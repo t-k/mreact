@@ -115,6 +115,7 @@ describe("create-mreact-app scaffolder", () => {
     const packageJson = JSON.parse(await readFile(join(directory, "package.json"), "utf8")) as {
       scripts?: Record<string, string>;
       dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
     };
     const tsconfig = JSON.parse(await readFile(join(directory, "tsconfig.json"), "utf8")) as {
       compilerOptions?: { types?: string[] };
@@ -440,9 +441,7 @@ describe("create-mreact-app scaffolder", () => {
       "@reckona/mreact-router",
     ]);
     expect(dryRun.codemods.map((item) => item.id)).toContain("0.0.16-import-policy-normalize");
-    expect(dryRun.codemods.map((item) => item.id)).toContain(
-      "0.0.148-interactive-counter-starter",
-    );
+    expect(dryRun.codemods.map((item) => item.id)).toContain("0.0.148-interactive-counter-starter");
     expect(dryRunPackage).toContain('"@reckona/mreact": "^0.0.10"');
 
     const result = await upgradeMreactApp({ directory, fromVersion: "0.0.10" });
@@ -598,10 +597,14 @@ describe("create-mreact-app scaffolder", () => {
       template: "basic",
     });
 
-    const hiddenPackage = JSON.parse(await readFile(join(hiddenDirectory, "package.json"), "utf8")) as {
+    const hiddenPackage = JSON.parse(
+      await readFile(join(hiddenDirectory, "package.json"), "utf8"),
+    ) as {
       name: string;
     };
-    const underscorePackage = JSON.parse(await readFile(join(underscoreDirectory, "package.json"), "utf8")) as {
+    const underscorePackage = JSON.parse(
+      await readFile(join(underscoreDirectory, "package.json"), "utf8"),
+    ) as {
       name: string;
     };
     const longPackage = JSON.parse(await readFile(join(longDirectory, "package.json"), "utf8")) as {
@@ -709,7 +712,9 @@ describe("create-mreact-app scaffolder", () => {
     expect(deployDocs).toContain("assetBaseUrl");
     expect(deployDocs).toContain('routesDir: "src/app"');
     expect(deployDocs).toContain('allowedSourceDirs: ["src"]');
-    expect(deployDocs.match(/fileURLToPath\(new URL\("\.\.\/\.mreact", import\.meta\.url\)\)/g)).toHaveLength(2);
+    expect(
+      deployDocs.match(/fileURLToPath\(new URL\("\.\.\/\.mreact", import\.meta\.url\)\)/g),
+    ).toHaveLength(2);
     expect(gitignore.split("\n")).toContain(".lambda");
     expect(readme).toContain("AWS Lambda deploy files are included.");
     const packageJson = JSON.parse(await readFile(join(directory, "package.json"), "utf8")) as {

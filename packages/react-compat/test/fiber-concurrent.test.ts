@@ -10,16 +10,12 @@ import {
   forwardRef,
   lazy,
   memo,
+  type ReactCompatNode,
 } from "../src/element.js";
 import { createContext } from "../src/context.js";
 import { commitFiberRoot } from "../src/fiber-commit.js";
 import { reconcileChildFibers } from "../src/fiber-child.js";
-import {
-  ChildDeletion,
-  Placement,
-  Ref,
-  Update,
-} from "../src/fiber-flags.js";
+import { ChildDeletion, Placement, Ref, Update } from "../src/fiber-flags.js";
 import { createFiber, createFiberRoot } from "../src/fiber.js";
 import { renderHostFiberRoot } from "../src/fiber-host.js";
 import {
@@ -245,9 +241,9 @@ describe("concurrent fiber work loop", () => {
       return createElement("p", null, "strict");
     }
 
-    expect(canReconcileConcurrently(
-      createElement(StrictMode, null, createElement(App, null)),
-    )).toBe(true);
+    expect(
+      canReconcileConcurrently(createElement(StrictMode, null, createElement(App, null))),
+    ).toBe(true);
   });
 
   it("renders StrictMode through the concurrent Fiber path", () => {
@@ -260,11 +256,7 @@ describe("concurrent fiber work loop", () => {
       return createElement("p", null, "strict");
     }
 
-    prepareFreshStack(
-      root,
-      createElement(StrictMode, null, createElement(App, null)),
-      SyncLane,
-    );
+    prepareFreshStack(root, createElement(StrictMode, null, createElement(App, null)), SyncLane);
 
     expect(
       renderRootConcurrent(root, SyncLane, {
@@ -282,12 +274,10 @@ describe("concurrent fiber work loop", () => {
     const container = document.createElement("div");
     const root = createFiberRoot(container);
     const calls: string[] = [];
-    const Button = forwardRef<{ label: string }, HTMLButtonElement>(
-      (props, ref) => {
-        calls.push(props.label);
-        return createElement("button", { ref }, props.label);
-      },
-    );
+    const Button = forwardRef<{ label: string }, HTMLButtonElement>((props, ref) => {
+      calls.push(props.label);
+      return createElement("button", { ref }, props.label);
+    });
 
     prepareFreshStack(
       root,
@@ -499,11 +489,7 @@ describe("concurrent fiber work loop", () => {
 
     prepareFreshStack(
       root,
-      createElement(
-        Theme.Provider,
-        { value: "inner" },
-        createElement("span", null, "inner"),
-      ),
+      createElement(Theme.Provider, { value: "inner" }, createElement("span", null, "inner")),
       TransitionLane,
     );
     expect(
@@ -528,15 +514,14 @@ describe("concurrent fiber work loop", () => {
   it("captures pending lazy work in suspense and renders resolved work on retry", async () => {
     const container = document.createElement("div");
     const root = createFiberRoot(container);
-    let resolveModule: (module: { default: (props: { label: string }) => unknown }) => void =
-      () => {};
+    let resolveModule: (module: {
+      default: (props: { label: string }) => ReactCompatNode;
+    }) => void = () => {};
     const LazyLabel = lazy(
       () =>
-        new Promise<{ default: (props: { label: string }) => unknown }>(
-          (resolve) => {
-            resolveModule = resolve;
-          },
-        ),
+        new Promise<{ default: (props: { label: string }) => ReactCompatNode }>((resolve) => {
+          resolveModule = resolve;
+        }),
     );
 
     const element = createElement(
@@ -558,8 +543,7 @@ describe("concurrent fiber work loop", () => {
     expect(root.finishedWork?.child?.child?.type).toBe("em");
 
     resolveModule({
-      default: (props: { label: string }) =>
-        createElement("span", null, props.label),
+      default: (props: { label: string }) => createElement("span", null, props.label),
     });
     await LazyLabel.promise;
 
@@ -574,9 +558,7 @@ describe("concurrent fiber work loop", () => {
       didSuspend: false,
     });
     expect(root.finishedWork?.child?.child?.tag).toBe("lazy");
-    expect(root.finishedWork?.child?.child?.child?.tag).toBe(
-      "function-component",
-    );
+    expect(root.finishedWork?.child?.child?.child?.tag).toBe("function-component");
     expect(root.finishedWork?.child?.child?.child?.child?.type).toBe("span");
   });
 
@@ -584,7 +566,7 @@ describe("concurrent fiber work loop", () => {
     const container = document.createElement("div");
     const root = createFiberRoot(container);
     const LazyBroken = lazy(() =>
-      Promise.reject<{ default: () => unknown }>(new Error("boom")),
+      Promise.reject<{ default: () => ReactCompatNode }>(new Error("boom")),
     );
     const errors: string[] = [];
 
@@ -629,7 +611,7 @@ describe("concurrent fiber work loop", () => {
     const container = document.createElement("div");
     const root = createFiberRoot(container);
 
-    function Broken() {
+    function Broken(): never {
       throw new Error("broken");
     }
 
@@ -655,32 +637,28 @@ describe("concurrent fiber work loop", () => {
   });
 
   it("applies suspense list reveal order during concurrent capture", () => {
-    const pending = new Promise<{ default: () => unknown }>(() => {});
+    const pending = new Promise<{ default: () => ReactCompatNode }>(() => {});
     const Pending = lazy(() => pending);
 
     const renderList = (revealOrder: string) => {
       const root = createFiberRoot(document.createElement("div"));
       prepareFreshStack(
         root,
-        createElement(
-          SuspenseList,
-          { revealOrder },
-          [
-            createElement(
-              Suspense,
-              {
-                fallback: createElement("em", { key: "loading" }, "loading"),
-                key: "pending",
-              },
-              createElement(Pending, null),
-            ),
-            createElement(
-              Suspense,
-              { fallback: null, key: "ready" },
-              createElement("strong", null, "ready"),
-            ),
-          ],
-        ),
+        createElement(SuspenseList, { revealOrder }, [
+          createElement(
+            Suspense,
+            {
+              fallback: createElement("em", { key: "loading" }, "loading"),
+              key: "pending",
+            },
+            createElement(Pending, null),
+          ),
+          createElement(
+            Suspense,
+            { fallback: null, key: "ready" },
+            createElement("strong", null, "ready"),
+          ),
+        ]),
         TransitionLane,
       );
       const result = renderRootConcurrent(root, TransitionLane, {
@@ -796,10 +774,10 @@ describe("concurrent fiber work loop", () => {
     const root = createFiberRoot(container);
 
     class Boundary {
-      props: { children: unknown };
+      props: { children?: ReactCompatNode };
       state = { message: "" };
 
-      constructor(props: { children: unknown }) {
+      constructor(props: { children?: ReactCompatNode }) {
         this.props = props;
       }
 
@@ -814,7 +792,7 @@ describe("concurrent fiber work loop", () => {
       }
     }
 
-    function Broken() {
+    function Broken(): never {
       throw new Error("boom");
     }
 
@@ -1111,11 +1089,7 @@ describe("fiber child reconciliation", () => {
     const previousRef = () => {};
     const nextRef = () => {};
     const parent = createFiber("host-component", { children: null });
-    const current = createFiber(
-      "host-component",
-      { id: "old", ref: previousRef },
-      "a",
-    );
+    const current = createFiber("host-component", { id: "old", ref: previousRef }, "a");
     current.type = "button";
     current.memoizedProps = { id: "old", ref: previousRef };
 
@@ -1134,10 +1108,7 @@ describe("fiber commit phase", () => {
   it("applies completed host work only during commit", () => {
     const container = document.createElement("div");
     const root = createFiberRoot(container);
-    const finishedWork = renderHostFiberRoot(
-      root,
-      createElement("button", { id: "save" }, "Save"),
-    );
+    const finishedWork = renderHostFiberRoot(root, createElement("button", { id: "save" }, "Save"));
 
     root.finishedWork = finishedWork;
     expect(container.innerHTML).toBe("");
@@ -1159,11 +1130,7 @@ describe("fiber commit phase", () => {
       createElement(
         "div",
         null,
-        createElement(
-          "span",
-          { ref: (node: unknown) => calls.push(node) },
-          "A",
-        ),
+        createElement("span", { ref: (node: unknown) => calls.push(node) }, "A"),
       ),
     );
     root.finishedWork = first;

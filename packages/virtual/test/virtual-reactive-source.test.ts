@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { effect } from "@reckona/mreact-reactive-core";
-import { createVirtualGrid, createVirtualList } from "../src/index.js";
+import { createVirtualGrid, createVirtualList, type VirtualKey } from "../src/index.js";
 
 interface Row {
   id: string;
@@ -39,7 +39,7 @@ describe("reactive item sources", () => {
       viewportSize: () => 40,
     });
 
-    const seen: string[][] = [];
+    const seen: VirtualKey[][] = [];
     const dispose = effect(() => {
       seen.push(virtual.entries.get().map((entry) => entry.key));
     });

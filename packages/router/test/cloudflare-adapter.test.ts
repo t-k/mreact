@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, test, vi } from "vitest";
-import { __resetQueryClientForTesting, getQueryClient } from "@reckona/mreact-query";
+import {
+  __resetQueryClientForTesting,
+  createQueryClient,
+  getQueryClient,
+} from "@reckona/mreact-query";
 import { buildApp } from "../src/build.js";
 import { routeSecurityHeaders } from "../src/security-headers.js";
 import {
@@ -15,7 +19,9 @@ import {
   createCloudflareRouteModuleRenderer,
   createCloudflareStaticAssetLoader,
   collectCloudflareRouteModules,
+  type CloudflareRouteModule,
 } from "../src/adapters/cloudflare.js";
+import type { RouteSecurityHeaders } from "../src/types.js";
 
 describe("mreact Cloudflare Workers adapter", () => {
   test("serves prerendered routes and client assets without filesystem access", async () => {
@@ -115,7 +121,7 @@ export default function Page() { return <main>Cloudflare route</main>; }`,
     const handler = createCloudflareBuiltRequestHandler({
       assets: {},
       clientManifest,
-      renderRoute: createCloudflareRouteModuleRenderer<typeof env>({
+      renderRoute: createCloudflareRouteModuleRenderer({
         modules: registry.routeModules,
       }),
       serverManifest,
@@ -198,7 +204,7 @@ export default function Page() {
     {
       label: "custom permissions policy and every supported field",
       security: {
-        contentTypeOptions: "custom-nosniff",
+        contentTypeOptions: "nosniff",
         frameOptions: "DENY",
         hsts: { includeSubDomains: true, maxAge: 31536000, preload: true },
         permissionsPolicy: {
@@ -251,7 +257,10 @@ export default function Page() { return <main>Security parity</main>; }`,
       serverManifest,
     });
     const request = new Request("https://app.example/");
-    const expected = routeSecurityHeaders({ request, security });
+    const expected = routeSecurityHeaders({
+      request,
+      security: security as RouteSecurityHeaders,
+    });
     const response = await handler.fetch(request, {}, createExecutionContext());
     const securityHeaderNames = [
       "permissions-policy",
@@ -970,7 +979,11 @@ export function middleware(request: Request) {
         modules: {
           "api/upload/route.ts": {
             async POST(request, context) {
-              const result = await context.env.MEDIA.put(context.params.id, await request.text());
+              const id =
+                typeof context.params.id === "string"
+                  ? context.params.id
+                  : (context.params.id?.[0] ?? "");
+              const result = await context.env.MEDIA.put(id, await request.text());
 
               return Response.json({
                 contextMatches: context.context === executionContext,
@@ -1073,7 +1086,7 @@ export function middleware(request: Request) {
           },
         ],
       },
-      renderRoute: createCloudflareRouteModuleRenderer({
+      renderRoute: createCloudflareRouteModuleRenderer<typeof env>({
         modules: {
           "users/$id/page.tsx": {
             loader({ env: loaderEnv, params, request }) {
@@ -1245,7 +1258,9 @@ export function middleware(request: Request) {
               },
               default({ data, queryClient }) {
                 const loaderData = data as { profile: { name: string } };
-                const cached = queryClient.getQueryData<{ name: string }>(["profile"]);
+                const cached = queryClient.getQueryData(["profile"]) as
+                  | { name: string }
+                  | undefined;
                 return `<main>${loaderData.profile.name}:${cached?.name}</main>`;
               },
             },
@@ -1706,7 +1721,10 @@ export function middleware(request: Request) {
         },
       },
     );
-    const module = await registry["users/$id/page.tsx"]?.();
+    const entry = registry["users/$id/page.tsx"];
+    const module = (typeof entry === "function" ? await entry() : entry) as
+      | CloudflareRouteModule
+      | undefined;
 
     expect(
       module?.default?.({
@@ -1715,6 +1733,7 @@ export function middleware(request: Request) {
         data: undefined,
         env: {},
         params: { id: "ada" },
+        queryClient: createQueryClient(),
         request: new Request("https://app.example/users/ada"),
         route: {
           file: "users/$id/page.tsx",
@@ -1989,6 +2008,7 @@ export function middleware(request: Request) {
       renderRoute: createCloudflareRouteModuleRenderer({
         modules: {
           // `default` present but not a function (mimics a client-reference object).
+          // @ts-expect-error This case intentionally supplies a non-callable default export.
           "src/app/login/page.tsx": { default: { $$typeof: "client.reference" } },
         },
       }),
@@ -3139,7 +3159,10 @@ export default function Page() {
     const previousBuffer = globalWithBuffer.Buffer;
 
     try {
-      globalWithBuffer.Buffer = { ...(previousBuffer as object), allocUnsafe: undefined };
+      globalWithBuffer.Buffer = {
+        ...(previousBuffer as object),
+        allocUnsafe: undefined,
+      } as unknown as typeof globalThis.Buffer;
       const response = await handler.fetch(
         new Request("https://app.example/"),
         {},

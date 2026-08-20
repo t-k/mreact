@@ -6746,7 +6746,7 @@ function countParsedElementsByName(node: unknown, name: string): number {
 
   return (
     ownCount +
-    (candidate.childNodes ?? []).reduce(
+    (candidate.childNodes ?? []).reduce<number>(
       (count: number, child) => count + countParsedElementsByName(child, name),
       0,
     )

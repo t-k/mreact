@@ -6,6 +6,7 @@ function compileServer(code: string): string {
     code,
     filename: "page.tsx",
     target: "server",
+    dev: false,
   }).code;
 }
 
@@ -23,7 +24,7 @@ describe("compiler render-value reassignment safety (Issue 074)", () => {
         return <p>{x}</p>;
       }`,
     );
-    const { default: Page } = await evaluateCompiled(code) as {
+    const { default: Page } = (await evaluateCompiled(code)) as {
       default: (p: { note: string }) => string;
     };
     const out = Page({ note: "<script>alert(1)</script>" });
@@ -38,7 +39,7 @@ describe("compiler render-value reassignment safety (Issue 074)", () => {
         return <p>{inner}</p>;
       }`,
     );
-    const { default: Page } = await evaluateCompiled(code) as {
+    const { default: Page } = (await evaluateCompiled(code)) as {
       default: () => string;
     };
     const out = Page();
@@ -55,7 +56,7 @@ describe("compiler render-value reassignment safety (Issue 074)", () => {
         return <article>{preview}</article>;
       }`,
     );
-    const { default: Item } = await evaluateCompiled(code) as {
+    const { default: Item } = (await evaluateCompiled(code)) as {
       default: (p: { item: { html: string } }) => string;
     };
     const out = Item({ item: { html: "<script>alert(1)</script>" } });
@@ -70,7 +71,7 @@ describe("compiler render-value reassignment safety (Issue 074)", () => {
         return <p>{pieces}</p>;
       }`,
     );
-    const { default: Page } = await evaluateCompiled(code) as {
+    const { default: Page } = (await evaluateCompiled(code)) as {
       default: (p: { note: string }) => string;
     };
     const out = Page({ note: "<script>alert(1)</script>" });

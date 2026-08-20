@@ -1,19 +1,11 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, test, vi } from "vitest";
-import {
-  createElement,
-  createRoot,
-  useCallback,
-  useMemo,
-  useRef,
-  useState,
-} from "../src/index.js";
+import { createElement, createRoot, useCallback, useMemo, useRef, useState } from "../src/index.js";
 import { createRootRuntime, type RootRuntime } from "../src/hooks.js";
 
-type RuntimeInstance = RootRuntime["instances"] extends Map<string, infer Instance>
-  ? Instance
-  : never;
+type RuntimeInstance =
+  RootRuntime["instances"] extends Map<string, infer Instance> ? Instance : never;
 
 describe("react-compat identity hooks", () => {
   test("skips inactive instance cleanup scans when every instance is active", () => {
@@ -47,16 +39,14 @@ describe("react-compat identity hooks", () => {
   });
 
   test("shares render state across duplicated hook module evaluations", async () => {
-    const rendererHooks = await import("../src/hooks.ts?renderer") as {
+    // @ts-expect-error The query creates an intentionally separate renderer module instance.
+    const rendererHooks = (await import("../src/hooks.ts?renderer")) as {
       createRootRuntime: (rerender: () => void) => unknown;
       getDevToolsHookState: (runtime: unknown, path: string) => unknown;
-      renderWithRootRuntime: <T>(
-        runtime: unknown,
-        path: string,
-        render: () => T,
-      ) => T;
+      renderWithRootRuntime: <T>(runtime: unknown, path: string, render: () => T) => T;
     };
-    const componentHooks = await import("../src/hooks.ts?component") as {
+    // @ts-expect-error The query creates an intentionally separate component module instance.
+    const componentHooks = (await import("../src/hooks.ts?component")) as {
       useRef: <T>(initialValue: T) => { current: T };
       useState: <T>(initialValue: T) => [T, (value: T) => void];
     };
@@ -68,9 +58,7 @@ describe("react-compat identity hooks", () => {
 
     expect(ref.current).toBe("shared");
 
-    rendererHooks.renderWithRootRuntime(runtime, "1", () =>
-      componentHooks.useState("state"),
-    );
+    rendererHooks.renderWithRootRuntime(runtime, "1", () => componentHooks.useState("state"));
 
     expect(rendererHooks.getDevToolsHookState(runtime, "1")).toBeUndefined();
   });
@@ -83,11 +71,7 @@ describe("react-compat identity hooks", () => {
       const [count, setCount] = useState(0);
       const ref = useRef(0);
       refs.push(ref);
-      return createElement(
-        "button",
-        { onClick: () => setCount(count + 1) },
-        count,
-      );
+      return createElement("button", { onClick: () => setCount(count + 1) }, count);
     }
 
     createRoot(container).render(createElement(App, null));
@@ -108,16 +92,8 @@ describe("react-compat identity hooks", () => {
       return createElement(
         "div",
         null,
-        createElement(
-          "button",
-          { id: "count", onClick: () => setCount(count + 1) },
-          memo.value,
-        ),
-        createElement(
-          "button",
-          { id: "other", onClick: () => setOther(other + 1) },
-          other,
-        ),
+        createElement("button", { id: "count", onClick: () => setCount(count + 1) }, memo.value),
+        createElement("button", { id: "other", onClick: () => setOther(other + 1) }, other),
       );
     }
 
@@ -137,11 +113,7 @@ describe("react-compat identity hooks", () => {
       const [count, setCount] = useState(0);
       const [other, setOther] = useState(0);
       callbacks.push(useCallback(() => setCount(count + 1), [count]));
-      return createElement(
-        "button",
-        { onClick: () => setOther(other + 1) },
-        other,
-      );
+      return createElement("button", { onClick: () => setOther(other + 1) }, other);
     }
 
     createRoot(container).render(createElement(App, null));

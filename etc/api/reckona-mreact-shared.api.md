@@ -171,6 +171,15 @@ export interface ModuleMetadata {
 }
 
 // @public
+export const REACT_CLIENT_REFERENCE_TYPE: unique symbol;
+
+// @public
+export const REACT_COMPAT_CONSUMER_TYPE: unique symbol;
+
+// @public
+export const REACT_COMPAT_PROVIDER_TYPE: unique symbol;
+
+// @public
 export function readDangerousHtmlOptIn(value: unknown): string | undefined;
 
 // @public

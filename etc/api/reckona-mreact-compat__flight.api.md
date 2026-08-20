@@ -4,6 +4,10 @@
 
 ```ts
 
+import { REACT_CLIENT_REFERENCE_TYPE } from '@reckona/mreact-shared';
+import { REACT_COMPAT_CONSUMER_TYPE } from '@reckona/mreact-shared';
+import { REACT_COMPAT_PROVIDER_TYPE } from '@reckona/mreact-shared';
+
 // @public
 export function createFetchServerReferenceCaller(endpoint: string, options?: FetchServerReferenceCallerOptions): NonNullable<DecodeFlightOptions["callServerReference"]>;
 
@@ -16,10 +20,17 @@ export interface DecodeFlightOptions {
 }
 
 // @public
-export function decodeFlightResponse(response: FlightResponse, options: DecodeFlightOptions): ReactCompatNode;
+export function decodeFlightResponse(response: FlightResponse, options: DecodeFlightOptions): unknown;
 
 // @public
-export type ElementType<P = Record<string, unknown>> = string | typeof Fragment | typeof Suspense | typeof SuspenseList | typeof Activity | typeof Profiler | typeof ERROR_BOUNDARY_TYPE | typeof REACTIVE_DOM_BLOCK_TYPE | typeof STRICT_MODE_TYPE | ReactCompatContextProviderShorthand | ReactCompatProviderType | ForwardRefType<P> | MemoType<P> | LazyType<P> | ((props: P) => ReactCompatNode | PromiseLike<ReactCompatNode>) | (new (props: P) => {
+export type ElementType<P = Record<string, unknown>> = string | typeof Fragment | typeof Suspense | typeof SuspenseList | typeof Activity | typeof Profiler | typeof ERROR_BOUNDARY_TYPE | typeof REACTIVE_DOM_BLOCK_TYPE | typeof STRICT_MODE_TYPE | ReactCompatContextProviderShorthand | ReactCompatProviderType | {
+    $$typeof: typeof REACT_COMPAT_CONSUMER_TYPE;
+    context: unknown;
+} | {
+    $$typeof: typeof REACT_CLIENT_REFERENCE_TYPE;
+    moduleId: string;
+    exportName: string;
+} | ForwardRefType<P> | MemoType<P> | LazyType<P> | ((props: P) => ReactCompatNode | PromiseLike<ReactCompatNode>) | (new (props: P) => {
     render(): ReactCompatNode;
 });
 
@@ -346,7 +357,7 @@ export interface ReactCompatContextProviderShorthand {
 }
 
 // @public
-export type ReactCompatNode = ReactCompatRenderableElement | ReactCompatPortal | string | number | boolean | null | undefined | ReactCompatNode[];
+export type ReactCompatNode = ReactCompatRenderableElement | ReactCompatPortal | string | number | boolean | null | undefined | ReactCompatNode[] | PromiseLike<ReactCompatNode>;
 
 // @public
 export interface ReactCompatPortal {
@@ -363,7 +374,7 @@ export interface ReactCompatPortal {
 // @public (undocumented)
 export interface ReactCompatProviderType {
     // (undocumented)
-    $$typeof: symbol;
+    $$typeof: typeof REACT_COMPAT_PROVIDER_TYPE;
     // (undocumented)
     context: unknown;
 }

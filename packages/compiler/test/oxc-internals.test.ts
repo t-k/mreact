@@ -62,6 +62,7 @@ import {
 import { lowerOxcDomNodeExpression } from "../src/oxc-dom-lowering.js";
 import { containsRawJsxInIr } from "../src/oxc-raw-jsx.js";
 import type { ModuleIr } from "../src/ir.js";
+import type { Diagnostic } from "../src/types.js";
 import type { TopLevelExportRenderInfo } from "../src/internal.js";
 
 describe("compiler OXC internals", () => {
@@ -670,7 +671,7 @@ export default function Page() {
   });
 
   test("reports client component references inside Await boundaries", () => {
-    const diagnostics: { code: string; message: string }[] = [];
+    const diagnostics: Diagnostic[] = [];
 
     validateOxcAwaitCompatComponents(
       {
@@ -710,7 +711,7 @@ export default function Page() {
 
   test("analyzes static, dynamic, event, and spread attributes", () => {
     const code = '<button id="save" disabled onClick={save} {...props} />';
-    const diagnostics: { code: string; message: string }[] = [];
+    const diagnostics: Diagnostic[] = [];
     const propsStart = code.indexOf("props");
 
     expect(
@@ -750,7 +751,7 @@ export default function Page() {
 
   test("analyzes lowercase event attributes as event handlers", () => {
     const code = "<button onclick={save} />";
-    const diagnostics: { code: string; message: string }[] = [];
+    const diagnostics: Diagnostic[] = [];
 
     expect(
       analyzeOxcAttribute(
@@ -1001,13 +1002,12 @@ export default function Page() {
     const countStart = code.indexOf("total");
     const restStart = code.indexOf("rest");
     const headerExpression = { type: "JSXElement", openingElement: {}, children: [] };
-    const analyzeJsxNode = () =>
-      ({
-        kind: "element",
-        tagName: "h1",
-        attributes: [],
-        children: [{ kind: "text", value: "Ada" }],
-      }) as const;
+    const analyzeJsxNode: Parameters<typeof analyzeOxcComponentProp>[2] = () => ({
+      kind: "element",
+      tagName: "h1",
+      attributes: [],
+      children: [{ kind: "text", value: "Ada" }],
+    });
 
     expect(
       analyzeOxcComponentProp(
@@ -1154,7 +1154,7 @@ export default function Page() {
         },
       ]),
     ).toEqual(
-      new Map([
+      new Map<string, unknown>([
         ["value", initializer],
         ["ignored", { type: "Literal", value: 1 }],
       ]),

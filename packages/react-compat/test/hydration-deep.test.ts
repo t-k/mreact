@@ -240,7 +240,7 @@ describe("react-compat deep hydration", () => {
       createElement("p", null, "Hello, ", "Ada"),
       createElement("p", null, ""),
     );
-    container.innerHTML = '<section><p>Hello, <!-- -->Ada</p><p></p></section>';
+    container.innerHTML = "<section><p>Hello, <!-- -->Ada</p><p></p></section>";
     const recoveries: string[] = [];
 
     hydrateRoot(container, element, {
@@ -367,9 +367,7 @@ describe("react-compat deep hydration", () => {
     });
 
     expect(container.innerHTML).toBe('<p id="client">client</p>');
-    expect(recoveries).toEqual([
-      "tag:0:Hydration tag mismatch: expected <p> but found <span>.",
-    ]);
+    expect(recoveries).toEqual(["tag:0:Hydration tag mismatch: expected <p> but found <span>."]);
   });
 
   test("publishes structural recoveries after the hydrated root becomes current", () => {
@@ -794,11 +792,7 @@ describe("react-compat deep hydration", () => {
 
     function Counter() {
       const [count, setCount] = useState(0);
-      return createElement(
-        "button",
-        { onClick: () => setCount((value) => value + 1) },
-        count,
-      );
+      return createElement("button", { onClick: () => setCount((value) => value + 1) }, count);
     }
 
     const root = hydrateRoot(container, createElement(Counter, null), {
@@ -906,7 +900,7 @@ describe("react-compat deep hydration", () => {
     const serverFallback = container.querySelector("em");
     const pending = new Promise<void>(() => {});
 
-    function AsyncChild() {
+    function AsyncChild(): never {
       throw pending;
     }
 

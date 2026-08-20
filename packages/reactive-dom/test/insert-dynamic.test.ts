@@ -11,6 +11,7 @@ import { insertMemoDynamic } from "../src/insert-memo-dynamic.js";
 import { bindText } from "../src/bind-text.js";
 import { installCompatRenderValueNormalizer } from "../src/compat-normalize.js";
 import { registerDispose } from "../src/scope.js";
+import type { RenderValue } from "../src/types.js";
 
 const REACT_COMPAT_ELEMENT_TYPE = Symbol.for("react.transitional.element");
 
@@ -30,7 +31,7 @@ const jsxs = jsx;
 
 describe("insertDynamic", () => {
   test("replaces only the dynamic range before the marker", async () => {
-    const value = cell<unknown>("first");
+    const value = cell<RenderValue>("first");
     const parent = document.createElement("div");
     const before = document.createTextNode("before:");
     const marker = document.createComment("marker");
@@ -46,9 +47,7 @@ describe("insertDynamic", () => {
     value.set([strong, 2]);
     await flushEffects();
 
-    expect(parent.innerHTML).toBe(
-      "before:<strong>node</strong>2<!--marker-->:after",
-    );
+    expect(parent.innerHTML).toBe("before:<strong>node</strong>2<!--marker-->:after");
 
     value.set(null);
     await flushEffects();
@@ -89,22 +88,19 @@ describe("insertDynamic", () => {
     const marker = document.createComment("marker");
     parent.append(marker);
 
-    const dispose = insertMemo(
-      parent,
-      marker,
-      () =>
-        createMemo(
-          "Card",
-          props.get(),
-          (nextProps) => {
-            events.push(`render:${nextProps.revision}`);
-            registerDispose(() => events.push(`dispose:${nextProps.revision}`));
-            const article = document.createElement("article");
-            article.dataset.revision = String(nextProps.revision);
-            return article;
-          },
-          (previous, next) => previous.signature === next.signature,
-        ),
+    const dispose = insertMemo(parent, marker, () =>
+      createMemo(
+        "Card",
+        props.get(),
+        (nextProps) => {
+          events.push(`render:${nextProps.revision}`);
+          registerDispose(() => events.push(`dispose:${nextProps.revision}`));
+          const article = document.createElement("article");
+          article.dataset.revision = String(nextProps.revision);
+          return article;
+        },
+        (previous, next) => previous.signature === next.signature,
+      ),
     );
     const article = parent.querySelector("article");
 
@@ -126,22 +122,19 @@ describe("insertDynamic", () => {
     const marker = document.createComment("marker");
     parent.append(marker);
 
-    const dispose = insertMemo(
-      parent,
-      marker,
-      () =>
-        createMemo(
-          "Card",
-          props.get(),
-          (nextProps) => {
-            events.push(`render:${nextProps.signature}`);
-            registerDispose(() => events.push(`dispose:${nextProps.signature}`));
-            const article = document.createElement("article");
-            article.textContent = nextProps.signature;
-            return article;
-          },
-          (previous, next) => previous.signature === next.signature,
-        ),
+    const dispose = insertMemo(parent, marker, () =>
+      createMemo(
+        "Card",
+        props.get(),
+        (nextProps) => {
+          events.push(`render:${nextProps.signature}`);
+          registerDispose(() => events.push(`dispose:${nextProps.signature}`));
+          const article = document.createElement("article");
+          article.textContent = nextProps.signature;
+          return article;
+        },
+        (previous, next) => previous.signature === next.signature,
+      ),
     );
     const firstArticle = parent.querySelector("article");
 
@@ -163,23 +156,20 @@ describe("insertDynamic", () => {
     const marker = document.createComment("marker");
     parent.append(marker);
 
-    const dispose = insertMemoDynamic(
-      parent,
-      marker,
-      () =>
-        createMemo(
-          "List",
-          props.get(),
-          (nextProps) => {
-            events.push(`render:${nextProps.revision}`);
-            registerDispose(() => events.push(`dispose:${nextProps.revision}`));
-            return createList(
-              () => [`row:${nextProps.revision}`],
-              (row) => document.createTextNode(row),
-            );
-          },
-          (previous, next) => previous.signature === next.signature,
-        ),
+    const dispose = insertMemoDynamic(parent, marker, () =>
+      createMemo(
+        "List",
+        props.get(),
+        (nextProps) => {
+          events.push(`render:${nextProps.revision}`);
+          registerDispose(() => events.push(`dispose:${nextProps.revision}`));
+          return createList(
+            () => [`row:${nextProps.revision}`],
+            (row) => document.createTextNode(row),
+          );
+        },
+        (previous, next) => previous.signature === next.signature,
+      ),
     );
 
     expect(parent.textContent).toBe("row:0");
@@ -208,16 +198,13 @@ describe("insertDynamic", () => {
     const marker = document.createComment("marker");
     parent.append(marker);
 
-    const dispose = insertMemo(
-      parent,
-      marker,
-      () =>
-        createMemo("Label", props.get(), (nextProps) => {
-          renders += 1;
-          const span = document.createElement("span");
-          span.textContent = nextProps.label;
-          return span;
-        }),
+    const dispose = insertMemo(parent, marker, () =>
+      createMemo("Label", props.get(), (nextProps) => {
+        renders += 1;
+        const span = document.createElement("span");
+        span.textContent = nextProps.label;
+        return span;
+      }),
     );
     const firstSpan = parent.querySelector("span");
 
@@ -339,7 +326,7 @@ describe("insertDynamic", () => {
   });
 
   test("does not throw when the marker has been removed before a queued update", async () => {
-    const value = cell<unknown>("first");
+    const value = cell<RenderValue>("first");
     const parent = document.createElement("div");
     const marker = document.createComment("marker");
     parent.append(marker);
@@ -357,7 +344,7 @@ describe("insertDynamic", () => {
   });
 
   test("continues updating when a fragment marker is moved into the document", async () => {
-    const value = cell<unknown>("first");
+    const value = cell<RenderValue>("first");
     const fragment = document.createDocumentFragment();
     const marker = document.createComment("marker");
     const host = document.createElement("div");
@@ -410,9 +397,7 @@ describe("insertDynamic", () => {
     const marker = document.createComment("marker");
     parent.append(marker);
 
-    function FamilyReadyState(props: {
-      readonly familyWithRole: { readonly role: string };
-    }) {
+    function FamilyReadyState(props: { readonly familyWithRole: { readonly role: string } }) {
       const span = document.createElement("span");
       const role = document.createTextNode("");
       span.append(role);
@@ -505,12 +490,16 @@ describe("insertDynamic", () => {
     parent.append(marker);
     const ownerDisposers: Array<() => void> = [];
 
-    withCleanupScope((dispose) => {
-      ownerDisposers.push(dispose);
-    }, () => insertDynamic(parent, marker, () => {
-      registerDispose(() => events.push("cleanup"));
-      return document.createTextNode("owned");
-    }));
+    withCleanupScope(
+      (dispose) => {
+        ownerDisposers.push(dispose);
+      },
+      () =>
+        insertDynamic(parent, marker, () => {
+          registerDispose(() => events.push("cleanup"));
+          return document.createTextNode("owned");
+        }),
+    );
 
     for (const dispose of ownerDisposers) {
       dispose();
@@ -531,13 +520,13 @@ describe("insertDynamic", () => {
     const marker = document.createComment("marker");
     parent.append(marker);
 
-    const dispose = insertDynamic(parent, marker, () =>
-      jsx(Panel, { children: jsx("p", { children: "Updated abc" }) }) as never,
+    const dispose = insertDynamic(
+      parent,
+      marker,
+      () => jsx(Panel, { children: jsx("p", { children: "Updated abc" }) }) as never,
     );
 
-    expect(parent.innerHTML).toBe(
-      "<main><h1>Reset</h1><p>Updated abc</p></main><!--marker-->",
-    );
+    expect(parent.innerHTML).toBe("<main><h1>Reset</h1><p>Updated abc</p></main><!--marker-->");
 
     dispose();
   });

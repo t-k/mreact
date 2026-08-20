@@ -50,8 +50,9 @@ describe("react-compat createElement", () => {
       type: "button",
     });
 
-    expect((element.props as Record<PropertyKey, unknown>)[REACTIVE_TEXT_BINDING_META])
-      .toBe(binding);
+    expect((element.props as Record<PropertyKey, unknown>)[REACTIVE_TEXT_BINDING_META]).toBe(
+      binding,
+    );
   });
 
   test("keeps config children when no variadic children are passed", () => {
@@ -69,14 +70,11 @@ describe("react-compat createElement", () => {
   test("keeps multiple children as an array", () => {
     const element = createElement(Fragment, null, "A", "B");
 
-    expect(element.props.children).toEqual(["A", "B"]);
+    expect((element as { props: { children?: unknown } }).props.children).toEqual(["A", "B"]);
   });
 
   test("uses a createElement-specific props copy path", async () => {
-    const source = await readFile(
-      new URL("../src/element.ts", import.meta.url),
-      "utf8",
-    );
+    const source = await readFile(new URL("../src/element.ts", import.meta.url), "utf8");
 
     expect(source).toContain("copyCreateElementProps(config)");
   });

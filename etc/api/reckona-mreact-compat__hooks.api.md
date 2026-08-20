@@ -59,6 +59,9 @@ export function useMemo<T>(factory: () => T, deps?: readonly unknown[]): T;
 export function useOptimistic<TState, TPayload>(state: TState, update?: (state: TState, payload: TPayload) => TState): [TState, (payload: TPayload) => void];
 
 // @public
+export function useReducer<TState>(reducer: (state: TState) => TState, initialArg: TState): [TState, () => void];
+
+// @public (undocumented)
 export function useReducer<TState, TAction, TInitial = TState>(reducer: (state: TState, action: TAction) => TState, initialArg: TInitial, init?: (initialArg: TInitial) => TState): [TState, (action: TAction) => void];
 
 // @public
@@ -68,6 +71,12 @@ export function useRef<T>(initial: T): {
 
 // @public
 export function useState<T>(initial: T | (() => T)): [T, (value: T | ((previous: T) => T)) => void];
+
+// @public (undocumented)
+export function useState<T = undefined>(): [
+T | undefined,
+(value: T | undefined | ((previous: T | undefined) => T | undefined)) => void
+];
 
 // @public
 export function useSyncExternalStore<T>(subscribe: (listener: () => void) => () => void, getSnapshot: () => T, getServerSnapshot?: () => T): T;

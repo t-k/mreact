@@ -8,7 +8,7 @@ describe("Link client rendering", () => {
     const anchor = Link({
       children: "profile",
       href: "javascript:alert(1)",
-    }) as HTMLAnchorElement;
+    }) as unknown as HTMLAnchorElement;
 
     expect(anchor.tagName).toBe("A");
     expect(anchor.getAttribute("href")).toBeNull();
@@ -29,7 +29,7 @@ describe("Link client rendering", () => {
         ref = element;
       },
       style: { color: "red" },
-    }) as HTMLAnchorElement;
+    }) as unknown as HTMLAnchorElement;
 
     anchor.click();
 
@@ -48,7 +48,7 @@ describe("Link client rendering", () => {
       browser.__mreactLinkExecuted = false;
 
       try {
-        const anchor = Link({ href: "/safe", [name]: payload }) as HTMLAnchorElement;
+        const anchor = Link({ href: "/safe", [name]: payload }) as unknown as HTMLAnchorElement;
         anchor.dispatchEvent(new Event(name.slice(2).toLowerCase()));
 
         expect(anchor.getAttribute(name)).toBeNull();
@@ -68,7 +68,7 @@ describe("Link client rendering", () => {
       href: "/safe",
       onClick: () => calls.push("bubble"),
       onClickCapture: () => calls.push("capture"),
-    }) as HTMLAnchorElement;
+    }) as unknown as HTMLAnchorElement;
 
     anchor.click();
 
@@ -90,7 +90,7 @@ describe("Link client rendering", () => {
       },
       prefetch: "viewport",
       ref,
-    }) as HTMLAnchorElement;
+    }) as unknown as HTMLAnchorElement;
 
     anchor.click();
 
@@ -103,7 +103,11 @@ describe("Link client rendering", () => {
   });
 
   test("omits false boolean attributes and maps DOM property aliases", () => {
-    const anchor = Link({ download: false, href: "/report", tabIndex: 2 }) as HTMLAnchorElement;
+    const anchor = Link({
+      download: false,
+      href: "/report",
+      tabIndex: 2,
+    }) as unknown as HTMLAnchorElement;
 
     expect(anchor.hasAttribute("download")).toBe(false);
     expect(anchor.getAttribute("tabindex")).toBe("2");

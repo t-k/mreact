@@ -603,7 +603,7 @@ describe("bindList", () => {
     parent.replaceChildren = ((...nodes) => {
       parentReplacements += 1;
       replacementArgumentCount = nodes.length;
-      firstReplacementNode = nodes[0];
+      firstReplacementNode = nodes[0] as Node | undefined;
       return replaceChildren(...nodes);
     }) as typeof parent.replaceChildren;
 
@@ -662,7 +662,7 @@ describe("bindList", () => {
       return replaceChildren(...nodes);
     }) as typeof parent.replaceChildren;
 
-    items.set(values.toReversed());
+    items.set([...values].reverse());
     await flushEffects();
 
     expect(parentInsertions).toBe(999);

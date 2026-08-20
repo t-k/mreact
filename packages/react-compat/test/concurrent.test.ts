@@ -17,6 +17,7 @@ import {
   useState,
   useSyncExternalStore,
   useTransition,
+  type ReactCompatNode,
 } from "../src/index.js";
 import {
   forceFrameRate,
@@ -370,19 +371,24 @@ describe("react-compat concurrent subset", () => {
     function App() {
       renders += 1;
       const [count, setCount] = useState(0);
-      const [optimistic, addOptimistic] = useOptimistic<string[], string>(base,
-        (state, value) => [...state, value]
-      );
+      const [optimistic, addOptimistic] = useOptimistic<string[], string>(base, (state, value) => [
+        ...state,
+        value,
+      ]);
       renderedOptimistic.push(optimistic);
       rerender = () => setCount((previous) => previous + 1);
-      return createElement("button", {
-        ref: (node: HTMLButtonElement | null) => {
-          if (node !== null && !attached) {
-            attached = true;
-            addOptimistic("mounted");
-          }
+      return createElement(
+        "button",
+        {
+          ref: (node: HTMLButtonElement | null) => {
+            if (node !== null && !attached) {
+              attached = true;
+              addOptimistic("mounted");
+            }
+          },
         },
-      }, `${count}:${optimistic.join(",")}`);
+        `${count}:${optimistic.join(",")}`,
+      );
     }
 
     root.render(createElement(App, null));
@@ -408,26 +414,32 @@ describe("react-compat concurrent subset", () => {
 
     function App() {
       const [showButton, setShowButton] = useState(false);
-      const [optimistic, addOptimistic] = useOptimistic<string[], string>(base,
-        (state, value) => [...state, value]
-      );
+      const [optimistic, addOptimistic] = useOptimistic<string[], string>(base, (state, value) => [
+        ...state,
+        value,
+      ]);
       const [, start] = useTransition();
-      launch = () => start(() => {
-        addOptimistic("first");
-        setShowButton(true);
-        return action.promise;
-      });
+      launch = () =>
+        start(() => {
+          addOptimistic("first");
+          setShowButton(true);
+          return action.promise;
+        });
       if (!showButton) {
         return createElement("p", null, optimistic.join(","));
       }
-      return createElement("button", {
-        ref: (node: HTMLButtonElement | null) => {
-          if (node !== null && !attached) {
-            attached = true;
-            addOptimistic("second");
-          }
+      return createElement(
+        "button",
+        {
+          ref: (node: HTMLButtonElement | null) => {
+            if (node !== null && !attached) {
+              attached = true;
+              addOptimistic("second");
+            }
+          },
         },
-      }, optimistic.join(","));
+        optimistic.join(","),
+      );
     }
 
     root.render(createElement(App, null));
@@ -487,10 +499,11 @@ describe("react-compat concurrent subset", () => {
     function App() {
       const [optimistic, addOptimistic] = useOptimistic("base", (_state, value: string) => value);
       const [pending, start] = useTransition();
-      launch = () => start(() => {
-        addOptimistic("temp");
-        throw new Error("scope boom");
-      });
+      launch = () =>
+        start(() => {
+          addOptimistic("temp");
+          throw new Error("scope boom");
+        });
       return createElement("p", null, `${pending ? "pending" : "settled"}:${optimistic}`);
     }
 
@@ -525,10 +538,11 @@ describe("react-compat concurrent subset", () => {
     function App() {
       const [optimistic, addOptimistic] = useOptimistic("base", (_state, value: string) => value);
       const [pending, start] = useTransition();
-      launch = () => start(() => {
-        addOptimistic("temp");
-        return brokenThenable;
-      });
+      launch = () =>
+        start(() => {
+          addOptimistic("temp");
+          return brokenThenable;
+        });
       return createElement("p", null, `${pending ? "pending" : "settled"}:${optimistic}`);
     }
 
@@ -563,10 +577,11 @@ describe("react-compat concurrent subset", () => {
     function App() {
       const [optimistic, addOptimistic] = useOptimistic("base", (_state, value: string) => value);
       const [pending, start] = useTransition();
-      launch = () => start(() => {
-        addOptimistic("temp");
-        return brokenThenable;
-      });
+      launch = () =>
+        start(() => {
+          addOptimistic("temp");
+          return brokenThenable;
+        });
       return createElement("p", null, `${pending ? "pending" : "settled"}:${optimistic}`);
     }
 
@@ -599,16 +614,14 @@ describe("react-compat concurrent subset", () => {
     let launch = () => undefined;
 
     function App() {
-      const [base, dispatch, actionPending] = useActionState(
-        () => brokenThenable,
-        "base",
-      );
+      const [base, dispatch, actionPending] = useActionState(() => brokenThenable, "base");
       const [optimistic, addOptimistic] = useOptimistic(base, (_state, value: string) => value);
       const [transitionPending, start] = useTransition();
-      launch = () => start(() => {
-        addOptimistic("temp");
-        dispatch(undefined);
-      });
+      launch = () =>
+        start(() => {
+          addOptimistic("temp");
+          dispatch(undefined);
+        });
       return createElement("p", null, `${transitionPending}:${actionPending}:${optimistic}`);
     }
 
@@ -638,16 +651,14 @@ describe("react-compat concurrent subset", () => {
     let launch = () => undefined;
 
     function App() {
-      const [base, dispatch, actionPending] = useActionState(
-        () => brokenThenable,
-        "base",
-      );
+      const [base, dispatch, actionPending] = useActionState(() => brokenThenable, "base");
       const [optimistic, addOptimistic] = useOptimistic(base, (_state, value: string) => value);
       const [transitionPending, start] = useTransition();
-      launch = () => start(() => {
-        addOptimistic("temp");
-        dispatch(undefined);
-      });
+      launch = () =>
+        start(() => {
+          addOptimistic("temp");
+          dispatch(undefined);
+        });
       return createElement("p", null, `${transitionPending}:${actionPending}:${optimistic}`);
     }
 
@@ -677,26 +688,32 @@ describe("react-compat concurrent subset", () => {
 
     function App() {
       const [refState, setRefState] = useState(false);
-      const [optimistic, addOptimistic] = useOptimistic<string[], string>(base,
-        (state, value) => [...state, value]
-      );
-      launch = () => startTransition(() => {
-        calls.push("before");
-        addOptimistic("scope");
-        calls.push("after");
-        return action.promise;
-      });
+      const [optimistic, addOptimistic] = useOptimistic<string[], string>(base, (state, value) => [
+        ...state,
+        value,
+      ]);
+      launch = () =>
+        startTransition(() => {
+          calls.push("before");
+          addOptimistic("scope");
+          calls.push("after");
+          return action.promise;
+        });
       if (optimistic.includes("scope")) {
-        return createElement("button", {
-          ref: (node: HTMLButtonElement | null) => {
-            if (node !== null && !attached) {
-              attached = true;
-              calls.push("ref");
-              addOptimistic("ref");
-              setRefState(true);
-            }
+        return createElement(
+          "button",
+          {
+            ref: (node: HTMLButtonElement | null) => {
+              if (node !== null && !attached) {
+                attached = true;
+                calls.push("ref");
+                addOptimistic("ref");
+                setRefState(true);
+              }
+            },
           },
-        }, `${optimistic.join(",")}:${refState}`);
+          `${optimistic.join(",")}:${refState}`,
+        );
       }
       return createElement("p", null, `${refState}:${optimistic.join(",")}`);
     }
@@ -753,10 +770,11 @@ describe("react-compat concurrent subset", () => {
     function App() {
       const [optimistic, addOptimistic] = useOptimistic("base", (_state, value: string) => value);
       const [pending, start] = useTransition();
-      launch = () => start(() => {
-        addOptimistic("temp");
-        return action.promise;
-      });
+      launch = () =>
+        start(() => {
+          addOptimistic("temp");
+          return action.promise;
+        });
       return createElement("p", null, `${pending ? "pending" : "settled"}:${optimistic}`);
     }
 
@@ -907,25 +925,24 @@ describe("react-compat concurrent subset", () => {
 
     function App() {
       const [base, setBase] = useState(["base"]);
-      const [optimistic, addOptimistic] = useOptimistic<string[], string>(base,
-        (state, value) => [...state, `${value}:sending`]
-      );
+      const [optimistic, addOptimistic] = useOptimistic<string[], string>(base, (state, value) => [
+        ...state,
+        `${value}:sending`,
+      ]);
       const [pending, start] = useTransition();
-      launchFirst = () => start(() => {
-        addOptimistic("A");
-        return first.promise.then((nextBase) => {
-          startTransition(() => setBase(nextBase));
+      launchFirst = () =>
+        start(() => {
+          addOptimistic("A");
+          return first.promise.then((nextBase) => {
+            startTransition(() => setBase(nextBase));
+          });
         });
-      });
-      launchSecond = () => start(() => {
-        addOptimistic("B");
-        return second.promise;
-      });
-      return createElement(
-        "p",
-        null,
-        `${pending ? "pending" : "settled"}:${optimistic.join(",")}`,
-      );
+      launchSecond = () =>
+        start(() => {
+          addOptimistic("B");
+          return second.promise;
+        });
+      return createElement("p", null, `${pending ? "pending" : "settled"}:${optimistic.join(",")}`);
     }
 
     root.render(createElement(App, null));
@@ -1002,15 +1019,17 @@ describe("react-compat concurrent subset", () => {
         },
         ["base"],
       );
-      const [optimistic, addOptimistic] = useOptimistic<string[], string>(base,
-        (state, value) => [...state, `${value}:sending`]
-      );
+      const [optimistic, addOptimistic] = useOptimistic<string[], string>(base, (state, value) => [
+        ...state,
+        `${value}:sending`,
+      ]);
       const [firstPending, startFirst] = useTransition();
       const [secondPending, startSecond] = useTransition();
-      launch = (label) => (label === "A" ? startFirst : startSecond)(() => {
-        addOptimistic(label);
-        dispatch(label);
-      });
+      launch = (label) =>
+        (label === "A" ? startFirst : startSecond)(() => {
+          addOptimistic(label);
+          dispatch(label);
+        });
       return createElement(
         "p",
         null,
@@ -1055,15 +1074,17 @@ describe("react-compat concurrent subset", () => {
         },
         ["base"],
       );
-      const [optimistic, addOptimistic] = useOptimistic<string[], string>(base,
-        (state, value) => [...state, value]
-      );
+      const [optimistic, addOptimistic] = useOptimistic<string[], string>(base, (state, value) => [
+        ...state,
+        value,
+      ]);
       const [, startFirst] = useTransition();
       const [, startSecond] = useTransition();
-      launch = (label) => (label === "A" ? startFirst : startSecond)(() => {
-        addOptimistic(label);
-        dispatch(label);
-      });
+      launch = (label) =>
+        (label === "A" ? startFirst : startSecond)(() => {
+          addOptimistic(label);
+          dispatch(label);
+        });
       return createElement("p", null, optimistic.join(","));
     }
 
@@ -1100,18 +1121,16 @@ describe("react-compat concurrent subset", () => {
     let launch: (label: "A" | "B") => void = () => {};
 
     function App() {
-      const [, dispatch] = useActionState(
-        (previous: string, label: "A" | "B") => {
-          calls.push(`${label}:${previous}`);
-          return first.promise;
-        },
-        "base",
-      );
+      const [, dispatch] = useActionState((previous: string, label: "A" | "B") => {
+        calls.push(`${label}:${previous}`);
+        return first.promise;
+      }, "base");
       const [, startFirst] = useTransition();
       const [, startSecond] = useTransition();
-      launch = (label) => (label === "A" ? startFirst : startSecond)(() => {
-        dispatch(label);
-      });
+      launch = (label) =>
+        (label === "A" ? startFirst : startSecond)(() => {
+          dispatch(label);
+        });
       return createElement("p", null, "mounted");
     }
 
@@ -1288,14 +1307,16 @@ describe("react-compat concurrent subset", () => {
 
     function App() {
       const snapshot = useSyncExternalStore(() => () => undefined, getSnapshot);
-      const [optimistic, addOptimistic] = useOptimistic<string[], string>([],
-        (state, value) => [...state, value]
-      );
+      const [optimistic, addOptimistic] = useOptimistic<string[], string>([], (state, value) => [
+        ...state,
+        value,
+      ]);
       const [pending, start] = useTransition();
-      launch = (label, action) => start(() => {
-        addOptimistic(label);
-        return action;
-      });
+      launch = (label, action) =>
+        start(() => {
+          addOptimistic(label);
+          return action;
+        });
       return createElement(
         "p",
         null,
@@ -1447,7 +1468,7 @@ describe("react-compat concurrent subset", () => {
     const fallback = container.firstChild;
     const pending = new Promise<void>(() => {});
 
-    function AsyncChild() {
+    function AsyncChild(): never {
       throw pending;
     }
 
@@ -1469,7 +1490,7 @@ describe("react-compat concurrent subset", () => {
     const root = createRoot(container);
     const pending = new Promise<void>(() => {});
 
-    function Pending() {
+    function Pending(): never {
       throw pending;
     }
 
@@ -1492,7 +1513,7 @@ describe("react-compat concurrent subset", () => {
     const root = createRoot(container);
     const pending = new Promise<void>(() => {});
 
-    function Pending() {
+    function Pending(): never {
       throw pending;
     }
 
@@ -1511,7 +1532,7 @@ describe("react-compat concurrent subset", () => {
     const root = createRoot(container);
     const pending = new Promise<void>(() => {});
 
-    function Pending() {
+    function Pending(): never {
       throw pending;
     }
 
@@ -1534,7 +1555,7 @@ describe("react-compat concurrent subset", () => {
     const root = createRoot(container);
     const pending = new Promise<void>(() => {});
 
-    function Pending() {
+    function Pending(): never {
       throw pending;
     }
 
@@ -1557,7 +1578,7 @@ describe("react-compat concurrent subset", () => {
     const root = createRoot(container);
     const errors: string[] = [];
 
-    function Broken() {
+    function Broken(): never {
       throw new Error("boom");
     }
 
@@ -1582,15 +1603,15 @@ describe("react-compat concurrent subset", () => {
     const root = createRoot(container);
     const errors: string[] = [];
 
-    function Broken() {
+    function Broken(): never {
       throw new Error("boom");
     }
 
     class Boundary {
-      props: { children: unknown };
+      props: { children?: ReactCompatNode };
       state = { message: "" };
 
-      constructor(props: { children: unknown }) {
+      constructor(props: { children?: ReactCompatNode }) {
         this.props = props;
       }
 

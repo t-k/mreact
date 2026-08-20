@@ -1,14 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  isElement,
-  isForwardRef,
-  isFragment,
-  isLazy,
-  isMemo,
-  isValidElementType,
-} from "react-is";
+import { isElement, isForwardRef, isFragment, isLazy, isMemo, isValidElementType } from "react-is";
 import ReactCompatDefault, {
   createElement as createElementFromDefaultImport,
 } from "../src/index.js";
@@ -57,9 +50,7 @@ describe("react-compat entrypoints", () => {
 
   test("uses React element type symbols accepted by react-is", () => {
     const MemoLabel = memo(() => createElement("span", null, "memo"));
-    const ForwardLabel = forwardRef((_props, ref) =>
-      createElement("span", { ref }, "forward")
-    );
+    const ForwardLabel = forwardRef((_props, ref) => createElement("span", { ref }, "forward"));
     const LazyLabel = lazy(async () => ({ default: MemoLabel }));
     const Context = createContext("fallback");
 
@@ -106,6 +97,7 @@ describe("react-compat entrypoints", () => {
 
     expect(hooks.useState).toBeTypeOf("function");
     expect(hooks.useReducer).toBeTypeOf("function");
+    // @ts-expect-error The hooks entrypoint intentionally excludes server rendering APIs.
     expect(hooks.renderToString).toBeUndefined();
     expect("default" in hooks).toBe(false);
   });
@@ -116,7 +108,9 @@ describe("react-compat entrypoints", () => {
     expect(server.createElement).toBeTypeOf("function");
     expect(server.renderToString).toBeTypeOf("function");
     expect(server.useMemo).toBeTypeOf("function");
+    // @ts-expect-error The server entrypoint intentionally excludes client root APIs.
     expect(server.createRoot).toBeUndefined();
+    // @ts-expect-error The server entrypoint intentionally excludes client render APIs.
     expect(server.render).toBeUndefined();
     expect("default" in server).toBe(false);
     expect(server.renderToString(() => server.createElement("p", null, "server"))).toBe(

@@ -353,6 +353,12 @@ export interface AppRouterServerActionOptions {
 }
 
 // @public
+export interface AppRouterServerRenderArtifactLoader {
+    // (undocumented)
+    load(routeFile: string): Promise<void>;
+}
+
+// @public
 export interface AssetHelperOptions {
     // (undocumented)
     base?: string;
@@ -1379,6 +1385,8 @@ export interface RenderAppRequestOptions {
     serverModuleCacheVersion?: string | undefined;
     // (undocumented)
     serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
+    // (undocumented)
+    serverRenderArtifactLoader?: AppRouterServerRenderArtifactLoader | undefined;
     // (undocumented)
     serverSourceFiles?: ReadonlyMap<string, string> | undefined;
     // (undocumented)

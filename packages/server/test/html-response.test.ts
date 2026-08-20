@@ -1,10 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { createElement, Suspense } from "@reckona/mreact-compat";
+import { createElement, Suspense, type ReactCompatNode } from "@reckona/mreact-compat";
 import { html } from "../src/index.js";
 
-async function readDecodedChunk(
-  reader: ReadableStreamDefaultReader<Uint8Array>,
-): Promise<string> {
+async function readDecodedChunk(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<string> {
   const result = await reader.read();
   return result.done ? "" : new TextDecoder().decode(result.value);
 }
@@ -38,9 +36,7 @@ describe("Next-style HTML response", () => {
       createElement("main", null, createElement("h1", null, "mreact streaming route")),
     );
 
-    await expect(response.text()).resolves.toBe(
-      "<main><h1>mreact streaming route</h1></main>",
-    );
+    await expect(response.text()).resolves.toBe("<main><h1>mreact streaming route</h1></main>");
     expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
   });
 
@@ -73,12 +69,12 @@ describe("Next-style HTML response", () => {
   });
 
   test("streams fallback for buffered list children before their deferred work resolves", async () => {
-    let resolveLead: (value: unknown) => void = () => {};
-    let resolveReady: (value: unknown) => void = () => {};
-    const lead = new Promise((resolve) => {
+    let resolveLead: (value: ReactCompatNode) => void = () => {};
+    let resolveReady: (value: ReactCompatNode) => void = () => {};
+    const lead = new Promise<ReactCompatNode>((resolve) => {
       resolveLead = resolve;
     });
-    const ready = new Promise((resolve) => {
+    const ready = new Promise<ReactCompatNode>((resolve) => {
       resolveReady = resolve;
     });
     const response = html(

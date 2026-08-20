@@ -112,7 +112,7 @@ describe("reactive-core devtools instrumentation", () => {
   });
 
   test("stops emitting immediately after the global hook detaches", () => {
-    const globalWithHook = globalThis as typeof globalThis & {
+    const globalWithHook = globalThis as unknown as {
       __mreactDevtools?: { emit?: (event: Record<string, unknown>) => void } | undefined;
     };
     const events: Record<string, unknown>[] = [];
@@ -213,11 +213,13 @@ describe("reactive-core devtools instrumentation", () => {
     const count = cell(0);
     const originalBind = devtools.emit.bind;
     let bindCalls = 0;
-    (devtools.emit as typeof devtools.emit & { bind: typeof originalBind }).bind =
-      ((thisArg: unknown, ...args: unknown[]) => {
-        bindCalls += 1;
-        return originalBind.call(devtools.emit, thisArg, ...args);
-      }) as typeof originalBind;
+    (devtools.emit as typeof devtools.emit & { bind: typeof originalBind }).bind = ((
+      thisArg: unknown,
+      ...args: unknown[]
+    ) => {
+      bindCalls += 1;
+      return originalBind.call(devtools.emit, thisArg, ...args);
+    }) as typeof originalBind;
 
     const dispose = effect(() => {
       count.get();

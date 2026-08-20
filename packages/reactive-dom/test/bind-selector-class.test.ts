@@ -68,7 +68,7 @@ describe("bindSelectorClass", () => {
     const selectedFor = ((key: number) => {
       reads += 1;
       return key === 1;
-    }) as Selector<number, number>;
+    }) as unknown as Selector<number, number>;
 
     selectedFor.subscribe = () => () => {};
     selectedFor.dispose = () => {};
@@ -89,7 +89,7 @@ describe("bindSelectorClass", () => {
     const selectedFor = ((key: number) => {
       reads += 1;
       return key === 1;
-    }) as Selector<number, number>;
+    }) as unknown as Selector<number, number>;
 
     selectedFor.subscribe = () => () => {};
     selectedFor.dispose = () => {};

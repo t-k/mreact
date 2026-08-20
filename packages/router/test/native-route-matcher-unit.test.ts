@@ -104,7 +104,7 @@ describe("native route matcher parity", () => {
               return {
                 index: 0,
                 params: {},
-                catchAllParams: { slug },
+                catchAllParams: { slug: [...slug] },
               };
             },
           },

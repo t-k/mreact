@@ -38,9 +38,9 @@ export interface ReactSuspenseScriptOptions {
 }
 
 /** Options for React Suspense boundaries rendered with streamed segments. */
-export interface ReactSuspenseBoundaryOptions extends AsyncBoundaryOptions {
+export interface ReactSuspenseBoundaryOptions
+  extends AsyncBoundaryOptions, ReactSuspenseScriptOptions {
   fallback?: (sink: HtmlSink) => void | PromiseLike<void>;
-  nonce?: string;
 }
 
 /** Error metadata used when forcing a React Suspense boundary to client render. */
@@ -115,11 +115,7 @@ function isProductionMode(): boolean {
   }
 }
 
-function appendAwaitHydrationData(
-  sink: HtmlSink,
-  awaitId: string,
-  resolved: unknown,
-): void {
+function appendAwaitHydrationData(sink: HtmlSink, awaitId: string, resolved: unknown): void {
   const serialized = serializeAwaitHydrationValue(resolved, awaitId);
 
   if (serialized === undefined) {
@@ -159,7 +155,12 @@ function containsNonSerializableSurface(value: unknown): boolean {
     return false;
   }
 
-  if (value instanceof Date || value instanceof Map || value instanceof Set || value instanceof RegExp) {
+  if (
+    value instanceof Date ||
+    value instanceof Map ||
+    value instanceof Set ||
+    value instanceof RegExp
+  ) {
     return true;
   }
 

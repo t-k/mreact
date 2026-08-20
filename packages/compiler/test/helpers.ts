@@ -30,6 +30,7 @@ import {
   useReducer,
   useState,
 } from "@reckona/mreact-compat";
+import type { ReactCompatNode } from "@reckona/mreact-compat";
 import {
   Fragment,
   REACTIVE_STATE_BINDING_META,
@@ -185,7 +186,7 @@ export async function runCompatComponent(
   }
 
   const container = document.createElement("div");
-  createRoot(container).render(component(...args));
+  createRoot(container).render(component(...args) as ReactCompatNode);
   await flushEffects();
   return container;
 }
@@ -210,7 +211,7 @@ export async function runCompatHydration(
 
   const container = document.createElement("div");
   container.innerHTML = html;
-  hydrateRoot(container, component(...args));
+  hydrateRoot(container, component(...args) as ReactCompatNode);
   await flushEffects();
   return container;
 }

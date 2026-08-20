@@ -338,7 +338,11 @@ export default function Page() { return <main>Lambda prerender HSTS</main>; }`,
     const events: AppRouterLogEvent[] = [];
     const handler = createAwsLambdaRequestHandler({
       hostPolicy: "trusted-proxy",
-      logger: { error: (event) => events.push(event) },
+      logger: {
+        error(event) {
+          events.push(event);
+        },
+      },
       outDir,
     });
 
@@ -380,7 +384,11 @@ export default function Page() { return <main>Lambda prerender HSTS</main>; }`,
     await buildApp({ appDir, outDir });
     const events: AppRouterLogEvent[] = [];
     const options = {
-      logger: { error: (event: AppRouterLogEvent) => events.push(event) },
+      logger: {
+        error(event: AppRouterLogEvent) {
+          events.push(event);
+        },
+      },
       outDir,
     };
     const traceEvent = {

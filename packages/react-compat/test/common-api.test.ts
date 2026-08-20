@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { cell, effect } from "@reckona/mreact-reactive-core";
 import { flushEffects as flushReactiveEffects } from "@reckona/mreact-reactive-core/testing";
 import {
@@ -46,12 +46,14 @@ import {
   cacheSignal,
   captureOwnerStack,
   unstable_useCacheRefresh,
+  type ReactCompatNode,
 } from "../src/index.js";
 import {
   __setCacheScopeStorageForTesting,
   createCacheScope,
   refreshCacheScope,
   runWithCacheScope,
+  type CacheScope,
 } from "../src/internal.js";
 import { runWithEventPriority } from "../src/event-priority.js";
 import { getFiberRootForContainer } from "../src/fiber-work-loop.js";
@@ -443,7 +445,10 @@ describe("react-compat common API subset", () => {
     class CollectionDocument extends CollectionNode {
       constructor() {
         super("#document-fragment", undefined as unknown as CollectionDocument);
-        this.ownerDocument = this;
+        Object.defineProperty(this, "ownerDocument", {
+          configurable: true,
+          value: this,
+        });
       }
 
       createElement(tagName: string) {
@@ -792,7 +797,7 @@ describe("react-compat common API subset", () => {
     const root = createRoot(container);
 
     class Animate extends Component<{
-      children: (style: { t: number }) => unknown;
+      children?: (style: { t: number }) => ReactCompatNode;
       onAnimationStart: () => void;
     }> {
       componentDidMount() {
@@ -800,7 +805,7 @@ describe("react-compat common API subset", () => {
       }
 
       render() {
-        return this.props.children({ t: 0 });
+        return this.props.children?.({ t: 0 }) ?? null;
       }
     }
 
@@ -876,11 +881,11 @@ describe("react-compat common API subset", () => {
     const container = document.createElement("div");
     const root = createRoot(container);
     let resolveModule: (module: {
-      default: (props: { value: string }) => unknown;
+      default: (props: { value: string }) => ReactCompatNode;
     }) => void = () => {};
     const LazyLabel = lazy(
       () =>
-        new Promise<{ default: (props: { value: string }) => unknown }>((resolve) => {
+        new Promise<{ default: (props: { value: string }) => ReactCompatNode }>((resolve) => {
           resolveModule = resolve;
         }),
     );
@@ -1268,10 +1273,13 @@ describe("react-compat common API subset", () => {
     }
 
     function Reader() {
-      const snapshot = useSyncExternalStore((listener) => {
-        listeners.add(listener);
-        return () => listeners.delete(listener);
-      }, () => value);
+      const snapshot = useSyncExternalStore(
+        (listener) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+        () => value,
+      );
       return createElement("span", null, snapshot);
     }
 
@@ -1300,10 +1308,13 @@ describe("react-compat common API subset", () => {
 
     function Reader() {
       renders += 1;
-      const snapshot = useSyncExternalStore((listener) => {
-        listeners.add(listener);
-        return () => listeners.delete(listener);
-      }, () => 7);
+      const snapshot = useSyncExternalStore(
+        (listener) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+        () => 7,
+      );
       return createElement("span", null, snapshot);
     }
 
@@ -1607,7 +1618,7 @@ describe("react-compat common API subset", () => {
       return selected;
     }
 
-    function EditableLike({ children }: { children: unknown }) {
+    function EditableLike({ children }: { children: ReactCompatNode }) {
       const context = useContext(SelectorContext);
       if (context === null) {
         throw new Error("missing selector context");
@@ -1629,7 +1640,7 @@ describe("react-compat common API subset", () => {
     }
 
     const MemoSelectorProbe = memo(
-      ({ render }: { render: () => unknown }) => render(),
+      ({ render }: { render: () => ReactCompatNode }) => render(),
       (previous, next) => previous.render === next.render,
     );
 
@@ -2398,7 +2409,9 @@ describe("react-compat common API subset", () => {
       createElement(
         "div",
         null,
+        // @ts-expect-error Legacy ES5 constructors intentionally lack a TypeScript construct signature.
         createElement(Es5Counter, { label: "count" }),
+        // @ts-expect-error Legacy ES5 constructors intentionally lack a TypeScript construct signature.
         createElement(Es5PureCounter, { label: "pure" }),
       ),
     );
@@ -2571,7 +2584,7 @@ describe("react-compat common API subset", () => {
       return createElement("span", { id: "dynamic" }, context?.i18n.locale);
     }
 
-    function Provider({ children }: { children?: unknown }) {
+    function Provider({ children }: { children?: ReactCompatNode }) {
       const makeContext = useCallback(() => ({ i18n: new Proxy(i18n, {}) }), []);
       const [context, setContext] = useState(makeContext);
 
@@ -2708,7 +2721,7 @@ describe("react-compat common API subset", () => {
     const root = createRoot(container);
     let switchStore: (() => void) | undefined;
 
-    function Provider(props: { store: { value: number }; children: unknown }) {
+    function Provider(props: { store: { value: number }; children?: ReactCompatNode }) {
       const contextValue = useMemo(() => ({ store: props.store }), [props.store]);
 
       return createElement(StoreContext.Provider, { value: contextValue }, props.children);
@@ -2757,7 +2770,7 @@ describe("react-compat common API subset", () => {
 
     function Provider(props: {
       store: { getState: () => number; subscribe: () => () => void };
-      children: unknown;
+      children?: ReactCompatNode;
     }) {
       const contextValue = useMemo(() => ({ store: props.store }), [props.store]);
       const previousState = useMemo(() => props.store.getState(), [props.store]);
@@ -2805,6 +2818,7 @@ describe("react-compat common API subset", () => {
   });
 
   test("constructor-bound setState works when React and renderer load separate compat modules", async () => {
+    // @ts-expect-error The query creates an intentionally separate module instance in Vite.
     const duplicateReact = await import("../src/index.js?constructor-copy");
     const StoreContext = createContext({ value: 11 });
     const container = document.createElement("div");
@@ -3385,7 +3399,9 @@ describe("react-compat common API subset", () => {
     const container = document.createElement("div");
     const values: unknown[] = [];
     globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__ = {
-      inject: () => 99,
+      inject: vi.fn(() => 99),
+      onCommitFiberRoot: vi.fn(),
+      onCommitFiberUnmount: vi.fn(),
     };
 
     function App() {
@@ -3429,5 +3445,5 @@ function createNodeAsyncLocalStorage() {
   const { AsyncLocalStorage } = process.getBuiltinModule(
     "node:async_hooks",
   ) as typeof import("node:async_hooks");
-  return new AsyncLocalStorage();
+  return new AsyncLocalStorage<CacheScope>();
 }

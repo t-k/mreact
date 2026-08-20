@@ -97,7 +97,7 @@ describe("react-compat production bundle", () => {
         },
       });
       const code = (Array.isArray(result) ? result : [result])
-        .flatMap((output) => output.output)
+        .flatMap((output) => ("output" in output ? output.output : []))
         .filter((output): output is Rollup.OutputChunk => output.type === "chunk")
         .map((chunk) => chunk.code)
         .join("\n");
@@ -152,7 +152,7 @@ describe("react-compat production bundle", () => {
         },
       });
       const code = (Array.isArray(result) ? result : [result])
-        .flatMap((output) => output.output)
+        .flatMap((output) => ("output" in output ? output.output : []))
         .filter((output): output is Rollup.OutputChunk => output.type === "chunk")
         .map((chunk) => chunk.code)
         .join("\n");
@@ -411,7 +411,7 @@ export function mount(container: Element) {
         },
       });
       const chunk = (Array.isArray(result) ? result : [result])
-        .flatMap((output) => output.output)
+        .flatMap((output) => ("output" in output ? output.output : []))
         .find((output): output is Rollup.OutputChunk => output.type === "chunk");
       if (chunk === undefined) {
         throw new Error("expected Vite to emit a compat bundle chunk");
@@ -510,7 +510,7 @@ async function bundlePackedScenario(
     root,
   });
   const chunk = (Array.isArray(result) ? result : [result])
-    .flatMap((output) => output.output)
+    .flatMap((output) => ("output" in output ? output.output : []))
     .find((output): output is Rollup.OutputChunk => output.type === "chunk");
 
   if (chunk === undefined) {

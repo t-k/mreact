@@ -56,7 +56,7 @@ describe("server boundary module", () => {
   test("small Await hydration payloads skip UTF-8 measurement", async () => {
     let encodeCalls = 0;
     class CountingTextEncoder extends originalTextEncoder {
-      encode(input?: string): Uint8Array {
+      encode(input?: string) {
         encodeCalls += 1;
         return super.encode(input);
       }

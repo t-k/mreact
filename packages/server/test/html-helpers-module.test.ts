@@ -1,4 +1,4 @@
-import { createElement } from "@reckona/mreact-compat";
+import { createElement, type ReactCompatNode } from "@reckona/mreact-compat";
 import { describe, expect, test } from "vitest";
 import { parseFragment } from "parse5";
 import { createStringSink } from "../src/index.js";
@@ -97,14 +97,14 @@ describe("server HTML helpers module", () => {
 
     function First() {
       started.push("first");
-      return new Promise((resolve) => {
+      return new Promise<ReactCompatNode>((resolve) => {
         resolveFirst = () => resolve(createElement("span", null, "A"));
       });
     }
 
     function Second() {
       started.push("second");
-      return new Promise((resolve) => {
+      return new Promise<ReactCompatNode>((resolve) => {
         resolveSecond = () => resolve(createElement("span", null, "B"));
       });
     }
@@ -413,7 +413,7 @@ function countElementsByName(node: unknown, name: string): number {
 
   return (
     ownCount +
-    (candidate.childNodes ?? []).reduce(
+    (candidate.childNodes ?? []).reduce<number>(
       (count: number, child) => count + countElementsByName(child, name),
       0,
     )

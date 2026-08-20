@@ -6,6 +6,7 @@
 
 import { Fragment } from '@reckona/mreact-compat';
 import { HtmlSink } from '@reckona/mreact-shared/compiler-contract';
+import { REACT_CLIENT_REFERENCE_TYPE } from '@reckona/mreact-shared';
 import { ReactCompatNode } from '@reckona/mreact-compat';
 
 // @public
@@ -20,7 +21,7 @@ export interface AsyncBoundaryOptions {
 export type AsyncBoundaryRender<T> = (sink: HtmlSink, value: Awaited<T>) => void | PromiseLike<void>;
 
 // @public
-export const CLIENT_REFERENCE_TYPE: unique symbol;
+export const CLIENT_REFERENCE_TYPE: typeof REACT_CLIENT_REFERENCE_TYPE;
 
 // @public
 export interface ClientReference {
@@ -387,11 +388,9 @@ export interface ReactFlightProtocolCoverage {
 }
 
 // @public
-export interface ReactSuspenseBoundaryOptions extends AsyncBoundaryOptions {
+export interface ReactSuspenseBoundaryOptions extends AsyncBoundaryOptions, ReactSuspenseScriptOptions {
     // (undocumented)
     fallback?: (sink: HtmlSink) => void | PromiseLike<void>;
-    // (undocumented)
-    nonce?: string;
 }
 
 // @public

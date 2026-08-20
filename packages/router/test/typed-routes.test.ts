@@ -19,8 +19,11 @@ describe("typed routes", () => {
   });
 
   test("href rejects non-internal route patterns at runtime", () => {
+    // @ts-expect-error Dynamic route parameters are intentionally omitted to reach validation.
     expect(() => href("//evil.example" as never)).toThrow(/internal route path/);
+    // @ts-expect-error Dynamic route parameters are intentionally omitted to reach validation.
     expect(() => href("javascript:alert(1)" as never)).toThrow(/internal route path/);
+    // @ts-expect-error Dynamic route parameters are intentionally omitted to reach validation.
     expect(() => href("/safe\npath" as never)).toThrow(/control characters/);
   });
 

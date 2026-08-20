@@ -15,16 +15,25 @@ type RuntimeApi = {
   Profiler: unknown;
   PureComponent: typeof React.PureComponent;
   StrictMode: unknown;
+  Suspense: unknown;
   Children: {
     count(children: unknown): number;
     map<T>(children: unknown, fn: (child: unknown, index: number) => T): T[] | null;
     only(children: unknown): unknown;
     toArray(children: unknown): unknown[];
   };
-  cloneElement: (element: unknown, props: Record<string, unknown> | null, ...children: unknown[]) => unknown;
+  cloneElement: (
+    element: unknown,
+    props: Record<string, unknown> | null,
+    ...children: unknown[]
+  ) => unknown;
   createContext: <T>(defaultValue: T) => unknown;
-  createElement: (type: unknown, props: Record<string, unknown> | null, ...children: unknown[]) => unknown;
-  createPortal: (children: unknown, container: Element, key?: unknown) => unknown;
+  createElement: (
+    type: unknown,
+    props: Record<string, unknown> | null,
+    ...children: unknown[]
+  ) => React.ReactNode;
+  createPortal: (children: unknown, container: Element, key?: unknown) => React.ReactNode;
   createRef: <T>() => { current: T | null };
   forwardRef: (render: (props: Record<string, unknown>, ref: unknown) => unknown) => unknown;
   isValidElement: (value: unknown) => boolean;
@@ -40,6 +49,10 @@ type RuntimeApi = {
     initialState: TState,
   ) => [TState, (payload: TPayload) => void, boolean];
   useEffect: (effect: () => void | (() => void), deps?: readonly unknown[]) => void;
+  useCallback: <T extends (...args: never[]) => unknown>(
+    callback: T,
+    deps: readonly unknown[],
+  ) => T;
   useId: () => string;
   useImperativeHandle: <T>(ref: unknown, create: () => T, deps?: readonly unknown[]) => void;
   useInsertionEffect: (effect: () => void | (() => void), deps?: readonly unknown[]) => void;
@@ -173,11 +186,7 @@ describe("react-compat official React conformance", () => {
           return api.createElement("p", null, api.use<string>(Theme));
         }
 
-        return api.createElement(
-          Theme.Provider,
-          { value: "dark" },
-          api.createElement(Label, null),
-        );
+        return api.createElement(Theme.Provider, { value: "dark" }, api.createElement(Label, null));
       },
     },
     {
@@ -194,16 +203,12 @@ describe("react-compat official React conformance", () => {
     {
       name: "renders fragments, arrays, null, and boolean children on the server",
       createElement(api: RuntimeApi) {
-        return api.createElement(
-          api.Fragment,
+        return api.createElement(api.Fragment, null, [
+          api.createElement("span", { key: "a" }, "A"),
           null,
-          [
-            api.createElement("span", { key: "a" }, "A"),
-            null,
-            false,
-            api.createElement("span", { key: "b" }, "B"),
-          ],
-        );
+          false,
+          api.createElement("span", { key: "b" }, "B"),
+        ]);
       },
     },
     {
@@ -248,11 +253,7 @@ describe("react-compat official React conformance", () => {
           return api.createElement("p", null, api.useContext<string>(Theme));
         }
 
-        return api.createElement(
-          Theme,
-          { value: "dark" },
-          api.createElement(Label, null),
-        );
+        return api.createElement(Theme, { value: "dark" }, api.createElement(Label, null));
       },
     },
     {
@@ -290,10 +291,7 @@ describe("react-compat official React conformance", () => {
       name: "renders memoized components and useMemo results on the server",
       createElement(api: RuntimeApi) {
         const Label = api.memo((props: Record<string, unknown>) => {
-          const value = api.useMemo(
-            () => String(props.value).toUpperCase(),
-            [props.value],
-          );
+          const value = api.useMemo(() => String(props.value).toUpperCase(), [props.value]);
           return api.createElement("strong", null, value);
         });
 
@@ -305,11 +303,7 @@ describe("react-compat official React conformance", () => {
       createElement(api: RuntimeApi) {
         const child = api.createElement("span", { className: "old" }, "old");
 
-        return api.createElement(
-          "div",
-          null,
-          api.cloneElement(child, { className: "new" }, "new"),
-        );
+        return api.createElement("div", null, api.cloneElement(child, { className: "new" }, "new"));
       },
     },
     {
@@ -369,7 +363,11 @@ describe("react-compat official React conformance", () => {
           log.push(`render:${count}`);
           return api.createElement(
             "button",
-            { onClick: () => { setCount((value) => value + 1); } },
+            {
+              onClick: () => {
+                setCount((value) => value + 1);
+              },
+            },
             `count:${count}`,
           );
         }
@@ -377,9 +375,9 @@ describe("react-compat official React conformance", () => {
         return api.createElement(Counter, null);
       },
       interact(container: Element) {
-        container.querySelector("button")?.dispatchEvent(
-          new MouseEvent("click", { bubbles: true, cancelable: true }),
-        );
+        container
+          .querySelector("button")
+          ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
       },
     },
     {
@@ -387,14 +385,26 @@ describe("react-compat official React conformance", () => {
       createElement(api: RuntimeApi, log: string[]) {
         return api.createElement(
           "div",
-          { onClick: () => { log.push("parent"); } },
-          api.createElement("button", { onClick: () => { log.push("child"); } }, "Save"),
+          {
+            onClick: () => {
+              log.push("parent");
+            },
+          },
+          api.createElement(
+            "button",
+            {
+              onClick: () => {
+                log.push("child");
+              },
+            },
+            "Save",
+          ),
         );
       },
       interact(container: Element) {
-        container.querySelector("button")?.dispatchEvent(
-          new MouseEvent("click", { bubbles: true, cancelable: true }),
-        );
+        container
+          .querySelector("button")
+          ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
       },
     },
     {
@@ -402,14 +412,17 @@ describe("react-compat official React conformance", () => {
       createElement(api: RuntimeApi, log: string[]) {
         function Counter() {
           const [count, dispatch] = api.useReducer(
-            (state: number, action: { type: "inc" }) =>
-              action.type === "inc" ? state + 1 : state,
+            (state: number, action: { type: "inc" }) => (action.type === "inc" ? state + 1 : state),
             0,
           );
           log.push(`render:${count}`);
           return api.createElement(
             "button",
-            { onClick: () => { dispatch({ type: "inc" }); } },
+            {
+              onClick: () => {
+                dispatch({ type: "inc" });
+              },
+            },
             `count:${count}`,
           );
         }
@@ -417,9 +430,9 @@ describe("react-compat official React conformance", () => {
         return api.createElement(Counter, null);
       },
       interact(container: Element) {
-        container.querySelector("button")?.dispatchEvent(
-          new MouseEvent("click", { bubbles: true, cancelable: true }),
-        );
+        container
+          .querySelector("button")
+          ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
       },
     },
     {
@@ -454,11 +467,7 @@ describe("react-compat official React conformance", () => {
           return api.createElement("p", null, value);
         }
 
-        return api.createElement(
-          Theme.Provider,
-          { value: "dark" },
-          api.createElement(Label, null),
-        );
+        return api.createElement(Theme.Provider, { value: "dark" }, api.createElement(Label, null));
       },
       interact() {
         return;
@@ -479,11 +488,7 @@ describe("react-compat official React conformance", () => {
         return api.createElement("p", null, api.useContext<string>(Theme));
       }
 
-      return api.createElement(
-        Theme,
-        { value: "dark" },
-        api.createElement(Label, null),
-      );
+      return api.createElement(Theme, { value: "dark" }, api.createElement(Label, null));
     }
 
     const react = await renderReactDomConformance(createElement, () => undefined);
@@ -541,7 +546,11 @@ describe("react-compat official React conformance", () => {
 
         return api.createElement(
           "button",
-          { onClick: () => { setCount((value) => value + 1); } },
+          {
+            onClick: () => {
+              setCount((value) => value + 1);
+            },
+          },
           count,
         );
       }
@@ -550,14 +559,14 @@ describe("react-compat official React conformance", () => {
     }
 
     const react = await renderReactDomConformance(createElement, (container) => {
-      container.querySelector("button")?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, cancelable: true }),
-      );
+      container
+        .querySelector("button")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
     const compat = await renderCompatDomConformance(createElement, (container) => {
-      container.querySelector("button")?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, cancelable: true }),
-      );
+      container
+        .querySelector("button")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
 
     expect(compat).toEqual(react);
@@ -587,14 +596,14 @@ describe("react-compat official React conformance", () => {
     }
 
     const react = await renderReactDomConformance(createElement, (container) => {
-      container.querySelector("button")?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, cancelable: true }),
-      );
+      container
+        .querySelector("button")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
     const compat = await renderCompatDomConformance(createElement, (container) => {
-      container.querySelector("button")?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, cancelable: true }),
-      );
+      container
+        .querySelector("button")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
 
     expect(compat).toEqual(react);
@@ -613,7 +622,11 @@ describe("react-compat official React conformance", () => {
 
         return api.createElement(
           "button",
-          { onClick: () => { setLabel("B"); } },
+          {
+            onClick: () => {
+              setLabel("B");
+            },
+          },
           label,
         );
       }
@@ -695,14 +708,14 @@ describe("react-compat official React conformance", () => {
     }
 
     const react = await renderReactDomConformance(createElement, (container) => {
-      container.querySelector("button")?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, cancelable: true }),
-      );
+      container
+        .querySelector("button")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
     const compat = await renderCompatDomConformance(createElement, (container) => {
-      container.querySelector("button")?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, cancelable: true }),
-      );
+      container
+        .querySelector("button")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
 
     expect(compat).toEqual(react);
@@ -746,7 +759,7 @@ describe("react-compat official React conformance", () => {
   test("catches render errors in class error boundaries like React", async () => {
     function createElement(api: RuntimeApi, log: string[]) {
       const BaseComponent = api.Component as typeof React.Component<
-        { children?: unknown },
+        { children?: React.ReactNode },
         { message: string }
       >;
 
@@ -768,7 +781,7 @@ describe("react-compat official React conformance", () => {
         }
       }
 
-      function Broken() {
+      function Broken(): never {
         throw new Error("boom");
       }
 
@@ -827,11 +840,19 @@ describe("react-compat official React conformance", () => {
 
     function createElement(api: RuntimeApi, log: string[], store: ReturnType<typeof createStore>) {
       function Label() {
-        const value = api.useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+        const value = api.useSyncExternalStore(
+          store.subscribe,
+          store.getSnapshot,
+          store.getSnapshot,
+        );
         log.push(`render:${value}`);
         return api.createElement(
           "button",
-          { onClick: () => { store.set("B"); } },
+          {
+            onClick: () => {
+              store.set("B");
+            },
+          },
           value,
         );
       }
@@ -844,17 +865,17 @@ describe("react-compat official React conformance", () => {
     const react = await renderReactDomConformance(
       (api, log) => createElement(api, log, reactStore),
       (container) => {
-        container.querySelector("button")?.dispatchEvent(
-          new MouseEvent("click", { bubbles: true, cancelable: true }),
-        );
+        container
+          .querySelector("button")
+          ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
       },
     );
     const compat = await renderCompatDomConformance(
       (api, log) => createElement(api, log, compatStore),
       (container) => {
-        container.querySelector("button")?.dispatchEvent(
-          new MouseEvent("click", { bubbles: true, cancelable: true }),
-        );
+        container
+          .querySelector("button")
+          ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
       },
     );
 
@@ -885,14 +906,14 @@ describe("react-compat official React conformance", () => {
     }
 
     const react = await renderReactDomConformance(createElement, (container) => {
-      container.querySelector("button")?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, cancelable: true }),
-      );
+      container
+        .querySelector("button")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
     const compat = await renderCompatDomConformance(createElement, (container) => {
-      container.querySelector("button")?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, cancelable: true }),
-      );
+      container
+        .querySelector("button")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
 
     expect(compat.after).toBe(react.after);
@@ -907,7 +928,11 @@ describe("react-compat official React conformance", () => {
         );
         return api.createElement(
           "button",
-          { onClick: () => { dispatch("B"); } },
+          {
+            onClick: () => {
+              dispatch("B");
+            },
+          },
           `${state}:${pending}`,
         );
       }
@@ -916,14 +941,14 @@ describe("react-compat official React conformance", () => {
     }
 
     const react = await renderReactDomConformance(createElement, (container) => {
-      container.querySelector("button")?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, cancelable: true }),
-      );
+      container
+        .querySelector("button")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
     const compat = await renderCompatDomConformance(createElement, (container) => {
-      container.querySelector("button")?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, cancelable: true }),
-      );
+      container
+        .querySelector("button")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
 
     expect(compat).toEqual(react);
@@ -952,14 +977,14 @@ describe("react-compat official React conformance", () => {
     }
 
     const react = await renderReactDomConformance(createElement, (container) => {
-      container.querySelector("button")?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, cancelable: true }),
-      );
+      container
+        .querySelector("button")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
     const compat = await renderCompatDomConformance(createElement, (container) => {
-      container.querySelector("button")?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, cancelable: true }),
-      );
+      container
+        .querySelector("button")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
 
     expect(compat).toEqual(react);
@@ -993,14 +1018,14 @@ describe("react-compat official React conformance", () => {
     }
 
     const react = await renderReactDomConformance(createElement, (container) => {
-      container.querySelector("button")?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, cancelable: true }),
-      );
+      container
+        .querySelector("button")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
     const compat = await renderCompatDomConformance(createElement, (container) => {
-      container.querySelector("button")?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, cancelable: true }),
-      );
+      container
+        .querySelector("button")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
 
     expect(compat.after).toBe(react.after);
@@ -1012,7 +1037,11 @@ describe("react-compat official React conformance", () => {
         const [count, setCount] = api.useState(0);
         return api.createElement(
           "button",
-          { onClick: () => { setCount((value) => value + 1); } },
+          {
+            onClick: () => {
+              setCount((value) => value + 1);
+            },
+          },
           count,
         );
       }
@@ -1030,14 +1059,14 @@ describe("react-compat official React conformance", () => {
     }
 
     const react = await renderReactDomConformance(createElement, (container) => {
-      container.querySelector("button")?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, cancelable: true }),
-      );
+      container
+        .querySelector("button")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
     const compat = await renderCompatDomConformance(createElement, (container) => {
-      container.querySelector("button")?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, cancelable: true }),
-      );
+      container
+        .querySelector("button")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
 
     expect(compat).toEqual(react);
@@ -1051,7 +1080,12 @@ describe("react-compat official React conformance", () => {
         log.push(id);
         return api.createElement(
           "button",
-          { id, onClick: () => { setCount((value) => value + 1); } },
+          {
+            id,
+            onClick: () => {
+              setCount((value) => value + 1);
+            },
+          },
           `${id}:${count}`,
         );
       }
@@ -1060,14 +1094,14 @@ describe("react-compat official React conformance", () => {
     }
 
     const react = await renderReactDomConformance(createElement, (container) => {
-      container.querySelector("button")?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, cancelable: true }),
-      );
+      container
+        .querySelector("button")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
     const compat = await renderCompatDomConformance(createElement, (container) => {
-      container.querySelector("button")?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, cancelable: true }),
-      );
+      container
+        .querySelector("button")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
 
     expect(compat).toEqual(react);
@@ -1102,9 +1136,21 @@ describe("react-compat official React conformance", () => {
     function createElement(api: RuntimeApi, log: string[], portalContainer: Element) {
       return api.createElement(
         "section",
-        { onClick: () => { log.push("owner"); } },
+        {
+          onClick: () => {
+            log.push("owner");
+          },
+        },
         api.createPortal(
-          api.createElement("button", { onClick: () => { log.push("portal"); } }, "Portal"),
+          api.createElement(
+            "button",
+            {
+              onClick: () => {
+                log.push("portal");
+              },
+            },
+            "Portal",
+          ),
           portalContainer,
         ),
       );
@@ -1113,17 +1159,17 @@ describe("react-compat official React conformance", () => {
     const react = await renderReactDomConformance(
       (api, log) => createElement(api, log, reactPortalContainer),
       () => {
-        reactPortalContainer.querySelector("button")?.dispatchEvent(
-          new MouseEvent("click", { bubbles: true, cancelable: true }),
-        );
+        reactPortalContainer
+          .querySelector("button")
+          ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
       },
     );
     const compat = await renderCompatDomConformance(
       (api, log) => createElement(api, log, compatPortalContainer),
       () => {
-        compatPortalContainer.querySelector("button")?.dispatchEvent(
-          new MouseEvent("click", { bubbles: true, cancelable: true }),
-        );
+        compatPortalContainer
+          .querySelector("button")
+          ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
       },
     );
 
@@ -1140,7 +1186,11 @@ describe("react-compat official React conformance", () => {
     function createElement(api: RuntimeApi, log: string[]) {
       return api.createElement(
         "div",
-        { onClick: () => { log.push("parent"); } },
+        {
+          onClick: () => {
+            log.push("parent");
+          },
+        },
         api.createElement(
           "button",
           {
@@ -1155,14 +1205,14 @@ describe("react-compat official React conformance", () => {
     }
 
     const react = await renderReactDomConformance(createElement, (container) => {
-      container.querySelector("button")?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, cancelable: true }),
-      );
+      container
+        .querySelector("button")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
     const compat = await renderCompatDomConformance(createElement, (container) => {
-      container.querySelector("button")?.dispatchEvent(
-        new MouseEvent("click", { bubbles: true, cancelable: true }),
-      );
+      container
+        .querySelector("button")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
 
     expect(compat).toEqual(react);
@@ -1312,7 +1362,9 @@ describe("react-compat official React conformance", () => {
         "button",
         {
           className: "primary",
-          onClick: () => { log.push("click"); },
+          onClick: () => {
+            log.push("click");
+          },
         },
         "Save",
       );
@@ -1329,14 +1381,8 @@ describe("react-compat official React conformance", () => {
       return api.createElement("p", null, "client");
     }
 
-    const react = await hydrateReactMismatchConformance(
-      "<p>server</p>",
-      createElement,
-    );
-    const compat = await hydrateCompatMismatchConformance(
-      "<p>server</p>",
-      createElement,
-    );
+    const react = await hydrateReactMismatchConformance("<p>server</p>", createElement);
+    const compat = await hydrateCompatMismatchConformance("<p>server</p>", createElement);
 
     expect(compat.after).toBe(react.after);
     expect(compat.recoverableErrors).toBeGreaterThan(0);
@@ -1560,9 +1606,9 @@ async function renderReactDomEffectCleanupConformance(
   });
   const before = container.innerHTML;
   await act(async () => {
-    container.querySelector("button")?.dispatchEvent(
-      new MouseEvent("click", { bubbles: true, cancelable: true }),
-    );
+    container
+      .querySelector("button")
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
   });
   const after = container.innerHTML;
   await act(async () => {
@@ -1582,9 +1628,9 @@ async function renderCompatDomEffectCleanupConformance(
   root.render(createElement(compatApi, log) as Compat.ReactCompatNode);
   await flushCompatAsyncWork();
   const before = container.innerHTML;
-  container.querySelector("button")?.dispatchEvent(
-    new MouseEvent("click", { bubbles: true, cancelable: true }),
-  );
+  container
+    .querySelector("button")
+    ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
   await flushCompatAsyncWork();
   const after = container.innerHTML;
   root.unmount();
@@ -1632,17 +1678,15 @@ async function hydrateReactDomConformance(
 ): Promise<{ before: string; after: string; log: string[] }> {
   const log: string[] = [];
   const container = document.createElement("div");
-  container.innerHTML = renderReactToString(
-    createElement(reactApi, []) as React.ReactNode,
-  );
+  container.innerHTML = renderReactToString(createElement(reactApi, []) as React.ReactNode);
   const before = container.innerHTML;
 
   await act(async () => {
     hydrateReactRoot(container, createElement(reactApi, log) as React.ReactNode);
   });
-  container.querySelector("button")?.dispatchEvent(
-    new MouseEvent("click", { bubbles: true, cancelable: true }),
-  );
+  container
+    .querySelector("button")
+    ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
 
   return { before, after: container.innerHTML, log };
 }
@@ -1658,9 +1702,9 @@ async function hydrateCompatDomConformance(
   const before = container.innerHTML;
 
   Compat.hydrateRoot(container, createElement(compatApi, log) as Compat.ReactCompatNode);
-  container.querySelector("button")?.dispatchEvent(
-    new MouseEvent("click", { bubbles: true, cancelable: true }),
-  );
+  container
+    .querySelector("button")
+    ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
 
   return { before, after: container.innerHTML, log };
 }

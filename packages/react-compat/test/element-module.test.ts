@@ -9,7 +9,7 @@ describe("createElement module", () => {
       "utf8",
     );
     const implementationStart = source.indexOf(
-      "export function createElement<P extends object>(\n  type: ElementType<P>,\n  config: (P & ReactReservedProps) | null,\n): ReactCompatElement<P> {",
+      "export function createElement<P extends object>(\n  type: ElementType<P>,\n  config?: (P & ReactReservedProps) | null,\n): ReactCompatElement<P> {",
     );
 
     expect(implementationStart).toBeGreaterThanOrEqual(0);

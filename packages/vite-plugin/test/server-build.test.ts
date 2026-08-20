@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { build } from "vite";
+import { build, type Rollup } from "vite";
 
 describe("modularReact server build fixture", () => {
   test("builds a static SSR fixture", async () => {
@@ -20,14 +20,18 @@ describe("modularReact server build fixture", () => {
         },
       });
 
-      const outputs = Array.isArray(result) ? result : [result];
+      const outputs: Rollup.RollupOutput[] = Array.isArray(result)
+        ? result
+        : "output" in result
+          ? [result]
+          : (() => {
+              throw new Error("Vite unexpectedly returned a build watcher");
+            })();
       const chunks = outputs.flatMap((output) => output.output);
 
       expect(chunks.some((chunk) => chunk.type === "chunk")).toBe(true);
       expect(
-        chunks.some(
-          (chunk) => chunk.type === "chunk" && chunk.code.includes("Hello SSR"),
-        ),
+        chunks.some((chunk) => chunk.type === "chunk" && chunk.code.includes("Hello SSR")),
       ).toBe(true);
     } finally {
       await rm(outDir, { force: true, recursive: true });

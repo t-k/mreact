@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi, type Mock } from "vitest";
 import { build as viteBuild } from "vite";
 import { join } from "node:path";
 import {
@@ -43,11 +43,11 @@ const devToolsE2EScenarios = [
 ] as const;
 
 interface TestDevToolsHook {
-  inject: ReturnType<typeof vi.fn>;
-  onCommitFiberRoot: ReturnType<typeof vi.fn>;
-  onPostCommitFiberRoot?: ReturnType<typeof vi.fn>;
-  onCommitFiberUnmount: ReturnType<typeof vi.fn>;
-  getFiberRoots?: ReturnType<typeof vi.fn>;
+  inject: Mock<(...args: any[]) => any>;
+  onCommitFiberRoot: Mock<(...args: any[]) => any>;
+  onPostCommitFiberRoot?: Mock<(...args: any[]) => any>;
+  onCommitFiberUnmount: Mock<(...args: any[]) => any>;
+  getFiberRoots?: Mock<(...args: any[]) => any>;
 }
 
 interface TestDevToolsRenderer {
@@ -71,7 +71,12 @@ interface TestDevToolsRenderer {
     oldPath: Array<string | number>,
     newPath: Array<string | number>,
   ): void;
-  overrideHookState?(fiber: unknown, id: string, path: Array<string | number>, value: unknown): void;
+  overrideHookState?(
+    fiber: unknown,
+    id: string,
+    path: Array<string | number>,
+    value: unknown,
+  ): void;
   scheduleUpdate?(fiber: unknown): void;
   startProfiling?(): void;
   stopProfiling?(): void;
@@ -236,7 +241,8 @@ render(createElement("p", null, "Hello"), container);`;
         },
       ],
     });
-    const output = Array.isArray(result) ? result[0]?.output : result.output;
+    const firstResult = Array.isArray(result) ? result[0] : result;
+    const output = firstResult !== undefined && "output" in firstResult ? firstResult.output : [];
     const code = output
       .filter((item): item is { code: string; type: "chunk" } => item.type === "chunk")
       .map((chunk) => chunk.code)
@@ -365,16 +371,18 @@ render(createElement("p", null, "Hello"), container);`;
     const roots = new Map<number, Set<unknown>>();
     const hook: TestDevToolsHook = {
       inject: vi.fn(() => 14),
-      onCommitFiberRoot: vi.fn((rendererID: number, root: { current: { memoizedState: unknown } }) => {
-        const set = roots.get(rendererID) ?? new Set<unknown>();
-        roots.set(rendererID, set);
+      onCommitFiberRoot: vi.fn(
+        (rendererID: number, root: { current: { memoizedState: unknown } }) => {
+          const set = roots.get(rendererID) ?? new Set<unknown>();
+          roots.set(rendererID, set);
 
-        if (root.current.memoizedState === null) {
-          set.delete(root);
-        } else {
-          set.add(root);
-        }
-      }),
+          if (root.current.memoizedState === null) {
+            set.delete(root);
+          } else {
+            set.add(root);
+          }
+        },
+      ),
       onCommitFiberUnmount: vi.fn(),
       getFiberRoots: vi.fn((rendererID: number) => roots.get(rendererID) ?? new Set()),
     };
@@ -524,6 +532,7 @@ render(createElement("p", null, "Hello"), container);`;
           tag: number;
           elementType: unknown;
           child?: {
+            elementType?: unknown;
             _debugHookTypes: string[] | null;
             memoizedState: unknown;
           };
@@ -745,10 +754,7 @@ render(createElement("p", null, "Hello"), container);`;
         () => () => undefined,
         () => "snapshot",
       );
-      const [actionState] = useActionState(
-        (state: number, payload: number) => state + payload,
-        1,
-      );
+      const [actionState] = useActionState((state: number, payload: number) => state + payload, 1);
       const [optimistic] = useOptimistic("base");
       const event = useEffectEvent(() => optimistic);
       useInsertionEffect(() => undefined, []);
@@ -791,16 +797,18 @@ render(createElement("p", null, "Hello"), container);`;
     const roots = new Map<number, Set<unknown>>();
     const hook: TestDevToolsHook = {
       inject: vi.fn(() => 20),
-      onCommitFiberRoot: vi.fn((rendererID: number, root: { current: { memoizedState: unknown } }) => {
-        const set = roots.get(rendererID) ?? new Set<unknown>();
-        roots.set(rendererID, set);
+      onCommitFiberRoot: vi.fn(
+        (rendererID: number, root: { current: { memoizedState: unknown } }) => {
+          const set = roots.get(rendererID) ?? new Set<unknown>();
+          roots.set(rendererID, set);
 
-        if (root.current.memoizedState === null) {
-          set.delete(root);
-        } else {
-          set.add(root);
-        }
-      }),
+          if (root.current.memoizedState === null) {
+            set.delete(root);
+          } else {
+            set.add(root);
+          }
+        },
+      ),
       onPostCommitFiberRoot: vi.fn(),
       onCommitFiberUnmount: vi.fn(),
       getFiberRoots: vi.fn((rendererID: number) => roots.get(rendererID) ?? new Set()),
@@ -839,6 +847,7 @@ render(createElement("p", null, "Hello"), container);`;
             child?: {
               stateNode: HTMLButtonElement;
             };
+            type?: unknown;
           };
         };
       };

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, test } from "vitest";
-import { createElement, createRoot, useState } from "../src/index.js";
+import { createElement, createRoot, useState, type ReactCompatNode } from "../src/index.js";
 import {
   decodeFlightResponse,
   createFetchServerReferenceCaller,
@@ -10,10 +10,7 @@ import {
   parseFlightResponse,
   readFlightResponse,
 } from "../src/flight.js";
-import {
-  renderToFlightResponse,
-  toReactFlightPayload,
-} from "../../server/src/flight.js";
+import { renderToFlightResponse, toReactFlightPayload } from "../../server/src/flight.js";
 
 describe("react-compat Flight client", () => {
   test("preserves own __proto__ data without changing the decoded object prototype", () => {
@@ -262,7 +259,7 @@ describe("react-compat Flight client", () => {
     );
     const container = document.createElement("div");
 
-    createRoot(container).render(node);
+    createRoot(container).render(node as ReactCompatNode);
 
     expect(container.innerHTML).toBe("<p>Ada</p>");
   });
@@ -297,7 +294,7 @@ describe("react-compat Flight client", () => {
     );
     const container = document.createElement("div");
 
-    createRoot(container).render(node);
+    createRoot(container).render(node as ReactCompatNode);
     container.querySelector("button")?.click();
 
     expect(container.innerHTML).toBe("<button>Ada</button>");
@@ -328,7 +325,7 @@ describe("react-compat Flight client", () => {
     );
     const container = document.createElement("div");
 
-    createRoot(container).render(node);
+    createRoot(container).render(node as ReactCompatNode);
     container.querySelector("button")?.click();
 
     expect(calls).toEqual([["actions/save", "save", "workspace-1", "Ada"]]);
@@ -359,7 +356,7 @@ describe("react-compat Flight client", () => {
     );
     const container = document.createElement("div");
 
-    createRoot(container).render(node);
+    createRoot(container).render(node as ReactCompatNode);
     container.querySelector("button")?.click();
 
     const call = calls[0];
@@ -376,7 +373,7 @@ describe("react-compat Flight client", () => {
     const seen: Record<string, unknown> = {};
     function Card(props: Record<string, unknown>) {
       Object.assign(seen, props);
-      return createElement("p", null, props.children);
+      return createElement("p", null, props.children as ReactCompatNode);
     }
     const node = decodeFlightResponse(
       parseFlightResponse(
@@ -398,7 +395,7 @@ describe("react-compat Flight client", () => {
     );
     const container = document.createElement("div");
 
-    createRoot(container).render(node);
+    createRoot(container).render(node as ReactCompatNode);
 
     expect(container.innerHTML).toBe("<p>Hello Ada</p>");
     expect(seen.when).toEqual(new Date("2026-05-11T00:00:00.000Z"));
@@ -434,7 +431,7 @@ describe("react-compat Flight client", () => {
     );
     const container = document.createElement("div");
 
-    createRoot(container).render(node);
+    createRoot(container).render(node as ReactCompatNode);
 
     expect(container.innerHTML).toBe("<p>ok</p>");
     expect(seen.form).toBeInstanceOf(FormData);
@@ -475,7 +472,7 @@ describe("react-compat Flight client", () => {
     );
     const container = document.createElement("div");
 
-    createRoot(container).render(node);
+    createRoot(container).render(node as ReactCompatNode);
 
     expect(container.innerHTML).toBe("<p>2</p>");
     expect(seen.bytes).toEqual(new Uint8Array([1, 2, 3, 4]));
@@ -508,7 +505,7 @@ describe("react-compat Flight client", () => {
     });
     const container = document.createElement("div");
 
-    createRoot(container).render(node);
+    createRoot(container).render(node as ReactCompatNode);
 
     expect(container.innerHTML).toBe("<p>4</p>");
     expect(seen.bytes).toEqual(new Uint8Array([1, 2, 3, 4]));
@@ -617,7 +614,7 @@ describe("react-compat Flight client", () => {
     );
     const container = document.createElement("div");
 
-    createRoot(container).render(node);
+    createRoot(container).render(node as ReactCompatNode);
     container.querySelector("button")?.click();
     await Promise.resolve();
 

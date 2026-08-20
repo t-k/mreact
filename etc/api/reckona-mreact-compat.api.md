@@ -4,6 +4,10 @@
 
 ```ts
 
+import { REACT_CLIENT_REFERENCE_TYPE } from '@reckona/mreact-shared';
+import { REACT_COMPAT_CONSUMER_TYPE } from '@reckona/mreact-shared';
+import { REACT_COMPAT_PROVIDER_TYPE } from '@reckona/mreact-shared';
+
 // @public
 export function act<T>(callback: () => T): T extends PromiseLike<unknown> ? Promise<void> : void;
 
@@ -65,7 +69,20 @@ export interface ComponentConstructor {
 export function createContext<T>(defaultValue: T): ReactCompatContext<T>;
 
 // @public
-export function createElement<P extends object>(type: ElementType<P>, config: (P & ReactReservedProps) | null, ...children: ReactCompatNode[]): ReactCompatElement<P>;
+export function createElement(type: string, config?: (Record<string, unknown> & ReactReservedProps) | null, ...children: ReactCompatNode[]): ReactCompatElement<Record<string, unknown>>;
+
+// @public (undocumented)
+export function createElement<P extends object>(type: ForwardRefType<P>, config?: (P extends Record<string, never> ? ReactReservedProps : P & ReactReservedProps) | null, ...children: (P extends {
+    children?: infer Child;
+} ? Child | ReactCompatNode : ReactCompatNode)[]): ReactCompatElement<P>;
+
+// @public (undocumented)
+export function createElement<T>(type: ReactCompatConsumer<T>, config: null | undefined, render: (value: T) => ReactCompatNode): ReactCompatElement<Record<string, unknown>>;
+
+// @public (undocumented)
+export function createElement<P extends object>(type: ElementType<P>, config?: (P & ReactReservedProps) | null, ...children: (P extends {
+    children?: infer Child;
+} ? Child | ReactCompatNode : ReactCompatNode)[]): ReactCompatElement<P>;
 
 // @public
 export function createErrorBoundary(options: ErrorBoundaryOptions, children: ReactCompatNode): ReactCompatElement<ErrorBoundaryOptions & {
@@ -90,7 +107,14 @@ export function createStreamingHydrationRoot(container: Element, options?: Strea
 export type EffectCallback = () => void | (() => void);
 
 // @public
-export type ElementType<P = Record<string, unknown>> = string | typeof Fragment | typeof Suspense | typeof SuspenseList | typeof Activity | typeof Profiler | typeof ERROR_BOUNDARY_TYPE | typeof REACTIVE_DOM_BLOCK_TYPE | typeof STRICT_MODE_TYPE | ReactCompatContextProviderShorthand | ReactCompatProviderType | ForwardRefType<P> | MemoType<P> | LazyType<P> | ((props: P) => ReactCompatNode | PromiseLike<ReactCompatNode>) | (new (props: P) => {
+export type ElementType<P = Record<string, unknown>> = string | typeof Fragment | typeof Suspense | typeof SuspenseList | typeof Activity | typeof Profiler | typeof ERROR_BOUNDARY_TYPE | typeof REACTIVE_DOM_BLOCK_TYPE | typeof STRICT_MODE_TYPE | ReactCompatContextProviderShorthand | ReactCompatProviderType | {
+    $$typeof: typeof REACT_COMPAT_CONSUMER_TYPE;
+    context: unknown;
+} | {
+    $$typeof: typeof REACT_CLIENT_REFERENCE_TYPE;
+    moduleId: string;
+    exportName: string;
+} | ForwardRefType<P> | MemoType<P> | LazyType<P> | ((props: P) => ReactCompatNode | PromiseLike<ReactCompatNode>) | (new (props: P) => {
     render(): ReactCompatNode;
 });
 
@@ -138,9 +162,7 @@ export type FormEventHandler<TCurrentTarget extends EventTarget = Element> = JSX
 // @public
 export function forwardRef<P, T>(render: (props: P, ref: {
     current: T | null;
-} | ((value: T | null) => void) | null) => ReactCompatNode): ForwardRefType<P & {
-    ref?: unknown;
-}>;
+} | ((value: T | null) => void) | null) => ReactCompatNode): ForwardRefType<P>;
 
 // @public
 export interface ForwardRefType<P = Record<string, unknown>> {
@@ -267,7 +289,7 @@ const ReactCompat: {
     readonly Profiler: typeof Profiler;
     readonly Suspense: typeof Suspense;
     readonly SuspenseList: typeof SuspenseList;
-    readonly StrictMode: symbol;
+    readonly StrictMode: STRICT_MODE_TYPE;
     readonly Children: {
         map<T>(children: ReactCompatNode, fn: (child: Exclude<ReactCompatNode, null | undefined | boolean>, index: number) => T): T[] | null;
         forEach(children: ReactCompatNode, fn: (child: Exclude<ReactCompatNode, null | undefined | boolean>, index: number) => void): void;
@@ -334,7 +356,7 @@ export interface ReactCompatConsumer<T> {
     // (undocumented)
     $$typeof: typeof REACT_COMPAT_CONSUMER_TYPE;
     // (undocumented)
-    context?: ReactCompatContextLike<T>;
+    context: ReactCompatContextLike<T>;
     // (undocumented)
     _context?: ReactCompatContextLike<T>;
     // (undocumented)
@@ -401,7 +423,7 @@ export interface ReactCompatExternalContext<T> {
 }
 
 // @public
-export type ReactCompatNode = ReactCompatRenderableElement | ReactCompatPortal | string | number | boolean | null | undefined | ReactCompatNode[];
+export type ReactCompatNode = ReactCompatRenderableElement | ReactCompatPortal | string | number | boolean | null | undefined | ReactCompatNode[] | PromiseLike<ReactCompatNode>;
 
 // @public
 export interface ReactCompatPortal {
@@ -420,7 +442,7 @@ export interface ReactCompatProvider<T> {
     // (undocumented)
     $$typeof: typeof REACT_COMPAT_PROVIDER_TYPE;
     // (undocumented)
-    context?: ReactCompatContextLike<T>;
+    context: ReactCompatContextLike<T>;
     // (undocumented)
     displayName: string | undefined;
 }
@@ -428,7 +450,7 @@ export interface ReactCompatProvider<T> {
 // @public (undocumented)
 export interface ReactCompatProviderType {
     // (undocumented)
-    $$typeof: symbol;
+    $$typeof: typeof REACT_COMPAT_PROVIDER_TYPE;
     // (undocumented)
     context: unknown;
 }
@@ -547,7 +569,7 @@ export interface StreamingHydrationRootOptions {
 }
 
 // @public
-export const StrictMode: symbol;
+export const StrictMode: typeof STRICT_MODE_TYPE;
 
 // @public
 export const Suspense: unique symbol;
@@ -607,6 +629,9 @@ export function useMemo<T>(factory: () => T, deps?: readonly unknown[]): T;
 export function useOptimistic<TState, TPayload>(state: TState, update?: (state: TState, payload: TPayload) => TState): [TState, (payload: TPayload) => void];
 
 // @public
+export function useReducer<TState>(reducer: (state: TState) => TState, initialArg: TState): [TState, () => void];
+
+// @public (undocumented)
 export function useReducer<TState, TAction, TInitial = TState>(reducer: (state: TState, action: TAction) => TState, initialArg: TInitial, init?: (initialArg: TInitial) => TState): [TState, (action: TAction) => void];
 
 // @public
@@ -616,6 +641,12 @@ export function useRef<T>(initial: T): {
 
 // @public
 export function useState<T>(initial: T | (() => T)): [T, (value: T | ((previous: T) => T)) => void];
+
+// @public (undocumented)
+export function useState<T = undefined>(): [
+T | undefined,
+(value: T | undefined | ((previous: T | undefined) => T | undefined)) => void
+];
 
 // @public
 export function useSyncExternalStore<T>(subscribe: (listener: () => void) => () => void, getSnapshot: () => T, getServerSnapshot?: () => T): T;

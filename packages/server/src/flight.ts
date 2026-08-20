@@ -1,8 +1,10 @@
 import { createCacheScope, runWithCacheScope } from "@reckona/mreact-compat/internal";
+import { REACT_CLIENT_REFERENCE_TYPE } from "@reckona/mreact-shared";
 import { getNativeFlight } from "./native-flight.js";
 
 /** Symbol tag used to identify client references in serialized Flight values. */
-export const CLIENT_REFERENCE_TYPE = Symbol.for("modular.react.client_reference");
+export const CLIENT_REFERENCE_TYPE: typeof REACT_CLIENT_REFERENCE_TYPE =
+  REACT_CLIENT_REFERENCE_TYPE;
 /** Symbol tag used to identify server references in serialized Flight values. */
 export const SERVER_REFERENCE_TYPE = Symbol.for("modular.react.server_reference");
 
@@ -688,9 +690,7 @@ export function createServerActionHandler(
 /** Encodes a structured Flight response into mreact's Base64-safe text row representation. */
 export function toReactFlightRows(response: FlightResponse): string {
   return encodeReactFlightResponseRows(response)
-    .map((row) =>
-      typeof row === "string" ? row : `${row.prefix}${encodeBase64Bytes(row.bytes)}`,
-    )
+    .map((row) => (typeof row === "string" ? row : `${row.prefix}${encodeBase64Bytes(row.bytes)}`))
     .join("\n");
 }
 

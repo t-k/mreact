@@ -102,8 +102,8 @@ export function parseFlightResponse(payload: string | ArrayBuffer | Uint8Array):
 export function decodeFlightResponse(
   response: FlightResponse,
   options: DecodeFlightOptions,
-): ReactCompatNode {
-  return decodeFlightModel(response.root, response, options) as ReactCompatNode;
+): unknown {
+  return decodeFlightModel(response.root, response, options);
 }
 
 /** Reads and parses a Flight response script from a document or parent node. */
@@ -125,7 +125,11 @@ export function hydrateFlightResponse(
   response: FlightResponse,
   options: HydrateFlightOptions,
 ): Root {
-  return hydrateRoot(container, decodeFlightResponse(response, options), options.hydrate);
+  return hydrateRoot(
+    container,
+    decodeFlightResponse(response, options) as ReactCompatNode,
+    options.hydrate,
+  );
 }
 
 /** Creates a server reference caller that POSTs encoded action invocations to an endpoint. */

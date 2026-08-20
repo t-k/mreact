@@ -2,6 +2,7 @@
 
 import { describe, expect, test } from "vitest";
 import { createElement, createRoot } from "@reckona/mreact-compat";
+import type { ReactCompatNode } from "@reckona/mreact-compat";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { parseSync } from "oxc-parser";
 import { transform } from "../src/index.js";
@@ -879,7 +880,7 @@ describe("compiler compat mode", () => {
 
     try {
       const module = compileCompatModule(outputWithSetter);
-      const App = module.App as (props: Record<string, unknown>) => unknown;
+      const App = module.App as (props: Record<string, unknown>) => ReactCompatNode;
       const container = document.createElement("div");
       createRoot(container).render(
         createElement(App, {

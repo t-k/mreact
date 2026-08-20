@@ -17,9 +17,7 @@ describe("HTML escaping helpers", () => {
   });
 
   test("preserves the existing quoted-attribute route-id behavior", () => {
-    expect(escapeHtmlQuotedAttribute(`<route & "id">`)).toBe(
-      "<route &amp; &quot;id&quot;>",
-    );
+    expect(escapeHtmlQuotedAttribute(`<route & "id">`)).toBe("<route &amp; &quot;id&quot;>");
   });
 
   test("returns no-escape values without replaceAll passes", () => {
@@ -30,10 +28,12 @@ describe("HTML escaping helpers", () => {
       String.prototype.replaceAll = function countedReplaceAll(
         this: string,
         searchValue: string | RegExp,
-        replaceValue: string,
+        replaceValue: string | ((substring: string, ...args: unknown[]) => string),
       ): string {
         replaceAllCalls += 1;
-        return originalReplaceAll.call(this, searchValue, replaceValue);
+        return typeof replaceValue === "string"
+          ? originalReplaceAll.call(this, searchValue, replaceValue)
+          : originalReplaceAll.call(this, searchValue, replaceValue);
       };
 
       expect(escapeHtmlText("plain text")).toBe("plain text");

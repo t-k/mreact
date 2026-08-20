@@ -30,6 +30,7 @@ import {
   buildApp,
   packageAwsLambdaArtifact,
   packageCloudflarePagesArtifact,
+  type BuiltPrerenderedRoute,
 } from "../src/build.js";
 import { appRouterBuildTargetMetadata } from "../src/config.js";
 import { exportStaticApp } from "../src/adapters/static.js";
@@ -132,7 +133,11 @@ function collectBareRuntimeImports(code: string): string[] {
       continue;
     }
 
-    imports.add(specifier.startsWith("@") ? specifier.split("/").slice(0, 2).join("/") : specifier.split("/")[0] ?? specifier);
+    imports.add(
+      specifier.startsWith("@")
+        ? specifier.split("/").slice(0, 2).join("/")
+        : (specifier.split("/")[0] ?? specifier),
+    );
   }
 
   return [...imports].sort();
@@ -144,7 +149,9 @@ function localNameForMinifiedExport(source: string, exportName: string): string 
     return undefined;
   }
 
-  return new RegExp(String.raw`(?:^|,)\s*([\w$]+)\s+as\s+${exportName}\s*(?:,|$)`).exec(exportClause)?.[1];
+  return new RegExp(String.raw`(?:^|,)\s*([\w$]+)\s+as\s+${exportName}\s*(?:,|$)`).exec(
+    exportClause,
+  )?.[1];
 }
 
 function minifiedExportClause(source: string): string | undefined {
@@ -211,7 +218,10 @@ async function runNodeModuleScript(script: string, cwd: string): Promise<string>
   try {
     exitCode = await new Promise<number | null>((resolve, reject) => {
       child.once("exit", (code) => resolve(code));
-      deadline = setTimeout(() => reject(new Error("Node module script timed out after 30 seconds.")), 30_000);
+      deadline = setTimeout(
+        () => reject(new Error("Node module script timed out after 30 seconds.")),
+        30_000,
+      );
     });
   } finally {
     clearTimeout(deadline);
@@ -354,9 +364,7 @@ async function hydrateTestServerModuleArtifact<T>(
   artifact: Record<string, unknown>,
 ): Promise<T> {
   for (const key of ["loader", "request", "routeMetadata", "stream", "string"]) {
-    const output = artifact[key] as
-      | { code?: string; moduleFile?: string }
-      | undefined;
+    const output = artifact[key] as { code?: string; moduleFile?: string } | undefined;
     if (
       output?.moduleFile !== undefined &&
       (output.code === undefined || output.code.length === 0)
@@ -512,9 +520,7 @@ export default function Layout(props) {
       .join("\n");
 
     expect(transformedCssSources).toHaveLength(1);
-    expect(transformedCssSources[0]).toContain(
-      '@source "../**/*.{js,jsx,ts,tsx,mdx}";',
-    );
+    expect(transformedCssSources[0]).toContain('@source "../**/*.{js,jsx,ts,tsx,mdx}";');
     expect(clientCss).toContain(".fixture-production-utility");
     expect(clientCss).not.toContain(".fixture-production-missing-source");
   });
@@ -575,6 +581,7 @@ export default function Layout(props) {
       "page.tsx": {
         analysis: {
           authIncludesClaims: false,
+          clientBoundaryFallbackImports: [],
           clientBoundaryImports: [],
           clientRoute: false,
           hasLoader: true,
@@ -606,9 +613,15 @@ export default function Layout(props) {
     expect(Object.keys(artifacts.requestFiles)).toEqual(["page.tsx"]);
     expect(Object.keys(artifacts.renderFiles)).toEqual(["page.tsx"]);
     expect(Object.keys(artifacts.files)).toEqual(["layout.tsx"]);
-    await expect(access(join(serverDir, artifacts.requestFiles["page.tsx"] ?? ""))).resolves.toBeUndefined();
-    await expect(access(join(serverDir, artifacts.renderFiles["page.tsx"] ?? ""))).resolves.toBeUndefined();
-    await expect(access(join(serverDir, artifacts.files["layout.tsx"] ?? ""))).resolves.toBeUndefined();
+    await expect(
+      access(join(serverDir, artifacts.requestFiles["page.tsx"] ?? "")),
+    ).resolves.toBeUndefined();
+    await expect(
+      access(join(serverDir, artifacts.renderFiles["page.tsx"] ?? "")),
+    ).resolves.toBeUndefined();
+    await expect(
+      access(join(serverDir, artifacts.files["layout.tsx"] ?? "")),
+    ).resolves.toBeUndefined();
   });
 
   test("batches Cloudflare loader wrapper modules into one Vite build", async () => {
@@ -616,8 +629,14 @@ export default function Layout(props) {
     const appDir = join(rootDir, "app");
     await mkdir(appDir, { recursive: true });
     await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
-    await writeFile(join(appDir, "alpha.ts"), `export function loader() { return { route: "alpha" }; }`);
-    await writeFile(join(appDir, "beta.ts"), `export function loader() { return { route: "beta" }; }`);
+    await writeFile(
+      join(appDir, "alpha.ts"),
+      `export function loader() { return { route: "alpha" }; }`,
+    );
+    await writeFile(
+      join(appDir, "beta.ts"),
+      `export function loader() { return { route: "beta" }; }`,
+    );
 
     const resolvedBuilds: string[] = [];
     const outputs = await __buildCloudflareRouteLoaderModuleBatchForTests({
@@ -647,15 +666,31 @@ export default function Layout(props) {
     const appDir = join(rootDir, "app");
     await mkdir(appDir, { recursive: true });
     await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
-    await writeFile(join(appDir, "alpha.ts"), `export function loader() { return { route: "alpha" }; }`);
-    await writeFile(join(appDir, "beta.ts"), `export function loader() { return { route: "beta" }; }`);
+    await writeFile(
+      join(appDir, "alpha.ts"),
+      `export function loader() { return { route: "alpha" }; }`,
+    );
+    await writeFile(
+      join(appDir, "beta.ts"),
+      `export function loader() { return { route: "beta" }; }`,
+    );
 
     const resolvedBuilds: string[] = [];
     const outputs = await __bundleRouteRequestModuleBatchForTests({
       appDir,
       entries: [
-        { code: `export { loader } from ${JSON.stringify(join(appDir, "alpha.ts"))};`, filename: join(appDir, "alpha.ts"), key: "alpha", label: "Loader" },
-        { code: `export { loader } from ${JSON.stringify(join(appDir, "beta.ts"))};`, filename: join(appDir, "beta.ts"), key: "beta", label: "Loader" },
+        {
+          code: `export { loader } from ${JSON.stringify(join(appDir, "alpha.ts"))};`,
+          filename: join(appDir, "alpha.ts"),
+          key: "alpha",
+          label: "Loader",
+        },
+        {
+          code: `export { loader } from ${JSON.stringify(join(appDir, "beta.ts"))};`,
+          filename: join(appDir, "beta.ts"),
+          key: "beta",
+          label: "Loader",
+        },
       ],
       vitePlugins: [
         {
@@ -782,7 +817,9 @@ export default function Login() {
       routesDir: "app",
       targets: ["node"],
     });
-    const policy = JSON.parse(await readFile(join(outDir, "server", "import-policy.json"), "utf8")) as {
+    const policy = JSON.parse(
+      await readFile(join(outDir, "server", "import-policy.json"), "utf8"),
+    ) as {
       byRoute?: Record<string, string[]>;
       runtimePackages?: string[];
     };
@@ -795,7 +832,9 @@ export default function Login() {
     const serverModuleCodeDir = join(outDir, "server", "server-modules", "code");
     const moduleFiles = await readdir(serverModuleCodeDir);
     const moduleCode = (
-      await Promise.all(moduleFiles.map((file) => readFile(join(serverModuleCodeDir, file), "utf8")))
+      await Promise.all(
+        moduleFiles.map((file) => readFile(join(serverModuleCodeDir, file), "utf8")),
+      )
     ).join("\n");
     expect(moduleCode).toMatch(/(?:from|import) "pg"/u);
     expect(moduleCode).not.toContain("file://");
@@ -849,7 +888,9 @@ export default function Page(props) {
       routesDir: "app",
       targets: ["aws-lambda"],
     });
-    const policy = JSON.parse(await readFile(join(outDir, "server", "import-policy.json"), "utf8")) as {
+    const policy = JSON.parse(
+      await readFile(join(outDir, "server", "import-policy.json"), "utf8"),
+    ) as {
       runtimePackages?: string[];
     };
     const requestArtifact = await readBuiltServerModuleArtifact<{
@@ -965,9 +1006,9 @@ export default function Page(props) {
       throw new Error("Missing users loader moduleFile");
     }
 
-    const usersLoaderModule = await import(
+    const usersLoaderModule = (await import(
       pathToFileURL(join(outDir, "server", usersLoaderModuleFile)).href
-    ) as { loader?: () => { title: string } };
+    )) as { loader?: () => { title: string } };
 
     expect(usersLoaderModule.loader?.().title).toBe("__LAMBDA_DB_MARKER__:32:users");
   });
@@ -1014,7 +1055,9 @@ export default function manifest() {
       routesDir: "app",
       targets: ["node"],
     });
-    const policy = JSON.parse(await readFile(join(outDir, "server", "import-policy.json"), "utf8")) as {
+    const policy = JSON.parse(
+      await readFile(join(outDir, "server", "import-policy.json"), "utf8"),
+    ) as {
       byRoute?: Record<string, string[]>;
       runtimePackages?: string[];
     };
@@ -1066,7 +1109,9 @@ export default function Page() {
       routesDir: "app",
       targets: ["cloudflare"],
     });
-    const policy = JSON.parse(await readFile(join(outDir, "server", "import-policy.json"), "utf8")) as {
+    const policy = JSON.parse(
+      await readFile(join(outDir, "server", "import-policy.json"), "utf8"),
+    ) as {
       runtimePackages?: string[];
     };
     const routeModules = await readFile(join(outDir, "cloudflare", "route-modules.mjs"), "utf8");
@@ -1089,27 +1134,42 @@ export default function Page() {
         },
       }),
     );
-    await writeFakePackageWithJson(rootDir, "native-driver", {
-      exports: "./index.js",
-      name: "native-driver",
-      type: "module",
-    }, "export const native = true;\n");
-    await writeFakePackageWithJson(rootDir, "db-core", {
-      exports: "./index.js",
-      name: "db-core",
-      optionalDependencies: {
-        "native-driver": "1.0.0",
+    await writeFakePackageWithJson(
+      rootDir,
+      "native-driver",
+      {
+        exports: "./index.js",
+        name: "native-driver",
+        type: "module",
       },
-      type: "module",
-    }, "export const core = true;\n");
-    await writeFakePackageWithJson(rootDir, "db-client", {
-      dependencies: {
-        "db-core": "1.0.0",
+      "export const native = true;\n",
+    );
+    await writeFakePackageWithJson(
+      rootDir,
+      "db-core",
+      {
+        exports: "./index.js",
+        name: "db-core",
+        optionalDependencies: {
+          "native-driver": "1.0.0",
+        },
+        type: "module",
       },
-      exports: "./index.js",
-      name: "db-client",
-      type: "module",
-    }, "export const connect = () => undefined;\n");
+      "export const core = true;\n",
+    );
+    await writeFakePackageWithJson(
+      rootDir,
+      "db-client",
+      {
+        dependencies: {
+          "db-core": "1.0.0",
+        },
+        exports: "./index.js",
+        name: "db-client",
+        type: "module",
+      },
+      "export const connect = () => undefined;\n",
+    );
     await writeFile(
       join(appDir, "page.tsx"),
       `import { connect } from "db-client";
@@ -1132,7 +1192,9 @@ export default function Page() {
       routesDir: "app",
       targets: ["node"],
     });
-    const policy = JSON.parse(await readFile(join(outDir, "server", "import-policy.json"), "utf8")) as {
+    const policy = JSON.parse(
+      await readFile(join(outDir, "server", "import-policy.json"), "utf8"),
+    ) as {
       byRoute?: Record<string, string[]>;
       runtimePackages?: string[];
     };
@@ -1142,7 +1204,9 @@ export default function Page() {
   });
 
   test("ignores invalid and missing transitive optional runtime packages", async () => {
-    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-import-policy-optional-invalid-"));
+    const rootDir = await mkdtemp(
+      join(tmpdir(), "mreact-app-build-import-policy-optional-invalid-"),
+    );
     const appDir = join(rootDir, "app");
     const outDir = join(rootDir, ".mreact");
     await mkdir(appDir, { recursive: true });
@@ -1154,15 +1218,20 @@ export default function Page() {
         },
       }),
     );
-    await writeFakePackageWithJson(rootDir, "db-client", {
-      exports: "./index.js",
-      name: "db-client",
-      optionalDependencies: {
-        "../../tmp/payload": "1.0.0",
-        "missing-native-driver": "1.0.0",
+    await writeFakePackageWithJson(
+      rootDir,
+      "db-client",
+      {
+        exports: "./index.js",
+        name: "db-client",
+        optionalDependencies: {
+          "../../tmp/payload": "1.0.0",
+          "missing-native-driver": "1.0.0",
+        },
+        type: "module",
       },
-      type: "module",
-    }, "export const connect = () => undefined;\n");
+      "export const connect = () => undefined;\n",
+    );
     await writeFile(
       join(appDir, "page.tsx"),
       `import { connect } from "db-client";
@@ -1185,7 +1254,9 @@ export default function Page() {
       routesDir: "app",
       targets: ["node"],
     });
-    const policy = JSON.parse(await readFile(join(outDir, "server", "import-policy.json"), "utf8")) as {
+    const policy = JSON.parse(
+      await readFile(join(outDir, "server", "import-policy.json"), "utf8"),
+    ) as {
       byRoute?: Record<string, string[]>;
       runtimePackages?: string[];
     };
@@ -1202,18 +1273,28 @@ export default function Page() {
       Array.from({ length: 1_001 }, (_, index) => [`optional-runtime-${index}`, "1.0.0"]),
     );
     await mkdir(appDir, { recursive: true });
-    await writeFakePackageWithJson(rootDir, "db-client", {
-      exports: "./index.js",
-      name: "db-client",
-      optionalDependencies,
-      type: "module",
-    }, `export default "db";`);
-    for (const packageName of Object.keys(optionalDependencies)) {
-      await writeFakePackageWithJson(rootDir, packageName, {
+    await writeFakePackageWithJson(
+      rootDir,
+      "db-client",
+      {
         exports: "./index.js",
-        name: packageName,
+        name: "db-client",
+        optionalDependencies,
         type: "module",
-      }, `export default ${JSON.stringify(packageName)};`);
+      },
+      `export default "db";`,
+    );
+    for (const packageName of Object.keys(optionalDependencies)) {
+      await writeFakePackageWithJson(
+        rootDir,
+        packageName,
+        {
+          exports: "./index.js",
+          name: packageName,
+          type: "module",
+        },
+        `export default ${JSON.stringify(packageName)};`,
+      );
     }
     await writeFile(
       join(appDir, "page.tsx"),
@@ -1349,7 +1430,10 @@ export default function Page() {
       outDir: lambdaOutDir,
       skipRuntimeDependencyCheck: true,
     });
-    const pagesPackaged = await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
+    const pagesPackaged = await packageCloudflarePagesArtifact({
+      fromDir: outDir,
+      outDir: pagesOutDir,
+    });
     const packageManifest = JSON.parse(
       await readFile(join(lambdaOutDir, "mreact-lambda-artifact.json"), "utf8"),
     ) as { streamingHandler?: string; totalBytes?: number };
@@ -1370,16 +1454,24 @@ export default function Page() {
     expect(packageManifest.streamingHandler).toBe("mreact-streaming-handler.handler");
     expect(pagesPackaged.totalBytes).toBeGreaterThan(0);
     expect(pagesPackaged.worker).toBe("_worker.js");
-    await expect(access(join(lambdaOutDir, ".mreact", "server", "manifest.json"))).resolves.toBeUndefined();
+    await expect(
+      access(join(lambdaOutDir, ".mreact", "server", "manifest.json")),
+    ).resolves.toBeUndefined();
     await expect(access(join(lambdaOutDir, "mreact-handler.mjs"))).resolves.toBeUndefined();
-    await expect(access(join(lambdaOutDir, "mreact-streaming-handler.mjs"))).resolves.toBeUndefined();
+    await expect(
+      access(join(lambdaOutDir, "mreact-streaming-handler.mjs")),
+    ).resolves.toBeUndefined();
     await expect(readFile(join(lambdaOutDir, "mreact-handler.mjs"), "utf8")).resolves.toContain(
       'outDir: resolve(here, ".mreact")',
     );
     await expect(access(join(lambdaOutDir, "package.json"))).resolves.toBeUndefined();
     await expect(access(join(pagesOutDir, "_worker.js"))).resolves.toBeUndefined();
-    await expect(access(join(pagesOutDir, "_mreact", "client", "manifest.json"))).resolves.toBeUndefined();
-    await expect(access(join(pagesOutDir, "mreact-cloudflare-pages-artifact.json"))).resolves.toBeUndefined();
+    await expect(
+      access(join(pagesOutDir, "_mreact", "client", "manifest.json")),
+    ).resolves.toBeUndefined();
+    await expect(
+      access(join(pagesOutDir, "mreact-cloudflare-pages-artifact.json")),
+    ).resolves.toBeUndefined();
     const pagesWorker = await readFile(join(pagesOutDir, "_worker.js"), "utf8");
     expect(pagesWorker).toContain("export");
     expect(pagesWorker).toContain("default");
@@ -1406,9 +1498,7 @@ export default function Page() {
       await buildApp({
         allowedSourceDirs: ["app"],
         awsLambdaPreload,
-        ...(awsLambdaPreload === "hot-route-requests"
-          ? { awsLambdaPreloadRoutes: ["/"] }
-          : {}),
+        ...(awsLambdaPreload === "hot-route-requests" ? { awsLambdaPreloadRoutes: ["/"] } : {}),
         outDir,
         projectRoot: rootDir,
         routesDir: "app",
@@ -1421,9 +1511,9 @@ export default function Page() {
       });
 
       const expected = `preload: { mode: ${JSON.stringify(awsLambdaPreload)}`;
-      await expect(readFile(join(outDir, "aws-lambda", "mreact-handler.mjs"), "utf8")).resolves.toContain(
-        expected,
-      );
+      await expect(
+        readFile(join(outDir, "aws-lambda", "mreact-handler.mjs"), "utf8"),
+      ).resolves.toContain(expected);
       await expect(readFile(join(lambdaOutDir, "mreact-handler.mjs"), "utf8")).resolves.toContain(
         expected,
       );
@@ -1431,9 +1521,9 @@ export default function Page() {
         readFile(join(lambdaOutDir, "mreact-streaming-handler.mjs"), "utf8"),
       ).resolves.toContain(expected);
       if (awsLambdaPreload === "hot-route-requests") {
-        await expect(
-          readFile(join(lambdaOutDir, "mreact-handler.mjs"), "utf8"),
-        ).resolves.toContain('routes: ["/"]');
+        await expect(readFile(join(lambdaOutDir, "mreact-handler.mjs"), "utf8")).resolves.toContain(
+          'routes: ["/"]',
+        );
         await expect(
           readFile(join(lambdaOutDir, "mreact-streaming-handler.mjs"), "utf8"),
         ).resolves.toContain('routes: ["/"]');
@@ -1485,7 +1575,10 @@ describe("route unit test", () => {
     });
     const worker = await readFile(join(outDir, "cloudflare", "worker.mjs"), "utf8");
     const routeModules = await readFile(join(outDir, "cloudflare", "route-modules.mjs"), "utf8");
-    const pagesPackaged = await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
+    const pagesPackaged = await packageCloudflarePagesArtifact({
+      fromDir: outDir,
+      outDir: pagesOutDir,
+    });
     const pagesWorker = await readFile(join(pagesOutDir, "_worker.js"), "utf8");
 
     expect(worker).not.toContain("page.test.ts");
@@ -1528,8 +1621,9 @@ describe("route unit test", () => {
     const builtManifest = await readFile(join(outDir, "client", "manifest.json"), "utf8");
     await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
 
-    await expect(readFile(join(pagesOutDir, "_mreact", "client", "manifest.json"), "utf8"))
-      .resolves.toBe(builtManifest);
+    await expect(
+      readFile(join(pagesOutDir, "_mreact", "client", "manifest.json"), "utf8"),
+    ).resolves.toBe(builtManifest);
   });
 
   test("packages Cloudflare Pages workers whose runtime dependencies import util", async () => {
@@ -1618,7 +1712,13 @@ export default createDefaultCloudflarePagesHandler({ onResponse: applyResponseHe
     await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir, workerEntry });
 
     const worker = (await import(pathToFileURL(join(pagesOutDir, "_worker.js")).href)) as {
-      default: ExportedHandler;
+      default: {
+        fetch(
+          request: Request,
+          env: { ASSETS: { fetch(): Response } },
+          context: ExecutionContext,
+        ): Promise<Response>;
+      };
     };
     const response = await worker.default.fetch!(
       new Request("https://example.test/", { headers: { cookie: "session=active" } }),
@@ -1693,7 +1793,7 @@ export default function Page() {
       targets: ["cloudflare"],
     });
     await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
-    const worker = await import(pathToFileURL(join(pagesOutDir, "_worker.js")).href) as {
+    const worker = (await import(pathToFileURL(join(pagesOutDir, "_worker.js")).href)) as {
       default: {
         fetch: (request: Request, env: unknown, context: ExecutionContext) => Promise<Response>;
       };
@@ -1756,7 +1856,7 @@ export default function Login(props: { data: { intent: string } }) {
     ) as { routes: Array<{ path: string; script?: string }> };
     const loginScript = clientManifest.routes.find((route) => route.path === "/login")?.script;
     await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
-    const worker = await import(pathToFileURL(join(pagesOutDir, "_worker.js")).href) as {
+    const worker = (await import(pathToFileURL(join(pagesOutDir, "_worker.js")).href)) as {
       default: {
         fetch: (request: Request, env: unknown, context: ExecutionContext) => Promise<Response>;
       };
@@ -1885,7 +1985,7 @@ export function GET() {
     });
     await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
     const workerSource = await readFile(join(pagesOutDir, "_worker.js"), "utf8");
-    const worker = await import(pathToFileURL(join(pagesOutDir, "_worker.js")).href) as {
+    const worker = (await import(pathToFileURL(join(pagesOutDir, "_worker.js")).href)) as {
       default: {
         fetch: (request: Request, env: unknown, context: ExecutionContext) => Promise<Response>;
       };
@@ -2033,7 +2133,7 @@ export default function LoginPage(props: { data: { kind: string } }) {
       targets: ["cloudflare"],
     });
     await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
-    const worker = await import(pathToFileURL(join(pagesOutDir, "_worker.js")).href) as {
+    const worker = (await import(pathToFileURL(join(pagesOutDir, "_worker.js")).href)) as {
       default: {
         fetch: (request: Request, env: unknown, context: ExecutionContext) => Promise<Response>;
       };
@@ -2110,7 +2210,7 @@ export default function BetaPage() {
       targets: ["cloudflare"],
     });
     await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
-    const worker = await import(pathToFileURL(join(pagesOutDir, "_worker.js")).href) as {
+    const worker = (await import(pathToFileURL(join(pagesOutDir, "_worker.js")).href)) as {
       default: {
         fetch: (request: Request, env: unknown, context: ExecutionContext) => Promise<Response>;
       };
@@ -2142,7 +2242,9 @@ export default function BetaPage() {
     // island from the shared shell makes generated Cloudflare route modules
     // re-export default/App/slots as accessors. The packaged worker must still
     // resolve each route's own default page component by source path.
-    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-pages-client-island-auth-shell-"));
+    const rootDir = await mkdtemp(
+      join(tmpdir(), "mreact-cloudflare-pages-client-island-auth-shell-"),
+    );
     const appDir = join(rootDir, "src", "app");
     const outDir = join(rootDir, ".mreact");
     const pagesOutDir = join(rootDir, ".pages");
@@ -2194,7 +2296,7 @@ export default function BetaPage() {
       targets: ["cloudflare"],
     });
     await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
-    const worker = await import(pathToFileURL(join(pagesOutDir, "_worker.js")).href) as {
+    const worker = (await import(pathToFileURL(join(pagesOutDir, "_worker.js")).href)) as {
       default: {
         fetch: (request: Request, env: unknown, context: ExecutionContext) => Promise<Response>;
       };
@@ -2247,7 +2349,10 @@ export function Island() {
   return <span data-island="x">island</span>;
 }`,
     );
-    const markers = Array.from({ length: 80 }, (_, index) => `const marker${index} = "marker-${index}";`).join("\n");
+    const markers = Array.from(
+      { length: 80 },
+      (_, index) => `const marker${index} = "marker-${index}";`,
+    ).join("\n");
     const markerSpans = Array.from(
       { length: 80 },
       (_, index) => `<span data-marker${index}={marker${index}}></span>`,
@@ -2292,10 +2397,13 @@ export default function Page() {
     });
 
     const routeSources = await Promise.all(
-      routeNames.map(async (routeName) => [
-        routeName,
-        await readFile(join(outDir, "cloudflare", "routes", `${routeName}.mjs`), "utf8"),
-      ] as const),
+      routeNames.map(
+        async (routeName) =>
+          [
+            routeName,
+            await readFile(join(outDir, "cloudflare", "routes", `${routeName}.mjs`), "utf8"),
+          ] as const,
+      ),
     );
     const routeFiles = await readdir(join(outDir, "cloudflare", "routes"));
     const stringRouteSources = await Promise.all(
@@ -2310,7 +2418,9 @@ export default function Page() {
     );
     const chunkFiles = await readdir(join(outDir, "cloudflare", "routes", "chunks"));
 
-    expect(chunkFiles.some((file) => file.includes("layout.") || file.includes("BigShell."))).toBe(true);
+    expect(chunkFiles.some((file) => file.includes("layout.") || file.includes("BigShell."))).toBe(
+      true,
+    );
     for (const [routeName, source] of routeSources) {
       expect(source, routeName).not.toContain("export { default, App, slots }");
       expect(source, routeName).not.toContain("default as componentDefault");
@@ -2336,7 +2446,7 @@ export default function Page() {
 
     await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
     const workerSource = await readFile(join(pagesOutDir, "_worker.js"), "utf8");
-    const worker = await import(pathToFileURL(join(pagesOutDir, "_worker.js")).href) as {
+    const worker = (await import(pathToFileURL(join(pagesOutDir, "_worker.js")).href)) as {
       default: {
         fetch: (request: Request, env: unknown, context: ExecutionContext) => Promise<Response>;
       };
@@ -2377,7 +2487,10 @@ export function Island() {
   return <span data-island="auth">island</span>;
 }`,
     );
-    const markers = Array.from({ length: 80 }, (_, index) => `const marker${index} = "marker-${index}";`).join("\n");
+    const markers = Array.from(
+      { length: 80 },
+      (_, index) => `const marker${index} = "marker-${index}";`,
+    ).join("\n");
     const markerSpans = Array.from(
       { length: 80 },
       (_, index) => `<span data-marker${index}={marker${index}}></span>`,
@@ -2468,7 +2581,10 @@ export function Island() {
   return <span data-island="root">island</span>;
 }`,
     );
-    const markers = Array.from({ length: 120 }, (_, index) => `const marker${index} = "marker-${index}";`).join("\n");
+    const markers = Array.from(
+      { length: 120 },
+      (_, index) => `const marker${index} = "marker-${index}";`,
+    ).join("\n");
     const markerSpans = Array.from(
       { length: 120 },
       (_, index) => `<span data-marker${index}={marker${index}}></span>`,
@@ -2518,16 +2634,20 @@ export default function SignupPage() {
     });
     await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
 
-    await withWranglerPagesDev(pagesOutDir, async (origin) => {
-      const root = await fetch(`${origin}/`, { redirect: "manual" });
-      const login = await fetch(`${origin}/login`);
-      const signup = await fetch(`${origin}/signup`);
+    await withWranglerPagesDev(
+      pagesOutDir,
+      async (origin) => {
+        const root = await fetch(`${origin}/`, { redirect: "manual" });
+        const login = await fetch(`${origin}/login`);
+        const signup = await fetch(`${origin}/signup`);
 
-      expect(root.status, await root.text()).toBe(303);
-      expect(root.headers.get("location")).toBe("/login");
-      expect(login.status, await login.text()).toBe(200);
-      expect(signup.status, await signup.text()).toBe(200);
-    }, { compatibilityDate: "2024-11-01", readiness: "output" });
+        expect(root.status, await root.text()).toBe(303);
+        expect(root.headers.get("location")).toBe("/login");
+        expect(login.status, await login.text()).toBe(200);
+        expect(signup.status, await signup.text()).toBe(200);
+      },
+      { compatibilityDate: "2024-11-01", readiness: "output" },
+    );
   }, 40_000);
 
   test("packaged Cloudflare Pages worker shims createRequire import meta URL under workerd", async () => {
@@ -2537,7 +2657,10 @@ export default function SignupPage() {
     await mkdir(join(fromDir, "client"), { recursive: true });
     await mkdir(join(fromDir, "cloudflare"), { recursive: true });
     await writeFile(join(fromDir, "client", "manifest.json"), JSON.stringify({ publicAssets: [] }));
-    await writeFile(join(fromDir, "cloudflare", "route-modules.mjs"), "export const routeModules = {};\n");
+    await writeFile(
+      join(fromDir, "cloudflare", "route-modules.mjs"),
+      "export const routeModules = {};\n",
+    );
     await writeFile(
       join(fromDir, "cloudflare", "worker.mjs"),
       `import { createRequire } from "node:module";
@@ -2554,13 +2677,17 @@ export default {
 
     await packageCloudflarePagesArtifact({ fromDir, outDir: pagesOutDir });
 
-    await withWranglerPagesDev(pagesOutDir, async (origin) => {
-      const response = await fetch(`${origin}/`);
-      const text = await response.text();
+    await withWranglerPagesDev(
+      pagesOutDir,
+      async (origin) => {
+        const response = await fetch(`${origin}/`);
+        const text = await response.text();
 
-      expect(response.status, text).toBe(200);
-      expect(text).toBe("function");
-    }, { compatibilityDate: "2024-11-01", readiness: "output" });
+        expect(response.status, text).toBe(200);
+        expect(text).toBe("function");
+      },
+      { compatibilityDate: "2024-11-01", readiness: "output" },
+    );
   }, 40_000);
 
   test("deduplicates Cloudflare page dynamic import dependencies shared by multiple routes", async () => {
@@ -2570,10 +2697,7 @@ export default {
     await mkdir(join(appDir, "login"), { recursive: true });
     await mkdir(join(appDir, "signup"), { recursive: true });
     await mkdir(join(rootDir, "lib"), { recursive: true });
-    await writeFile(
-      join(rootDir, "package.json"),
-      JSON.stringify({ dependencies: {} }),
-    );
+    await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
     await writeFile(
       join(rootDir, "lib", "browser-service.ts"),
       `export async function loadBrowserSdk() {
@@ -2661,8 +2785,7 @@ export default function Page() {
         .map(async (file) => await readFile(join(outDir, "cloudflare", "routes", file), "utf8")),
     );
     const markerOccurrences = routeSources.reduce(
-      (count, source) =>
-        count + source.split("MREACT_SHARED_STATIC_WRAPPER_SDK_MARKER").length - 1,
+      (count, source) => count + source.split("MREACT_SHARED_STATIC_WRAPPER_SDK_MARKER").length - 1,
       0,
     );
 
@@ -2692,9 +2815,9 @@ export default function Page() {
       targets: ["aws-lambda"],
     });
 
-    await expect(packageAwsLambdaArtifact({ fromDir: outDir, outDir: lambdaOutDir })).rejects.toThrow(
-      /AWS Lambda artifact is missing production runtime dependencies/,
-    );
+    await expect(
+      packageAwsLambdaArtifact({ fromDir: outDir, outDir: lambdaOutDir }),
+    ).rejects.toThrow(/AWS Lambda artifact is missing production runtime dependencies/);
     await expect(
       packageAwsLambdaArtifact({
         fromDir: outDir,
@@ -2762,87 +2885,87 @@ export default function Page() {
   test.each(["mreact-handler.mjs", "mreact-streaming-handler.mjs"])(
     "warms middleware without evaluating unrelated pages when importing packaged %s",
     async (handlerFile) => {
-    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-lambda-packaged-preload-plane-"));
-    const appDir = join(rootDir, "app");
-    const outDir = join(rootDir, ".mreact");
-    const lambdaOutDir = join(rootDir, ".lambda");
-    await mkdir(join(appDir, "slow"), { recursive: true });
-    await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
-    await writeFile(
-      join(appDir, "middleware.ts"),
-      `globalThis.__mreactGeneratedLambdaPreload = [
+      const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-lambda-packaged-preload-plane-"));
+      const appDir = join(rootDir, "app");
+      const outDir = join(rootDir, ".mreact");
+      const lambdaOutDir = join(rootDir, ".lambda");
+      await mkdir(join(appDir, "slow"), { recursive: true });
+      await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
+      await writeFile(
+        join(appDir, "middleware.ts"),
+        `globalThis.__mreactGeneratedLambdaPreload = [
   ...(globalThis.__mreactGeneratedLambdaPreload ?? []),
   "middleware-module",
 ];
 export const config = { matcher: "/admin/:path*" };
 export function middleware() {}
 `,
-    );
-    await writeFile(
-      join(appDir, "page.tsx"),
-      `import { redirect } from "@reckona/mreact-router";
+      );
+      await writeFile(
+        join(appDir, "page.tsx"),
+        `import { redirect } from "@reckona/mreact-router";
 export function loader() { redirect("/login", { status: 303 }); }
 export default function Page() { return <main>root</main>; }`,
-    );
-    await writeFile(
-      join(appDir, "slow", "page.tsx"),
-      `globalThis.__mreactGeneratedLambdaPreload = [
+      );
+      await writeFile(
+        join(appDir, "slow", "page.tsx"),
+        `globalThis.__mreactGeneratedLambdaPreload = [
   ...(globalThis.__mreactGeneratedLambdaPreload ?? []),
   "slow-page-module",
 ];
 await globalThis.__slowPageGate;
 export default function Slow() { return <main>slow</main>; }
 `,
-    );
+      );
 
-    await buildApp({
-      allowedSourceDirs: ["app"],
-      outDir,
-      projectRoot: rootDir,
-      routesDir: "app",
-      targets: ["aws-lambda"],
-    });
-    await packageAwsLambdaArtifact({
-      fromDir: outDir,
-      outDir: lambdaOutDir,
-      skipRuntimeDependencyCheck: true,
-    });
-    await rename(appDir, join(rootDir, "app.moved"));
-    await rename(outDir, join(rootDir, ".mreact.moved"));
-    await mkdir(join(lambdaOutDir, "node_modules", "@reckona"), { recursive: true });
-    await symlink(
-      join(process.cwd(), "packages", "router"),
-      join(lambdaOutDir, "node_modules", "@reckona", "mreact-router"),
-    );
+      await buildApp({
+        allowedSourceDirs: ["app"],
+        outDir,
+        projectRoot: rootDir,
+        routesDir: "app",
+        targets: ["aws-lambda"],
+      });
+      await packageAwsLambdaArtifact({
+        fromDir: outDir,
+        outDir: lambdaOutDir,
+        skipRuntimeDependencyCheck: true,
+      });
+      await rename(appDir, join(rootDir, "app.moved"));
+      await rename(outDir, join(rootDir, ".mreact.moved"));
+      await mkdir(join(lambdaOutDir, "node_modules", "@reckona"), { recursive: true });
+      await symlink(
+        join(process.cwd(), "packages", "router"),
+        join(lambdaOutDir, "node_modules", "@reckona", "mreact-router"),
+      );
 
-    const smokeOutput = await runNodeModuleScript(
-      [
-        `let responseMetadata;`,
-        `let releaseSlowPage;`,
-        `globalThis.__slowPageGate = new Promise((resolve) => { releaseSlowPage = resolve; });`,
-        `globalThis.awslambda = { streamifyResponse: (handler) => handler, HttpResponseStream: { from: (stream, metadata) => { responseMetadata = metadata; return stream; } } };`,
-        `const mod = await import(${JSON.stringify(pathToFileURL(join(lambdaOutDir, handlerFile)).href)});`,
-        `const event = { headers: { host: "lambda.test" }, rawPath: "/", rawQueryString: "", requestContext: { http: { method: "GET" } }, version: "2.0" };`,
-        `const stream = { write: () => true, end: () => {}, once: (_event, callback) => callback() };`,
-        `const request = ${handlerFile === "mreact-streaming-handler.mjs" ? "mod.handler(event, stream, {})" : "mod.handler(event)"};`,
-        `let timeoutId;`,
-        `const result = await Promise.race([request.then((value) => ({ kind: "response", value })), new Promise((resolve) => { timeoutId = setTimeout(() => resolve({ kind: "timeout" }), 1000); })]);`,
-        `clearTimeout(timeoutId);`,
-        `releaseSlowPage();`,
-        `if (result.kind === "timeout") await request;`,
-        `console.log(JSON.stringify({ kind: result.kind, preloaded: globalThis.__mreactGeneratedLambdaPreload ?? [], status: ${handlerFile === "mreact-streaming-handler.mjs" ? "responseMetadata?.statusCode" : "result.value?.statusCode"} }));`,
-      ].join("\n"),
-      lambdaOutDir,
-    );
-    const result = JSON.parse(smokeOutput.trim().split("\n").at(-1) ?? "{}") as {
-      kind?: string;
-      preloaded?: string[];
-      status?: number;
-    };
+      const smokeOutput = await runNodeModuleScript(
+        [
+          `let responseMetadata;`,
+          `let releaseSlowPage;`,
+          `globalThis.__slowPageGate = new Promise((resolve) => { releaseSlowPage = resolve; });`,
+          `globalThis.awslambda = { streamifyResponse: (handler) => handler, HttpResponseStream: { from: (stream, metadata) => { responseMetadata = metadata; return stream; } } };`,
+          `const mod = await import(${JSON.stringify(pathToFileURL(join(lambdaOutDir, handlerFile)).href)});`,
+          `const event = { headers: { host: "lambda.test" }, rawPath: "/", rawQueryString: "", requestContext: { http: { method: "GET" } }, version: "2.0" };`,
+          `const stream = { write: () => true, end: () => {}, once: (_event, callback) => callback() };`,
+          `const request = ${handlerFile === "mreact-streaming-handler.mjs" ? "mod.handler(event, stream, {})" : "mod.handler(event)"};`,
+          `let timeoutId;`,
+          `const result = await Promise.race([request.then((value) => ({ kind: "response", value })), new Promise((resolve) => { timeoutId = setTimeout(() => resolve({ kind: "timeout" }), 1000); })]);`,
+          `clearTimeout(timeoutId);`,
+          `releaseSlowPage();`,
+          `if (result.kind === "timeout") await request;`,
+          `console.log(JSON.stringify({ kind: result.kind, preloaded: globalThis.__mreactGeneratedLambdaPreload ?? [], status: ${handlerFile === "mreact-streaming-handler.mjs" ? "responseMetadata?.statusCode" : "result.value?.statusCode"} }));`,
+        ].join("\n"),
+        lambdaOutDir,
+      );
+      const result = JSON.parse(smokeOutput.trim().split("\n").at(-1) ?? "{}") as {
+        kind?: string;
+        preloaded?: string[];
+        status?: number;
+      };
 
-    expect(result).toMatchObject({ kind: "response", status: 303 });
-    expect(result.preloaded).toContain("middleware-module");
-    expect(result.preloaded).not.toContain("slow-page-module");
+      expect(result).toMatchObject({ kind: "response", status: 303 });
+      expect(result.preloaded).toContain("middleware-module");
+      expect(result.preloaded).not.toContain("slow-page-module");
     },
   );
 
@@ -2928,16 +3051,13 @@ export const handler = await createPreloadedAwsLambdaRequestHandler({
       await readFile(join(outDir, "client", "manifest.json"), "utf8"),
     ) as { publicAssets?: string[] };
 
-    expect(clientManifest.publicAssets).toEqual([
-      "/icons/logo.svg",
-      "/robots.txt",
-      "/styles.css",
-    ]);
+    expect(clientManifest.publicAssets).toEqual(["/icons/logo.svg", "/robots.txt", "/styles.css"]);
     await expect(readFile(join(outDir, "client", "styles.css"), "utf8")).resolves.toContain(
       "color: black",
     );
-    await expect(access(join(outDir, "client", "_mreact", "client", "manifest.json"))).rejects
-      .toThrow();
+    await expect(
+      access(join(outDir, "client", "_mreact", "client", "manifest.json")),
+    ).rejects.toThrow();
     await expect(
       access(join(outDir, "client", "public", "_mreact", "client", "manifest.json")),
     ).rejects.toThrow();
@@ -2993,18 +3113,11 @@ export const handler = await createPreloadedAwsLambdaRequestHandler({
       await readFile(join(outDir, "server", "manifest.json"), "utf8"),
     ) as { files?: Record<string, string> };
 
-    expect(clientManifest.publicAssets).toEqual([
-      "/icon",
-      "/manifest.webmanifest",
-      "/robots.txt",
-    ]);
+    expect(clientManifest.publicAssets).toEqual(["/icon", "/manifest.webmanifest", "/robots.txt"]);
     await expect(readFile(join(outDir, "client", "robots.txt"), "utf8")).resolves.toBe(
       "User-agent: *\n",
     );
-    await expect(readFile(join(outDir, "client", "icon"))).resolves.toHaveProperty(
-      "byteLength",
-      4,
-    );
+    await expect(readFile(join(outDir, "client", "icon"))).resolves.toHaveProperty("byteLength", 4);
     expect(Object.keys(serverManifest.files ?? {})).not.toContain("app/icon.png");
   });
 
@@ -3148,7 +3261,9 @@ export default function Page() { return <main>Private build response</main>; }
       await readFile(join(outDir, "server", "manifest.json"), "utf8"),
     ) as { prerenderedRoutes?: Record<string, unknown> };
     expect(serverManifest.prerenderedRoutes?.["/"]).toBeUndefined();
-    await expect(access(join(outDir, "cloudflare", "routes", "index.mjs"))).resolves.toBeUndefined();
+    await expect(
+      access(join(outDir, "cloudflare", "routes", "index.mjs")),
+    ).resolves.toBeUndefined();
 
     const response = await renderBuiltAppRequest({
       outDir,
@@ -3239,7 +3354,9 @@ export default function Page() { return <main>Shared shell</main>; }
     ) as { prerenderedRoutes?: Record<string, unknown> };
 
     expect(serverManifest.prerenderedRoutes?.["/"]).toBeUndefined();
-    await expect(access(join(outDir, "cloudflare", "routes", "index.mjs"))).resolves.toBeUndefined();
+    await expect(
+      access(join(outDir, "cloudflare", "routes", "index.mjs")),
+    ).resolves.toBeUndefined();
 
     const first = await renderBuiltAppRequest({
       outDir,
@@ -3316,7 +3433,10 @@ export function middleware() {
 }
 `,
     );
-    await writeFile(join(appDir, "page.tsx"), "export default function Page() { return <main />; }");
+    await writeFile(
+      join(appDir, "page.tsx"),
+      "export default function Page() { return <main />; }",
+    );
 
     await buildApp({
       outDir,
@@ -3354,7 +3474,10 @@ export function middleware() {
     await mkdir(join(appDir, "api"), { recursive: true });
     await mkdir(join(rootDir, "src", "content"), { recursive: true });
     await writeFile(join(rootDir, "src", "content", "message.fixture"), "message: Server Route OK");
-    await writeFile(join(appDir, "page.tsx"), "export default function Page() { return <main />; }");
+    await writeFile(
+      join(appDir, "page.tsx"),
+      "export default function Page() { return <main />; }",
+    );
     await writeFile(
       join(appDir, "api", "route.ts"),
       `import { message } from "../../content/message.fixture";
@@ -3449,7 +3572,10 @@ export default function Page() {
     const outDir = join(rootDir, ".mreact");
     await mkdir(appDir, { recursive: true });
     await mkdir(join(rootDir, "src", "posts"), { recursive: true });
-    await writeFile(join(rootDir, "src", "posts", "counter.mdx"), "---\ntitle: Counter\n---\n\n# Counter");
+    await writeFile(
+      join(rootDir, "src", "posts", "counter.mdx"),
+      "---\ntitle: Counter\n---\n\n# Counter",
+    );
     await writeFile(
       join(appDir, "page.tsx"),
       `import { Counter } from "../posts/counter.mdx";
@@ -3661,8 +3787,9 @@ export default function Page(props: { data: PageData }) {
     await expect(exportStaticApp({ exportDir, outDir })).resolves.toEqual({
       routes: ["/build/getting-started", "/evaluate/why"],
     });
-    await expect(readFile(join(exportDir, "evaluate", "why", "index.html"), "utf8")).resolves
-      .toContain('<h1 id="hello-frontmatter">');
+    await expect(
+      readFile(join(exportDir, "evaluate", "why", "index.html"), "utf8"),
+    ).resolves.toContain('<h1 id="hello-frontmatter">');
   });
 
   test("prerenders MDX imports with frontmatter and TSX code fences", async () => {
@@ -3776,8 +3903,9 @@ export default function Page() {
     await expect(readFile(join(exportDir, "icons", "logo.svg"), "utf8")).resolves.toBe(
       "<svg></svg>",
     );
-    await expect(access(join(exportDir, "_mreact", "client", "manifest.json"))).resolves
-      .toBeUndefined();
+    await expect(
+      access(join(exportDir, "_mreact", "client", "manifest.json")),
+    ).resolves.toBeUndefined();
   });
 
   test("static export preserves prerendered dynamic route CSS and public asset closure", async () => {
@@ -3815,16 +3943,14 @@ export default function Page(props) {
       routes: ["/users/ada"],
     });
     const html = await readFile(join(exportDir, "users", "ada", "index.html"), "utf8");
-    const cssPath = html.match(/href="\/_mreact\/client\/(?<asset>[^"]+\.css)"/u)?.groups
-      ?.asset;
+    const cssPath = html.match(/href="\/_mreact\/client\/(?<asset>[^"]+\.css)"/u)?.groups?.asset;
 
-    expect(html).toContain("<main class=\"profile\">User ada</main>");
+    expect(html).toContain('<main class="profile">User ada</main>');
     expect(cssPath).toMatch(/^assets\/routes\/users__id\.[a-f0-9]{8}\.css$/);
-    await expect(readFile(join(exportDir, "_mreact", "client", cssPath ?? ""), "utf8"))
-      .resolves.toContain(".profile");
-    await expect(readFile(join(exportDir, "avatar.txt"), "utf8")).resolves.toBe(
-      "static avatar",
-    );
+    await expect(
+      readFile(join(exportDir, "_mreact", "client", cssPath ?? ""), "utf8"),
+    ).resolves.toContain(".profile");
+    await expect(readFile(join(exportDir, "avatar.txt"), "utf8")).resolves.toBe("static avatar");
   });
 
   test("static export does not let public assets overwrite framework client artifacts", async () => {
@@ -3857,8 +3983,9 @@ export default function Page() {
     const builtManifest = await readFile(join(outDir, "client", "manifest.json"), "utf8");
     await expect(exportStaticApp({ exportDir, outDir })).resolves.toEqual({ routes: ["/"] });
 
-    await expect(readFile(join(exportDir, "_mreact", "client", "manifest.json"), "utf8"))
-      .resolves.toBe(builtManifest);
+    await expect(
+      readFile(join(exportDir, "_mreact", "client", "manifest.json"), "utf8"),
+    ).resolves.toBe(builtManifest);
   });
 
   test("prerendered loaders honor user Vite plugins during render", async () => {
@@ -3867,7 +3994,10 @@ export default function Page() {
     const outDir = join(rootDir, ".mreact");
     await mkdir(appDir, { recursive: true });
     await mkdir(join(rootDir, "src", "content"), { recursive: true });
-    await writeFile(join(rootDir, "src", "content", "message.fixture"), "message: Prerender Plugin OK");
+    await writeFile(
+      join(rootDir, "src", "content", "message.fixture"),
+      "message: Prerender Plugin OK",
+    );
     await writeFile(
       join(appDir, "page.tsx"),
       `import { message } from "../content/message.fixture";
@@ -3964,9 +4094,7 @@ export default function Page() {
       await readFile(join(outDir, "server", "manifest.json"), "utf8"),
     ) as { prerenderedRoutes?: Record<string, { html?: string }> };
 
-    expect(serverManifest.prerenderedRoutes?.["/"]?.html).toContain(
-      "<main>Page Plugin OK</main>",
-    );
+    expect(serverManifest.prerenderedRoutes?.["/"]?.html).toContain("<main>Page Plugin OK</main>");
   });
 
   test("generateStaticParams imports honor user Vite plugins during prerender", async () => {
@@ -4030,10 +4158,7 @@ export default function Page(props) {
     const appDir = join(rootDir, "src", "app");
     await mkdir(appDir, { recursive: true });
     await mkdir(join(rootDir, "src", "content"), { recursive: true });
-    await writeFile(
-      join(rootDir, "src", "content", "entry.fixture"),
-      "message: Render Plugin OK",
-    );
+    await writeFile(join(rootDir, "src", "content", "entry.fixture"), "message: Render Plugin OK");
     await writeFile(
       join(appDir, "page.tsx"),
       `export async function loader() {
@@ -4616,7 +4741,9 @@ export default function Page() {
       routesDir: "app",
       targets: ["aws-lambda"],
     });
-    const manifest = JSON.parse(await readFile(join(outDir, "server", "manifest.json"), "utf8")) as {
+    const manifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as {
       serverModuleRenderFiles?: Record<string, string>;
     };
     const renderArtifact = JSON.parse(
@@ -4704,7 +4831,9 @@ export default function Page() {
       warn.mockRestore();
     }
 
-    const manifest = JSON.parse(await readFile(join(outDir, "server", "manifest.json"), "utf8")) as {
+    const manifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as {
       routeServerActionReferences?: Record<string, unknown[]>;
     };
 
@@ -4788,7 +4917,9 @@ export default function Page() {
       ok: false,
       error: "Unknown server action.",
     });
-    expect((globalThis as { __mreactBuiltAdminDeleteCalls?: number }).__mreactBuiltAdminDeleteCalls).toBeUndefined();
+    expect(
+      (globalThis as { __mreactBuiltAdminDeleteCalls?: number }).__mreactBuiltAdminDeleteCalls,
+    ).toBeUndefined();
   });
 
   test("persists configured asset base URLs in the server manifest", async () => {
@@ -5127,7 +5258,9 @@ export default function Page() {
     expect(script).toMatch(/^assets\/routes\/index\.[a-f0-9]{8}\.js$/);
     expect(clientManifest.routes[0]?.sourceMap).toBeUndefined();
     await expect(access(join(outDir, "client", `${script}.map`))).rejects.toThrow();
-    await expect(access(join(outDir, "source-maps", "client", `${script}.map`))).resolves.toBeUndefined();
+    await expect(
+      access(join(outDir, "source-maps", "client", `${script}.map`)),
+    ).resolves.toBeUndefined();
     await expect(readFile(join(outDir, "client", script ?? ""), "utf8")).resolves.not.toContain(
       "sourceMappingURL=",
     );
@@ -5196,7 +5329,8 @@ export default function Page() {
   test("built routes render fragment, array, string, and null root returns consistently", async () => {
     const cases = [
       {
-        expected: '<div data-mreact-route-id="index"><span>fragment</span><strong>root</strong></div>',
+        expected:
+          '<div data-mreact-route-id="index"><span>fragment</span><strong>root</strong></div>',
         file: "page.mreact.tsx",
         name: "fragment",
         source: `import { cell } from "@reckona/mreact-reactive-core";
@@ -5252,14 +5386,8 @@ export default function Page() { cell(0); return null; }`,
     const libDir = join(rootDir, "src", "lib");
     await mkdir(appDir, { recursive: true });
     await mkdir(libDir, { recursive: true });
-    await writeFile(
-      join(rootDir, "package.json"),
-      JSON.stringify({ dependencies: {} }),
-    );
-    await writeFile(
-      join(libDir, "message.ts"),
-      `export const message = "alias ok";`,
-    );
+    await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
+    await writeFile(join(libDir, "message.ts"), `export const message = "alias ok";`);
     await writeFile(
       join(appDir, "page.tsx"),
       `import { message } from "@lib/message";
@@ -5645,9 +5773,7 @@ export default function Layout(props) {
     const css = clientManifest.routes[0]?.css?.[0];
 
     expect(css).toMatch(/^assets\/routes\/index\.[a-f0-9]{8}\.css$/);
-    await expect(readFile(join(outDir, "client", css ?? ""), "utf8")).resolves.toContain(
-      ".title",
-    );
+    await expect(readFile(join(outDir, "client", css ?? ""), "utf8")).resolves.toContain(".title");
 
     const response = await renderBuiltAppRequest({
       outDir,
@@ -5746,7 +5872,7 @@ export default function Layout(props) {
     const html = await response.text();
 
     expect(response.status).toBe(404);
-    expect(html).toContain("<main class=\"missing\">Missing</main>");
+    expect(html).toContain('<main class="missing">Missing</main>');
     expect(html).toContain(`<link rel="stylesheet" href="/_mreact/client/${css}">`);
   });
 
@@ -5767,8 +5893,14 @@ export default function Layout(props) {
   return <html><body>{props.children}</body></html>;
 }`,
     );
-    await writeFile(join(appDir, "a", "page.mreact.tsx"), "export default function Page() { return <main className=\"shell\">A</main>; }");
-    await writeFile(join(appDir, "b", "page.mreact.tsx"), "export default function Page() { return <main className=\"shell\">B</main>; }");
+    await writeFile(
+      join(appDir, "a", "page.mreact.tsx"),
+      'export default function Page() { return <main className="shell">A</main>; }',
+    );
+    await writeFile(
+      join(appDir, "b", "page.mreact.tsx"),
+      'export default function Page() { return <main className="shell">B</main>; }',
+    );
     await writeFile(
       join(appDir, "c", "page.mreact.tsx"),
       `import "./page.css";
@@ -5828,9 +5960,7 @@ export default function Layout(props) {
     const css = clientManifest.routes[0]?.css?.[0];
 
     expect(css).toMatch(/^assets\/routes\/index\.[a-f0-9]{8}\.css$/);
-    await expect(readFile(join(outDir, "client", css ?? ""), "utf8")).resolves.toContain(
-      ".title",
-    );
+    await expect(readFile(join(outDir, "client", css ?? ""), "utf8")).resolves.toContain(".title");
 
     const response = await renderBuiltAppRequest({
       outDir,
@@ -5846,10 +5976,7 @@ export default function Layout(props) {
     const appDir = join(rootDir, "src", "app");
     const outDir = join(rootDir, ".mreact");
     await mkdir(appDir, { recursive: true });
-    await writeFile(
-      join(rootDir, "src", "global.css"),
-      ".title { color: rgb(4 5 6); }",
-    );
+    await writeFile(join(rootDir, "src", "global.css"), ".title { color: rgb(4 5 6); }");
     await writeFile(
       join(appDir, "layout.tsx"),
       `import "../global.css";
@@ -5895,9 +6022,7 @@ export default function Page() {
 
     expect(route?.client).toBe(true);
     expect(css).toMatch(/^assets\/routes\/index\.[a-f0-9]{8}\.css$/);
-    await expect(readFile(join(outDir, "client", css ?? ""), "utf8")).resolves.toContain(
-      ".title",
-    );
+    await expect(readFile(join(outDir, "client", css ?? ""), "utf8")).resolves.toContain(".title");
   });
 
   test("injects configured asset base URL for built client route assets", async () => {
@@ -6178,8 +6303,12 @@ export default function Page() {
     });
     expect(home?.script).toBeUndefined();
     expect(home?.navigationScript).toMatch(/^assets\/navigation\.[a-f0-9]{8}\.js$/);
-    await expect(access(join(outDir, "client", home?.navigationScript ?? ""))).resolves.toBeUndefined();
-    expect(html).not.toContain(`<script type="module" src="/_mreact/client/${home?.navigationScript}"></script>`);
+    await expect(
+      access(join(outDir, "client", home?.navigationScript ?? "")),
+    ).resolves.toBeUndefined();
+    expect(html).not.toContain(
+      `<script type="module" src="/_mreact/client/${home?.navigationScript}"></script>`,
+    );
     expect(html).not.toContain("mreact-props-index");
   });
 
@@ -7284,10 +7413,14 @@ export default function Page(props) {
     });
 
     expect(await response.text()).toContain("Loaded on the server");
-    expect(await (await renderBuiltAppRequest({
-      outDir,
-      request: new Request("http://local.test/"),
-    })).text()).toContain("<title>Server-only metadata</title>");
+    expect(
+      await (
+        await renderBuiltAppRequest({
+          outDir,
+          request: new Request("http://local.test/"),
+        })
+      ).text(),
+    ).toContain("<title>Server-only metadata</title>");
   });
 
   test("keeps typed form action implementations out of production client bundles", async () => {
@@ -7753,20 +7886,13 @@ export default function Page({ data }) {
 
     expect(manifest.serverModules).toBeUndefined();
     expect(manifestText).not.toContain("__mreact_jsx");
-    expect(artifactPath).toMatch(
-      /^server-modules\/(?:request\/)?[a-f0-9]{16}\.json$/,
-    );
+    expect(artifactPath).toMatch(/^server-modules\/(?:request\/)?[a-f0-9]{16}\.json$/);
 
     const artifact = await hydrateTestServerModuleArtifact<{
       loader?: { code?: string; moduleFile?: string };
       request?: { code?: string };
-    }>(
-      outDir,
-      JSON.parse(await readFile(join(outDir, "server", artifactPath ?? ""), "utf8")),
-    );
-    expect(artifact.loader?.moduleFile).toMatch(
-      /^server-modules\/code\/[a-f0-9]{16}\.mjs$/,
-    );
+    }>(outDir, JSON.parse(await readFile(join(outDir, "server", artifactPath ?? ""), "utf8")));
+    expect(artifact.loader?.moduleFile).toMatch(/^server-modules\/code\/[a-f0-9]{16}\.mjs$/);
     expect(artifact.loader?.code).toContain("loader-secret");
     expect(artifact.request).toBeUndefined();
 
@@ -7804,7 +7930,9 @@ export default function Page({ data }) {
     );
 
     await buildApp({ appDir, outDir, targets: ["node"] });
-    const manifest = JSON.parse(await readFile(join(outDir, "server", "manifest.json"), "utf8")) as {
+    const manifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as {
       serverModuleClosureFiles?: Record<string, string[]>;
     };
 
@@ -8054,7 +8182,9 @@ export default function Layout() {
     );
 
     await buildApp({ appDir, outDir, targets: ["node"] });
-    const manifest = JSON.parse(await readFile(join(outDir, "server", "manifest.json"), "utf8")) as {
+    const manifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as {
       serverModuleFiles?: Record<string, string>;
       serverModuleRenderFiles?: Record<string, string>;
     };
@@ -8094,7 +8224,9 @@ export default function Page() {
     state.__mreactRenderArtifactLoaded = 0;
 
     await buildApp({ appDir, outDir, targets: ["node"] });
-    const manifest = JSON.parse(await readFile(join(outDir, "server", "manifest.json"), "utf8")) as {
+    const manifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as {
       serverModuleRenderFiles?: Record<string, string>;
       serverModuleRequestFiles?: Record<string, string>;
     };
@@ -8133,7 +8265,9 @@ export default function Page({ data }) {
     );
 
     await buildApp({ appDir, outDir, targets: ["node"] });
-    const manifest = JSON.parse(await readFile(join(outDir, "server", "manifest.json"), "utf8")) as {
+    const manifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as {
       serverModuleRenderFiles?: Record<string, string>;
       serverModuleRequestFiles?: Record<string, string>;
     };
@@ -8152,12 +8286,8 @@ export default function Page({ data }) {
       string?: { bundleCode?: string; moduleFile?: string };
     };
 
-    expect(requestArtifact.loader?.moduleFile).toMatch(
-      /^server-modules\/code\/[a-f0-9]{16}\.mjs$/,
-    );
-    expect(renderArtifact.string?.moduleFile).toMatch(
-      /^server-modules\/code\/[a-f0-9]{16}\.mjs$/,
-    );
+    expect(requestArtifact.loader?.moduleFile).toMatch(/^server-modules\/code\/[a-f0-9]{16}\.mjs$/);
+    expect(renderArtifact.string?.moduleFile).toMatch(/^server-modules\/code\/[a-f0-9]{16}\.mjs$/);
     expect(requestArtifact.loader?.code ?? "").not.toContain("module-file");
     expect(renderArtifact.string?.bundleCode).toBeUndefined();
 
@@ -8417,7 +8547,9 @@ export default function Page({ data }) {
     );
 
     await buildApp({ appDir, outDir, targets: ["node"] });
-    const manifest = JSON.parse(await readFile(join(outDir, "server", "manifest.json"), "utf8")) as {
+    const manifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as {
       serverModuleFiles?: Record<string, string>;
       serverModuleRequestFiles?: Record<string, string>;
     };
@@ -8937,7 +9069,7 @@ export default function Page() { return <main>Secure prerender</main>; }`,
       headers: Record<string, string>;
       strictTransportSecurity?: string | undefined;
     }> = [];
-    const entries = new Map<string, unknown>();
+    const entries = new Map<string, BuiltPrerenderedRoute>();
     const store = {
       delete(path: string) {
         entries.delete(path);
@@ -8945,8 +9077,13 @@ export default function Page() { return <main>Secure prerender</main>; }`,
       get(path: string) {
         return entries.get(path);
       },
-      set(path: string, entry: (typeof writes)[number]) {
-        writes.push(entry);
+      set(path: string, entry: BuiltPrerenderedRoute) {
+        writes.push({
+          headers: entry.headers,
+          ...(entry.strictTransportSecurity === undefined
+            ? {}
+            : { strictTransportSecurity: entry.strictTransportSecurity }),
+        });
         entries.set(path, entry);
       },
     };
@@ -9412,8 +9549,10 @@ export default function Page(props) {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-prerender-module-cache-"));
     const appDir = join(rootDir, "app");
     const outDir = join(rootDir, ".mreact");
-    const counterKey = `__mreactPrerenderModuleEvaluations_${rootDir
-      .replaceAll(/[^A-Za-z0-9_$]/g, "_")}`;
+    const counterKey = `__mreactPrerenderModuleEvaluations_${rootDir.replaceAll(
+      /[^A-Za-z0-9_$]/g,
+      "_",
+    )}`;
     await mkdir(join(appDir, "docs", "$slug"), { recursive: true });
     await writeFile(
       join(appDir, "docs", "$slug", "page.tsx"),
@@ -9439,9 +9578,7 @@ export default function Page(props) {
 
       expect(manifest.prerenderedRoutes?.["/docs/one"]?.html).toContain("<main>Doc one</main>");
       expect(manifest.prerenderedRoutes?.["/docs/two"]?.html).toContain("<main>Doc two</main>");
-      expect(manifest.prerenderedRoutes?.["/docs/three"]?.html).toContain(
-        "<main>Doc three</main>",
-      );
+      expect(manifest.prerenderedRoutes?.["/docs/three"]?.html).toContain("<main>Doc three</main>");
       expect((globalThis as Record<string, unknown>)[counterKey]).toBe(2);
     } finally {
       delete (globalThis as Record<string, unknown>)[counterKey];
@@ -9626,11 +9763,16 @@ function createRecordingPrerenderStore() {
 }
 
 async function writeFakePackage(rootDir: string, name: string, source: string): Promise<void> {
-  await writeFakePackageWithJson(rootDir, name, {
-    exports: "./index.js",
+  await writeFakePackageWithJson(
+    rootDir,
     name,
-    type: "module",
-  }, source);
+    {
+      exports: "./index.js",
+      name,
+      type: "module",
+    },
+    source,
+  );
 }
 
 async function writeFakePackageWithJson(

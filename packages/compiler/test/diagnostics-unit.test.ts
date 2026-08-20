@@ -12,7 +12,7 @@ import {
   unsupportedTopLevelJsxInitializerDiagnostic,
 } from "../src/diagnostics.js";
 
-const loc = { start: 1, end: 5 };
+const loc = { start: 1, end: 5, line: 1, column: 1 };
 
 describe("compiler diagnostics: factory branches with and without loc", () => {
   test("unsupportedComponentReferenceDiagnostic emits the supplied loc only when provided", () => {

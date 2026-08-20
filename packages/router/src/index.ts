@@ -288,6 +288,7 @@ export type {
   AppRouterRenderPreload,
   AppRouterResponseHook,
   AppRouterResponseHookContext,
+  AppRouterServerRenderArtifactLoader,
   RenderAppRequestOptions,
 } from "./render.js";
 export { parseTraceContext, traceContextFromRequest } from "./trace.js";

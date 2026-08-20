@@ -13,13 +13,25 @@ describe("react-compat Flight client decoder depth cap (Issue 079)", () => {
     }
     const payload = `{"version":1,"root":${nested},"clientReferences":[],"serverReferences":[]}`;
     const response = parseFlightResponse(payload);
-    expect(() => decodeFlightResponse(response, {})).toThrow(/MR_FLIGHT_TOO_DEEP/);
+    expect(() =>
+      decodeFlightResponse(response, {
+        loadClientReference() {
+          throw new Error("unexpected client reference");
+        },
+      }),
+    ).toThrow(/MR_FLIGHT_TOO_DEEP/);
   });
 
   test("legitimate (shallow) Flight payloads still decode", () => {
     const payload = `{"version":1,"root":[1,2,3],"clientReferences":[],"serverReferences":[]}`;
     const response = parseFlightResponse(payload);
-    expect(() => decodeFlightResponse(response, {})).not.toThrow();
+    expect(() =>
+      decodeFlightResponse(response, {
+        loadClientReference() {
+          throw new Error("unexpected client reference");
+        },
+      }),
+    ).not.toThrow();
   });
 });
 

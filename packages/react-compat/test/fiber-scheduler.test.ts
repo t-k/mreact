@@ -139,9 +139,15 @@ describe("fiber scheduler", () => {
     const host = createTestHost();
     setSchedulerHostForTesting(host);
     const calls: string[] = [];
-    const root = scheduleCallback("user-blocking", () => calls.push("root"));
-    scheduleCallback("normal", () => calls.push("kept"));
-    const belowRoot = scheduleCallback("low", () => calls.push("below-root"));
+    const root = scheduleCallback("user-blocking", () => {
+      calls.push("root");
+    });
+    scheduleCallback("normal", () => {
+      calls.push("kept");
+    });
+    const belowRoot = scheduleCallback("low", () => {
+      calls.push("below-root");
+    });
 
     cancelCallback(root);
     cancelCallback(belowRoot);
@@ -174,9 +180,27 @@ describe("fiber scheduler", () => {
     const host = createTestHost();
     setSchedulerHostForTesting(host);
     const calls: string[] = [];
-    scheduleCallback("normal", () => calls.push("ten"), { delay: 10 });
-    scheduleCallback("normal", () => calls.push("twenty-first"), { delay: 20 });
-    scheduleCallback("normal", () => calls.push("twenty-second"), { delay: 20 });
+    scheduleCallback(
+      "normal",
+      () => {
+        calls.push("ten");
+      },
+      { delay: 10 },
+    );
+    scheduleCallback(
+      "normal",
+      () => {
+        calls.push("twenty-first");
+      },
+      { delay: 20 },
+    );
+    scheduleCallback(
+      "normal",
+      () => {
+        calls.push("twenty-second");
+      },
+      { delay: 20 },
+    );
 
     host.advanceTo(9);
     host.flushAllHostCallbacks();
@@ -193,8 +217,20 @@ describe("fiber scheduler", () => {
     const host = createTestHost();
     setSchedulerHostForTesting(host);
     const calls: string[] = [];
-    const root = scheduleCallback("normal", () => calls.push("cancelled"), { delay: 10 });
-    scheduleCallback("normal", () => calls.push("kept"), { delay: 30 });
+    const root = scheduleCallback(
+      "normal",
+      () => {
+        calls.push("cancelled");
+      },
+      { delay: 10 },
+    );
+    scheduleCallback(
+      "normal",
+      () => {
+        calls.push("kept");
+      },
+      { delay: 30 },
+    );
     cancelCallback(root);
 
     expect(host.pendingTimeouts().map(({ due }) => due)).toEqual([10]);
@@ -212,9 +248,27 @@ describe("fiber scheduler", () => {
     const host = createTestHost();
     setSchedulerHostForTesting(host);
     const calls: string[] = [];
-    scheduleCallback("normal", () => calls.push("ten"), { delay: 10 });
-    const cancelled = scheduleCallback("normal", () => calls.push("cancelled"), { delay: 20 });
-    scheduleCallback("normal", () => calls.push("thirty"), { delay: 30 });
+    scheduleCallback(
+      "normal",
+      () => {
+        calls.push("ten");
+      },
+      { delay: 10 },
+    );
+    const cancelled = scheduleCallback(
+      "normal",
+      () => {
+        calls.push("cancelled");
+      },
+      { delay: 20 },
+    );
+    scheduleCallback(
+      "normal",
+      () => {
+        calls.push("thirty");
+      },
+      { delay: 30 },
+    );
     cancelCallback(cancelled);
 
     host.advanceTo(10);

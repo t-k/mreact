@@ -150,7 +150,7 @@ describe("react-compat server render", () => {
   });
 
   test("throws an explanatory error when renderToString encounters Suspense work", () => {
-    function App() {
+    function App(): never {
       throw Promise.resolve("pending");
     }
 

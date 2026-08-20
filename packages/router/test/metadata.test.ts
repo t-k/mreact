@@ -15,6 +15,7 @@ describe("router metadata contract", () => {
     expect(() =>
       validateRouteMetadata(
         {
+          // @ts-expect-error This test verifies runtime rejection of non-serializable metadata.
           title: () => "bad",
         },
         "metadata",
@@ -24,6 +25,7 @@ describe("router metadata contract", () => {
     expect(() =>
       validateRouteMetadata(
         {
+          // @ts-expect-error This test verifies runtime rejection of non-serializable metadata.
           openGraph: { images: [{ width: new Date("2026-06-07T00:00:00.000Z") }] },
         },
         "metadata",
@@ -33,6 +35,7 @@ describe("router metadata contract", () => {
     expect(() =>
       validateRouteMetadata(
         {
+          // @ts-expect-error This test verifies runtime rejection of non-string CSP values.
           csp: { directives: { "style-src": [123] } },
         },
         "metadata",

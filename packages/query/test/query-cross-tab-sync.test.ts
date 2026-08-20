@@ -489,12 +489,14 @@ describe("cross-tab query sync", () => {
     const failure = new Error("leader failed");
 
     try {
-      await expect(client.fetchQuery({
-        queryKey: ["profile"],
-        queryFn: async () => {
-          throw failure;
-        },
-      })).rejects.toBe(failure);
+      await expect(
+        client.fetchQuery({
+          queryKey: ["profile"],
+          queryFn: async () => {
+            throw failure;
+          },
+        }),
+      ).rejects.toBe(failure);
 
       expect(vi.getTimerCount()).toBe(0);
     } finally {
@@ -564,8 +566,14 @@ describe("cross-tab query sync", () => {
   });
 
   it("registers the handoff waiter before trying the Web Lock", async () => {
-    const firstApi = await import("../src/index.js?fast-leader-a") as typeof import("../src/index.js");
-    const secondApi = await import("../src/index.js?fast-leader-b") as typeof import("../src/index.js");
+    const firstApi = (await import(
+      // @ts-expect-error The query suffix intentionally creates an isolated Vitest module identity.
+      "../src/index.js?fast-leader-a"
+    )) as typeof import("../src/index.js");
+    const secondApi = (await import(
+      // @ts-expect-error The query suffix intentionally creates an isolated Vitest module identity.
+      "../src/index.js?fast-leader-b"
+    )) as typeof import("../src/index.js");
     const channel = uniqueChannelName();
     const first = firstApi.createQueryClient();
     const second = secondApi.createQueryClient();
@@ -660,8 +668,14 @@ describe("cross-tab query sync", () => {
   });
 
   it("ignores success messages whose query hash does not match the query key", async () => {
-    const firstApi = await import("../src/index.js?hash-mismatch-a") as typeof import("../src/index.js");
-    const secondApi = await import("../src/index.js?hash-mismatch-b") as typeof import("../src/index.js");
+    const firstApi = (await import(
+      // @ts-expect-error The query suffix intentionally creates an isolated Vitest module identity.
+      "../src/index.js?hash-mismatch-a"
+    )) as typeof import("../src/index.js");
+    const secondApi = (await import(
+      // @ts-expect-error The query suffix intentionally creates an isolated Vitest module identity.
+      "../src/index.js?hash-mismatch-b"
+    )) as typeof import("../src/index.js");
     const channel = uniqueChannelName();
     const first = firstApi.createQueryClient();
     const second = secondApi.createQueryClient();
@@ -784,9 +798,10 @@ describe("cross-tab query sync", () => {
 
       window.dispatchEvent(new Event("focus"));
 
-      await waitFor(() =>
-        firstObserver.result.get().data?.name === "fresh-from-focus" &&
-        secondObserver.result.get().data?.name === "fresh-from-focus"
+      await waitFor(
+        () =>
+          firstObserver.result.get().data?.name === "fresh-from-focus" &&
+          secondObserver.result.get().data?.name === "fresh-from-focus",
       );
       expect(firstObserver.result.get().data).toEqual({ name: "fresh-from-focus" });
       expect(secondObserver.result.get().data).toEqual({ name: "fresh-from-focus" });
@@ -843,9 +858,10 @@ describe("cross-tab query sync", () => {
 
       window.dispatchEvent(new Event("online"));
 
-      await waitFor(() =>
-        firstObserver.result.get().data?.unread === 7 &&
-        secondObserver.result.get().data?.unread === 7
+      await waitFor(
+        () =>
+          firstObserver.result.get().data?.unread === 7 &&
+          secondObserver.result.get().data?.unread === 7,
       );
       expect(firstObserver.result.get().data).toEqual({ unread: 7 });
       expect(secondObserver.result.get().data).toEqual({ unread: 7 });
@@ -864,7 +880,9 @@ function installRetainedLockManager(): void {
   const lockManager = {
     async request<T>(
       _name: string,
-      optionsOrCallback: { ifAvailable?: boolean | undefined } | ((lock: unknown) => T | Promise<T>),
+      optionsOrCallback:
+        | { ifAvailable?: boolean | undefined }
+        | ((lock: unknown) => T | Promise<T>),
       maybeCallback?: (lock: unknown | null) => T | Promise<T>,
     ): Promise<T> {
       if (typeof optionsOrCallback === "function") {
@@ -894,7 +912,9 @@ function installUnavailableLockManager(): void {
   const lockManager = {
     async request<T>(
       _name: string,
-      optionsOrCallback: { ifAvailable?: boolean | undefined } | ((lock: unknown) => T | Promise<T>),
+      optionsOrCallback:
+        | { ifAvailable?: boolean | undefined }
+        | ((lock: unknown) => T | Promise<T>),
       maybeCallback?: (lock: unknown | null) => T | Promise<T>,
     ): Promise<T> {
       if (typeof optionsOrCallback === "function") {
@@ -917,7 +937,9 @@ function installNamedLockManager(): { blockedRequests(): number } {
   const lockManager = {
     async request<T>(
       name: string,
-      optionsOrCallback: { ifAvailable?: boolean | undefined } | ((lock: unknown) => T | Promise<T>),
+      optionsOrCallback:
+        | { ifAvailable?: boolean | undefined }
+        | ((lock: unknown) => T | Promise<T>),
       maybeCallback?: (lock: unknown | null) => T | Promise<T>,
     ): Promise<T> {
       if (typeof optionsOrCallback === "function") {
@@ -931,7 +953,7 @@ function installNamedLockManager(): { blockedRequests(): number } {
 
       lockedNames.add(name);
       try {
-        return await maybeCallback?.({}) as T;
+        return (await maybeCallback?.({})) as T;
       } finally {
         lockedNames.delete(name);
       }

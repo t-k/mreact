@@ -22,6 +22,7 @@ describe("host reconciler module", () => {
 
   test("exposes host renderability checks independently of the fiber-host compatibility entry", () => {
     expect(canRenderHostFiber(createElement("section", null, "ok"))).toBe(true);
+    // @ts-expect-error Symbols are intentionally rejected by the host renderability guard.
     expect(canRenderHostFiber(Symbol("unsupported"))).toBe(false);
   });
 
@@ -127,10 +128,15 @@ describe("host reconciler module", () => {
       "utf8",
     );
     const memoStateStart = hostReconcilerSource.indexOf("const hasClassDescendant =");
-    const memoStateEnd = hostReconcilerSource.indexOf("return { fiber, consumed: childResult.consumed };", memoStateStart);
+    const memoStateEnd = hostReconcilerSource.indexOf(
+      "return { fiber, consumed: childResult.consumed };",
+      memoStateStart,
+    );
     const memoStateSource = hostReconcilerSource.slice(memoStateStart, memoStateEnd);
 
-    expect(memoStateSource).toContain("const hasClassDescendant = hasClassComponentDescendant(fiber.child);");
+    expect(memoStateSource).toContain(
+      "const hasClassDescendant = hasClassComponentDescendant(fiber.child);",
+    );
     expect(memoStateSource.match(/hasClassComponentDescendant\(fiber\.child\)/g)).toHaveLength(1);
   });
 
@@ -140,9 +146,7 @@ describe("host reconciler module", () => {
       "utf8",
     );
 
-    expect(hostReconcilerSource).toContain(
-      "collectMemoInstanceKeys(runtime, memoRuntimePath)",
-    );
+    expect(hostReconcilerSource).toContain("collectMemoInstanceKeys(runtime, memoRuntimePath)");
     expect(hostReconcilerSource).toContain("readDependencyFreeMemoInstanceKey(runtime, prefix)");
   });
 
@@ -153,7 +157,9 @@ describe("host reconciler module", () => {
     );
 
     expect(hostReconcilerSource).toContain("getHostChildFiberOptions(");
-    expect(hostReconcilerSource).not.toContain("namespace: childNamespace,\n      ...(previousChildNodes");
+    expect(hostReconcilerSource).not.toContain(
+      "namespace: childNamespace,\n      ...(previousChildNodes",
+    );
   });
 
   test("tries the initial host-only subtree builder before the generic host branch", async () => {
@@ -365,10 +371,7 @@ describe("host reconciler module", () => {
     vi.stubEnv("NODE_ENV", "production");
     const container = document.createElement("div");
     const root = createFiberRoot(container);
-    const work = renderHostFiberRoot(
-      root,
-      createElement("main", { id: "app" }, "Hello"),
-    );
+    const work = renderHostFiberRoot(root, createElement("main", { id: "app" }, "Hello"));
 
     expect(work.child?.tag).toBe("host-component");
     expect(work.child?.type).toBe("main");
@@ -693,9 +696,7 @@ describe("host reconciler module", () => {
 
     commitHostFiberRoot(root, updated);
 
-    expect(container.innerHTML).toBe(
-      '<span data-key="a">A</span><span data-key="c">C</span>',
-    );
+    expect(container.innerHTML).toBe('<span data-key="a">A</span><span data-key="c">C</span>');
   });
 
   test("commits keyed swaps for dependency-free memo rows", () => {
@@ -904,9 +905,7 @@ describe("host reconciler module", () => {
     lastRow.stateNode = undefined;
     commitHostFiberRoot(root, updated);
 
-    expect(container.innerHTML).toBe(
-      '<span data-key="a">A</span><span data-key="c">C</span>',
-    );
+    expect(container.innerHTML).toBe('<span data-key="a">A</span><span data-key="c">C</span>');
   });
 
   test("removes one keyed root child without resyncing unchanged siblings", () => {
@@ -937,9 +936,7 @@ describe("host reconciler module", () => {
     lastRow.stateNode = undefined;
     commitHostFiberRoot(root, updated);
 
-    expect(container.innerHTML).toBe(
-      '<span data-key="a">A</span><span data-key="c">C</span>',
-    );
+    expect(container.innerHTML).toBe('<span data-key="a">A</span><span data-key="c">C</span>');
   });
 
   test("records one removed dependency-free memo child during keyed reconcile", () => {
@@ -969,20 +966,13 @@ describe("host reconciler module", () => {
     const currentSecond = currentFirst?.sibling;
     const currentThird = currentSecond?.sibling;
 
-    if (
-      currentFirst === undefined ||
-      currentSecond === undefined ||
-      currentThird === undefined
-    ) {
+    if (currentFirst === undefined || currentSecond === undefined || currentThird === undefined) {
       expect.fail("expected initial memo children");
     }
 
     const updated = renderHostFiberRoot(
       root,
-      [
-        createElement(Row, { key: "a", label: "A" }),
-        createElement(Row, { key: "c", label: "C" }),
-      ],
+      [createElement(Row, { key: "a", label: "A" }), createElement(Row, { key: "c", label: "C" })],
       runtime,
     );
 
@@ -992,9 +982,7 @@ describe("host reconciler module", () => {
 
     commitHostFiberRoot(root, updated);
 
-    expect(container.innerHTML).toBe(
-      '<span data-row="A">A</span><span data-row="C">C</span>',
-    );
+    expect(container.innerHTML).toBe('<span data-row="A">A</span><span data-row="C">C</span>');
   });
 
   test("records dirty memo children during keyed reconcile without child list changes", () => {
@@ -1064,7 +1052,11 @@ describe("host reconciler module", () => {
         createElement(
           "svg",
           null,
-          createElement("g", { className: "recharts-layer" }, createElement(ShapeLayer, { visible: true })),
+          createElement(
+            "g",
+            { className: "recharts-layer" },
+            createElement(ShapeLayer, { visible: true }),
+          ),
         ),
       );
     });
@@ -1075,7 +1067,11 @@ describe("host reconciler module", () => {
         createElement(
           "svg",
           null,
-          createElement("g", { className: "recharts-layer" }, createElement(ShapeLayer, { visible: false })),
+          createElement(
+            "g",
+            { className: "recharts-layer" },
+            createElement(ShapeLayer, { visible: false }),
+          ),
         ),
       );
     });
@@ -1104,7 +1100,11 @@ describe("host reconciler module", () => {
         createElement(
           "svg",
           null,
-          createElement("g", { className: "recharts-funnel" }, createElement(Trapezoids, { ids: [1, 2, 3] })),
+          createElement(
+            "g",
+            { className: "recharts-funnel" },
+            createElement(Trapezoids, { ids: [1, 2, 3] }),
+          ),
         ),
       );
     });
@@ -1114,16 +1114,18 @@ describe("host reconciler module", () => {
         createElement(
           "svg",
           null,
-          createElement("g", { className: "recharts-funnel" }, createElement(Trapezoids, { ids: [2, 3, 4] })),
+          createElement(
+            "g",
+            { className: "recharts-funnel" },
+            createElement(Trapezoids, { ids: [2, 3, 4] }),
+          ),
         ),
       );
     });
 
-    expect(Array.from(container.querySelectorAll("path"), (path) => path.getAttribute("class"))).toEqual([
-      "trapezoid-2",
-      "trapezoid-3",
-      "trapezoid-4",
-    ]);
+    expect(
+      Array.from(container.querySelectorAll("path"), (path) => path.getAttribute("class")),
+    ).toEqual(["trapezoid-2", "trapezoid-3", "trapezoid-4"]);
     root.unmount();
   });
 
@@ -1143,7 +1145,11 @@ describe("host reconciler module", () => {
         createElement(
           "svg",
           null,
-          createElement("g", { className: "recharts-layer" }, createElement(ManagedPath, { selected: false })),
+          createElement(
+            "g",
+            { className: "recharts-layer" },
+            createElement(ManagedPath, { selected: false }),
+          ),
         ),
       );
     });
@@ -1157,15 +1163,18 @@ describe("host reconciler module", () => {
         createElement(
           "svg",
           null,
-          createElement("g", { className: "recharts-layer" }, createElement(ManagedPath, { selected: true })),
+          createElement(
+            "g",
+            { className: "recharts-layer" },
+            createElement(ManagedPath, { selected: true }),
+          ),
         ),
       );
     });
 
-    expect(Array.from(container.querySelectorAll("path"), (path) => path.getAttribute("class"))).toEqual([
-      "managed selected",
-      "unmanaged",
-    ]);
+    expect(
+      Array.from(container.querySelectorAll("path"), (path) => path.getAttribute("class")),
+    ).toEqual(["managed selected", "unmanaged"]);
     root.unmount();
   });
 });

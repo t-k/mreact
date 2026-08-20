@@ -67,10 +67,7 @@ import {
   type TrackedHeaderRequest,
   withTrackedRequest,
 } from "./request-header-tracking.js";
-import {
-  configuredHstsHeader,
-  hasInvalidConfiguredHsts,
-} from "./security-headers.js";
+import { configuredHstsHeader, hasInvalidConfiguredHsts } from "./security-headers.js";
 import { resolveRouterCacheLimit } from "./cache-config.js";
 import { protectNonceBearingResponse } from "./prerender-entry.js";
 import {
@@ -222,6 +219,7 @@ export interface RenderAppRequestOptions {
   routeMatcher?: RouteMatcher | undefined;
   routes?: readonly AppRoute[] | undefined;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
+  serverRenderArtifactLoader?: AppRouterServerRenderArtifactLoader | undefined;
   serverModuleCacheVersion?: string | undefined;
   devServerModuleCacheVersion?: string | undefined;
   // True when serving through a dev server: request-time server transforms
@@ -262,7 +260,6 @@ export interface RenderAppRequestRuntimeOptions extends RenderAppRequestOptions 
         strictTransportSecurity: () => string | undefined;
       }
     | undefined;
-  serverRenderArtifactLoader?: AppRouterServerRenderArtifactLoader | undefined;
 }
 
 export interface AppRouterRenderPreload {
@@ -798,7 +795,13 @@ async function waitForLoaderReadyOrSettled(
     return;
   }
 
-  await Promise.race([loaderReady, dataPromise.then(() => undefined, () => undefined)]);
+  await Promise.race([
+    loaderReady,
+    dataPromise.then(
+      () => undefined,
+      () => undefined,
+    ),
+  ]);
 }
 
 function addRenderTimingPhaseDuration(
@@ -1046,217 +1049,540 @@ async function renderAppRequestInternal(
   let sourceUsesRequestInput = true;
   let invalidConfiguredHsts = false;
   let renderedStrictTransportSecurity: string | undefined;
-  return (await withRouteCacheContext(options.routeCache, async () => {
-  try {
-    if (matched.route.kind === "asset") {
-      return await dispatchConventionAssetRoute({
-        file: matched.route.file,
-        request: options.request,
-      });
-    }
-
-    if (matched.route.kind === "metadata") {
-      return await dispatchMetadataRoute({
-        appDir: options.appDir,
-        file: matched.route.file,
-        importPolicy: options.importPolicy,
-        params: matched.params,
-        request: options.request,
-        route: matched.route,
-        serverModules: options.serverModules,
-        serverModuleCacheVersion: options.serverModuleCacheVersion,
-        serverSourceFiles: options.serverSourceFiles,
-        vitePlugins: options.vitePlugins,
-      });
-    }
-
-    if (matched.route.kind === "server") {
-      return await dispatchServerRoute({
-        appDir: options.appDir,
-        env: options.env,
-        file: matched.route.file,
-        importPolicy: options.importPolicy,
-        params: matched.params,
-        request: options.request,
-        route: matched.route,
-        serverModules: options.serverModules,
-        serverModuleCacheVersion: options.serverModuleCacheVersion,
-        serverSourceFiles: options.serverSourceFiles,
-        vitePlugins: options.vitePlugins,
-      });
-    }
-
-    // Issue 080: page routes render HTML for GET / HEAD only. Other
-    // methods (PUT, PATCH, DELETE, PROPFIND, ...) get 405 with an
-    // Allow header so the response shape complies with RFC 9110 §9
-    // and so caching intermediaries do not cross-cache method results.
-    const methodResponse = pageRouteMethodResponse(options.request.method);
-    if (methodResponse !== undefined) {
-      return methodResponse;
-    }
-
-    const clientScript = options.clientScripts?.get(matched.route.path);
-    const clientStyleSheets = options.clientStyles?.get(matched.route.path);
-    phaseStartedAt = renderTimingPhaseStartedAt(timing);
-    const originalCode = await readServerSourceFile(
-      matched.route.file,
-      options.serverModuleCacheVersion,
-      options.serverSourceFiles,
-    );
-    finishRenderTimingPhase(timing, phaseStartedAt, "readSourceMs");
-    phaseStartedAt = renderTimingPhaseStartedAt(timing);
-    const originalAnalysis = await analyzeRouteSource({
-      appDir: options.appDir,
-      artifact: options.serverModules?.get(matched.route.file)?.analysis,
-      code: originalCode,
-      filename: matched.route.file,
-      routePath: matched.route.path,
-      clientRouteInferenceCache,
-      serverModuleCacheVersion: options.serverModuleCacheVersion,
-      serverSourceFiles: options.serverSourceFiles,
-      define: options.define,
-      timing,
-      vitePlugins: options.vitePlugins,
-    });
-    sourceUsesRequestInput = originalAnalysis.usesRequestInput;
-    finishRenderTimingPhase(timing, phaseStartedAt, "sourceAnalysisMs");
-    const cachePolicy = originalAnalysis.cachePolicy;
-    const navigationScript = options.navigationScripts?.get(matched.route.path);
-    const navigationRequest = isNavigationRequest(options.request);
-    const cacheKey = routeCacheKey(
-      options.appDir,
-      matched.route.path,
-      url,
-      navigationRequest ? "navigation" : "document",
-    );
-    const mayUseRouteCache =
-      !sourceUsesRequestInput &&
-      (cachePolicy === undefined
-        ? originalAnalysis.usesRuntimeCacheControl
-        : cachePolicy.revalidateSeconds !== 0);
-    const reloadRouteCache = isNavigationRouteCacheReloadRequest(options.request);
-    phaseStartedAt = renderTimingPhaseStartedAt(timing);
-    const cachedResponse =
-      !mayUseRouteCache || reloadRouteCache
-        ? undefined
-        : await cachedRouteResponse({
-            cache: options.routeCache,
-            key: cacheKey,
+  return (
+    await withRouteCacheContext(options.routeCache, async () => {
+      try {
+        if (matched.route.kind === "asset") {
+          return await dispatchConventionAssetRoute({
+            file: matched.route.file,
             request: options.request,
           });
-    finishRenderTimingPhase(timing, phaseStartedAt, "routeCacheMs");
+        }
 
-    if (cachedResponse !== undefined) {
-      return cachedResponse;
-    }
-
-    // Only a route whose result may be stored pays for header-read tracking;
-    // cache hits returned above never construct it. Application code reads
-    // headers through this request so that a render depending on one is never
-    // stored under a key that ignores it. Callers that store by path alone ask
-    // for tracking through `renderSignals` even when the route itself declares
-    // no cache policy.
-    trackedRequest =
-      mayUseRouteCache || options.renderSignals !== undefined
-        ? trackRequestHeaderReads(options.request)
-        : undefined;
-    const appRequest = trackedRequest?.request ?? options.request;
-
-    phaseStartedAt = renderTimingPhaseStartedAt(timing);
-    const preparedActions = await prepareRouteServerActions({
-      appDir: options.appDir,
-      code: originalCode,
-      formActionReferences: options.serverActionReferencesByFile?.get(matched.route.file),
-      placeholders: true,
-      pageFile: matched.route.file,
-      request: options.request,
-    });
-    for (const diagnostic of preparedActions.diagnostics ?? []) {
-      console.warn(`${diagnostic.code}: ${diagnostic.message}`);
-    }
-    finishRenderTimingPhase(timing, phaseStartedAt, "serverActionsMs");
-    const code = preparedActions.code;
-    phaseStartedAt = renderTimingPhaseStartedAt(timing);
-    const routeAnalysis =
-      code === originalCode
-        ? originalAnalysis
-        : await analyzeRouteSource({
+        if (matched.route.kind === "metadata") {
+          return await dispatchMetadataRoute({
             appDir: options.appDir,
-            buildRenderCode: preparedActions.htmlReplacements !== undefined,
-            code,
+            file: matched.route.file,
+            importPolicy: options.importPolicy,
+            params: matched.params,
+            request: options.request,
+            route: matched.route,
+            serverModules: options.serverModules,
+            serverModuleCacheVersion: options.serverModuleCacheVersion,
+            serverSourceFiles: options.serverSourceFiles,
+            vitePlugins: options.vitePlugins,
+          });
+        }
+
+        if (matched.route.kind === "server") {
+          return await dispatchServerRoute({
+            appDir: options.appDir,
+            env: options.env,
+            file: matched.route.file,
+            importPolicy: options.importPolicy,
+            params: matched.params,
+            request: options.request,
+            route: matched.route,
+            serverModules: options.serverModules,
+            serverModuleCacheVersion: options.serverModuleCacheVersion,
+            serverSourceFiles: options.serverSourceFiles,
+            vitePlugins: options.vitePlugins,
+          });
+        }
+
+        // Issue 080: page routes render HTML for GET / HEAD only. Other
+        // methods (PUT, PATCH, DELETE, PROPFIND, ...) get 405 with an
+        // Allow header so the response shape complies with RFC 9110 §9
+        // and so caching intermediaries do not cross-cache method results.
+        const methodResponse = pageRouteMethodResponse(options.request.method);
+        if (methodResponse !== undefined) {
+          return methodResponse;
+        }
+
+        const clientScript = options.clientScripts?.get(matched.route.path);
+        const clientStyleSheets = options.clientStyles?.get(matched.route.path);
+        phaseStartedAt = renderTimingPhaseStartedAt(timing);
+        const originalCode = await readServerSourceFile(
+          matched.route.file,
+          options.serverModuleCacheVersion,
+          options.serverSourceFiles,
+        );
+        finishRenderTimingPhase(timing, phaseStartedAt, "readSourceMs");
+        phaseStartedAt = renderTimingPhaseStartedAt(timing);
+        const originalAnalysis = await analyzeRouteSource({
+          appDir: options.appDir,
+          artifact: options.serverModules?.get(matched.route.file)?.analysis,
+          code: originalCode,
+          filename: matched.route.file,
+          routePath: matched.route.path,
+          clientRouteInferenceCache,
+          serverModuleCacheVersion: options.serverModuleCacheVersion,
+          serverSourceFiles: options.serverSourceFiles,
+          define: options.define,
+          timing,
+          vitePlugins: options.vitePlugins,
+        });
+        sourceUsesRequestInput = originalAnalysis.usesRequestInput;
+        finishRenderTimingPhase(timing, phaseStartedAt, "sourceAnalysisMs");
+        const cachePolicy = originalAnalysis.cachePolicy;
+        const navigationScript = options.navigationScripts?.get(matched.route.path);
+        const navigationRequest = isNavigationRequest(options.request);
+        const cacheKey = routeCacheKey(
+          options.appDir,
+          matched.route.path,
+          url,
+          navigationRequest ? "navigation" : "document",
+        );
+        const mayUseRouteCache =
+          !sourceUsesRequestInput &&
+          (cachePolicy === undefined
+            ? originalAnalysis.usesRuntimeCacheControl
+            : cachePolicy.revalidateSeconds !== 0);
+        const reloadRouteCache = isNavigationRouteCacheReloadRequest(options.request);
+        phaseStartedAt = renderTimingPhaseStartedAt(timing);
+        const cachedResponse =
+          !mayUseRouteCache || reloadRouteCache
+            ? undefined
+            : await cachedRouteResponse({
+                cache: options.routeCache,
+                key: cacheKey,
+                request: options.request,
+              });
+        finishRenderTimingPhase(timing, phaseStartedAt, "routeCacheMs");
+
+        if (cachedResponse !== undefined) {
+          return cachedResponse;
+        }
+
+        // Only a route whose result may be stored pays for header-read tracking;
+        // cache hits returned above never construct it. Application code reads
+        // headers through this request so that a render depending on one is never
+        // stored under a key that ignores it. Callers that store by path alone ask
+        // for tracking through `renderSignals` even when the route itself declares
+        // no cache policy.
+        trackedRequest =
+          mayUseRouteCache || options.renderSignals !== undefined
+            ? trackRequestHeaderReads(options.request)
+            : undefined;
+        const appRequest = trackedRequest?.request ?? options.request;
+
+        phaseStartedAt = renderTimingPhaseStartedAt(timing);
+        const preparedActions = await prepareRouteServerActions({
+          appDir: options.appDir,
+          code: originalCode,
+          formActionReferences: options.serverActionReferencesByFile?.get(matched.route.file),
+          placeholders: true,
+          pageFile: matched.route.file,
+          request: options.request,
+        });
+        for (const diagnostic of preparedActions.diagnostics ?? []) {
+          console.warn(`${diagnostic.code}: ${diagnostic.message}`);
+        }
+        finishRenderTimingPhase(timing, phaseStartedAt, "serverActionsMs");
+        const code = preparedActions.code;
+        phaseStartedAt = renderTimingPhaseStartedAt(timing);
+        const routeAnalysis =
+          code === originalCode
+            ? originalAnalysis
+            : await analyzeRouteSource({
+                appDir: options.appDir,
+                buildRenderCode: preparedActions.htmlReplacements !== undefined,
+                code,
+                filename: matched.route.file,
+                routePath: matched.route.path,
+                clientRouteInferenceCache,
+                serverModuleCacheVersion: undefined,
+                serverSourceFiles: options.serverSourceFiles,
+                define: options.define,
+                vitePlugins: options.vitePlugins,
+              });
+        finishRenderTimingPhase(timing, phaseStartedAt, "routeCodeAnalysisMs");
+        const routeCode = routeAnalysis.routeCode;
+        const streamRoute = routeAnalysis.streamRoute;
+        const clientInference = routeAnalysis.clientInference;
+        const clientRoute = clientInference.client;
+        phaseStartedAt = renderTimingPhaseStartedAt(timing);
+        const loaderReady = routeAnalysis.hasLoader ? createDeferredSignal() : undefined;
+        const dataPromise = routeAnalysis.hasLoader
+          ? loadRouteDataWithInstrumentation({
+              appDir: options.appDir,
+              code: originalCode,
+              context: withTrackedRequest(
+                {
+                  env: options.env,
+                  params: matched.params,
+                  queryClient,
+                },
+                appRequest,
+                trackedRequest,
+              ),
+              filename: matched.route.file,
+              importPolicy: options.importPolicy,
+              instrumentation: options.instrumentation,
+              devServerModuleCacheVersion: options.devServerModuleCacheVersion,
+              request: options.request,
+              routeId: routeIdForPath(matched.route.path),
+              routePath: matched.route.path,
+              serverModules: options.serverModules,
+              serverModuleCacheVersion: options.serverModuleCacheVersion,
+              define: options.define,
+              vitePlugins: options.vitePlugins,
+              timing,
+              onLoaderReady: loaderReady?.resolve,
+            })
+          : undefined;
+        finishRenderTimingPhase(timing, phaseStartedAt, "loaderStartMs");
+        recoveryRoute = {
+          clientRoute,
+          props: {
+            params: matched.params,
+            request: { url: url.pathname },
+          },
+          routePath: matched.route.path,
+          script: clientScript,
+        };
+        if (streamRoute) {
+          phaseStartedAt = renderTimingPhaseStartedAt(timing);
+          const loadingFile = await nearestExistingBoundaryFileForPage({
+            appDir: options.appDir,
+            filename: "loading.mreact.tsx",
+            pageFile: matched.route.file,
+            serverSourceFiles: options.serverSourceFiles,
+          });
+          finishRenderTimingPhase(timing, phaseStartedAt, "loadingBoundaryLookupMs");
+          const streamShellResponseHeaders = {
+            "content-type": "text/html; charset=utf-8",
+            "x-mreact-stream": "1",
+          };
+
+          phaseStartedAt = renderTimingPhaseStartedAt(timing);
+          const mayRenderOutOfOrder = await mayRenderOutOfOrderBoundaryDeep({
+            code: routeCode,
             filename: matched.route.file,
+            serverModuleCacheVersion: options.serverModuleCacheVersion,
+            serverSourceFiles: options.serverSourceFiles,
+          });
+          finishRenderTimingPhase(timing, phaseStartedAt, "outOfOrderAnalysisMs");
+
+          if (loadingFile === undefined && !mayRenderOutOfOrder) {
+            phaseStartedAt = renderTimingPhaseStartedAt(timing);
+            let data: unknown;
+            try {
+              data = dataPromise === undefined ? undefined : await dataPromise;
+            } finally {
+              finishRenderTimingPhase(timing, phaseStartedAt, "loaderWaitMs");
+            }
+            if (data instanceof Response) {
+              emitRenderTiming(options, timing, data.status);
+              return data;
+            }
+            await waitForRenderPreload(options, timing);
+            await loadServerRenderArtifacts(options, matched.route.file, timing);
+            phaseStartedAt = renderTimingPhaseStartedAt(timing);
+            const stringOutput = transformServerModule({
+              code: routeCode,
+              clientBoundaryImports: clientInference.clientBoundaryImports,
+              clientBoundaryFallbackImports: clientInference.clientBoundaryFallbackImports,
+              filename: matched.route.file,
+              serverModules: options.serverModules,
+              serverOutput: "string",
+            });
+            finishRenderTimingPhase(timing, phaseStartedAt, "stringTransformMs");
+            const stringFatalDiagnostics = fatalServerDiagnostics(stringOutput.diagnostics);
+
+            if (stringFatalDiagnostics.length > 0) {
+              return new Response(
+                formatServerDiagnostics(matched.route.file, stringFatalDiagnostics),
+                {
+                  status: 500,
+                  headers: { "content-type": "text/plain; charset=utf-8" },
+                },
+              );
+            }
+
+            const renderedPage = await runWithQueryClient(queryClient, () =>
+              runServerModuleWithSlots(
+                stringOutput.code,
+                withTrackedRequest(
+                  {
+                    data,
+                    params: matched.params,
+                    queryClient,
+                  },
+                  appRequest,
+                  trackedRequest,
+                ),
+                matched.route.file,
+                options.serverModules,
+                options.serverModuleCacheVersion,
+                options.define,
+                options.vitePlugins,
+                undefined,
+                options.importPolicy,
+                options.devServerModuleCacheVersion,
+              ),
+            );
+            const pageHtml = renderedPage.html;
+            const pageHtmlForLayout = clientRoute
+              ? withHydrationMarkers({
+                  assetBaseUrl: options.assetBaseUrl,
+                  clientReferenceManifest: stringOutput.metadata.clientReferenceManifest,
+                  html: pageHtml,
+                  routePath: matched.route.path,
+                  script: clientScript,
+                  props: {
+                    params: matched.params,
+                    request: { url: url.pathname },
+                    data,
+                  },
+                })
+              : withServerOnlyRouteMarkers(
+                  pageHtml,
+                  matched.route.path,
+                  options.request,
+                  options.prerenderVariantCapture === true,
+                );
+            let html = await runWithQueryClient(queryClient, () =>
+              applyLayouts({
+                appDir: options.appDir,
+                pageFile: matched.route.file,
+                html: pageHtmlForLayout,
+                props: withTrackedRequest(
+                  {
+                    data,
+                    params: matched.params,
+                    queryClient,
+                  },
+                  appRequest,
+                  trackedRequest,
+                ),
+                slots: renderedPage.slots,
+                serverModules: options.serverModules,
+                serverModuleCacheVersion: options.serverModuleCacheVersion,
+                serverSourceFiles: options.serverSourceFiles,
+                clientRouteInferenceCache,
+                timing,
+                vitePlugins: options.vitePlugins,
+                importPolicy: options.importPolicy,
+              }),
+            );
+            const metadata = await loadComposedRouteMetadata({
+              appDir: options.appDir,
+              code: originalCode,
+              context: withTrackedRequest(
+                {
+                  data,
+                  params: matched.params,
+                },
+                appRequest,
+                trackedRequest,
+              ),
+              filename: matched.route.file,
+              importPolicy: options.importPolicy,
+              routes,
+              serverModules: options.serverModules,
+              serverModuleCacheVersion: options.serverModuleCacheVersion,
+              devServerModuleCacheVersion: options.devServerModuleCacheVersion,
+              serverSourceFiles: options.serverSourceFiles,
+              define: options.define,
+              vitePlugins: options.vitePlugins,
+            });
+            html = injectHeadMetadata(html, metadata);
+            warnIfCspNonceWouldBlockInlineTags({
+              html,
+              logger: options.logger,
+              metadata,
+              request: options.request,
+              serverModuleCacheVersion: options.serverModuleCacheVersion,
+            });
+            html = injectAuthSessionClaims(
+              html,
+              originalAnalysis.authIncludesClaims ? currentAuthClaims() : undefined,
+            );
+            html = injectQueryState(html, dehydrate(queryClient, options.dehydrateOptions));
+            const response = withOptionalActionCookie(
+              htmlResponse(
+                applyActionHtmlReplacements(
+                  `<!DOCTYPE html>${clientNavigationHeadTags({
+                    assetBaseUrl: options.assetBaseUrl,
+                    currentStyleSheets: clientStyleSheets,
+                    currentScript: clientRoute ? clientScript : undefined,
+                    currentNavigationScript: navigationScript,
+                    routeScripts: options.clientScripts,
+                  })}${html}`,
+                  preparedActions.htmlReplacements,
+                ),
+                {
+                  headers: responseHeadersForMetadata(metadata, options.request, {
+                    "x-mreact-stream": "1",
+                  }),
+                },
+              ),
+              preparedActions.csrfToken,
+              preparedActions.csrfTokenIsNew === true,
+            );
+            appendNavigationVary(response.headers);
+            emitRenderTiming(options, timing, response.status);
+            return response;
+          }
+
+          let streamData: unknown;
+          let streamDataPromise = dataPromise ?? Promise.resolve(undefined);
+          phaseStartedAt = renderTimingPhaseStartedAt(timing);
+          if (loadingFile === undefined || routeLoaderMayReturnControlResponse(originalCode)) {
+            try {
+              streamData = dataPromise === undefined ? undefined : await dataPromise;
+            } finally {
+              finishRenderTimingPhase(timing, phaseStartedAt, "loaderWaitMs");
+            }
+            if (streamData instanceof Response) {
+              emitRenderTiming(options, timing, streamData.status);
+              return streamData;
+            }
+            streamDataPromise = Promise.resolve(streamData);
+          } else {
+            try {
+              await waitForLoaderReadyOrSettled(streamDataPromise, loaderReady?.promise);
+              const settledData = await readSettledPromiseAtNextTask(streamDataPromise);
+              if (settledData.settled) {
+                if (settledData.value instanceof Response) {
+                  emitRenderTiming(options, timing, settledData.value.status);
+                  return settledData.value;
+                }
+                streamDataPromise = Promise.resolve(settledData.value);
+              }
+            } finally {
+              finishRenderTimingPhase(timing, phaseStartedAt, "loaderWaitMs");
+            }
+          }
+
+          const streamDataSettlement =
+            loadingFile === undefined ? undefined : observePromiseSettlement(streamDataPromise);
+
+          await waitForRenderPreload(options, timing);
+          await loadServerRenderArtifacts(options, matched.route.file, timing);
+          phaseStartedAt = renderTimingPhaseStartedAt(timing);
+          const output = transformServerModule({
+            code: routeCode,
+            clientBoundaryImports: clientInference.clientBoundaryImports,
+            clientBoundaryFallbackImports: clientInference.clientBoundaryFallbackImports,
+            filename: matched.route.file,
+            serverModules: options.serverModules,
+            serverOutput: "stream",
+            serverAwaitHydration: clientRoute,
+          });
+          finishRenderTimingPhase(timing, phaseStartedAt, "streamTransformMs");
+          const fatalDiagnostics = fatalServerDiagnostics(output.diagnostics);
+
+          if (fatalDiagnostics.length > 0) {
+            return new Response(formatServerDiagnostics(matched.route.file, fatalDiagnostics), {
+              status: 500,
+              headers: { "content-type": "text/plain; charset=utf-8" },
+            });
+          }
+
+          if (loadingFile !== undefined && streamDataSettlement !== undefined) {
+            phaseStartedAt = renderTimingPhaseStartedAt(timing);
+            const errorFile = await nearestExistingBoundaryFileForPage({
+              appDir: options.appDir,
+              filename: "error.mreact.tsx",
+              pageFile: matched.route.file,
+              serverSourceFiles: options.serverSourceFiles,
+            });
+            const streamResult = await runServerStreamModuleWithLoading(output.code, {
+              appDir: options.appDir,
+              assetBaseUrl: options.assetBaseUrl,
+              clientRoute,
+              data: streamDataPromise,
+              dataSettlement: streamDataSettlement,
+              define: options.define,
+              errorFile,
+              loadingFile,
+              markerRequest: options.request,
+              onRenderError: options.onRenderError,
+              prerenderVariantCapture: options.prerenderVariantCapture,
+              pageFile: matched.route.file,
+              params: matched.params,
+              queryClient,
+              request: appRequest,
+              requestUrl: url.pathname,
+              trackedRequest,
+              routePath: matched.route.path,
+              routeScripts: options.clientScripts,
+              serverModules: options.serverModules,
+              serverModuleCacheVersion: options.serverModuleCacheVersion,
+              serverSourceFiles: options.serverSourceFiles,
+              vitePlugins: options.vitePlugins,
+              clientRouteInferenceCache,
+              importPolicy: options.importPolicy,
+              script: clientScript,
+              clientReferenceManifest: output.metadata.clientReferenceManifest,
+            });
+            finishRenderTimingPhase(timing, phaseStartedAt, "streamConstructionMs");
+
+            if (streamResult instanceof Response) {
+              emitRenderTiming(options, timing, streamResult.status);
+              return streamResult;
+            }
+
+            const response = withOptionalActionCookie(
+              new Response(streamResult, {
+                headers: streamShellResponseHeaders,
+              }),
+              preparedActions.csrfToken,
+              preparedActions.csrfTokenIsNew === true,
+            );
+            appendNavigationVary(response.headers);
+            emitRenderTiming(options, timing, response.status);
+            return response;
+          }
+
+          const data = streamData;
+          const props = withTrackedRequest(
+            {
+              data,
+              params: matched.params,
+              queryClient,
+            },
+            appRequest,
+            trackedRequest,
+          );
+          phaseStartedAt = renderTimingPhaseStartedAt(timing);
+          const stream = runServerStreamModule(output.code, {
+            appDir: options.appDir,
+            assetBaseUrl: options.assetBaseUrl,
+            pageFile: matched.route.file,
+            markerRequest: options.request,
+            prerenderVariantCapture: options.prerenderVariantCapture,
+            props,
+            requestUrl: url.pathname,
             routePath: matched.route.path,
-            clientRouteInferenceCache,
-            serverModuleCacheVersion: undefined,
+            routeScripts: options.clientScripts,
+            serverModules: options.serverModules,
+            serverModuleCacheVersion: options.serverModuleCacheVersion,
             serverSourceFiles: options.serverSourceFiles,
             define: options.define,
             vitePlugins: options.vitePlugins,
+            clientRouteInferenceCache,
+            importPolicy: options.importPolicy,
+            clientRoute,
+            script: clientScript,
+            clientReferenceManifest: output.metadata.clientReferenceManifest,
           });
-    finishRenderTimingPhase(timing, phaseStartedAt, "routeCodeAnalysisMs");
-    const routeCode = routeAnalysis.routeCode;
-    const streamRoute = routeAnalysis.streamRoute;
-    const clientInference = routeAnalysis.clientInference;
-    const clientRoute = clientInference.client;
-    phaseStartedAt = renderTimingPhaseStartedAt(timing);
-    const loaderReady = routeAnalysis.hasLoader ? createDeferredSignal() : undefined;
-    const dataPromise = routeAnalysis.hasLoader
-      ? loadRouteDataWithInstrumentation({
-          appDir: options.appDir,
-          code: originalCode,
-          context: withTrackedRequest({
-            env: options.env,
-            params: matched.params,
-            queryClient,
-          }, appRequest, trackedRequest),
-          filename: matched.route.file,
-          importPolicy: options.importPolicy,
-          instrumentation: options.instrumentation,
-          devServerModuleCacheVersion: options.devServerModuleCacheVersion,
-          request: options.request,
-          routeId: routeIdForPath(matched.route.path),
-          routePath: matched.route.path,
-          serverModules: options.serverModules,
-          serverModuleCacheVersion: options.serverModuleCacheVersion,
-          define: options.define,
-          vitePlugins: options.vitePlugins,
-          timing,
-          onLoaderReady: loaderReady?.resolve,
-        })
-      : undefined;
-    finishRenderTimingPhase(timing, phaseStartedAt, "loaderStartMs");
-    recoveryRoute = {
-      clientRoute,
-      props: {
-        params: matched.params,
-        request: { url: url.pathname },
-      },
-      routePath: matched.route.path,
-      script: clientScript,
-    };
-    if (streamRoute) {
-      phaseStartedAt = renderTimingPhaseStartedAt(timing);
-      const loadingFile = await nearestExistingBoundaryFileForPage({
-        appDir: options.appDir,
-        filename: "loading.mreact.tsx",
-        pageFile: matched.route.file,
-        serverSourceFiles: options.serverSourceFiles,
-      });
-      finishRenderTimingPhase(timing, phaseStartedAt, "loadingBoundaryLookupMs");
-      const streamShellResponseHeaders = {
-        "content-type": "text/html; charset=utf-8",
-        "x-mreact-stream": "1",
-      };
+          finishRenderTimingPhase(timing, phaseStartedAt, "streamConstructionMs");
 
-      phaseStartedAt = renderTimingPhaseStartedAt(timing);
-      const mayRenderOutOfOrder = await mayRenderOutOfOrderBoundaryDeep({
-        code: routeCode,
-        filename: matched.route.file,
-        serverModuleCacheVersion: options.serverModuleCacheVersion,
-        serverSourceFiles: options.serverSourceFiles,
-      });
-      finishRenderTimingPhase(timing, phaseStartedAt, "outOfOrderAnalysisMs");
+          const response = withOptionalActionCookie(
+            new Response(stream, {
+              headers: streamShellResponseHeaders,
+            }),
+            preparedActions.csrfToken,
+            preparedActions.csrfTokenIsNew === true,
+          );
+          appendNavigationVary(response.headers);
+          emitRenderTiming(options, timing, response.status);
+          return response;
+        }
 
-      if (loadingFile === undefined && !mayRenderOutOfOrder) {
         phaseStartedAt = renderTimingPhaseStartedAt(timing);
         let data: unknown;
         try {
@@ -1268,10 +1594,16 @@ async function renderAppRequestInternal(
           emitRenderTiming(options, timing, data.status);
           return data;
         }
+        sourceUsesRequestInput ||= await routeShellsMayUseRequestInput({
+          appDir: options.appDir,
+          pageFile: matched.route.file,
+          serverModuleCacheVersion: options.serverModuleCacheVersion,
+          serverSourceFiles: options.serverSourceFiles,
+        });
         await waitForRenderPreload(options, timing);
         await loadServerRenderArtifacts(options, matched.route.file, timing);
         phaseStartedAt = renderTimingPhaseStartedAt(timing);
-        const stringOutput = transformServerModule({
+        const output = transformServerModule({
           code: routeCode,
           clientBoundaryImports: clientInference.clientBoundaryImports,
           clientBoundaryFallbackImports: clientInference.clientBoundaryFallbackImports,
@@ -1280,38 +1612,49 @@ async function renderAppRequestInternal(
           serverOutput: "string",
         });
         finishRenderTimingPhase(timing, phaseStartedAt, "stringTransformMs");
-        const stringFatalDiagnostics = fatalServerDiagnostics(stringOutput.diagnostics);
+        const fatalDiagnostics = fatalServerDiagnostics(output.diagnostics);
 
-        if (stringFatalDiagnostics.length > 0) {
-          return new Response(formatServerDiagnostics(matched.route.file, stringFatalDiagnostics), {
+        if (fatalDiagnostics.length > 0) {
+          return new Response(formatServerDiagnostics(matched.route.file, fatalDiagnostics), {
             status: 500,
             headers: { "content-type": "text/plain; charset=utf-8" },
           });
         }
 
+        phaseStartedAt = renderTimingPhaseStartedAt(timing);
         const renderedPage = await runWithQueryClient(queryClient, () =>
           runServerModuleWithSlots(
-            stringOutput.code,
-            withTrackedRequest({
-              data,
-              params: matched.params,
-              queryClient,
-            }, appRequest, trackedRequest),
+            output.code,
+            withTrackedRequest(
+              {
+                data,
+                params: matched.params,
+                queryClient,
+              },
+              appRequest,
+              trackedRequest,
+            ),
             matched.route.file,
             options.serverModules,
             options.serverModuleCacheVersion,
             options.define,
             options.vitePlugins,
-            undefined,
+            timing,
             options.importPolicy,
             options.devServerModuleCacheVersion,
           ),
         );
+        finishRenderTimingPhase(timing, phaseStartedAt, "pageRenderMs");
         const pageHtml = renderedPage.html;
+        // Wrap the page (not the full document) with the hydration marker so
+        // the marker sits inside <body>, not around <html>. Wrapping <html>
+        // forces the browser HTML parser to strip the wrappers and promote
+        // <head> / <body> children up to the marker, which flattens the
+        // layout into the marker and breaks the hydration target lookup.
         const pageHtmlForLayout = clientRoute
           ? withHydrationMarkers({
               assetBaseUrl: options.assetBaseUrl,
-              clientReferenceManifest: stringOutput.metadata.clientReferenceManifest,
+              clientReferenceManifest: output.metadata.clientReferenceManifest,
               html: pageHtml,
               routePath: matched.route.path,
               script: clientScript,
@@ -1327,16 +1670,21 @@ async function renderAppRequestInternal(
               options.request,
               options.prerenderVariantCapture === true,
             );
+        phaseStartedAt = renderTimingPhaseStartedAt(timing);
         let html = await runWithQueryClient(queryClient, () =>
           applyLayouts({
             appDir: options.appDir,
             pageFile: matched.route.file,
             html: pageHtmlForLayout,
-            props: withTrackedRequest({
-              data,
-              params: matched.params,
-              queryClient,
-            }, appRequest, trackedRequest),
+            props: withTrackedRequest(
+              {
+                data,
+                params: matched.params,
+                queryClient,
+              },
+              appRequest,
+              trackedRequest,
+            ),
             slots: renderedPage.slots,
             serverModules: options.serverModules,
             serverModuleCacheVersion: options.serverModuleCacheVersion,
@@ -1344,16 +1692,21 @@ async function renderAppRequestInternal(
             clientRouteInferenceCache,
             timing,
             vitePlugins: options.vitePlugins,
-            importPolicy: options.importPolicy,
           }),
         );
+        finishRenderTimingPhase(timing, phaseStartedAt, "layoutRenderMs");
+        phaseStartedAt = renderTimingPhaseStartedAt(timing);
         const metadata = await loadComposedRouteMetadata({
           appDir: options.appDir,
           code: originalCode,
-          context: withTrackedRequest({
-            data,
-            params: matched.params,
-          }, appRequest, trackedRequest),
+          context: withTrackedRequest(
+            {
+              data,
+              params: matched.params,
+            },
+            appRequest,
+            trackedRequest,
+          ),
           filename: matched.route.file,
           importPolicy: options.importPolicy,
           routes,
@@ -1364,6 +1717,8 @@ async function renderAppRequestInternal(
           define: options.define,
           vitePlugins: options.vitePlugins,
         });
+        finishRenderTimingPhase(timing, phaseStartedAt, "metadataMs");
+        phaseStartedAt = renderTimingPhaseStartedAt(timing);
         html = injectHeadMetadata(html, metadata);
         warnIfCspNonceWouldBlockInlineTags({
           html,
@@ -1377,6 +1732,7 @@ async function renderAppRequestInternal(
           originalAnalysis.authIncludesClaims ? currentAuthClaims() : undefined,
         );
         html = injectQueryState(html, dehydrate(queryClient, options.dehydrateOptions));
+
         const response = withOptionalActionCookie(
           htmlResponse(
             applyActionHtmlReplacements(
@@ -1390,436 +1746,122 @@ async function renderAppRequestInternal(
               preparedActions.htmlReplacements,
             ),
             {
-              headers: responseHeadersForMetadata(metadata, options.request, {
-                "x-mreact-stream": "1",
-              }),
+              headers: responseHeadersForMetadata(metadata, options.request),
             },
           ),
           preparedActions.csrfToken,
           preparedActions.csrfTokenIsNew === true,
         );
         appendNavigationVary(response.headers);
-        emitRenderTiming(options, timing, response.status);
-        return response;
-      }
 
-      let streamData: unknown;
-      let streamDataPromise = dataPromise ?? Promise.resolve(undefined);
-      phaseStartedAt = renderTimingPhaseStartedAt(timing);
-      if (loadingFile === undefined || routeLoaderMayReturnControlResponse(originalCode)) {
-        try {
-          streamData = dataPromise === undefined ? undefined : await dataPromise;
-        } finally {
-          finishRenderTimingPhase(timing, phaseStartedAt, "loaderWaitMs");
+        const effectiveCachePolicy = cachePolicy ?? activeRouteCacheContext()?.cachePolicy;
+        const configuredHsts = configuredHstsHeader(metadata?.security);
+        renderedStrictTransportSecurity = configuredHsts;
+        invalidConfiguredHsts = hasInvalidConfiguredHsts(metadata?.security);
+
+        const finalResponse = preparedActions.hasFormActions
+          ? withRouteCacheHeader(response, effectiveCachePolicy)
+          : await cacheRouteResponse({
+              key: cacheKey,
+              cache: options.routeCache,
+              // A policy can still arrive from a runtime cacheControl() call made
+              // outside the page source, which is what `mayUseRouteCache` scans.
+              // Without a tracker there is no evidence the render ignored request
+              // headers, so the entry is treated as header dependent.
+              headerDependent:
+                sourceUsesRequestInput ||
+                invalidConfiguredHsts ||
+                (trackedRequest?.requestDependent() ?? true),
+              ...(configuredHsts === undefined ? {} : { strictTransportSecurity: configuredHsts }),
+              path: matched.route.path,
+              policy: effectiveCachePolicy,
+              request: options.request,
+              response,
+            });
+        finishRenderTimingPhase(timing, phaseStartedAt, "responseBuildMs");
+        emitRenderTiming(options, timing, finalResponse.status);
+        return finalResponse;
+      } catch (error) {
+        if (isRedirectError(error)) {
+          const response = new Response(null, {
+            headers: { location: error.location },
+            status: error.status,
+          });
+          emitRenderTiming(options, timing, response.status);
+          return response;
         }
-        if (streamData instanceof Response) {
-          emitRenderTiming(options, timing, streamData.status);
-          return streamData;
+
+        if (isNotFoundError(error)) {
+          const notFoundFile = await nearestBoundaryFileForPage({
+            appDir: options.appDir,
+            filename: "not-found.mreact.tsx",
+            pageFile: matched.route.file,
+          });
+
+          const response = await renderSpecialRoute({
+            appDir: options.appDir,
+            assetBaseUrl: options.assetBaseUrl,
+            currentStyleSheets: options.clientStylesByFile?.get(notFoundFile),
+            error: undefined,
+            request: options.request,
+            routePath: matched.route.path,
+            routeFile: notFoundFile,
+            routeScripts: options.clientScripts,
+            serverModules: options.serverModules,
+            serverModuleCacheVersion: options.serverModuleCacheVersion,
+            serverSourceFiles: options.serverSourceFiles,
+            vitePlugins: options.vitePlugins,
+            navigation: recoveryRoute,
+            status: 404,
+            textFallback: "Not Found",
+          });
+          emitRenderTiming(options, timing, response.status);
+          return response;
         }
-        streamDataPromise = Promise.resolve(streamData);
-      } else {
-        try {
-          await waitForLoaderReadyOrSettled(streamDataPromise, loaderReady?.promise);
-          const settledData = await readSettledPromiseAtNextTask(streamDataPromise);
-          if (settledData.settled) {
-            if (settledData.value instanceof Response) {
-              emitRenderTiming(options, timing, settledData.value.status);
-              return settledData.value;
-            }
-            streamDataPromise = Promise.resolve(settledData.value);
-          }
-        } finally {
-          finishRenderTimingPhase(timing, phaseStartedAt, "loaderWaitMs");
-        }
-      }
 
-      const streamDataSettlement =
-        loadingFile === undefined ? undefined : observePromiseSettlement(streamDataPromise);
-
-      await waitForRenderPreload(options, timing);
-      await loadServerRenderArtifacts(options, matched.route.file, timing);
-      phaseStartedAt = renderTimingPhaseStartedAt(timing);
-      const output = transformServerModule({
-        code: routeCode,
-        clientBoundaryImports: clientInference.clientBoundaryImports,
-        clientBoundaryFallbackImports: clientInference.clientBoundaryFallbackImports,
-        filename: matched.route.file,
-        serverModules: options.serverModules,
-        serverOutput: "stream",
-        serverAwaitHydration: clientRoute,
-      });
-      finishRenderTimingPhase(timing, phaseStartedAt, "streamTransformMs");
-      const fatalDiagnostics = fatalServerDiagnostics(output.diagnostics);
-
-      if (fatalDiagnostics.length > 0) {
-        return new Response(formatServerDiagnostics(matched.route.file, fatalDiagnostics), {
-          status: 500,
-          headers: { "content-type": "text/plain; charset=utf-8" },
-        });
-      }
-
-      if (loadingFile !== undefined && streamDataSettlement !== undefined) {
-        phaseStartedAt = renderTimingPhaseStartedAt(timing);
-        const errorFile = await nearestExistingBoundaryFileForPage({
+        const errorFile = await nearestBoundaryFileForPage({
           appDir: options.appDir,
           filename: "error.mreact.tsx",
           pageFile: matched.route.file,
-          serverSourceFiles: options.serverSourceFiles,
         });
-        const streamResult = await runServerStreamModuleWithLoading(output.code, {
+        options.onRenderError?.(error);
+
+        const response = await renderSpecialRoute({
           appDir: options.appDir,
           assetBaseUrl: options.assetBaseUrl,
-          clientRoute,
-          data: streamDataPromise,
-          dataSettlement: streamDataSettlement,
-          define: options.define,
-          errorFile,
-          loadingFile,
-          markerRequest: options.request,
-          onRenderError: options.onRenderError,
-          prerenderVariantCapture: options.prerenderVariantCapture,
-          pageFile: matched.route.file,
-          params: matched.params,
-          queryClient,
-          request: appRequest,
-          requestUrl: url.pathname,
-          trackedRequest,
+          currentStyleSheets: options.clientStylesByFile?.get(errorFile),
+          error,
+          request: options.request,
           routePath: matched.route.path,
+          routeFile: errorFile,
           routeScripts: options.clientScripts,
           serverModules: options.serverModules,
           serverModuleCacheVersion: options.serverModuleCacheVersion,
           serverSourceFiles: options.serverSourceFiles,
           vitePlugins: options.vitePlugins,
-          clientRouteInferenceCache,
-          importPolicy: options.importPolicy,
-          script: clientScript,
-          clientReferenceManifest: output.metadata.clientReferenceManifest,
+          navigation: recoveryRoute,
+          status: 500,
+          textFallback: "Internal Server Error",
         });
-        finishRenderTimingPhase(timing, phaseStartedAt, "streamConstructionMs");
-
-        if (streamResult instanceof Response) {
-          emitRenderTiming(options, timing, streamResult.status);
-          return streamResult;
-        }
-
-        const response = withOptionalActionCookie(
-          new Response(streamResult, {
-            headers: streamShellResponseHeaders,
-          }),
-          preparedActions.csrfToken,
-          preparedActions.csrfTokenIsNew === true,
-        );
-        appendNavigationVary(response.headers);
         emitRenderTiming(options, timing, response.status);
         return response;
-      }
-
-      const data = streamData;
-      const props = withTrackedRequest({
-        data,
-        params: matched.params,
-        queryClient,
-      }, appRequest, trackedRequest);
-      phaseStartedAt = renderTimingPhaseStartedAt(timing);
-      const stream = runServerStreamModule(output.code, {
-        appDir: options.appDir,
-        assetBaseUrl: options.assetBaseUrl,
-        pageFile: matched.route.file,
-        markerRequest: options.request,
-        prerenderVariantCapture: options.prerenderVariantCapture,
-        props,
-        requestUrl: url.pathname,
-        routePath: matched.route.path,
-        routeScripts: options.clientScripts,
-        serverModules: options.serverModules,
-        serverModuleCacheVersion: options.serverModuleCacheVersion,
-        serverSourceFiles: options.serverSourceFiles,
-        define: options.define,
-        vitePlugins: options.vitePlugins,
-        clientRouteInferenceCache,
-        importPolicy: options.importPolicy,
-        clientRoute,
-        script: clientScript,
-        clientReferenceManifest: output.metadata.clientReferenceManifest,
-      });
-      finishRenderTimingPhase(timing, phaseStartedAt, "streamConstructionMs");
-
-      const response = withOptionalActionCookie(
-        new Response(stream, {
-          headers: streamShellResponseHeaders,
-        }),
-        preparedActions.csrfToken,
-        preparedActions.csrfTokenIsNew === true,
-      );
-      appendNavigationVary(response.headers);
-      emitRenderTiming(options, timing, response.status);
-      return response;
-    }
-
-    phaseStartedAt = renderTimingPhaseStartedAt(timing);
-    let data: unknown;
-    try {
-      data = dataPromise === undefined ? undefined : await dataPromise;
-    } finally {
-      finishRenderTimingPhase(timing, phaseStartedAt, "loaderWaitMs");
-    }
-    if (data instanceof Response) {
-      emitRenderTiming(options, timing, data.status);
-      return data;
-    }
-    sourceUsesRequestInput ||= await routeShellsMayUseRequestInput({
-      appDir: options.appDir,
-      pageFile: matched.route.file,
-      serverModuleCacheVersion: options.serverModuleCacheVersion,
-      serverSourceFiles: options.serverSourceFiles,
-    });
-    await waitForRenderPreload(options, timing);
-    await loadServerRenderArtifacts(options, matched.route.file, timing);
-    phaseStartedAt = renderTimingPhaseStartedAt(timing);
-    const output = transformServerModule({
-      code: routeCode,
-      clientBoundaryImports: clientInference.clientBoundaryImports,
-      clientBoundaryFallbackImports: clientInference.clientBoundaryFallbackImports,
-      filename: matched.route.file,
-      serverModules: options.serverModules,
-      serverOutput: "string",
-    });
-    finishRenderTimingPhase(timing, phaseStartedAt, "stringTransformMs");
-    const fatalDiagnostics = fatalServerDiagnostics(output.diagnostics);
-
-    if (fatalDiagnostics.length > 0) {
-      return new Response(formatServerDiagnostics(matched.route.file, fatalDiagnostics), {
-        status: 500,
-        headers: { "content-type": "text/plain; charset=utf-8" },
-      });
-    }
-
-    phaseStartedAt = renderTimingPhaseStartedAt(timing);
-    const renderedPage = await runWithQueryClient(queryClient, () =>
-      runServerModuleWithSlots(
-        output.code,
-        withTrackedRequest({
-          data,
-          params: matched.params,
-          queryClient,
-        }, appRequest, trackedRequest),
-        matched.route.file,
-        options.serverModules,
-        options.serverModuleCacheVersion,
-        options.define,
-        options.vitePlugins,
-        timing,
-        options.importPolicy,
-        options.devServerModuleCacheVersion,
-      ),
-    );
-    finishRenderTimingPhase(timing, phaseStartedAt, "pageRenderMs");
-    const pageHtml = renderedPage.html;
-    // Wrap the page (not the full document) with the hydration marker so
-    // the marker sits inside <body>, not around <html>. Wrapping <html>
-    // forces the browser HTML parser to strip the wrappers and promote
-    // <head> / <body> children up to the marker, which flattens the
-    // layout into the marker and breaks the hydration target lookup.
-    const pageHtmlForLayout = clientRoute
-      ? withHydrationMarkers({
-          assetBaseUrl: options.assetBaseUrl,
-          clientReferenceManifest: output.metadata.clientReferenceManifest,
-          html: pageHtml,
-          routePath: matched.route.path,
-          script: clientScript,
-          props: {
-            params: matched.params,
-            request: { url: url.pathname },
-            data,
-          },
-        })
-      : withServerOnlyRouteMarkers(
-          pageHtml,
-          matched.route.path,
-          options.request,
-          options.prerenderVariantCapture === true,
-        );
-    phaseStartedAt = renderTimingPhaseStartedAt(timing);
-    let html = await runWithQueryClient(queryClient, () =>
-      applyLayouts({
-        appDir: options.appDir,
-        pageFile: matched.route.file,
-        html: pageHtmlForLayout,
-        props: withTrackedRequest({
-          data,
-          params: matched.params,
-          queryClient,
-        }, appRequest, trackedRequest),
-        slots: renderedPage.slots,
-        serverModules: options.serverModules,
-        serverModuleCacheVersion: options.serverModuleCacheVersion,
-        serverSourceFiles: options.serverSourceFiles,
-        clientRouteInferenceCache,
-        timing,
-        vitePlugins: options.vitePlugins,
-      }),
-    );
-    finishRenderTimingPhase(timing, phaseStartedAt, "layoutRenderMs");
-    phaseStartedAt = renderTimingPhaseStartedAt(timing);
-    const metadata = await loadComposedRouteMetadata({
-      appDir: options.appDir,
-      code: originalCode,
-      context: withTrackedRequest({
-        data,
-        params: matched.params,
-      }, appRequest, trackedRequest),
-      filename: matched.route.file,
-      importPolicy: options.importPolicy,
-      routes,
-      serverModules: options.serverModules,
-      serverModuleCacheVersion: options.serverModuleCacheVersion,
-      devServerModuleCacheVersion: options.devServerModuleCacheVersion,
-      serverSourceFiles: options.serverSourceFiles,
-      define: options.define,
-      vitePlugins: options.vitePlugins,
-    });
-    finishRenderTimingPhase(timing, phaseStartedAt, "metadataMs");
-    phaseStartedAt = renderTimingPhaseStartedAt(timing);
-    html = injectHeadMetadata(html, metadata);
-    warnIfCspNonceWouldBlockInlineTags({
-      html,
-      logger: options.logger,
-      metadata,
-      request: options.request,
-      serverModuleCacheVersion: options.serverModuleCacheVersion,
-    });
-    html = injectAuthSessionClaims(
-      html,
-      originalAnalysis.authIncludesClaims ? currentAuthClaims() : undefined,
-    );
-    html = injectQueryState(html, dehydrate(queryClient, options.dehydrateOptions));
-
-    const response = withOptionalActionCookie(
-      htmlResponse(
-        applyActionHtmlReplacements(
-          `<!DOCTYPE html>${clientNavigationHeadTags({
-            assetBaseUrl: options.assetBaseUrl,
-            currentStyleSheets: clientStyleSheets,
-            currentScript: clientRoute ? clientScript : undefined,
-            currentNavigationScript: navigationScript,
-            routeScripts: options.clientScripts,
-          })}${html}`,
-          preparedActions.htmlReplacements,
-        ),
-        {
-          headers: responseHeadersForMetadata(metadata, options.request),
-        },
-      ),
-      preparedActions.csrfToken,
-      preparedActions.csrfTokenIsNew === true,
-    );
-    appendNavigationVary(response.headers);
-
-    const effectiveCachePolicy = cachePolicy ?? activeRouteCacheContext()?.cachePolicy;
-    const configuredHsts = configuredHstsHeader(metadata?.security);
-    renderedStrictTransportSecurity = configuredHsts;
-    invalidConfiguredHsts = hasInvalidConfiguredHsts(metadata?.security);
-
-    const finalResponse = preparedActions.hasFormActions
-      ? withRouteCacheHeader(response, effectiveCachePolicy)
-      : await cacheRouteResponse({
-          key: cacheKey,
-          cache: options.routeCache,
-          // A policy can still arrive from a runtime cacheControl() call made
-          // outside the page source, which is what `mayUseRouteCache` scans.
-          // Without a tracker there is no evidence the render ignored request
-          // headers, so the entry is treated as header dependent.
-          headerDependent:
+      } finally {
+        // Reported from every return path, including the streaming ones, so that a
+        // caller storing by path alone never mistakes an unreported render for a
+        // shareable one. The value stays lazy because a streamed render can still
+        // read request headers while its deferred parts resolve; callers read it
+        // after draining the body.
+        if (options.renderSignals !== undefined) {
+          const tracked = trackedRequest;
+          options.renderSignals.headerDependent = () =>
             sourceUsesRequestInput ||
             invalidConfiguredHsts ||
-            (trackedRequest?.requestDependent() ?? true),
-          ...(configuredHsts === undefined ? {} : { strictTransportSecurity: configuredHsts }),
-          path: matched.route.path,
-          policy: effectiveCachePolicy,
-          request: options.request,
-          response,
-        });
-    finishRenderTimingPhase(timing, phaseStartedAt, "responseBuildMs");
-    emitRenderTiming(options, timing, finalResponse.status);
-    return finalResponse;
-  } catch (error) {
-    if (isRedirectError(error)) {
-      const response = new Response(null, {
-        headers: { location: error.location },
-        status: error.status,
-      });
-      emitRenderTiming(options, timing, response.status);
-      return response;
-    }
-
-    if (isNotFoundError(error)) {
-      const notFoundFile = await nearestBoundaryFileForPage({
-        appDir: options.appDir,
-        filename: "not-found.mreact.tsx",
-        pageFile: matched.route.file,
-      });
-
-      const response = await renderSpecialRoute({
-        appDir: options.appDir,
-        assetBaseUrl: options.assetBaseUrl,
-        currentStyleSheets: options.clientStylesByFile?.get(notFoundFile),
-        error: undefined,
-        request: options.request,
-        routePath: matched.route.path,
-        routeFile: notFoundFile,
-        routeScripts: options.clientScripts,
-        serverModules: options.serverModules,
-        serverModuleCacheVersion: options.serverModuleCacheVersion,
-        serverSourceFiles: options.serverSourceFiles,
-        vitePlugins: options.vitePlugins,
-        navigation: recoveryRoute,
-        status: 404,
-        textFallback: "Not Found",
-      });
-      emitRenderTiming(options, timing, response.status);
-      return response;
-    }
-
-    const errorFile = await nearestBoundaryFileForPage({
-      appDir: options.appDir,
-      filename: "error.mreact.tsx",
-      pageFile: matched.route.file,
-    });
-    options.onRenderError?.(error);
-
-    const response = await renderSpecialRoute({
-      appDir: options.appDir,
-      assetBaseUrl: options.assetBaseUrl,
-      currentStyleSheets: options.clientStylesByFile?.get(errorFile),
-      error,
-      request: options.request,
-      routePath: matched.route.path,
-      routeFile: errorFile,
-      routeScripts: options.clientScripts,
-      serverModules: options.serverModules,
-      serverModuleCacheVersion: options.serverModuleCacheVersion,
-      serverSourceFiles: options.serverSourceFiles,
-      vitePlugins: options.vitePlugins,
-      navigation: recoveryRoute,
-      status: 500,
-      textFallback: "Internal Server Error",
-    });
-    emitRenderTiming(options, timing, response.status);
-    return response;
-  } finally {
-    // Reported from every return path, including the streaming ones, so that a
-    // caller storing by path alone never mistakes an unreported render for a
-    // shareable one. The value stays lazy because a streamed render can still
-    // read request headers while its deferred parts resolve; callers read it
-    // after draining the body.
-    if (options.renderSignals !== undefined) {
-      const tracked = trackedRequest;
-      options.renderSignals.headerDependent = () =>
-        sourceUsesRequestInput || invalidConfiguredHsts || (tracked?.requestDependent() ?? true);
-      options.renderSignals.strictTransportSecurity = () => renderedStrictTransportSecurity;
-    }
-  }
-  })).value;
+            (tracked?.requestDependent() ?? true);
+          options.renderSignals.strictTransportSecurity = () => renderedStrictTransportSecurity;
+        }
+      }
+    })
+  ).value;
 }
 
 async function applyAppRouterResponseHook(
@@ -2081,9 +2123,7 @@ export function prerenderVariantMarkerParts(routePath: string): {
 function appendNavigationVary(headers: Headers): void {
   const vary = headers.get("vary");
   if (
-    vary
-      ?.split(",")
-      .some((value) => value.trim().toLowerCase() === "x-mreact-navigation") === true
+    vary?.split(",").some((value) => value.trim().toLowerCase() === "x-mreact-navigation") === true
   ) {
     return;
   }
@@ -2321,11 +2361,7 @@ async function renderSpecialRoute(options: {
   );
 }
 
-function errorBoundaryProps(
-  error: unknown,
-  request: Request,
-  routePath: string | undefined,
-) {
+function errorBoundaryProps(error: unknown, request: Request, routePath: string | undefined) {
   return {
     data: undefined,
     debug: errorDebugContext(error, routePath),
@@ -3829,11 +3865,15 @@ async function runServerStreamModuleWithLoading(
     importPolicy?: AppRouterImportPolicy | undefined;
   },
 ): Promise<ReadableStream<Uint8Array> | Response> {
-  const loadingProps = withTrackedRequest({
-    data: undefined,
-    params: options.params,
-    queryClient: options.queryClient,
-  }, options.request, options.trackedRequest);
+  const loadingProps = withTrackedRequest(
+    {
+      data: undefined,
+      params: options.params,
+      queryClient: options.queryClient,
+    },
+    options.request,
+    options.trackedRequest,
+  );
   const layoutShells = await layoutShellsForPage(
     options.appDir,
     options.pageFile,
@@ -3907,11 +3947,15 @@ async function runServerStreamModuleWithLoading(
         await appendServerStreamModule(
           code,
           boundarySink,
-          withTrackedRequest({
-            data,
-            params: options.params,
-            queryClient: options.queryClient,
-          }, options.request, options.trackedRequest),
+          withTrackedRequest(
+            {
+              data,
+              params: options.params,
+              queryClient: options.queryClient,
+            },
+            options.request,
+            options.trackedRequest,
+          ),
           options.pageFile,
           options.serverModules,
           options.serverModuleCacheVersion,

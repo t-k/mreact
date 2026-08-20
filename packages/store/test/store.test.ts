@@ -448,9 +448,10 @@ describe("createStore", () => {
       { count: 0 },
       {
         persist: {
-          load: () => new Promise<{ count: number }>((resolve) => {
-            resolveLoad = resolve;
-          }),
+          load: () =>
+            new Promise<{ count: number }>((resolve) => {
+              resolveLoad = resolve;
+            }),
           save: async () => Promise.reject(failure),
         },
       },
@@ -544,9 +545,10 @@ describe("createStore", () => {
       {
         persist: {
           hydrationConflict: "replace",
-          load: () => new Promise<{ count: number }>((resolve) => {
-            resolveLoad = resolve;
-          }),
+          load: () =>
+            new Promise<{ count: number }>((resolve) => {
+              resolveLoad = resolve;
+            }),
         },
       },
     );
@@ -559,20 +561,30 @@ describe("createStore", () => {
   });
 
   it("merges or custom-resolves persisted state after a local hydration commit", async () => {
-    let resolveMergedLoad: ((state: { count: number; loadedOnly?: string; server: string }) => void) | undefined;
-    const merged = createStore<{ count: number; local: string; loadedOnly?: string; server: string }>(
+    let resolveMergedLoad:
+      | ((state: { count: number; local: string; loadedOnly?: string; server: string }) => void)
+      | undefined;
+    const merged = createStore<{
+      count: number;
+      local: string;
+      loadedOnly?: string;
+      server: string;
+    }>(
       { count: 0, local: "initial", server: "none" },
       {
         persist: {
           hydrationConflict: "merge",
-          load: () => new Promise<{ count: number; loadedOnly?: string; server: string }>((resolve) => {
-            resolveMergedLoad = resolve;
-          }),
+          load: () =>
+            new Promise<{ count: number; local: string; loadedOnly?: string; server: string }>(
+              (resolve) => {
+                resolveMergedLoad = resolve;
+              },
+            ),
         },
       },
     );
     merged.set({ local: "new" });
-    resolveMergedLoad?.({ count: 2, loadedOnly: "loaded", server: "loaded" });
+    resolveMergedLoad?.({ count: 2, local: "persisted", loadedOnly: "loaded", server: "loaded" });
     await merged.persistence.ready;
 
     expect(merged.get()).toEqual({ count: 0, local: "new", loadedOnly: "loaded", server: "none" });
@@ -583,9 +595,10 @@ describe("createStore", () => {
       {
         persist: {
           hydrationConflict: (loaded, current) => ({ count: loaded.count + current.count }),
-          load: () => new Promise<{ count: number }>((resolve) => {
-            resolveCustomLoad = resolve;
-          }),
+          load: () =>
+            new Promise<{ count: number }>((resolve) => {
+              resolveCustomLoad = resolve;
+            }),
         },
       },
     );
@@ -601,7 +614,7 @@ describe("createStore", () => {
       { value: "initial" },
       { persist: { load: () => ({ value: "loaded" }) } },
     );
-    const untagged = createStore(
+    const untagged = createStore<{ state: { value: string }; version: number }>(
       { state: { value: "initial" }, version: 0 },
       { persist: { load: () => ({ state: { value: "loaded" }, version: 2 }) } },
     );
@@ -610,7 +623,11 @@ describe("createStore", () => {
       { persist: { load: () => persistedStoreState({ value: "tagged" }, 2) } },
     );
 
-    await Promise.all([primitive.persistence.ready, untagged.persistence.ready, tagged.persistence.ready]);
+    await Promise.all([
+      primitive.persistence.ready,
+      untagged.persistence.ready,
+      tagged.persistence.ready,
+    ]);
 
     expect(primitive.get()).toEqual({ value: "loaded" });
     expect(untagged.get()).toEqual({ state: { value: "loaded" }, version: 2 });
@@ -642,7 +659,12 @@ describe("createStore", () => {
   });
 
   it("preserves tagged-looking raw domain state when it has additional fields", async () => {
-    const store = createStore(
+    const store = createStore<{
+      __mreactStorePersistedState: true;
+      state: { status: string };
+      version: number;
+      workspace: string;
+    }>(
       {
         __mreactStorePersistedState: true as const,
         state: { status: "new" },
@@ -692,16 +714,19 @@ describe("createStore", () => {
   it("coalesces pending async persist callback saves to the latest state", async () => {
     let releaseFirst: (() => void) | undefined;
     const saved: number[] = [];
-    const store = createStore({ count: 0 }, {
-      persist: async (state) => {
-        if (state.count === 1) {
-          await new Promise<void>((resolve) => {
-            releaseFirst = resolve;
-          });
-        }
-        saved.push(state.count);
+    const store = createStore(
+      { count: 0 },
+      {
+        persist: async (state) => {
+          if (state.count === 1) {
+            await new Promise<void>((resolve) => {
+              releaseFirst = resolve;
+            });
+          }
+          saved.push(state.count);
+        },
       },
-    });
+    );
 
     store.set({ count: 1 });
     store.set({ count: 2 });

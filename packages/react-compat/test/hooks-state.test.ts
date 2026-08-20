@@ -21,6 +21,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactCompatNode,
 } from "../src/index.js";
 import { getFiberRootForContainer } from "../src/fiber-work-loop.js";
 import type { Fiber } from "../src/fiber.js";
@@ -107,13 +108,17 @@ describe("react-compat useState", () => {
       renders += 1;
       const [count, updateCount] = useState(0);
       setCount = updateCount;
-      return createElement("button", {
-        ref: (node: HTMLButtonElement | null) => {
-          if (node !== null) {
-            updateCount((previous) => previous);
-          }
+      return createElement(
+        "button",
+        {
+          ref: (node: HTMLButtonElement | null) => {
+            if (node !== null) {
+              updateCount((previous) => previous);
+            }
+          },
         },
-      }, count);
+        count,
+      );
     }
 
     createRoot(container).render(createElement(App, null));
@@ -130,11 +135,7 @@ describe("react-compat useState", () => {
 
     function Counter() {
       const [count, setCount] = useState(0);
-      return createElement(
-        "button",
-        { onClick: () => setCount(count + 1) },
-        count,
-      );
+      return createElement("button", { onClick: () => setCount(count + 1) }, count);
     }
 
     createRoot(container).render(createElement(Counter, null));
@@ -156,10 +157,8 @@ describe("react-compat useState", () => {
 
     function Counter() {
       renders += 1;
-      const state = useState(0) as unknown as [
-        number,
-        (value: number) => void,
-      ] & Record<PropertyKey, unknown>;
+      const state = useState(0) as unknown as [number, (value: number) => void] &
+        Record<PropertyKey, unknown>;
       expect(state).toHaveLength(2);
       const [count, setCount] = state;
       const textBinding = state[reactiveTextBindingMeta];
@@ -190,10 +189,8 @@ describe("react-compat useState", () => {
     let binding: { subscribers: Set<Text> } | undefined;
 
     function Counter() {
-      const state = useState(0) as unknown as [
-        number,
-        (value: number) => void,
-      ] & Record<PropertyKey, unknown>;
+      const state = useState(0) as unknown as [number, (value: number) => void] &
+        Record<PropertyKey, unknown>;
       const [count] = state;
       binding = state[reactiveTextBindingMeta] as { subscribers: Set<Text> };
       return createElement("p", { [reactiveTextBindingMeta]: binding }, count);
@@ -270,10 +267,8 @@ describe("react-compat useState", () => {
 
     function Counter() {
       renders += 1;
-      const state = useState(0) as unknown as [
-        number,
-        (value: number) => void,
-      ] & Record<PropertyKey, unknown>;
+      const state = useState(0) as unknown as [number, (value: number) => void] &
+        Record<PropertyKey, unknown>;
       const [, setCount] = state;
       const stateBinding = state[reactiveStateBindingMeta] as { get(): unknown };
       update = setCount;
@@ -315,10 +310,8 @@ describe("react-compat useState", () => {
 
     function Counter() {
       renders += 1;
-      const state = useState(0) as unknown as [
-        number,
-        (value: number) => void,
-      ] & Record<PropertyKey, unknown>;
+      const state = useState(0) as unknown as [number, (value: number) => void] &
+        Record<PropertyKey, unknown>;
       const [, setCount] = state;
       const stateBinding = state[reactiveStateBindingMeta] as { get(): unknown };
       update = setCount;
@@ -363,15 +356,19 @@ describe("react-compat useState", () => {
         effects.push("mounted");
       }, []);
 
-      return createElement("button", {
-        ref: (node: HTMLButtonElement | null) => {
-          if (node !== null) {
-            setCount(() => {
-              throw new Error("updater boom");
-            });
-          }
+      return createElement(
+        "button",
+        {
+          ref: (node: HTMLButtonElement | null) => {
+            if (node !== null) {
+              setCount(() => {
+                throw new Error("updater boom");
+              });
+            }
+          },
         },
-      }, 0);
+        0,
+      );
     }
 
     const root = createRoot(container);
@@ -390,7 +387,8 @@ describe("react-compat useState", () => {
       const state = useReducer((count: number, delta: number) => count + delta, 0) as [
         number,
         (delta: number) => void,
-      ] & Record<PropertyKey, unknown>;
+      ] &
+        Record<PropertyKey, unknown>;
       binding = state[reactiveStateBindingMeta] as { get(): unknown };
       return createElement("p", null, state[0]);
     }
@@ -500,12 +498,7 @@ describe("react-compat useState", () => {
     setValue(1);
     await Promise.resolve();
 
-    expect(order).toEqual([
-      "cleanup:A:0",
-      "cleanup:B:0",
-      "setup:A:1",
-      "setup:B:1",
-    ]);
+    expect(order).toEqual(["cleanup:A:0", "cleanup:B:0", "setup:A:1", "setup:B:1"]);
   });
 
   test("layout effect cleanup runs for all slots before setup", () => {
@@ -536,12 +529,7 @@ describe("react-compat useState", () => {
     order.length = 0;
     setValue(1);
 
-    expect(order).toEqual([
-      "cleanup:A:0",
-      "cleanup:B:0",
-      "setup:A:1",
-      "setup:B:1",
-    ]);
+    expect(order).toEqual(["cleanup:A:0", "cleanup:B:0", "setup:A:1", "setup:B:1"]);
   });
 
   test("defers state updates from ref callbacks until after host commit", () => {
@@ -618,7 +606,7 @@ describe("react-compat useState", () => {
       };
     }
 
-    const Slot = forwardRef<{ children?: unknown }, HTMLElement>((props, forwardedRef) => {
+    const Slot = forwardRef<{ children?: ReactCompatNode }, HTMLElement>((props, forwardedRef) => {
       const child = Children.only(props.children as never);
 
       if (!isValidElement(child)) {
@@ -630,23 +618,25 @@ describe("react-compat useState", () => {
       });
     });
 
-    const Layer = forwardRef<{ children?: unknown }, HTMLDivElement>((props, forwardedRef) => {
-      const [node, setNode] = useState<HTMLDivElement | null>(null);
-      const localRef = useCallback((nextNode: HTMLDivElement | null) => {
-        if (nextNode !== null) {
-          hostNodes.push(nextNode);
-        }
-        setNode(nextNode);
-      }, []);
+    const Layer = forwardRef<{ children?: ReactCompatNode }, HTMLDivElement>(
+      (props, forwardedRef) => {
+        const [node, setNode] = useState<HTMLDivElement | null>(null);
+        const localRef = useCallback((nextNode: HTMLDivElement | null) => {
+          if (nextNode !== null) {
+            hostNodes.push(nextNode);
+          }
+          setNode(nextNode);
+        }, []);
 
-      return createElement(
-        "div",
-        { ref: composeRefs(forwardedRef, localRef) },
-        node === null ? null : props.children,
-      );
-    });
+        return createElement(
+          "div",
+          { ref: composeRefs(forwardedRef, localRef) },
+          node === null ? null : props.children,
+        );
+      },
+    );
 
-    function PresenceLike(props: { present: boolean; children?: unknown }) {
+    function PresenceLike(props: { present: boolean; children?: ReactCompatNode }) {
       const [node, setNode] = useState<HTMLElement | null>(null);
       const child = Children.only(props.children as never);
       const ref = useCallback((nextNode: HTMLElement | null) => {
@@ -698,17 +688,13 @@ describe("react-compat useState", () => {
 
     function Tracker() {
       const [count, setCount] = useState(0);
-      return createElement(
-        "button",
-        { onMouseMove: () => setCount((value) => value + 1) },
-        count,
-      );
+      return createElement("button", { onMouseMove: () => setCount((value) => value + 1) }, count);
     }
 
     createRoot(container).render(createElement(Tracker, null));
-    container.querySelector("button")?.dispatchEvent(
-      new MouseEvent("mousemove", { bubbles: true }),
-    );
+    container
+      .querySelector("button")
+      ?.dispatchEvent(new MouseEvent("mousemove", { bubbles: true }));
 
     expect(container.querySelector("button")?.textContent).toBe("0");
     await Promise.resolve();
@@ -722,11 +708,7 @@ describe("react-compat useState", () => {
 
     function Counter() {
       const [count, setCount] = useState(0);
-      return createElement(
-        "button",
-        { onClick: () => setCount((value) => value + 1) },
-        count,
-      );
+      return createElement("button", { onClick: () => setCount((value) => value + 1) }, count);
     }
 
     createRoot(container).render(createElement(Counter, null));
@@ -747,11 +729,7 @@ describe("react-compat useState", () => {
     function Counter() {
       const [count, dispatch] = useReducer(reducer, 1, (value) => value + 1);
       dispatches.push(dispatch);
-      return createElement(
-        "button",
-        { onClick: () => dispatch({ type: "add", value: 2 }) },
-        count,
-      );
+      return createElement("button", { onClick: () => dispatch({ type: "add", value: 2 }) }, count);
     }
 
     createRoot(container).render(createElement(Counter, null));
@@ -860,10 +838,7 @@ describe("react-compat useState", () => {
     }
 
     function CurrentSubscription() {
-      const subscription = useMemo(
-        () => ({ initialValueFn: () => "ready" }),
-        [],
-      );
+      const subscription = useMemo(() => ({ initialValueFn: () => "ready" }), []);
       const [value] = useState(() => subscription.initialValueFn());
       return createElement("span", null, value);
     }
@@ -890,10 +865,7 @@ describe("react-compat useState", () => {
     }
 
     function SubscriptionReader() {
-      const subscription = useMemo(
-        () => ({ initialValueFn: () => "ready" }),
-        [],
-      );
+      const subscription = useMemo(() => ({ initialValueFn: () => "ready" }), []);
       const [value] = useState(() => subscription.initialValueFn());
       return createElement("span", null, value);
     }
@@ -918,9 +890,7 @@ describe("react-compat useState", () => {
   });
 
   test("throws when called outside render", () => {
-    expect(() => useState(0)).toThrow(
-      "Hooks can only be called while rendering.",
-    );
+    expect(() => useState(0)).toThrow("Hooks can only be called while rendering.");
   });
 
   test("preserves component hook state by key when list order changes", () => {

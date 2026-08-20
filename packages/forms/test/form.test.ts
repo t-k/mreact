@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { effect } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { createForm } from "../src/index.js";
+import type { StandardSchemaV1 } from "../src/index.js";
 
 describe("createForm", () => {
   it("tracks field values, dirty state, and touched state", () => {
@@ -1098,12 +1099,8 @@ describe("createForm", () => {
 });
 
 function standardSchema<Input, Output = Input>(
-  validate: (
-    value: unknown,
-  ) =>
-    | { value: Output; issues?: undefined }
-    | { issues: Array<{ message: string; path?: readonly unknown[] }> },
-) {
+  validate: (value: unknown) => StandardSchemaV1.Result<Output>,
+): StandardSchemaV1<Input, Output> {
   return {
     "~standard": {
       version: 1 as const,

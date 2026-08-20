@@ -1,12 +1,5 @@
 import { execFileSync } from "node:child_process";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -41,7 +34,14 @@ describe("router package entrypoints", () => {
       configFile: false,
       logLevel: "silent",
     });
-    const code = (Array.isArray(result) ? result : [result])
+    const outputs = Array.isArray(result)
+      ? result
+      : "output" in result
+        ? [result]
+        : (() => {
+            throw new Error("Vite unexpectedly returned a build watcher");
+          })();
+    const code = outputs
       .flatMap((output) => output.output)
       .filter((output): output is Rollup.OutputChunk => output.type === "chunk")
       .map((chunk) => chunk.code)
@@ -96,7 +96,9 @@ export async function load(url, context, nextLoad) {
         .map((line) => JSON.parse(line) as string);
       const routerModules = evaluated
         .filter((url) => url.includes("/packages/router/dist/"))
-        .map((url) => url.slice(url.indexOf("/packages/router/dist/") + "/packages/router/dist/".length))
+        .map((url) =>
+          url.slice(url.indexOf("/packages/router/dist/") + "/packages/router/dist/".length),
+        )
         .sort();
 
       expect(routerModules).toEqual([
@@ -142,13 +144,15 @@ export async function load(url, context, nextLoad) {
     expect(manifest.exports).toHaveProperty("./app-router-globals");
   });
 
-  test("app-router global types include Await for shared stream components", () => {
-    const directory = mkdtempSync(join(process.cwd(), "node_modules", ".tmp-mreact-types-"));
-    const filename = join(directory, "Shared.tsx");
+  test(
+    "app-router global types include Await for shared stream components",
+    () => {
+      const directory = mkdtempSync(join(process.cwd(), "node_modules", ".tmp-mreact-types-"));
+      const filename = join(directory, "Shared.tsx");
 
-    writeFileSync(
-      filename,
-      `
+      writeFileSync(
+        filename,
+        `
 export function Shared(props: { name: Promise<string> }) {
   return (
     <Await value={props.name} placeholder={<em>loading</em>}>
@@ -157,53 +161,55 @@ export function Shared(props: { name: Promise<string> }) {
   );
 }
 `,
-    );
+      );
 
-    try {
-      const program = ts.createProgram({
-        rootNames: [
-          filename,
-          join(process.cwd(), "packages", "router", "src", "app-router-globals.ts"),
-        ],
-        options: {
-          baseUrl: process.cwd(),
-          jsx: ts.JsxEmit.ReactJSX,
-          jsxImportSource: "@reckona/mreact-compat",
-          ignoreDeprecations: "6.0",
-          module: ts.ModuleKind.ESNext,
-          moduleResolution: ts.ModuleResolutionKind.Bundler,
-          noEmit: true,
-          paths: {
-            "@reckona/mreact-compat": ["packages/react-compat/src/index.ts"],
-            "@reckona/mreact-compat/jsx-runtime": [
-              "packages/react-compat/src/jsx-runtime.ts",
-            ],
-            "@reckona/mreact-compat/jsx-dev-runtime": [
-              "packages/react-compat/src/jsx-dev-runtime.ts",
-            ],
+      try {
+        const program = ts.createProgram({
+          rootNames: [
+            filename,
+            join(process.cwd(), "packages", "router", "src", "app-router-globals.ts"),
+          ],
+          options: {
+            baseUrl: process.cwd(),
+            jsx: ts.JsxEmit.ReactJSX,
+            jsxImportSource: "@reckona/mreact-compat",
+            ignoreDeprecations: "6.0",
+            module: ts.ModuleKind.ESNext,
+            moduleResolution: ts.ModuleResolutionKind.Bundler,
+            noEmit: true,
+            paths: {
+              "@reckona/mreact-compat": ["packages/react-compat/src/index.ts"],
+              "@reckona/mreact-compat/jsx-runtime": ["packages/react-compat/src/jsx-runtime.ts"],
+              "@reckona/mreact-compat/jsx-dev-runtime": [
+                "packages/react-compat/src/jsx-dev-runtime.ts",
+              ],
+            },
+            strict: true,
+            target: ts.ScriptTarget.ES2022,
+            types: [],
           },
-          strict: true,
-          target: ts.ScriptTarget.ES2022,
-          types: [],
-        },
-      });
-      const diagnostics = ts
-        .getPreEmitDiagnostics(program)
-        .map((diagnostic) => flattenDiagnostic(diagnostic));
+        });
+        const diagnostics = ts
+          .getPreEmitDiagnostics(program)
+          .map((diagnostic) => flattenDiagnostic(diagnostic));
 
-      expect(diagnostics).toEqual([]);
-    } finally {
-      rmSync(directory, { force: true, recursive: true });
-    }
-  }, packageEntrypointTypeCheckTimeoutMs);
+        expect(diagnostics).toEqual([]);
+      } finally {
+        rmSync(directory, { force: true, recursive: true });
+      }
+    },
+    packageEntrypointTypeCheckTimeoutMs,
+  );
 
-  test("public entrypoint infers route loader data", () => {
-    const directory = mkdtempSync(join(process.cwd(), "node_modules", ".tmp-mreact-types-"));
-    const filename = join(directory, "route-loader-data.ts");
+  test(
+    "public entrypoint infers route loader data",
+    () => {
+      const directory = mkdtempSync(join(process.cwd(), "node_modules", ".tmp-mreact-types-"));
+      const filename = join(directory, "route-loader-data.ts");
 
-    writeFileSync(
-      filename,
-      `
+      writeFileSync(
+        filename,
+        `
 import type { InferLoaderData } from "@reckona/mreact-router";
 
 async function loader(context: { params: { id: string } }) {
@@ -218,51 +224,55 @@ data.name.toUpperCase();
 // @ts-expect-error count is inferred as number.
 data.count.toUpperCase();
 `,
-    );
+      );
 
-    try {
-      const program = ts.createProgram({
-        rootNames: [filename, join(process.cwd(), "packages", "router", "src", "index.ts")],
-        options: {
-          baseUrl: process.cwd(),
-          ignoreDeprecations: "6.0",
-          module: ts.ModuleKind.ESNext,
-          moduleResolution: ts.ModuleResolutionKind.Bundler,
-          noEmit: true,
-          paths: {
-            "@reckona/mreact-router": ["packages/router/src/index.ts"],
-            "@reckona/mreact-compiler": ["packages/compiler/src/index.ts"],
-            "@reckona/mreact-devtools": ["packages/devtools/src/index.ts"],
-            "@reckona/mreact-query": ["packages/query/src/index.ts"],
-            "@reckona/mreact-reactive-core": ["packages/reactive-core/src/index.ts"],
-            "@reckona/mreact-reactive-core/runtime-state": [
-              "packages/reactive-core/src/runtime-state-public.ts",
-            ],
-            "@reckona/mreact-server": ["packages/server/src/index.ts"],
-            "@reckona/mreact-shared": ["packages/shared/src/index.ts"],
+      try {
+        const program = ts.createProgram({
+          rootNames: [filename, join(process.cwd(), "packages", "router", "src", "index.ts")],
+          options: {
+            baseUrl: process.cwd(),
+            ignoreDeprecations: "6.0",
+            module: ts.ModuleKind.ESNext,
+            moduleResolution: ts.ModuleResolutionKind.Bundler,
+            noEmit: true,
+            paths: {
+              "@reckona/mreact-router": ["packages/router/src/index.ts"],
+              "@reckona/mreact-compiler": ["packages/compiler/src/index.ts"],
+              "@reckona/mreact-devtools": ["packages/devtools/src/index.ts"],
+              "@reckona/mreact-query": ["packages/query/src/index.ts"],
+              "@reckona/mreact-reactive-core": ["packages/reactive-core/src/index.ts"],
+              "@reckona/mreact-reactive-core/runtime-state": [
+                "packages/reactive-core/src/runtime-state-public.ts",
+              ],
+              "@reckona/mreact-server": ["packages/server/src/index.ts"],
+              "@reckona/mreact-shared": ["packages/shared/src/index.ts"],
+            },
+            strict: true,
+            target: ts.ScriptTarget.ES2022,
+            types: ["node"],
           },
-          strict: true,
-          target: ts.ScriptTarget.ES2022,
-          types: ["node"],
-        },
-      });
-      const diagnostics = ts
-        .getPreEmitDiagnostics(program)
-        .map((diagnostic) => flattenDiagnostic(diagnostic));
+        });
+        const diagnostics = ts
+          .getPreEmitDiagnostics(program)
+          .map((diagnostic) => flattenDiagnostic(diagnostic));
 
-      expect(diagnostics).toEqual([]);
-    } finally {
-      rmSync(directory, { force: true, recursive: true });
-    }
-  }, packageEntrypointTypeCheckTimeoutMs);
+        expect(diagnostics).toEqual([]);
+      } finally {
+        rmSync(directory, { force: true, recursive: true });
+      }
+    },
+    packageEntrypointTypeCheckTimeoutMs,
+  );
 
-  test("public entrypoint infers page props from route loader data", () => {
-    const directory = mkdtempSync(join(process.cwd(), "node_modules", ".tmp-mreact-page-types-"));
-    const filename = join(directory, "route-page-data.ts");
+  test(
+    "public entrypoint infers page props from route loader data",
+    () => {
+      const directory = mkdtempSync(join(process.cwd(), "node_modules", ".tmp-mreact-page-types-"));
+      const filename = join(directory, "route-page-data.ts");
 
-    writeFileSync(
-      filename,
-      `
+      writeFileSync(
+        filename,
+        `
 import { definePage, type LoaderContext } from "@reckona/mreact-router";
 
 interface UserData {
@@ -290,102 +300,112 @@ export default definePage<typeof loader>(function Page(props) {
   return props.data.name;
 });
 `,
-    );
+      );
 
-    try {
-      const program = ts.createProgram({
-        rootNames: [filename, join(process.cwd(), "packages", "router", "src", "index.ts")],
-        options: {
-          baseUrl: process.cwd(),
-          ignoreDeprecations: "6.0",
-          module: ts.ModuleKind.ESNext,
-          moduleResolution: ts.ModuleResolutionKind.Bundler,
-          noEmit: true,
-          paths: {
-            "@reckona/mreact-router": ["packages/router/src/index.ts"],
-            "@reckona/mreact-compat": ["packages/react-compat/src/index.ts"],
-            "@reckona/mreact-compiler": ["packages/compiler/src/index.ts"],
-            "@reckona/mreact-devtools": ["packages/devtools/src/index.ts"],
-            "@reckona/mreact-query": ["packages/query/src/index.ts"],
-            "@reckona/mreact-reactive-core": ["packages/reactive-core/src/index.ts"],
-            "@reckona/mreact-reactive-core/runtime-state": [
-              "packages/reactive-core/src/runtime-state-public.ts",
-            ],
-            "@reckona/mreact-server": ["packages/server/src/index.ts"],
-            "@reckona/mreact-shared": ["packages/shared/src/index.ts"],
+      try {
+        const program = ts.createProgram({
+          rootNames: [filename, join(process.cwd(), "packages", "router", "src", "index.ts")],
+          options: {
+            baseUrl: process.cwd(),
+            ignoreDeprecations: "6.0",
+            module: ts.ModuleKind.ESNext,
+            moduleResolution: ts.ModuleResolutionKind.Bundler,
+            noEmit: true,
+            paths: {
+              "@reckona/mreact-router": ["packages/router/src/index.ts"],
+              "@reckona/mreact-compat": ["packages/react-compat/src/index.ts"],
+              "@reckona/mreact-compiler": ["packages/compiler/src/index.ts"],
+              "@reckona/mreact-devtools": ["packages/devtools/src/index.ts"],
+              "@reckona/mreact-query": ["packages/query/src/index.ts"],
+              "@reckona/mreact-reactive-core": ["packages/reactive-core/src/index.ts"],
+              "@reckona/mreact-reactive-core/runtime-state": [
+                "packages/reactive-core/src/runtime-state-public.ts",
+              ],
+              "@reckona/mreact-server": ["packages/server/src/index.ts"],
+              "@reckona/mreact-shared": ["packages/shared/src/index.ts"],
+            },
+            strict: true,
+            target: ts.ScriptTarget.ES2022,
+            types: ["node"],
           },
-          strict: true,
-          target: ts.ScriptTarget.ES2022,
-          types: ["node"],
-        },
-      });
-      const diagnostics = ts
-        .getPreEmitDiagnostics(program)
-        .map((diagnostic) => flattenDiagnostic(diagnostic));
+        });
+        const diagnostics = ts
+          .getPreEmitDiagnostics(program)
+          .map((diagnostic) => flattenDiagnostic(diagnostic));
 
-      expect(diagnostics).toEqual([]);
-    } finally {
-      rmSync(directory, { force: true, recursive: true });
-    }
-  }, packageEntrypointTypeCheckTimeoutMs);
+        expect(diagnostics).toEqual([]);
+      } finally {
+        rmSync(directory, { force: true, recursive: true });
+      }
+    },
+    packageEntrypointTypeCheckTimeoutMs,
+  );
 
-  test("public entrypoint exports throwNotFound as a never-returning helper", () => {
-    const directory = mkdtempSync(join(process.cwd(), "node_modules", ".tmp-mreact-not-found-types-"));
-    const filename = join(directory, "throw-not-found.ts");
+  test(
+    "public entrypoint exports throwNotFound as a never-returning helper",
+    () => {
+      const directory = mkdtempSync(
+        join(process.cwd(), "node_modules", ".tmp-mreact-not-found-types-"),
+      );
+      const filename = join(directory, "throw-not-found.ts");
 
-    writeFileSync(
-      filename,
-      `
+      writeFileSync(
+        filename,
+        `
 import { throwNotFound } from "@reckona/mreact-router";
 
 const value: never = throwNotFound();
 `,
-    );
+      );
 
-    try {
-      const program = ts.createProgram({
-        rootNames: [filename, join(process.cwd(), "packages", "router", "src", "index.ts")],
-        options: {
-          baseUrl: process.cwd(),
-          ignoreDeprecations: "6.0",
-          module: ts.ModuleKind.ESNext,
-          moduleResolution: ts.ModuleResolutionKind.Bundler,
-          noEmit: true,
-          paths: {
-            "@reckona/mreact-router": ["packages/router/src/index.ts"],
-            "@reckona/mreact-compat": ["packages/react-compat/src/index.ts"],
-            "@reckona/mreact-compiler": ["packages/compiler/src/index.ts"],
-            "@reckona/mreact-devtools": ["packages/devtools/src/index.ts"],
-            "@reckona/mreact-query": ["packages/query/src/index.ts"],
-            "@reckona/mreact-reactive-core": ["packages/reactive-core/src/index.ts"],
-            "@reckona/mreact-reactive-core/runtime-state": [
-              "packages/reactive-core/src/runtime-state-public.ts",
-            ],
-            "@reckona/mreact-server": ["packages/server/src/index.ts"],
-            "@reckona/mreact-shared": ["packages/shared/src/index.ts"],
+      try {
+        const program = ts.createProgram({
+          rootNames: [filename, join(process.cwd(), "packages", "router", "src", "index.ts")],
+          options: {
+            baseUrl: process.cwd(),
+            ignoreDeprecations: "6.0",
+            module: ts.ModuleKind.ESNext,
+            moduleResolution: ts.ModuleResolutionKind.Bundler,
+            noEmit: true,
+            paths: {
+              "@reckona/mreact-router": ["packages/router/src/index.ts"],
+              "@reckona/mreact-compat": ["packages/react-compat/src/index.ts"],
+              "@reckona/mreact-compiler": ["packages/compiler/src/index.ts"],
+              "@reckona/mreact-devtools": ["packages/devtools/src/index.ts"],
+              "@reckona/mreact-query": ["packages/query/src/index.ts"],
+              "@reckona/mreact-reactive-core": ["packages/reactive-core/src/index.ts"],
+              "@reckona/mreact-reactive-core/runtime-state": [
+                "packages/reactive-core/src/runtime-state-public.ts",
+              ],
+              "@reckona/mreact-server": ["packages/server/src/index.ts"],
+              "@reckona/mreact-shared": ["packages/shared/src/index.ts"],
+            },
+            strict: true,
+            target: ts.ScriptTarget.ES2022,
+            types: ["node"],
           },
-          strict: true,
-          target: ts.ScriptTarget.ES2022,
-          types: ["node"],
-        },
-      });
-      const diagnostics = ts
-        .getPreEmitDiagnostics(program)
-        .map((diagnostic) => flattenDiagnostic(diagnostic));
+        });
+        const diagnostics = ts
+          .getPreEmitDiagnostics(program)
+          .map((diagnostic) => flattenDiagnostic(diagnostic));
 
-      expect(diagnostics).toEqual([]);
-    } finally {
-      rmSync(directory, { force: true, recursive: true });
-    }
-  }, packageEntrypointTypeCheckTimeoutMs);
+        expect(diagnostics).toEqual([]);
+      } finally {
+        rmSync(directory, { force: true, recursive: true });
+      }
+    },
+    packageEntrypointTypeCheckTimeoutMs,
+  );
 
-  test("public entrypoint exposes typed route href helpers", () => {
-    const directory = mkdtempSync(join(process.cwd(), "node_modules", ".tmp-mreact-href-types-"));
-    const filename = join(directory, "typed-href.ts");
+  test(
+    "public entrypoint exposes typed route href helpers",
+    () => {
+      const directory = mkdtempSync(join(process.cwd(), "node_modules", ".tmp-mreact-href-types-"));
+      const filename = join(directory, "typed-href.ts");
 
-    writeFileSync(
-      filename,
-      `
+      writeFileSync(
+        filename,
+        `
 import { href } from "@reckona/mreact-router";
 
 const user = href("/users/:id", { params: { id: "ada" } });
@@ -404,111 +424,117 @@ href("/files/:...path", { params: { path: "notes" } });
 // @ts-expect-error href only accepts internal route paths.
 href("https://example.test/users/:id", { params: { id: "ada" } });
 `,
-    );
+      );
 
-    try {
-      const program = ts.createProgram({
-        rootNames: [filename, join(process.cwd(), "packages", "router", "src", "index.ts")],
-        options: {
-          baseUrl: process.cwd(),
-          ignoreDeprecations: "6.0",
-          module: ts.ModuleKind.ESNext,
-          moduleResolution: ts.ModuleResolutionKind.Bundler,
-          noEmit: true,
-          paths: {
-            "@reckona/mreact-router": ["packages/router/src/index.ts"],
-            "@reckona/mreact-compat": ["packages/react-compat/src/index.ts"],
-            "@reckona/mreact-compiler": ["packages/compiler/src/index.ts"],
-            "@reckona/mreact-devtools": ["packages/devtools/src/index.ts"],
-            "@reckona/mreact-query": ["packages/query/src/index.ts"],
-            "@reckona/mreact-reactive-core": ["packages/reactive-core/src/index.ts"],
-            "@reckona/mreact-reactive-core/runtime-state": [
-              "packages/reactive-core/src/runtime-state-public.ts",
-            ],
-            "@reckona/mreact-server": ["packages/server/src/index.ts"],
-            "@reckona/mreact-shared": ["packages/shared/src/index.ts"],
+      try {
+        const program = ts.createProgram({
+          rootNames: [filename, join(process.cwd(), "packages", "router", "src", "index.ts")],
+          options: {
+            baseUrl: process.cwd(),
+            ignoreDeprecations: "6.0",
+            module: ts.ModuleKind.ESNext,
+            moduleResolution: ts.ModuleResolutionKind.Bundler,
+            noEmit: true,
+            paths: {
+              "@reckona/mreact-router": ["packages/router/src/index.ts"],
+              "@reckona/mreact-compat": ["packages/react-compat/src/index.ts"],
+              "@reckona/mreact-compiler": ["packages/compiler/src/index.ts"],
+              "@reckona/mreact-devtools": ["packages/devtools/src/index.ts"],
+              "@reckona/mreact-query": ["packages/query/src/index.ts"],
+              "@reckona/mreact-reactive-core": ["packages/reactive-core/src/index.ts"],
+              "@reckona/mreact-reactive-core/runtime-state": [
+                "packages/reactive-core/src/runtime-state-public.ts",
+              ],
+              "@reckona/mreact-server": ["packages/server/src/index.ts"],
+              "@reckona/mreact-shared": ["packages/shared/src/index.ts"],
+            },
+            strict: true,
+            target: ts.ScriptTarget.ES2022,
+            types: ["node"],
           },
-          strict: true,
-          target: ts.ScriptTarget.ES2022,
-          types: ["node"],
-        },
-      });
-      const diagnostics = ts
-        .getPreEmitDiagnostics(program)
-        .map((diagnostic) => flattenDiagnostic(diagnostic));
+        });
+        const diagnostics = ts
+          .getPreEmitDiagnostics(program)
+          .map((diagnostic) => flattenDiagnostic(diagnostic));
 
-      expect(diagnostics).toEqual([]);
-    } finally {
-      rmSync(directory, { force: true, recursive: true });
-    }
-  }, packageEntrypointTypeCheckTimeoutMs);
+        expect(diagnostics).toEqual([]);
+      } finally {
+        rmSync(directory, { force: true, recursive: true });
+      }
+    },
+    packageEntrypointTypeCheckTimeoutMs,
+  );
 
-  test("link subpath exports Link as a valid mreact JSX component", () => {
-    const directory = mkdtempSync(join(process.cwd(), "node_modules", ".tmp-mreact-types-"));
-    const filename = join(directory, "link-jsx.tsx");
+  test(
+    "link subpath exports Link as a valid mreact JSX component",
+    () => {
+      const directory = mkdtempSync(join(process.cwd(), "node_modules", ".tmp-mreact-types-"));
+      const filename = join(directory, "link-jsx.tsx");
 
-    writeFileSync(
-      filename,
-      `
+      writeFileSync(
+        filename,
+        `
 import { Link } from "@reckona/mreact-router/link";
 
 export function Navigation() {
   return <Link href="/docs" prefetch="viewport"><span>Docs</span></Link>;
 }
 `,
-    );
+      );
 
-    try {
-      const program = ts.createProgram({
-        rootNames: [filename, join(process.cwd(), "packages", "router", "src", "link.ts")],
-        options: {
-          baseUrl: process.cwd(),
-          jsx: ts.JsxEmit.ReactJSX,
-          jsxImportSource: "@reckona/mreact",
-          ignoreDeprecations: "6.0",
-          module: ts.ModuleKind.ESNext,
-          moduleResolution: ts.ModuleResolutionKind.Bundler,
-          noEmit: true,
-          paths: {
-            "@reckona/mreact": ["packages/react/src/index.ts"],
-            "@reckona/mreact/jsx-runtime": ["packages/react/src/jsx-runtime.ts"],
-            "@reckona/mreact/jsx-dev-runtime": ["packages/react/src/jsx-dev-runtime.ts"],
-            "@reckona/mreact-compat": ["packages/react-compat/src/index.ts"],
-            "@reckona/mreact-compat/jsx-runtime": [
-              "packages/react-compat/src/jsx-runtime.ts",
-            ],
-            "@reckona/mreact-compat/jsx-dev-runtime": [
-              "packages/react-compat/src/jsx-dev-runtime.ts",
-            ],
-            "@reckona/mreact-router/link": ["packages/router/src/link.ts"],
-            "@reckona/mreact-shared/compiler-contract": [
-              "packages/shared/src/compiler-contract.ts",
-            ],
-            "@reckona/mreact-shared/html-escape": ["packages/shared/src/html-escape.ts"],
-            "@reckona/mreact-shared/url-safety": ["packages/shared/src/url-safety.ts"],
+      try {
+        const program = ts.createProgram({
+          rootNames: [filename, join(process.cwd(), "packages", "router", "src", "link.ts")],
+          options: {
+            baseUrl: process.cwd(),
+            jsx: ts.JsxEmit.ReactJSX,
+            jsxImportSource: "@reckona/mreact",
+            ignoreDeprecations: "6.0",
+            module: ts.ModuleKind.ESNext,
+            moduleResolution: ts.ModuleResolutionKind.Bundler,
+            noEmit: true,
+            paths: {
+              "@reckona/mreact": ["packages/react/src/index.ts"],
+              "@reckona/mreact/jsx-runtime": ["packages/react/src/jsx-runtime.ts"],
+              "@reckona/mreact/jsx-dev-runtime": ["packages/react/src/jsx-dev-runtime.ts"],
+              "@reckona/mreact-compat": ["packages/react-compat/src/index.ts"],
+              "@reckona/mreact-compat/jsx-runtime": ["packages/react-compat/src/jsx-runtime.ts"],
+              "@reckona/mreact-compat/jsx-dev-runtime": [
+                "packages/react-compat/src/jsx-dev-runtime.ts",
+              ],
+              "@reckona/mreact-router/link": ["packages/router/src/link.ts"],
+              "@reckona/mreact-shared/compiler-contract": [
+                "packages/shared/src/compiler-contract.ts",
+              ],
+              "@reckona/mreact-shared/html-escape": ["packages/shared/src/html-escape.ts"],
+              "@reckona/mreact-shared/url-safety": ["packages/shared/src/url-safety.ts"],
+            },
+            strict: true,
+            target: ts.ScriptTarget.ES2022,
+            types: [],
           },
-          strict: true,
-          target: ts.ScriptTarget.ES2022,
-          types: [],
-        },
-      });
-      const diagnostics = ts
-        .getPreEmitDiagnostics(program)
-        .map((diagnostic) => flattenDiagnostic(diagnostic));
+        });
+        const diagnostics = ts
+          .getPreEmitDiagnostics(program)
+          .map((diagnostic) => flattenDiagnostic(diagnostic));
 
-      expect(diagnostics).toEqual([]);
-    } finally {
-      rmSync(directory, { force: true, recursive: true });
-    }
-  }, packageEntrypointTypeCheckTimeoutMs);
+        expect(diagnostics).toEqual([]);
+      } finally {
+        rmSync(directory, { force: true, recursive: true });
+      }
+    },
+    packageEntrypointTypeCheckTimeoutMs,
+  );
 
-  test("public entrypoint exposes app-router route and children types", () => {
-    const directory = mkdtempSync(join(process.cwd(), "node_modules", ".tmp-mreact-types-"));
-    const filename = join(directory, "route-public-types.ts");
+  test(
+    "public entrypoint exposes app-router route and children types",
+    () => {
+      const directory = mkdtempSync(join(process.cwd(), "node_modules", ".tmp-mreact-types-"));
+      const filename = join(directory, "route-public-types.ts");
 
-    writeFileSync(
-      filename,
-      `
+      writeFileSync(
+        filename,
+        `
 import type {
   LayoutProps,
   LoaderContext,
@@ -545,44 +571,46 @@ const routeHandlerContext: RouteHandlerContext<{ id: string }> = {
 };
 routeHandlerContext.params.id.toUpperCase();
 `,
-    );
+      );
 
-    try {
-      const program = ts.createProgram({
-        rootNames: [filename, join(process.cwd(), "packages", "router", "src", "index.ts")],
-        options: {
-          baseUrl: process.cwd(),
-          ignoreDeprecations: "6.0",
-          module: ts.ModuleKind.ESNext,
-          moduleResolution: ts.ModuleResolutionKind.Bundler,
-          noEmit: true,
-          paths: {
-            "@reckona/mreact-router": ["packages/router/src/index.ts"],
-            "@reckona/mreact-compat": ["packages/react-compat/src/index.ts"],
-            "@reckona/mreact-compiler": ["packages/compiler/src/index.ts"],
-            "@reckona/mreact-devtools": ["packages/devtools/src/index.ts"],
-            "@reckona/mreact-query": ["packages/query/src/index.ts"],
-            "@reckona/mreact-reactive-core": ["packages/reactive-core/src/index.ts"],
-            "@reckona/mreact-reactive-core/runtime-state": [
-              "packages/reactive-core/src/runtime-state-public.ts",
-            ],
-            "@reckona/mreact-server": ["packages/server/src/index.ts"],
-            "@reckona/mreact-shared": ["packages/shared/src/index.ts"],
+      try {
+        const program = ts.createProgram({
+          rootNames: [filename, join(process.cwd(), "packages", "router", "src", "index.ts")],
+          options: {
+            baseUrl: process.cwd(),
+            ignoreDeprecations: "6.0",
+            module: ts.ModuleKind.ESNext,
+            moduleResolution: ts.ModuleResolutionKind.Bundler,
+            noEmit: true,
+            paths: {
+              "@reckona/mreact-router": ["packages/router/src/index.ts"],
+              "@reckona/mreact-compat": ["packages/react-compat/src/index.ts"],
+              "@reckona/mreact-compiler": ["packages/compiler/src/index.ts"],
+              "@reckona/mreact-devtools": ["packages/devtools/src/index.ts"],
+              "@reckona/mreact-query": ["packages/query/src/index.ts"],
+              "@reckona/mreact-reactive-core": ["packages/reactive-core/src/index.ts"],
+              "@reckona/mreact-reactive-core/runtime-state": [
+                "packages/reactive-core/src/runtime-state-public.ts",
+              ],
+              "@reckona/mreact-server": ["packages/server/src/index.ts"],
+              "@reckona/mreact-shared": ["packages/shared/src/index.ts"],
+            },
+            strict: true,
+            target: ts.ScriptTarget.ES2022,
+            types: ["node"],
           },
-          strict: true,
-          target: ts.ScriptTarget.ES2022,
-          types: ["node"],
-        },
-      });
-      const diagnostics = ts
-        .getPreEmitDiagnostics(program)
-        .map((diagnostic) => flattenDiagnostic(diagnostic));
+        });
+        const diagnostics = ts
+          .getPreEmitDiagnostics(program)
+          .map((diagnostic) => flattenDiagnostic(diagnostic));
 
-      expect(diagnostics).toEqual([]);
-    } finally {
-      rmSync(directory, { force: true, recursive: true });
-    }
-  }, packageEntrypointTypeCheckTimeoutMs);
+        expect(diagnostics).toEqual([]);
+      } finally {
+        rmSync(directory, { force: true, recursive: true });
+      }
+    },
+    packageEntrypointTypeCheckTimeoutMs,
+  );
 
   test("exposes modular client helper subpaths", async () => {
     const manifest = JSON.parse(
@@ -617,15 +645,17 @@ routeHandlerContext.params.id.toUpperCase();
     expect(manifest.dependencies).toHaveProperty("@reckona/mreact-reactive-dom");
   });
 
-  test("public entrypoint exports prepared form action reference type", () => {
-    const directory = mkdtempSync(
-      join(process.cwd(), "node_modules", ".tmp-mreact-form-action-types-"),
-    );
-    const filename = join(directory, "form-action-reference.ts");
+  test(
+    "public entrypoint exports prepared form action reference type",
+    () => {
+      const directory = mkdtempSync(
+        join(process.cwd(), "node_modules", ".tmp-mreact-form-action-types-"),
+      );
+      const filename = join(directory, "form-action-reference.ts");
 
-    writeFileSync(
-      filename,
-      `
+      writeFileSync(
+        filename,
+        `
 import type {
   AppRouterProjectOptions,
   AppRouterRenderPreload,
@@ -688,55 +718,61 @@ void cookies;
 void matcher;
 void scan;
 `,
-    );
+      );
 
-    try {
-      const program = ts.createProgram({
-        rootNames: [filename, join(process.cwd(), "packages", "router", "src", "index.ts")],
-        options: {
-          baseUrl: process.cwd(),
-          ignoreDeprecations: "6.0",
-          module: ts.ModuleKind.ESNext,
-          moduleResolution: ts.ModuleResolutionKind.Bundler,
-          noEmit: true,
-          paths: {
-            "@reckona/mreact-router": ["packages/router/src/index.ts"],
-            "@reckona/mreact-compat": ["packages/react-compat/src/index.ts"],
-            "@reckona/mreact-compiler": ["packages/compiler/src/index.ts"],
-            "@reckona/mreact-devtools": ["packages/devtools/src/index.ts"],
-            "@reckona/mreact-query": ["packages/query/src/index.ts"],
-            "@reckona/mreact-reactive-core": ["packages/reactive-core/src/index.ts"],
-            "@reckona/mreact-reactive-core/runtime-state": [
-              "packages/reactive-core/src/runtime-state-public.ts",
-            ],
-            "@reckona/mreact-server": ["packages/server/src/index.ts"],
-            "@reckona/mreact-shared": ["packages/shared/src/index.ts"],
+      try {
+        const program = ts.createProgram({
+          rootNames: [filename, join(process.cwd(), "packages", "router", "src", "index.ts")],
+          options: {
+            baseUrl: process.cwd(),
+            ignoreDeprecations: "6.0",
+            module: ts.ModuleKind.ESNext,
+            moduleResolution: ts.ModuleResolutionKind.Bundler,
+            noEmit: true,
+            paths: {
+              "@reckona/mreact-router": ["packages/router/src/index.ts"],
+              "@reckona/mreact-compat": ["packages/react-compat/src/index.ts"],
+              "@reckona/mreact-compiler": ["packages/compiler/src/index.ts"],
+              "@reckona/mreact-devtools": ["packages/devtools/src/index.ts"],
+              "@reckona/mreact-query": ["packages/query/src/index.ts"],
+              "@reckona/mreact-reactive-core": ["packages/reactive-core/src/index.ts"],
+              "@reckona/mreact-reactive-core/runtime-state": [
+                "packages/reactive-core/src/runtime-state-public.ts",
+              ],
+              "@reckona/mreact-server": ["packages/server/src/index.ts"],
+              "@reckona/mreact-shared": ["packages/shared/src/index.ts"],
+            },
+            strict: true,
+            target: ts.ScriptTarget.ES2022,
+            types: ["node"],
           },
-          strict: true,
-          target: ts.ScriptTarget.ES2022,
-          types: ["node"],
-        },
-      });
-      const diagnostics = ts
-        .getPreEmitDiagnostics(program)
-        .map((diagnostic) => flattenDiagnostic(diagnostic));
+        });
+        const diagnostics = ts
+          .getPreEmitDiagnostics(program)
+          .map((diagnostic) => flattenDiagnostic(diagnostic));
 
-      expect(diagnostics).toEqual([]);
-    } finally {
-      rmSync(directory, { force: true, recursive: true });
-    }
-    // Whole-program public-surface type checks need the same headroom as the
-    // sibling createProgram tests on single-worker CI runners.
-  }, packageEntrypointTypeCheckTimeoutMs);
+        expect(diagnostics).toEqual([]);
+      } finally {
+        rmSync(directory, { force: true, recursive: true });
+      }
+      // Whole-program public-surface type checks need the same headroom as the
+      // sibling createProgram tests on single-worker CI runners.
+    },
+    packageEntrypointTypeCheckTimeoutMs,
+  );
 
-  test("generated route declarations type-check Link href without a runtime helper import", () => {
-    const directory = mkdtempSync(join(process.cwd(), "node_modules", ".tmp-mreact-link-routes-"));
-    const routesFilename = join(directory, "routes.d.ts");
-    const filename = join(directory, "link-routes.tsx");
+  test(
+    "generated route declarations type-check Link href without a runtime helper import",
+    () => {
+      const directory = mkdtempSync(
+        join(process.cwd(), "node_modules", ".tmp-mreact-link-routes-"),
+      );
+      const routesFilename = join(directory, "routes.d.ts");
+      const filename = join(directory, "link-routes.tsx");
 
-    writeFileSync(
-      routesFilename,
-      `
+      writeFileSync(
+        routesFilename,
+        `
 export type AppRoutePath = "/" | "/docs" | "/users/:id" | "/files/:...path";
 
 declare module "@reckona/mreact-router/link" {
@@ -745,10 +781,10 @@ declare module "@reckona/mreact-router/link" {
   }
 }
 `,
-    );
-    writeFileSync(
-      filename,
-      `
+      );
+      writeFileSync(
+        filename,
+        `
 import { Link } from "@reckona/mreact-router/link";
 
 export function Navigation() {
@@ -766,84 +802,86 @@ export function Navigation() {
   );
 }
 `,
-    );
+      );
 
-    try {
-      const program = ts.createProgram({
-        rootNames: [
-          routesFilename,
-          filename,
-          join(process.cwd(), "packages", "router", "src", "link.ts"),
-        ],
-        options: {
-          baseUrl: process.cwd(),
-          jsx: ts.JsxEmit.ReactJSX,
-          jsxImportSource: "@reckona/mreact",
-          ignoreDeprecations: "6.0",
-          module: ts.ModuleKind.ESNext,
-          moduleResolution: ts.ModuleResolutionKind.Bundler,
-          noEmit: true,
-          paths: {
-            "@reckona/mreact": ["packages/react/src/index.ts"],
-            "@reckona/mreact/jsx-runtime": ["packages/react/src/jsx-runtime.ts"],
-            "@reckona/mreact/jsx-dev-runtime": ["packages/react/src/jsx-dev-runtime.ts"],
-            "@reckona/mreact-router": ["packages/router/src/index.ts"],
-            "@reckona/mreact-router/link": ["packages/router/src/link.ts"],
-            "@reckona/mreact-compat": ["packages/react-compat/src/index.ts"],
-            "@reckona/mreact-compat/jsx-runtime": [
-              "packages/react-compat/src/jsx-runtime.ts",
-            ],
-            "@reckona/mreact-compat/jsx-dev-runtime": [
-              "packages/react-compat/src/jsx-dev-runtime.ts",
-            ],
-            "@reckona/mreact-compiler": ["packages/compiler/src/index.ts"],
-            "@reckona/mreact-devtools": ["packages/devtools/src/index.ts"],
-            "@reckona/mreact-query": ["packages/query/src/index.ts"],
-            "@reckona/mreact-reactive-core": ["packages/reactive-core/src/index.ts"],
-            "@reckona/mreact-reactive-core/runtime-state": [
-              "packages/reactive-core/src/runtime-state-public.ts",
-            ],
-            "@reckona/mreact-server": ["packages/server/src/index.ts"],
-            "@reckona/mreact-shared": ["packages/shared/src/index.ts"],
-            "@reckona/mreact-shared/compiler-contract": [
-              "packages/shared/src/compiler-contract.ts",
-            ],
-            "@reckona/mreact-shared/html-escape": ["packages/shared/src/html-escape.ts"],
-            "@reckona/mreact-shared/url-safety": ["packages/shared/src/url-safety.ts"],
+      try {
+        const program = ts.createProgram({
+          rootNames: [
+            routesFilename,
+            filename,
+            join(process.cwd(), "packages", "router", "src", "link.ts"),
+          ],
+          options: {
+            baseUrl: process.cwd(),
+            jsx: ts.JsxEmit.ReactJSX,
+            jsxImportSource: "@reckona/mreact",
+            ignoreDeprecations: "6.0",
+            module: ts.ModuleKind.ESNext,
+            moduleResolution: ts.ModuleResolutionKind.Bundler,
+            noEmit: true,
+            paths: {
+              "@reckona/mreact": ["packages/react/src/index.ts"],
+              "@reckona/mreact/jsx-runtime": ["packages/react/src/jsx-runtime.ts"],
+              "@reckona/mreact/jsx-dev-runtime": ["packages/react/src/jsx-dev-runtime.ts"],
+              "@reckona/mreact-router": ["packages/router/src/index.ts"],
+              "@reckona/mreact-router/link": ["packages/router/src/link.ts"],
+              "@reckona/mreact-compat": ["packages/react-compat/src/index.ts"],
+              "@reckona/mreact-compat/jsx-runtime": ["packages/react-compat/src/jsx-runtime.ts"],
+              "@reckona/mreact-compat/jsx-dev-runtime": [
+                "packages/react-compat/src/jsx-dev-runtime.ts",
+              ],
+              "@reckona/mreact-compiler": ["packages/compiler/src/index.ts"],
+              "@reckona/mreact-devtools": ["packages/devtools/src/index.ts"],
+              "@reckona/mreact-query": ["packages/query/src/index.ts"],
+              "@reckona/mreact-reactive-core": ["packages/reactive-core/src/index.ts"],
+              "@reckona/mreact-reactive-core/runtime-state": [
+                "packages/reactive-core/src/runtime-state-public.ts",
+              ],
+              "@reckona/mreact-server": ["packages/server/src/index.ts"],
+              "@reckona/mreact-shared": ["packages/shared/src/index.ts"],
+              "@reckona/mreact-shared/compiler-contract": [
+                "packages/shared/src/compiler-contract.ts",
+              ],
+              "@reckona/mreact-shared/html-escape": ["packages/shared/src/html-escape.ts"],
+              "@reckona/mreact-shared/url-safety": ["packages/shared/src/url-safety.ts"],
+            },
+            strict: true,
+            target: ts.ScriptTarget.ES2022,
+            types: [],
           },
-          strict: true,
-          target: ts.ScriptTarget.ES2022,
-          types: [],
-        },
-      });
-      const diagnostics = ts
-        .getPreEmitDiagnostics(program)
-        .map((diagnostic) => flattenDiagnostic(diagnostic));
+        });
+        const diagnostics = ts
+          .getPreEmitDiagnostics(program)
+          .map((diagnostic) => flattenDiagnostic(diagnostic));
 
-      expect(diagnostics).toEqual([]);
-    } finally {
-      rmSync(directory, { force: true, recursive: true });
-    }
-  }, packageEntrypointTypeCheckTimeoutMs);
+        expect(diagnostics).toEqual([]);
+      } finally {
+        rmSync(directory, { force: true, recursive: true });
+      }
+    },
+    packageEntrypointTypeCheckTimeoutMs,
+  );
 
-  test("generated public asset declarations type-check asset paths without a runtime helper import", () => {
-    const directory = mkdtempSync(
-      join(process.cwd(), "node_modules", ".tmp-mreact-public-assets-"),
-    );
-    const publicAssetsFilename = join(directory, "public-assets.d.ts");
-    const filename = join(directory, "public-assets.tsx");
+  test(
+    "generated public asset declarations type-check asset paths without a runtime helper import",
+    () => {
+      const directory = mkdtempSync(
+        join(process.cwd(), "node_modules", ".tmp-mreact-public-assets-"),
+      );
+      const publicAssetsFilename = join(directory, "public-assets.d.ts");
+      const filename = join(directory, "public-assets.tsx");
 
-    writeFileSync(
-      publicAssetsFilename,
-      `
+      writeFileSync(
+        publicAssetsFilename,
+        `
 declare module "mreact:public-assets" {
   export type PublicAssetPath = "/favicon.svg" | "/images/hero.avif" | "/robots.txt";
 }
 `,
-    );
-    writeFileSync(
-      filename,
-      `
+      );
+      writeFileSync(
+        filename,
+        `
 import type { PublicAssetPath } from "mreact:public-assets";
 
 const hero = "/images/hero.avif" satisfies PublicAssetPath;
@@ -854,38 +892,40 @@ export function Hero() {
   return <img src={hero} alt="Hero" width="1200" height="630" />;
 }
 `,
-    );
+      );
 
-    try {
-      const program = ts.createProgram({
-        rootNames: [publicAssetsFilename, filename],
-        options: {
-          baseUrl: process.cwd(),
-          jsx: ts.JsxEmit.ReactJSX,
-          jsxImportSource: "@reckona/mreact",
-          ignoreDeprecations: "6.0",
-          module: ts.ModuleKind.ESNext,
-          moduleResolution: ts.ModuleResolutionKind.Bundler,
-          noEmit: true,
-          paths: {
-            "@reckona/mreact": ["packages/react/src/index.ts"],
-            "@reckona/mreact/jsx-runtime": ["packages/react/src/jsx-runtime.ts"],
-            "@reckona/mreact/jsx-dev-runtime": ["packages/react/src/jsx-dev-runtime.ts"],
+      try {
+        const program = ts.createProgram({
+          rootNames: [publicAssetsFilename, filename],
+          options: {
+            baseUrl: process.cwd(),
+            jsx: ts.JsxEmit.ReactJSX,
+            jsxImportSource: "@reckona/mreact",
+            ignoreDeprecations: "6.0",
+            module: ts.ModuleKind.ESNext,
+            moduleResolution: ts.ModuleResolutionKind.Bundler,
+            noEmit: true,
+            paths: {
+              "@reckona/mreact": ["packages/react/src/index.ts"],
+              "@reckona/mreact/jsx-runtime": ["packages/react/src/jsx-runtime.ts"],
+              "@reckona/mreact/jsx-dev-runtime": ["packages/react/src/jsx-dev-runtime.ts"],
+            },
+            strict: true,
+            target: ts.ScriptTarget.ES2022,
+            types: [],
           },
-          strict: true,
-          target: ts.ScriptTarget.ES2022,
-          types: [],
-        },
-      });
-      const diagnostics = ts
-        .getPreEmitDiagnostics(program)
-        .map((diagnostic) => flattenDiagnostic(diagnostic));
+        });
+        const diagnostics = ts
+          .getPreEmitDiagnostics(program)
+          .map((diagnostic) => flattenDiagnostic(diagnostic));
 
-      expect(diagnostics).toEqual([]);
-    } finally {
-      rmSync(directory, { force: true, recursive: true });
-    }
-  }, packageEntrypointTypeCheckTimeoutMs);
+        expect(diagnostics).toEqual([]);
+      } finally {
+        rmSync(directory, { force: true, recursive: true });
+      }
+    },
+    packageEntrypointTypeCheckTimeoutMs,
+  );
 });
 
 function flattenDiagnostic(diagnostic: ts.Diagnostic): string {

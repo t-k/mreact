@@ -122,14 +122,14 @@ describe("router route module loader contract", () => {
   test("normalizes import policy cache keys regardless of set order", () => {
     expect(
       importPolicyCacheKey({
-        allowedPackages: new Set(["zod", "jose"]),
-        allowedSourceDirs: new Set(["/b", "/a"]),
+        allowedPackages: ["zod", "jose"],
+        allowedSourceDirs: ["/b", "/a"],
         projectRoot: "/repo",
       }),
     ).toBe(
       importPolicyCacheKey({
-        allowedPackages: new Set(["jose", "zod"]),
-        allowedSourceDirs: new Set(["/a", "/b"]),
+        allowedPackages: ["jose", "zod"],
+        allowedSourceDirs: ["/a", "/b"],
         projectRoot: "/repo",
       }),
     );

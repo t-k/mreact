@@ -1,3 +1,10 @@
+import {
+  REACT_CLIENT_REFERENCE_TYPE,
+  REACT_COMPAT_CONSUMER_TYPE,
+  REACT_COMPAT_PROVIDER_TYPE,
+} from "@reckona/mreact-shared";
+import type { ReactCompatConsumer } from "./context.js";
+
 export const REACT_COMPAT_ELEMENT_TYPE = Symbol.for("react.transitional.element");
 export const ERROR_BOUNDARY_TYPE = Symbol.for("modular.react.error_boundary");
 export const FORWARD_REF_TYPE = Symbol.for("react.forward_ref");
@@ -6,7 +13,6 @@ export const LAZY_TYPE = Symbol.for("react.lazy");
 export const STRICT_MODE_TYPE = Symbol.for("react.strict_mode");
 export const PORTAL_TYPE = Symbol.for("react.portal");
 export const REACTIVE_DOM_BLOCK_TYPE = Symbol.for("modular.react.reactive_dom_block");
-const REACT_COMPAT_PROVIDER_TYPE = Symbol.for("react.context");
 /** Symbol used to group JSX children without adding a host element. */
 export const Fragment = Symbol.for("react.fragment");
 /** Symbol used to suspend rendering while async content resolves. */
@@ -27,7 +33,7 @@ export const REACTIVE_STATE_BINDING_META = Symbol.for("modular.react.reactive_st
 const hasOwnProperty = Object.prototype.hasOwnProperty;
 
 export interface ReactCompatProviderType {
-  $$typeof: symbol;
+  $$typeof: typeof REACT_COMPAT_PROVIDER_TYPE;
   context: unknown;
 }
 
@@ -49,6 +55,12 @@ export type ElementType<P = Record<string, unknown>> =
   | typeof STRICT_MODE_TYPE
   | ReactCompatContextProviderShorthand
   | ReactCompatProviderType
+  | { $$typeof: typeof REACT_COMPAT_CONSUMER_TYPE; context: unknown }
+  | {
+      $$typeof: typeof REACT_CLIENT_REFERENCE_TYPE;
+      moduleId: string;
+      exportName: string;
+    }
   | ForwardRefType<P>
   | MemoType<P>
   | LazyType<P>
@@ -78,7 +90,8 @@ export type ReactCompatNode =
   | boolean
   | null
   | undefined
-  | ReactCompatNode[];
+  | ReactCompatNode[]
+  | PromiseLike<ReactCompatNode>;
 
 /** React-compatible element record produced by createElement and JSX transforms. */
 export interface ReactCompatElement<P = Record<string, unknown>> {
@@ -117,14 +130,29 @@ export interface ReactiveDomBlockProps {
 }
 
 /** Creates a React-compatible element from a type, config object, and children. */
+export function createElement(
+  type: string,
+  config?: (Record<string, unknown> & ReactReservedProps) | null,
+  ...children: ReactCompatNode[]
+): ReactCompatElement<Record<string, unknown>>;
+export function createElement<P extends object>(
+  type: ForwardRefType<P>,
+  config?: (P extends Record<string, never> ? ReactReservedProps : P & ReactReservedProps) | null,
+  ...children: (P extends { children?: infer Child } ? Child | ReactCompatNode : ReactCompatNode)[]
+): ReactCompatElement<P>;
+export function createElement<T>(
+  type: ReactCompatConsumer<T>,
+  config: null | undefined,
+  render: (value: T) => ReactCompatNode,
+): ReactCompatElement<Record<string, unknown>>;
 export function createElement<P extends object>(
   type: ElementType<P>,
-  config: (P & ReactReservedProps) | null,
-  ...children: ReactCompatNode[]
+  config?: (P & ReactReservedProps) | null,
+  ...children: (P extends { children?: infer Child } ? Child | ReactCompatNode : ReactCompatNode)[]
 ): ReactCompatElement<P>;
 export function createElement<P extends object>(
   type: ElementType<P>,
-  config: (P & ReactReservedProps) | null,
+  config?: (P & ReactReservedProps) | null,
 ): ReactCompatElement<P> {
   const childCount = arguments.length - 2;
 
@@ -339,7 +367,7 @@ export function forwardRef<P, T>(
     props: P,
     ref: { current: T | null } | ((value: T | null) => void) | null,
   ) => ReactCompatNode,
-): ForwardRefType<P & { ref?: unknown }> {
+): ForwardRefType<P> {
   return { $$typeof: FORWARD_REF_TYPE, render: render as ForwardRefType<P>["render"] };
 }
 
@@ -363,7 +391,7 @@ export function lazy<P>(load: () => Promise<{ default: ElementType<P> }>): LazyT
 }
 
 /** Symbol used to mark a subtree for strict-mode development checks. */
-export const StrictMode = STRICT_MODE_TYPE;
+export const StrictMode: typeof STRICT_MODE_TYPE = STRICT_MODE_TYPE;
 
 /** Clones an existing element with merged props and optional replacement children. */
 export function cloneElement<P extends object>(

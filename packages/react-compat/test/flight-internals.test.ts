@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { parseReactFlightPayload } from "../src/flight-parser.js";
 import { decodeFlightModel } from "../src/flight-decoder.js";
 import { decodeFlightElementModel } from "../src/flight-element-builder.js";
+import type { FlightModel } from "../src/flight-types.js";
 
 describe("react-compat Flight internals", () => {
   test("parser converts React Flight rows into a typed response model", () => {
@@ -56,7 +57,7 @@ describe("react-compat Flight internals", () => {
   });
 
   test("decoder materializes __proto__ as an own data property", () => {
-    const model = JSON.parse('{"__proto__":{"isAdmin":true}}') as Record<string, unknown>;
+    const model: FlightModel = JSON.parse('{"__proto__":{"isAdmin":true}}');
     const decoded = decodeFlightModel(
       model,
       {

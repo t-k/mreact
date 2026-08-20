@@ -4,8 +4,10 @@
 
 ```ts
 
+import { REACT_CLIENT_REFERENCE_TYPE } from '@reckona/mreact-shared';
+
 // @public
-export const CLIENT_REFERENCE_TYPE: unique symbol;
+export const CLIENT_REFERENCE_TYPE: typeof REACT_CLIENT_REFERENCE_TYPE;
 
 // @public
 export interface ClientReference {

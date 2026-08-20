@@ -22,6 +22,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type ReactCompatNode,
 } from "../src/index.js";
 import { getFiberRootForContainer } from "../src/fiber-work-loop.js";
 import { getAppliedEventHandler, getAppliedProps } from "../src/host-event-binder.js";
@@ -1161,6 +1162,7 @@ describe("react-compat render", () => {
     render(createElement("button", { onClick }, "Click"), container);
 
     const button = container.querySelector("button");
+    // @ts-expect-error Listener metadata was intentionally removed from AppliedProps.
     expect(getAppliedProps(button!)?.listeners).toBeUndefined();
     expect(getAppliedEventHandler(button!, "onClick")).toBe(onClick);
   });
@@ -1394,11 +1396,7 @@ describe("react-compat render", () => {
       };
       const element =
         tagName === "select"
-          ? createElement(
-              "select",
-              eventProps,
-              createElement("option", { value: "a" }, "A"),
-            )
+          ? createElement("select", eventProps, createElement("option", { value: "a" }, "A"))
           : createElement("input", eventProps);
 
       render(element, container);
@@ -1805,7 +1803,7 @@ describe("react-compat render", () => {
       }, initialState);
     }
 
-    function Presence(props: { present: boolean; children?: unknown }) {
+    function Presence(props: { present: boolean; children?: ReactCompatNode }) {
       const presence = usePresence(props.present);
       const child = Children.only(props.children as never);
 
@@ -1847,7 +1845,7 @@ describe("react-compat render", () => {
       };
     }
 
-    const PortalPrimitive = forwardRef<{ children?: unknown }, HTMLDivElement>(
+    const PortalPrimitive = forwardRef<{ children?: ReactCompatNode }, HTMLDivElement>(
       (props, forwardedRef) => {
         const [mounted, setMounted] = useState(false);
         useLayoutEffect(() => {
@@ -1959,7 +1957,7 @@ describe("react-compat render", () => {
     const root = createRoot(container);
     const effects: string[] = [];
 
-    function FocusScopeLike(props: { children?: unknown }) {
+    function FocusScopeLike(props: { children?: ReactCompatNode }) {
       const [scope, setScope] = useState<HTMLDivElement | null>(null);
 
       useEffect(() => {
@@ -2165,9 +2163,9 @@ describe("react-compat render", () => {
       ),
     );
 
-    innerContainer.querySelector("button")?.dispatchEvent(
-      new MouseEvent("click", { bubbles: true, cancelable: true }),
-    );
+    innerContainer
+      .querySelector("button")
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
 
     expect(calls).toEqual(["inner", "outer"]);
   });
@@ -2248,9 +2246,9 @@ describe("react-compat render", () => {
       ),
       container,
     );
-    container.querySelector("section > div")?.dispatchEvent(
-      new Event("beforetoggle", { bubbles: false }),
-    );
+    container
+      .querySelector("section > div")
+      ?.dispatchEvent(new Event("beforetoggle", { bubbles: false }));
 
     expect(handler).toHaveBeenCalledTimes(1);
   });
@@ -2273,12 +2271,7 @@ describe("react-compat render", () => {
     );
     container.querySelector("img")?.dispatchEvent(new Event("load", { bubbles: false }));
 
-    expect(calls).toEqual([
-      "parent:capture",
-      "target:capture",
-      "target:bubble",
-      "parent:bubble",
-    ]);
+    expect(calls).toEqual(["parent:capture", "target:capture", "target:bubble", "parent:bubble"]);
   });
 
   test("defers capture updates until direct bubble dispatch completes", () => {
@@ -2321,9 +2314,9 @@ describe("react-compat render", () => {
       ),
       container,
     );
-    container.querySelector("section > div")?.dispatchEvent(
-      new Event("scroll", { bubbles: false }),
-    );
+    container
+      .querySelector("section > div")
+      ?.dispatchEvent(new Event("scroll", { bubbles: false }));
 
     expect(calls).toEqual(["parent:capture", "target:capture", "target:bubble"]);
   });
@@ -2422,12 +2415,7 @@ describe("react-compat render", () => {
       );
       document.body.querySelector("img")?.dispatchEvent(new Event("load", { bubbles: false }));
 
-      expect(calls).toEqual([
-        "owner:capture",
-        "portal:capture",
-        "portal:bubble",
-        "owner:bubble",
-      ]);
+      expect(calls).toEqual(["owner:capture", "portal:capture", "portal:bubble", "owner:bubble"]);
     } finally {
       root.unmount();
       container.remove();
@@ -2864,7 +2852,7 @@ describe("react-compat render", () => {
     const apiTerm = container.querySelectorAll("dt")[1];
     const apiDescription = container.querySelectorAll("dd")[1];
 
-    root.render(renderSections(sections.toReversed()));
+    root.render(renderSections([...sections].reverse()));
 
     expect(container.innerHTML).toBe(
       "<dl><dt>api</dt><dd>API</dd><dt>intro</dt><dd>Intro</dd></dl>",

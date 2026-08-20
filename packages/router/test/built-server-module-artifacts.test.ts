@@ -8,7 +8,17 @@ import {
   type BuiltServerModuleArtifactRuntime,
 } from "../src/built-server-module-artifacts.js";
 
-function createRuntime(appDir: string): BuiltServerModuleArtifactRuntime {
+type MutableArtifactRuntime = Omit<
+  BuiltServerModuleArtifactRuntime,
+  "serverModuleFiles" | "serverModuleRenderFiles" | "serverModuleRequestFiles" | "serverSourceFiles"
+> & {
+  serverModuleFiles: Map<string, string>;
+  serverModuleRenderFiles: Map<string, string>;
+  serverModuleRequestFiles: Map<string, string>;
+  serverSourceFiles: Map<string, string>;
+};
+
+function createRuntime(appDir: string): MutableArtifactRuntime {
   return {
     appDir,
     serverModuleArtifactLoads: new Map(),
@@ -33,7 +43,9 @@ describe("built server module artifact loading", () => {
     await writeFile(join(codeDir, "page.mjs"), "export const page = true;");
     await writeFile(
       join(requestDir, "page.json"),
-      JSON.stringify({ loader: { moduleFile: "server-modules/code/page.mjs", sourceHash: "page" } }),
+      JSON.stringify({
+        loader: { moduleFile: "server-modules/code/page.mjs", sourceHash: "page" },
+      }),
     );
     await writeFile(
       join(requestDir, "dep.json"),

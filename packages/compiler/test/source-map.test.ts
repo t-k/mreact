@@ -37,21 +37,14 @@ describe("compiler source maps", () => {
     expect(map.sources).toEqual(["App.tsx"]);
     expect(map.sourcesContent).toEqual([code]);
     expect(map.mappings).not.toBe("");
-    expect(map.mappings.split(";").length).toBe(
-      output.code.split("\n").length,
-    );
-    expect(
-      map.mappings.split(";").some((line) => line.split(",").length > 1),
-    ).toBe(true);
+    expect(map.mappings.split(";").length).toBe(output.code.split("\n").length);
+    expect(map.mappings.split(";").some((line) => line.split(",").length > 1)).toBe(true);
   });
 
   test("maps generated template segments back to the JSX source column", () => {
-    const code = [
-      "export function App() {",
-      '  return <div id="x">Hello</div>;',
-      "}",
-      "",
-    ].join("\n");
+    const code = ["export function App() {", '  return <div id="x">Hello</div>;', "}", ""].join(
+      "\n",
+    );
     const output = transform({
       code,
       filename: "App.tsx",
@@ -97,6 +90,7 @@ describe("compiler source maps", () => {
       sourceMap: true,
     });
     const map = JSON.parse(output.map as string) as {
+      names: string[];
       mappings: string;
     };
     const decoded = decodeMappings(map.mappings);
@@ -183,10 +177,7 @@ describe("compiler source maps", () => {
       .split("\n")
       .findIndex((line) => line.includes('bindProp(_root, "aria-label"'));
     const sourceLine = code.split("\n")[2] ?? "";
-    const sourceExpressionColumn = sourceLine.indexOf(
-      "name",
-      sourceLine.indexOf("aria-label"),
-    );
+    const sourceExpressionColumn = sourceLine.indexOf("name", sourceLine.indexOf("aria-label"));
 
     expect(generatedAriaLine).toBeGreaterThanOrEqual(0);
     expect(sourceExpressionColumn).toBeGreaterThanOrEqual(0);
@@ -393,8 +384,7 @@ function decodeSegment(segment: string): number[] {
   return values;
 }
 
-const sourceMapBase64 =
-  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const sourceMapBase64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 function encodeVlqReference(value: number): string {
   let vlq = value < 0 ? -value * 2 + 1 : value * 2;

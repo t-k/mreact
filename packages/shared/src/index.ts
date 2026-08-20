@@ -3,3 +3,4 @@ export * from "./html-elements.js";
 export * from "./url-safety.js";
 export * from "./compiler-contract.js";
 export * from "./dom-prop-names.js";
+export * from "./react-symbols.js";

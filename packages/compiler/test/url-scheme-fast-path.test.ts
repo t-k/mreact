@@ -6,6 +6,7 @@ function compileServer(code: string): string {
     code,
     filename: "page.tsx",
     target: "server",
+    dev: false,
   });
   return output.code;
 }
@@ -15,6 +16,7 @@ function compileServerStream(code: string): string {
     code,
     filename: "page.tsx",
     target: "server",
+    dev: false,
     serverOutput: "stream",
   });
   return output.code;

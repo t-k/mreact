@@ -76,7 +76,7 @@ describe("reactive-dom native bundle layering", () => {
           ],
         },
       });
-      const chunks = Array.isArray(result) ? result : [result];
+      const chunks = (Array.isArray(result) ? result : [result]) as Rollup.RollupOutput[];
       const code = chunks
         .flatMap((output) => output.output)
         .filter((output): output is Rollup.OutputChunk => output.type === "chunk")

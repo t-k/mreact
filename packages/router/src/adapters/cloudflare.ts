@@ -217,6 +217,7 @@ export type CloudflareRouteModuleComponent<Data = unknown, Env = unknown> = (
  * Defines the exports accepted from a Cloudflare page route module.
  */
 export interface CloudflareRouteModule<Data = unknown, Env = unknown> {
+  [exportName: string]: unknown;
   App?: CloudflareRouteModuleComponent<Data, Env> | undefined;
   CloudflareRouteComponent?: CloudflareRouteModuleComponent<Data, Env> | undefined;
   default?: CloudflareRouteModuleComponent<Data, Env> | undefined;
@@ -1413,9 +1414,7 @@ function prerenderedResponse(
     return undefined;
   }
 
-  const html = isNavigation
-    ? validatedPrerenderedNavigationHtml(prerendered)
-    : prerendered.html;
+  const html = isNavigation ? validatedPrerenderedNavigationHtml(prerendered) : prerendered.html;
   if (html === undefined) {
     return cloudflareDocumentReloadNavigationResponse();
   }

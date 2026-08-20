@@ -1,5 +1,4 @@
-const REACT_COMPAT_PROVIDER_TYPE = Symbol.for("react.context");
-const REACT_COMPAT_CONSUMER_TYPE = Symbol.for("react.consumer");
+import { REACT_COMPAT_CONSUMER_TYPE, REACT_COMPAT_PROVIDER_TYPE } from "@reckona/mreact-shared";
 
 export interface ReactCompatContext<T> {
   defaultValue: T;
@@ -19,19 +18,17 @@ export interface ReactCompatExternalContext<T> {
   displayName?: string | undefined;
 }
 
-export type ReactCompatContextLike<T> =
-  | ReactCompatContext<T>
-  | ReactCompatExternalContext<T>;
+export type ReactCompatContextLike<T> = ReactCompatContext<T> | ReactCompatExternalContext<T>;
 
 export interface ReactCompatProvider<T> {
   $$typeof: typeof REACT_COMPAT_PROVIDER_TYPE;
-  context?: ReactCompatContextLike<T>;
+  context: ReactCompatContextLike<T>;
   displayName: string | undefined;
 }
 
 export interface ReactCompatConsumer<T> {
   $$typeof: typeof REACT_COMPAT_CONSUMER_TYPE;
-  context?: ReactCompatContextLike<T>;
+  context: ReactCompatContextLike<T>;
   _context?: ReactCompatContextLike<T>;
   displayName: string | undefined;
 }
@@ -52,24 +49,18 @@ interface ContextEnvironmentState {
 
 const externalContextValues = new WeakMap<object, unknown[]>();
 
-const CONTEXT_READ_OBSERVER_STATE_KEY = Symbol.for(
-  "modular.react.context_read_observer_state",
-);
-const contextReadObserverState =
-  ((globalThis as typeof globalThis & Record<symbol, ContextReadObserverState | undefined>)[
-    CONTEXT_READ_OBSERVER_STATE_KEY
-  ] ??= {
-    current: undefined,
-  });
-const CONTEXT_ENVIRONMENT_STATE_KEY = Symbol.for(
-  "modular.react.context_environment_state",
-);
-const contextEnvironmentState =
-  ((globalThis as typeof globalThis & Record<symbol, ContextEnvironmentState | undefined>)[
-    CONTEXT_ENVIRONMENT_STATE_KEY
-  ] ??= {
-    current: undefined,
-  });
+const CONTEXT_READ_OBSERVER_STATE_KEY = Symbol.for("modular.react.context_read_observer_state");
+const contextReadObserverState = ((
+  globalThis as typeof globalThis & Record<symbol, ContextReadObserverState | undefined>
+)[CONTEXT_READ_OBSERVER_STATE_KEY] ??= {
+  current: undefined,
+});
+const CONTEXT_ENVIRONMENT_STATE_KEY = Symbol.for("modular.react.context_environment_state");
+const contextEnvironmentState = ((
+  globalThis as typeof globalThis & Record<symbol, ContextEnvironmentState | undefined>
+)[CONTEXT_ENVIRONMENT_STATE_KEY] ??= {
+  current: undefined,
+});
 
 /** Creates isolated provider storage for one concurrent Fiber root. */
 export function createContextEnvironment(): ContextEnvironment {
@@ -77,10 +68,7 @@ export function createContextEnvironment(): ContextEnvironment {
 }
 
 /** Runs synchronous Fiber work against an isolated context environment. */
-export function withContextEnvironment<T>(
-  environment: ContextEnvironment,
-  render: () => T,
-): T {
+export function withContextEnvironment<T>(environment: ContextEnvironment, render: () => T): T {
   const previousEnvironment = contextEnvironmentState.current;
   contextEnvironmentState.current = environment;
 
@@ -125,10 +113,8 @@ function installContextDisplayName<T>(context: ReactCompatContext<T>): void {
     },
     set(value: string | undefined) {
       displayName = value;
-      context.Provider.displayName =
-        value === undefined ? undefined : `${value}.Provider`;
-      context.Consumer.displayName =
-        value === undefined ? undefined : `${value}.Consumer`;
+      context.Provider.displayName = value === undefined ? undefined : `${value}.Provider`;
+      context.Consumer.displayName = value === undefined ? undefined : `${value}.Consumer`;
     },
   });
 }
@@ -174,10 +160,7 @@ export function readContextValue<T>(context: ReactCompatContextLike<T>): T {
   return context._defaultValue as T;
 }
 
-export function withContextReadObserver<T>(
-  observer: ContextReadObserver,
-  render: () => T,
-): T {
+export function withContextReadObserver<T>(observer: ContextReadObserver, render: () => T): T {
   const previousObserver = contextReadObserverState.current;
   contextReadObserverState.current = observer;
 
@@ -188,9 +171,7 @@ export function withContextReadObserver<T>(
   }
 }
 
-export function isReactCompatProvider(
-  value: unknown,
-): value is ReactCompatProvider<unknown> {
+export function isReactCompatProvider(value: unknown): value is ReactCompatProvider<unknown> {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -198,9 +179,7 @@ export function isReactCompatProvider(
   );
 }
 
-export function isReactCompatContext(
-  value: unknown,
-): value is ReactCompatContext<unknown> {
+export function isReactCompatContext(value: unknown): value is ReactCompatContext<unknown> {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -211,9 +190,7 @@ export function isReactCompatContext(
   );
 }
 
-export function isReactCompatConsumer(
-  value: unknown,
-): value is ReactCompatConsumer<unknown> {
+export function isReactCompatConsumer(value: unknown): value is ReactCompatConsumer<unknown> {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -235,10 +212,7 @@ export function renderWithContextProvider<T, R>(
   }
 }
 
-export function pushContextProvider<T>(
-  provider: ReactCompatProvider<T>,
-  value: T,
-): void {
+export function pushContextProvider<T>(provider: ReactCompatProvider<T>, value: T): void {
   const context = providerContext(provider);
   const environment = contextEnvironmentState.current;
 
@@ -293,19 +267,13 @@ export function renderContextConsumerToString<T>(
   return render(useContext(consumerContext(consumer)));
 }
 
-export function providerContext<T>(
-  provider: ReactCompatProvider<T>,
-): ReactCompatContextLike<T> {
+export function providerContext<T>(provider: ReactCompatProvider<T>): ReactCompatContextLike<T> {
   return provider.context ?? (provider as unknown as ReactCompatExternalContext<T>);
 }
 
-export function consumerContext<T>(
-  consumer: ReactCompatConsumer<T>,
-): ReactCompatContextLike<T> {
+export function consumerContext<T>(consumer: ReactCompatConsumer<T>): ReactCompatContextLike<T> {
   return (
-    consumer.context ??
-    consumer._context ??
-    (consumer as unknown as ReactCompatExternalContext<T>)
+    consumer.context ?? consumer._context ?? (consumer as unknown as ReactCompatExternalContext<T>)
   );
 }
 

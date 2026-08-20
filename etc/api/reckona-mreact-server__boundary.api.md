@@ -42,11 +42,9 @@ export interface OutOfOrderReorderScriptOptions {
 }
 
 // @public
-export interface ReactSuspenseBoundaryOptions extends AsyncBoundaryOptions {
+export interface ReactSuspenseBoundaryOptions extends AsyncBoundaryOptions, ReactSuspenseScriptOptions {
     // (undocumented)
     fallback?: (sink: HtmlSink) => void | PromiseLike<void>;
-    // (undocumented)
-    nonce?: string;
 }
 
 // @public

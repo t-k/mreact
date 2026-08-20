@@ -51,7 +51,10 @@ describe("buffer sink", () => {
     const flushed: Uint8Array[] = [];
 
     try {
-      globalWithBuffer.Buffer = { ...(previousBuffer as object), allocUnsafe: undefined };
+      globalWithBuffer.Buffer = {
+        ...(previousBuffer as object),
+        allocUnsafe: undefined,
+      } as unknown as typeof globalThis.Buffer;
       const sink = createStreamingBufferSink({
         flushThreshold: 1024,
         onFlush(buffer) {

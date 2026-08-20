@@ -16,6 +16,7 @@ import {
   tryRequirePermission,
   tryRequireRole,
 } from "../src/index.js";
+import type { AuthSessionClaims } from "../src/index.js";
 
 const originalEnv = process.env.NODE_ENV;
 
@@ -327,9 +328,9 @@ describe("auth package", () => {
     await expect(requireRole(request, store, "   ")).rejects.toThrow(
       "Role requirement must contain at least one role.",
     );
-    await expect(
-      requirePermission(request, store, undefined as never),
-    ).rejects.toThrow("Permission requirement must contain at least one permission.");
+    await expect(requirePermission(request, store, undefined as never)).rejects.toThrow(
+      "Permission requirement must contain at least one permission.",
+    );
   });
 
   it("treats empty policy axes as unconstrained", () => {
@@ -526,9 +527,10 @@ describe("auth package", () => {
         async () => {
           await getCurrentSession(firstRequest, store);
           const claims = getSessionClaims();
-          const redirect = await requireSession(new Request("https://app.test/missing"), store).catch(
-            (error: unknown) => error,
-          );
+          const redirect = await requireSession(
+            new Request("https://app.test/missing"),
+            store,
+          ).catch((error: unknown) => error);
           return {
             claims,
             location:
@@ -551,9 +553,10 @@ describe("auth package", () => {
         async () => {
           await getCurrentSession(secondRequest, store);
           const claims = getSessionClaims();
-          const redirect = await requireSession(new Request("https://app.test/missing"), store).catch(
-            (error: unknown) => error,
-          );
+          const redirect = await requireSession(
+            new Request("https://app.test/missing"),
+            store,
+          ).catch((error: unknown) => error);
           return {
             claims,
             location:

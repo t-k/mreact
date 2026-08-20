@@ -2,10 +2,7 @@
 
 import { describe, expect, test } from "vitest";
 import { transform } from "../src/index.js";
-import {
-  compileClientModule,
-  runClientComponent,
-} from "./helpers.js";
+import { compileClientModule, runClientComponent } from "./helpers.js";
 
 describe("compiler client runtime dynamic output", () => {
   test("emits dynamic writer source labels only in development output", () => {
@@ -57,7 +54,7 @@ describe("compiler client runtime dynamic output", () => {
 
     expect(runtimeState.__attachedDomRef).toBe(node);
     delete runtimeState.__attachedDomRef;
-    node.remove();
+    (node as ChildNode).remove();
   });
 
   test("aliases the domRef runtime helper around component-local bindings", async () => {
@@ -89,7 +86,7 @@ describe("compiler client runtime dynamic output", () => {
     expect(runtimeState.__localBindDomRefCalled).toBeUndefined();
     expect(runtimeState.__attachedDomRef).toBe(node);
     delete runtimeState.__attachedDomRef;
-    node.remove();
+    (node as ChildNode).remove();
   });
 
   test("preserves user literals and identifiers that match old emitter placeholders", async () => {
@@ -204,7 +201,7 @@ describe("compiler client runtime dynamic output", () => {
 
   test("decodes JSX entities inside function-call component DOM output", async () => {
     const output = transform({
-      code: 'function Chevron() { return <span>&rsaquo;</span>; } export function App() { return <div>{Chevron()}</div>; }',
+      code: "function Chevron() { return <span>&rsaquo;</span>; } export function App() { return <div>{Chevron()}</div>; }",
       filename: "App.tsx",
       target: "client",
       dev: true,

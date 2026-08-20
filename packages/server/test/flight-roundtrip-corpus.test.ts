@@ -227,16 +227,17 @@ describe("Flight round-trip corpus (issue 081)", () => {
       "m",
     ],
     ["data-view", { kind: "data-view", bytes: [1, 2, 3, 4] }, "V"],
-  ] as const)("emits the %s model with binary row tag %s", (_label, root, tag) => {
-    const payload = toReactFlightPayload({ ...baseResponse, root });
-    const prefix = new TextEncoder().encode(`1:${tag}4,`);
+  ] satisfies ReadonlyArray<readonly [string, FlightModel, string]>)(
+    "emits the %s model with binary row tag %s",
+    (_label, root, tag) => {
+      const payload = toReactFlightPayload({ ...baseResponse, root });
+      const prefix = new TextEncoder().encode(`1:${tag}4,`);
 
-    expect(payload.slice(0, prefix.length)).toEqual(prefix);
-    expect(payload.slice(prefix.length, prefix.length + 4)).toEqual(
-      new Uint8Array([1, 2, 3, 4]),
-    );
-    expect(parseFlightResponse(payload).root).toEqual(root);
-  });
+      expect(payload.slice(0, prefix.length)).toEqual(prefix);
+      expect(payload.slice(prefix.length, prefix.length + 4)).toEqual(new Uint8Array([1, 2, 3, 4]));
+      expect(parseFlightResponse(payload).root).toEqual(root);
+    },
+  );
 
   test("encodes a large binary model without argument-list overflow", () => {
     const bytes = Array.from({ length: 128 * 1024 }, (_unused, index) => index & 0xff);
@@ -251,7 +252,7 @@ describe("Flight round-trip corpus (issue 081)", () => {
   });
 
   test("preserves the legacy Base64 binary representation in the text row encoder", () => {
-    const root = { kind: "array-buffer", bytes: [1, 2, 3, 4] } as const;
+    const root: FlightModel = { kind: "array-buffer", bytes: [1, 2, 3, 4] };
     const rows = toReactFlightRows({ ...baseResponse, root });
 
     expect(rows).toBe('1:A4,AQIDBA==\n0:"$1"');

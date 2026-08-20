@@ -995,7 +995,7 @@ export function App() {
 
     expect(host.textContent).toBe("Loading");
 
-    (globalThis as { __setStatus(value: string): void }).__setStatus("ready");
+    (globalThis as unknown as { __setStatus(value: string): void }).__setStatus("ready");
     await flushEffects();
 
     expect(host.querySelector("button")?.textContent).toBe("Ready");
@@ -1053,11 +1053,11 @@ export function App() {
 
     expect(host.textContent).toBe("Landing");
 
-    (globalThis as { __showMain(): void }).__showMain();
+    (globalThis as unknown as { __showMain(): void }).__showMain();
     await flushEffects();
     expect(host.textContent).toBe("Main");
 
-    (globalThis as { __showVariant(): void }).__showVariant();
+    (globalThis as unknown as { __showVariant(): void }).__showVariant();
     await flushEffects();
     expect(host.querySelector("aside")?.firstChild?.textContent).toBe("Variant");
     expect(host.querySelector("[aria-live='polite']")?.textContent).toBe("Saved");
@@ -2071,8 +2071,7 @@ export function App() {
     expect(changedCard?.getAttribute("data-revision")).toBe("1");
     expect(card?.isConnected).toBe(false);
 
-    delete (globalThis as typeof globalThis & { __nativeMemoRenders?: number })
-      .__nativeMemoRenders;
+    delete (globalThis as typeof globalThis & { __nativeMemoRenders?: number }).__nativeMemoRenders;
     delete (globalThis as typeof globalThis & { __nativeMemoComparisons?: number })
       .__nativeMemoComparisons;
   });

@@ -15,10 +15,7 @@ import {
   useContext,
   withContextReadObserver,
 } from "./context.js";
-import {
-  REACTIVE_STATE_BINDING_META,
-  REACTIVE_TEXT_BINDING_META,
-} from "./element.js";
+import { REACTIVE_STATE_BINDING_META, REACTIVE_TEXT_BINDING_META } from "./element.js";
 import { isThenable } from "./thenable.js";
 
 export interface RootRuntime {
@@ -270,18 +267,17 @@ interface HookRenderState {
 }
 
 const HOOK_RENDER_STATE_KEY = Symbol.for("modular.react.hook_render_state");
-const hookRenderState =
-  ((globalThis as typeof globalThis & Record<symbol, HookRenderState | undefined>)[
-    HOOK_RENDER_STATE_KEY
-  ] ??= {
-    currentRuntime: undefined,
-    currentInstance: undefined,
-    pendingInstance: undefined,
-    currentCacheScope: undefined,
-    hostCommitDepth: 0,
-    queuedHostCommitRerenders: new Set<RootRuntime>(),
-    queuedEffectFlushRerenders: new Set<RootRuntime>(),
-  });
+const hookRenderState = ((
+  globalThis as typeof globalThis & Record<symbol, HookRenderState | undefined>
+)[HOOK_RENDER_STATE_KEY] ??= {
+  currentRuntime: undefined,
+  currentInstance: undefined,
+  pendingInstance: undefined,
+  currentCacheScope: undefined,
+  hostCommitDepth: 0,
+  queuedHostCommitRerenders: new Set<RootRuntime>(),
+  queuedEffectFlushRerenders: new Set<RootRuntime>(),
+});
 const CACHE_SCOPE_SYMBOL = Symbol.for("modular.react.cache_scope");
 const NO_TRANSITION_ERROR = Symbol("mreact.no-transition-error");
 let cacheScopeStorage = createCacheScopeStorage();
@@ -376,9 +372,7 @@ export function act<T>(callback: () => T): T extends PromiseLike<unknown> ? Prom
 
   finishActScope();
   flushActWork();
-  return undefined as T extends PromiseLike<unknown>
-    ? Promise<void>
-    : void;
+  return undefined as T extends PromiseLike<unknown> ? Promise<void> : void;
 }
 
 async function flushActWorkAsync(): Promise<void> {
@@ -609,7 +603,10 @@ export function createRootRuntime(
           throw effectErrors[0];
         }
         if (effectErrors.length > 1) {
-          throw new AggregateError(effectErrors, "Multiple errors occurred while flushing effects.");
+          throw new AggregateError(
+            effectErrors,
+            "Multiple errors occurred while flushing effects.",
+          );
         }
       } finally {
         this.effectFlushPhase = undefined;
@@ -730,10 +727,7 @@ export function renderWithProfiler<T>(
 
     if (typeof onRender === "function" && typeof id === "string") {
       const actualDuration = Math.max(0, getCurrentTime() - startTime);
-      const baseDuration = Math.max(
-        runtime.profilerBaseDurations.get(path) ?? 0,
-        actualDuration,
-      );
+      const baseDuration = Math.max(runtime.profilerBaseDurations.get(path) ?? 0, actualDuration);
       runtime.profilerBaseDurations.set(path, baseDuration);
       runtime.pendingProfilerCommits.push({
         id,
@@ -839,10 +833,7 @@ function materializeInstance(): ComponentInstance {
   return instance;
 }
 
-function recordContextDependency(
-  context: ReactCompatContextLike<unknown>,
-  value: unknown,
-): void {
+function recordContextDependency(context: ReactCompatContextLike<unknown>, value: unknown): void {
   const instance = hookRenderState.currentInstance ?? materializeInstance();
   (instance.contextDependencies ??= new Map()).set(context, value);
 }
@@ -868,10 +859,7 @@ export function hasChangedContextDependency(
   return false;
 }
 
-export function hasContextDependency(
-  runtime: RootRuntime,
-  keys: readonly string[],
-): boolean {
+export function hasContextDependency(runtime: RootRuntime, keys: readonly string[]): boolean {
   return keys.some((key) => runtime.instances.get(key)?.contextDependencies !== undefined);
 }
 
@@ -918,10 +906,7 @@ export function getDevToolsHookState(
   };
 }
 
-export function renderWithStrictMode<T>(
-  runtime: RootRuntime,
-  render: () => T,
-): T {
+export function renderWithStrictMode<T>(runtime: RootRuntime, render: () => T): T {
   runtime.strictModeDepth += 1;
 
   try {
@@ -998,10 +983,7 @@ export function takeRuntimeSnapshot(runtime: RootRuntime): RuntimeSnapshot {
   };
 }
 
-export function restoreRuntimeSnapshot(
-  runtime: RootRuntime,
-  snapshot: RuntimeSnapshot,
-): void {
+export function restoreRuntimeSnapshot(runtime: RootRuntime, snapshot: RuntimeSnapshot): void {
   runtime.pendingInsertionEffects.length = snapshot.pendingInsertionEffectsLength;
   runtime.pendingImperativeHandleEffects.length = snapshot.pendingImperativeHandleEffectsLength;
   runtime.pendingLayoutEffects.length = snapshot.pendingLayoutEffectsLength;
@@ -1070,9 +1052,14 @@ function clonePortalNodes(source: Map<Element, Set<Node>>): Map<Element, Set<Nod
 }
 
 /** Stores component-local state and returns the current value with an updater. */
+export function useState<T>(initial: T | (() => T)): [T, (value: T | ((previous: T) => T)) => void];
+export function useState<T = undefined>(): [
+  T | undefined,
+  (value: T | undefined | ((previous: T | undefined) => T | undefined)) => void,
+];
 export function useState<T>(
-  initial: T | (() => T),
-): [T, (value: T | ((previous: T) => T)) => void] {
+  initial?: T | (() => T),
+): [T | undefined, (value: T | undefined | ((previous: T | undefined) => T | undefined)) => void] {
   const runtime = requireRuntime();
   const instance = requireInstance();
   const index = instance.hookIndex;
@@ -1109,13 +1096,14 @@ export function useState<T>(
     value: state,
   });
 
-  const result = [state as T, setState] as [
-    T,
-    (value: T | ((previous: T) => T)) => void,
-  ] & Record<PropertyKey, unknown>;
+  const result = [state as T, setState] as [T, (value: T | ((previous: T) => T)) => void] &
+    Record<PropertyKey, unknown>;
   result[REACTIVE_TEXT_BINDING_META] = getStateTextBinding(slot, state);
   result[REACTIVE_STATE_BINDING_META] = getStateBinding(slot);
-  return result;
+  return result as [
+    T | undefined,
+    (value: T | undefined | ((previous: T | undefined) => T | undefined)) => void,
+  ];
 }
 
 function enqueueStateUpdate(
@@ -1131,9 +1119,8 @@ function enqueueStateUpdate(
     return;
   }
   const lane = currentTransitionContext === undefined ? "sync" : "transition";
-  const renderDraft = hookRenderState.hostCommitDepth > 0
-    ? stateRenderDrafts.get(runtime)?.get(slot)
-    : undefined;
+  const renderDraft =
+    hookRenderState.hostCommitDepth > 0 ? stateRenderDrafts.get(runtime)?.get(slot) : undefined;
   if (
     lane === "sync" &&
     typeof value === "function" &&
@@ -1247,9 +1234,10 @@ function finishStateRender(runtime: RootRuntime, committed: boolean): boolean {
     }
 
     const appendedUpdates = (draft.slot.updates ?? []).slice(draft.processedUpdateCount);
-    const compactedAppendedUpdates = draft.remainingUpdates.length === 0
-      ? compactLiteralNoopUpdates(draft.value, appendedUpdates)
-      : appendedUpdates;
+    const compactedAppendedUpdates =
+      draft.remainingUpdates.length === 0
+        ? compactLiteralNoopUpdates(draft.value, appendedUpdates)
+        : appendedUpdates;
     const remainingUpdates = [...draft.remainingUpdates, ...compactedAppendedUpdates];
     draft.slot.value = draft.value;
     draft.slot.baseState = draft.baseState;
@@ -1301,16 +1289,11 @@ function finishOptimisticRender(runtime: RootRuntime, committed: boolean): void 
   }
 }
 
-function compactLiteralNoopUpdates(
-  state: unknown,
-  updates: readonly StateUpdate[],
-): StateUpdate[] {
+function compactLiteralNoopUpdates(state: unknown, updates: readonly StateUpdate[]): StateUpdate[] {
   const lane = updates[0]?.lane;
   if (
     updates.length === 0 ||
-    updates.some(
-      (update) => typeof update.action === "function" || update.lane !== lane,
-    )
+    updates.some((update) => typeof update.action === "function" || update.lane !== lane)
   ) {
     return [...updates];
   }
@@ -1367,9 +1350,7 @@ function getStateTextBinding(
   return slot.textBinding;
 }
 
-function getStateBinding(
-  slot: Extract<HookSlot, { kind: "state" }>,
-): ReactiveStateBinding {
+function getStateBinding(slot: Extract<HookSlot, { kind: "state" }>): ReactiveStateBinding {
   slot.stateBinding ??= {
     value: slot.value,
     source: { subscribers: null },
@@ -1385,7 +1366,10 @@ function optionsAllowDirectTextBinding(value: unknown): boolean {
   return typeof value !== "function";
 }
 
-function updateDirectTextBinding(binding: ReactiveTextBinding | undefined, value: unknown): boolean {
+function updateDirectTextBinding(
+  binding: ReactiveTextBinding | undefined,
+  value: unknown,
+): boolean {
   if (binding === undefined || binding.subscribers.size === 0) {
     return false;
   }
@@ -1434,6 +1418,15 @@ function isReactiveTextBinding(value: unknown): value is ReactiveTextBinding {
 }
 
 /** Stores reducer-managed component state and returns the current state with a dispatch function. */
+export function useReducer<TState>(
+  reducer: (state: TState) => TState,
+  initialArg: TState,
+): [TState, () => void];
+export function useReducer<TState, TAction, TInitial = TState>(
+  reducer: (state: TState, action: TAction) => TState,
+  initialArg: TInitial,
+  init?: (initialArg: TInitial) => TState,
+): [TState, (action: TAction) => void];
 export function useReducer<TState, TAction, TInitial = TState>(
   reducer: (state: TState, action: TAction) => TState,
   initialArg: TInitial,
@@ -1448,9 +1441,7 @@ export function useReducer<TState, TAction, TInitial = TState>(
   const reducerRef = runWithoutDevToolsHookTracking(() => useRef(reducer));
   const stateRef = runWithoutDevToolsHookTracking(() => useRef(state));
   const dispatchRef = runWithoutDevToolsHookTracking(() =>
-    useRef<((action: TAction) => void) | undefined>(
-      undefined,
-    )
+    useRef<((action: TAction) => void) | undefined>(undefined),
   );
   reducerRef.current = reducer;
   stateRef.current = state;
@@ -1471,10 +1462,8 @@ export function useReducer<TState, TAction, TInitial = TState>(
     value: state,
   });
 
-  const result = [state, dispatchRef.current] as [
-    TState,
-    (action: TAction) => void,
-  ] & Record<PropertyKey, unknown>;
+  const result = [state, dispatchRef.current] as [TState, (action: TAction) => void] &
+    Record<PropertyKey, unknown>;
   const stateBinding = (stateTuple as unknown as Record<PropertyKey, unknown>)[
     REACTIVE_STATE_BINDING_META
   ];
@@ -1515,14 +1504,11 @@ export function useId(): string {
   const runtime = requireRuntime();
   const instance = requireInstance();
   const idSlotKey = `${instance.path}:${instance.hookIndex}`;
-  const idRef = runWithoutDevToolsHookTracking(() =>
-    useRef<string | undefined>(undefined)
-  );
+  const idRef = runWithoutDevToolsHookTracking(() => useRef<string | undefined>(undefined));
 
   if (idRef.current === undefined) {
-    const hydratedId = runtime.idMode === "client"
-      ? hydratedIdsByRuntime.get(runtime)?.get(idSlotKey)
-      : undefined;
+    const hydratedId =
+      runtime.idMode === "client" ? hydratedIdsByRuntime.get(runtime)?.get(idSlotKey) : undefined;
 
     if (hydratedId !== undefined) {
       idRef.current = hydratedId;
@@ -1560,17 +1546,22 @@ export function useImperativeHandle<T>(
   deps?: readonly unknown[],
 ): void {
   runWithoutDevToolsHookTracking(() =>
-    useEffectImpl("imperative-handle", () => {
-      const handle = create();
-      assignRef(ref, handle);
-      return () => {
-        assignRef(ref, null);
-      };
-    }, deps === undefined ? undefined : [ref, ...deps])
+    useEffectImpl(
+      "imperative-handle",
+      () => {
+        const handle = create();
+        assignRef(ref, handle);
+        return () => {
+          assignRef(ref, null);
+        };
+      },
+      deps === undefined ? undefined : [ref, ...deps],
+    ),
   );
-  recordDevToolsHook("useImperativeHandle", deps === undefined
-    ? { kind: "imperative-handle" }
-    : { kind: "imperative-handle", deps });
+  recordDevToolsHook(
+    "useImperativeHandle",
+    deps === undefined ? { kind: "imperative-handle" } : { kind: "imperative-handle", deps },
+  );
 }
 
 /** Memoizes a computed value until its dependency list changes. */
@@ -1605,17 +1596,15 @@ export function useMemo<T>(factory: () => T, deps?: readonly unknown[]): T {
     const hookKey = getStrictMemoHookKey(instance, index);
     const replayByHook = runtime.strictMemoReplayByHook;
     const replay = runtime.strictMemoReplay;
-    value = replayByHook?.has(hookKey) === true
-      ? replayByHook.get(hookKey)
-      : replay === undefined || replay.index >= replay.values.length
-        ? slot.value
-        : replay.values[replay.index++];
+    value =
+      replayByHook?.has(hookKey) === true
+        ? replayByHook.get(hookKey)
+        : replay === undefined || replay.index >= replay.values.length
+          ? slot.value
+          : replay.values[replay.index++];
   } else if (shouldRecompute) {
     value = factory();
-    slot =
-      deps === undefined
-        ? { kind: "memo", value }
-        : { kind: "memo", value, deps };
+    slot = deps === undefined ? { kind: "memo", value } : { kind: "memo", value, deps };
     instance.hooks[index] = slot;
   } else {
     value = slot!.value;
@@ -1631,17 +1620,17 @@ export function useMemo<T>(factory: () => T, deps?: readonly unknown[]): T {
     throw new Error("Hook order changed between renders.");
   }
 
-  recordDevToolsHook("useMemo", memoSlot.deps === undefined
-    ? { kind: "memo", value }
-    : { kind: "memo", value, deps: memoSlot.deps });
+  recordDevToolsHook(
+    "useMemo",
+    memoSlot.deps === undefined
+      ? { kind: "memo", value }
+      : { kind: "memo", value, deps: memoSlot.deps },
+  );
 
   return value as T;
 }
 
-function getStrictMemoHookKey(
-  instance: ComponentInstance,
-  index: number,
-): string {
+function getStrictMemoHookKey(instance: ComponentInstance, index: number): string {
   return `${instance.path}:${getStrictMemoOwnerKey(instance.owner)}:${index}`;
 }
 
@@ -1662,9 +1651,7 @@ function getStrictMemoOwnerKey(owner: unknown): string {
 
   if (typeof owner === "symbol") {
     const globalKey = Symbol.keyFor(owner);
-    return globalKey === undefined
-      ? `p:symbol:${String(owner)}`
-      : `p:symbol-global:${globalKey}`;
+    return globalKey === undefined ? `p:symbol:${String(owner)}` : `p:symbol-global:${globalKey}`;
   }
 
   return `p:${typeof owner}:${String(owner)}`;
@@ -1698,9 +1685,13 @@ function recordDevToolsHook(type: string, value: DevToolsHookValue): void {
 }
 
 function hasInstalledDevToolsHook(): boolean {
-  return typeof (globalThis as {
-    __REACT_DEVTOOLS_GLOBAL_HOOK__?: { inject?: unknown } | undefined;
-  }).__REACT_DEVTOOLS_GLOBAL_HOOK__?.inject === "function";
+  return (
+    typeof (
+      globalThis as {
+        __REACT_DEVTOOLS_GLOBAL_HOOK__?: { inject?: unknown } | undefined;
+      }
+    ).__REACT_DEVTOOLS_GLOBAL_HOOK__?.inject === "function"
+  );
 }
 
 function runWithoutDevToolsHookTracking<T>(callback: () => T): T {
@@ -1720,9 +1711,10 @@ export function useCallback<T extends (...args: never[]) => unknown>(
   deps?: readonly unknown[],
 ): T {
   const value = runWithoutDevToolsHookTracking(() => useMemo(() => callback, deps));
-  recordDevToolsHook("useCallback", deps === undefined
-    ? { kind: "callback", value }
-    : { kind: "callback", value, deps });
+  recordDevToolsHook(
+    "useCallback",
+    deps === undefined ? { kind: "callback", value } : { kind: "callback", value, deps },
+  );
   return value;
 }
 
@@ -1764,7 +1756,7 @@ export function useEffectEvent<TArgs extends unknown[], TResult>(
   ref.current = callback;
 
   const event = runWithoutDevToolsHookTracking(() =>
-    useCallback((...args: TArgs) => ref.current(...args), [])
+    useCallback((...args: TArgs) => ref.current(...args), []),
   );
   recordDevToolsHook("useEffectEvent", {
     kind: "callback",
@@ -1775,36 +1767,36 @@ export function useEffectEvent<TArgs extends unknown[], TResult>(
 }
 
 /** Runs an effect after the rendered output has been committed. */
-export function useEffect(
-  callback: EffectCallback,
-  deps?: readonly unknown[],
-): void {
+export function useEffect(callback: EffectCallback, deps?: readonly unknown[]): void {
   useEffectImpl("normal", callback, deps);
-  recordDevToolsHook("useEffect", deps === undefined
-    ? { kind: "effect", effectKind: "normal" }
-    : { kind: "effect", effectKind: "normal", deps });
+  recordDevToolsHook(
+    "useEffect",
+    deps === undefined
+      ? { kind: "effect", effectKind: "normal" }
+      : { kind: "effect", effectKind: "normal", deps },
+  );
 }
 
 /** Runs an insertion effect before layout effects are flushed. */
-export function useInsertionEffect(
-  callback: EffectCallback,
-  deps?: readonly unknown[],
-): void {
+export function useInsertionEffect(callback: EffectCallback, deps?: readonly unknown[]): void {
   useEffectImpl("insertion", callback, deps);
-  recordDevToolsHook("useInsertionEffect", deps === undefined
-    ? { kind: "effect", effectKind: "insertion" }
-    : { kind: "effect", effectKind: "insertion", deps });
+  recordDevToolsHook(
+    "useInsertionEffect",
+    deps === undefined
+      ? { kind: "effect", effectKind: "insertion" }
+      : { kind: "effect", effectKind: "insertion", deps },
+  );
 }
 
 /** Runs a layout effect after DOM mutations and before normal effects. */
-export function useLayoutEffect(
-  callback: EffectCallback,
-  deps?: readonly unknown[],
-): void {
+export function useLayoutEffect(callback: EffectCallback, deps?: readonly unknown[]): void {
   useEffectImpl("layout", callback, deps);
-  recordDevToolsHook("useLayoutEffect", deps === undefined
-    ? { kind: "effect", effectKind: "layout" }
-    : { kind: "effect", effectKind: "layout", deps });
+  recordDevToolsHook(
+    "useLayoutEffect",
+    deps === undefined
+      ? { kind: "effect", effectKind: "layout" }
+      : { kind: "effect", effectKind: "layout", deps },
+  );
 }
 
 /** Subscribes to an external store with snapshot checks for consistent rendering. */
@@ -1822,9 +1814,10 @@ export function useSyncExternalStore<T>(
   if (slot === undefined) {
     slot = {
       kind: "store",
-      value: runtime.idMode === "server" && getServerSnapshot !== undefined
-        ? getServerSnapshot()
-        : getSnapshot(),
+      value:
+        runtime.idMode === "server" && getServerSnapshot !== undefined
+          ? getServerSnapshot()
+          : getSnapshot(),
     };
     instance.hooks[index] = slot;
   }
@@ -1836,7 +1829,7 @@ export function useSyncExternalStore<T>(
 
   const isHydrationMount =
     runtime.idMode === "server" && slot.hasMounted !== true && getServerSnapshot !== undefined;
-  const currentSnapshot = isHydrationMount ? slot.value as T : getSnapshot();
+  const currentSnapshot = isHydrationMount ? (slot.value as T) : getSnapshot();
 
   if (!Object.is(slot.value, currentSnapshot)) {
     slot.value = currentSnapshot;
@@ -1846,50 +1839,52 @@ export function useSyncExternalStore<T>(
     recordExternalStoreCheck(getSnapshot, currentSnapshot);
   }
 
-  runWithoutDevToolsHookTracking(() => useEffect(() => {
-    const checkForUpdates = (): void => {
-      if (instance.disposed === true) {
-        return;
+  runWithoutDevToolsHookTracking(() =>
+    useEffect(() => {
+      const checkForUpdates = (): void => {
+        if (instance.disposed === true) {
+          return;
+        }
+
+        const nextSnapshot = (slot.getSnapshot ?? getSnapshot)();
+
+        if (!Object.is(slot.value, nextSnapshot)) {
+          if (hookRenderState.hostCommitDepth > 0 && !Object.hasOwn(slot, "hostCommitValue")) {
+            slot.hostCommitValue = slot.value;
+          }
+          slot.value = nextSnapshot;
+          runtime.externalStoreUpdate = true;
+          if (hookRenderState.hostCommitDepth > 0) {
+            updateHostCommitDirtyState(instance);
+            hookRenderState.queuedHostCommitRerenders.add(runtime);
+            return;
+          }
+          instance.dirty = true;
+          if (runtime.profilerFlushDepth > 0) {
+            hookRenderState.queuedEffectFlushRerenders.add(runtime);
+            return;
+          }
+          if (eventBatchDepth > 0) {
+            queueEventRerender(runtime);
+            return;
+          }
+          runtime.rerender("sync");
+        }
+      };
+
+      const unsubscribe = subscribe(checkForUpdates);
+      try {
+        checkForUpdates();
+      } catch (error) {
+        unsubscribe();
+        throw error;
       }
-
-      const nextSnapshot = (slot.getSnapshot ?? getSnapshot)();
-
-      if (!Object.is(slot.value, nextSnapshot)) {
-        if (hookRenderState.hostCommitDepth > 0 && !Object.hasOwn(slot, "hostCommitValue")) {
-          slot.hostCommitValue = slot.value;
-        }
-        slot.value = nextSnapshot;
-        runtime.externalStoreUpdate = true;
-        if (hookRenderState.hostCommitDepth > 0) {
-          updateHostCommitDirtyState(instance);
-          hookRenderState.queuedHostCommitRerenders.add(runtime);
-          return;
-        }
-        instance.dirty = true;
-        if (runtime.profilerFlushDepth > 0) {
-          hookRenderState.queuedEffectFlushRerenders.add(runtime);
-          return;
-        }
-        if (eventBatchDepth > 0) {
-          queueEventRerender(runtime);
-          return;
-        }
-        runtime.rerender("sync");
-      }
-    };
-
-    const unsubscribe = subscribe(checkForUpdates);
-    try {
-      checkForUpdates();
-    } catch (error) {
-      unsubscribe();
-      throw error;
-    }
-    slot.hasMounted = true;
-    return () => {
-      unsubscribe();
-    };
-  }, [subscribe]));
+      slot.hasMounted = true;
+      return () => {
+        unsubscribe();
+      };
+    }, [subscribe]),
+  );
 
   recordDevToolsHook("useSyncExternalStore", {
     kind: "store",
@@ -1963,7 +1958,7 @@ export function useOptimistic<TState, TPayload>(
   const updateFn =
     update === undefined
       ? (_current: unknown, payload: unknown) => payload
-      : update as (state: unknown, payload: unknown) => unknown;
+      : (update as (state: unknown, payload: unknown) => unknown);
 
   if (slot !== undefined && slot.kind !== "optimistic") {
     throw new Error("Hook order changed between renders.");
@@ -1985,14 +1980,13 @@ export function useOptimistic<TState, TPayload>(
   const baseChanged = !Object.is(slot.baseState, state);
   const updatesForBase = !baseChanged
     ? slot.updates
-    : slot.updates.filter((optimisticUpdate) =>
-      optimisticUpdate.context !== undefined
-    );
+    : slot.updates.filter((optimisticUpdate) => optimisticUpdate.context !== undefined);
 
   if (slot.dispatch === undefined) {
     slot.dispatch = (payload: unknown): void => {
       const context = currentTransitionContext ?? currentCommitTransitionContext;
-      const hasHostCommitDraft = hookRenderState.hostCommitDepth > 0 &&
+      const hasHostCommitDraft =
+        hookRenderState.hostCommitDepth > 0 &&
         optimisticRenderDrafts.get(runtime)?.has(slot) === true;
       if (context === undefined && slot.updates.length === 0 && !hasHostCommitDraft) {
         slot.optimisticState = slot.update(slot.optimisticState, payload);
@@ -2008,9 +2002,10 @@ export function useOptimistic<TState, TPayload>(
   }
 
   const priority = renderPriorities.get(runtime) ?? "sync";
-  const remainingUpdates = priority === "transition"
-    ? updatesForBase.filter((optimisticUpdate) => optimisticUpdate.context?.settled !== true)
-    : [...updatesForBase];
+  const remainingUpdates =
+    priority === "transition"
+      ? updatesForBase.filter((optimisticUpdate) => optimisticUpdate.context?.settled !== true)
+      : [...updatesForBase];
   let optimisticState: unknown = baseChanged ? state : slot.optimisticState;
   for (const optimisticUpdate of remainingUpdates) {
     optimisticState = slot.update(optimisticState, optimisticUpdate.payload);
@@ -2107,12 +2102,8 @@ export function unstable_useCacheRefresh(): () => void {
   return useCallback(() => undefined, []);
 }
 
-export function hasStableExternalStores(
-  runtime: RootRuntime,
-): boolean {
-  return runtime.externalStoreChecks.every((check) =>
-    Object.is(check.getSnapshot(), check.value),
-  );
+export function hasStableExternalStores(runtime: RootRuntime): boolean {
+  return runtime.externalStoreChecks.every((check) => Object.is(check.getSnapshot(), check.value));
 }
 
 function readThenable<T>(thenable: PromiseLike<T>): T {
@@ -2225,10 +2216,10 @@ export function useTransition(): [boolean, StartTransition] {
   const instance = requireInstance();
   const pendingCount = runWithoutDevToolsHookTracking(() => useRef(0));
   const transitionError = runWithoutDevToolsHookTracking(() =>
-    useRef<unknown>(NO_TRANSITION_ERROR)
+    useRef<unknown>(NO_TRANSITION_ERROR),
   );
   const [renderedPendingCount, setRenderedPendingCount] = runWithoutDevToolsHookTracking(() =>
-    useState(0)
+    useState(0),
   );
   if (transitionError.current !== NO_TRANSITION_ERROR) {
     throw transitionError.current;
@@ -2261,16 +2252,13 @@ export function useTransition(): [boolean, StartTransition] {
     value: renderedPendingCount > 0,
   });
 
-  return [
-    renderedPendingCount > 0,
-    startTransitionWithPending,
-  ];
+  return [renderedPendingCount > 0, startTransitionWithPending];
 }
 
 /** Defers a value update so urgent renders can commit first. */
 export function useDeferredValue<T>(value: T, initialValue?: T): T {
   const [deferredValue, setDeferredValue] = runWithoutDevToolsHookTracking(() =>
-    useState(arguments.length > 1 ? (initialValue as T) : value)
+    useState(arguments.length > 1 ? (initialValue as T) : value),
   );
 
   runWithoutDevToolsHookTracking(() =>
@@ -2282,7 +2270,7 @@ export function useDeferredValue<T>(value: T, initialValue?: T): T {
       startTransition(() => {
         setDeferredValue(value);
       });
-    }, [value, deferredValue])
+    }, [value, deferredValue]),
   );
 
   const currentValue = Object.is(deferredValue, value) ? value : deferredValue;
@@ -2324,10 +2312,7 @@ function executeTransitionScope(scope: TransitionScope, context: TransitionConte
   }
 }
 
-function runTransitionScope<T>(
-  scope: () => T,
-  context: TransitionContext,
-): T {
+function runTransitionScope<T>(scope: () => T, context: TransitionContext): T {
   transitionDepth += 1;
   const previousContext = currentTransitionContext;
   currentTransitionContext = context;
@@ -2377,7 +2362,7 @@ function getThenFunction(value: unknown): ThenFunction | undefined {
     return undefined;
   }
   const then = (value as { then?: unknown }).then;
-  return typeof then === "function" ? then as ThenFunction : undefined;
+  return typeof then === "function" ? (then as ThenFunction) : undefined;
 }
 
 function settleTransitionContextIfReady(context: TransitionContext): void {
@@ -2418,10 +2403,7 @@ function reportGlobalTransitionError(error: unknown): void {
   });
 }
 
-function queueTransitionRerender(
-  runtime: RootRuntime,
-  context: TransitionContext,
-): void {
+function queueTransitionRerender(runtime: RootRuntime, context: TransitionContext): void {
   queuedTransitionRerenders.set(runtime, context);
 
   if (transitionRerenderScheduled) {
@@ -2481,9 +2463,7 @@ function flushEventRerendersForPriority(priority: EventPriority): void {
   eventRerenderScheduled = true;
   scheduleCallback(priority === "continuous" ? "normal" : "low", () => {
     eventRerenderScheduled = false;
-    flushQueuedEventRerenders(
-      priority === "continuous" ? "continuous" : "sync",
-    );
+    flushQueuedEventRerenders(priority === "continuous" ? "continuous" : "sync");
   });
 }
 
@@ -2557,18 +2537,15 @@ function useEffectImpl(
       effectKind === "insertion"
         ? runtime.pendingInsertionEffects
         : effectKind === "imperative-handle"
-        ? runtime.pendingImperativeHandleEffects
-        : effectKind === "layout"
-        ? runtime.pendingLayoutEffects
-        : runtime.pendingEffects;
+          ? runtime.pendingImperativeHandleEffects
+          : effectKind === "layout"
+            ? runtime.pendingLayoutEffects
+            : runtime.pendingEffects;
     queue.push({ slot, instancePath: instance.path, order: queue.length });
   }
 }
 
-function recordExternalStoreCheck<T>(
-  getSnapshot: () => T,
-  value: T,
-): void {
+function recordExternalStoreCheck<T>(getSnapshot: () => T, value: T): void {
   hookRenderState.currentRuntime?.externalStoreChecks.push({ getSnapshot, value });
 }
 
@@ -2663,10 +2640,7 @@ function isStrictAncestorPath(ancestor: string, descendant: string): boolean {
   return ancestor === "" || descendant.startsWith(`${ancestor}.`);
 }
 
-function flushProfilerCommits(
-  runtime: RootRuntime,
-  commits: PendingProfilerCommit[],
-): void {
+function flushProfilerCommits(runtime: RootRuntime, commits: PendingProfilerCommit[]): void {
   if (commits.length === 0) {
     return;
   }
@@ -2732,12 +2706,10 @@ function runNextActionStateDispatch(
   let then: ThenFunction | undefined;
 
   try {
-    result = dispatch.context === undefined
-      ? dispatch.action(slot.state, dispatch.payload)
-      : runTransitionScope(
-        () => dispatch.action(slot.state, dispatch.payload),
-        dispatch.context,
-      );
+    result =
+      dispatch.context === undefined
+        ? dispatch.action(slot.state, dispatch.payload)
+        : runTransitionScope(() => dispatch.action(slot.state, dispatch.payload), dispatch.context);
     then = getThenFunction(result);
     if (then === undefined) {
       if (dispatch.context !== undefined) {
@@ -2756,9 +2728,17 @@ function runNextActionStateDispatch(
       return;
     }
   } catch (error) {
-    settleActionStateDispatch(slot, runtime, instance, dispatch, false, () => {
-      slot.error = error;
-    }, true);
+    settleActionStateDispatch(
+      slot,
+      runtime,
+      instance,
+      dispatch,
+      false,
+      () => {
+        slot.error = error;
+      },
+      true,
+    );
     return;
   }
 
@@ -2773,15 +2753,31 @@ function runNextActionStateDispatch(
         });
       },
       (error) => {
-        settleActionStateDispatch(slot, runtime, instance, dispatch, true, () => {
-          slot.error = error;
-        }, true);
+        settleActionStateDispatch(
+          slot,
+          runtime,
+          instance,
+          dispatch,
+          true,
+          () => {
+            slot.error = error;
+          },
+          true,
+        );
       },
     );
   } catch (error) {
-    settleActionStateDispatch(slot, runtime, instance, dispatch, true, () => {
-      slot.error = error;
-    }, true);
+    settleActionStateDispatch(
+      slot,
+      runtime,
+      instance,
+      dispatch,
+      true,
+      () => {
+        slot.error = error;
+      },
+      true,
+    );
   }
 }
 
@@ -2967,10 +2963,7 @@ function dedupePendingEffects(queue: PendingEffect[]): void {
 }
 
 function flushEffectFlushRerenders(): void {
-  if (
-    effectFlushRerenderDepth > 0 ||
-    hookRenderState.queuedEffectFlushRerenders.size === 0
-  ) {
+  if (effectFlushRerenderDepth > 0 || hookRenderState.queuedEffectFlushRerenders.size === 0) {
     return;
   }
 
@@ -2999,18 +2992,18 @@ function flushEffectFlushRerenders(): void {
   }
 }
 
-function updateHostCommitDirtyState(
-  instance: ComponentInstance,
-): void {
-  instance.dirty = instance.nonStateDirty || instance.hooks.some(
-    (slot) =>
-      (slot.kind === "state" && (slot.updates?.length ?? 0) > 0) ||
-      (slot.kind === "optimistic" &&
-        slot.updates.some((update) => update.context?.settled === true)) ||
-      ((slot.kind === "state" || slot.kind === "store") &&
-        Object.hasOwn(slot, "hostCommitValue") &&
-        !Object.is(slot.hostCommitValue, slot.value)),
-  );
+function updateHostCommitDirtyState(instance: ComponentInstance): void {
+  instance.dirty =
+    instance.nonStateDirty ||
+    instance.hooks.some(
+      (slot) =>
+        (slot.kind === "state" && (slot.updates?.length ?? 0) > 0) ||
+        (slot.kind === "optimistic" &&
+          slot.updates.some((update) => update.context?.settled === true)) ||
+        ((slot.kind === "state" || slot.kind === "store") &&
+          Object.hasOwn(slot, "hostCommitValue") &&
+          !Object.is(slot.hostCommitValue, slot.value)),
+    );
 }
 
 function clearHostCommitStateBaselines(runtime: RootRuntime): void {
@@ -3073,7 +3066,9 @@ function createCacheTrieNode(): CacheTrieNode {
 }
 
 function getCurrentCacheScope(): CacheScope | undefined {
-  return cacheScopeStorage?.getStore() ?? hookRenderState.currentCacheScope ?? getGlobalCacheScope();
+  return (
+    cacheScopeStorage?.getStore() ?? hookRenderState.currentCacheScope ?? getGlobalCacheScope()
+  );
 }
 
 function getGlobalCacheScope(): CacheScope | undefined {
@@ -3097,18 +3092,22 @@ interface AsyncLocalStorageLike<T> {
 type AsyncLocalStorageConstructor = new <T>() => AsyncLocalStorageLike<T>;
 
 function createCacheScopeStorage(): AsyncLocalStorageLike<CacheScope> | undefined {
-  const globalConstructor = (globalThis as {
-    AsyncLocalStorage?: AsyncLocalStorageConstructor | undefined;
-  }).AsyncLocalStorage;
+  const globalConstructor = (
+    globalThis as {
+      AsyncLocalStorage?: AsyncLocalStorageConstructor | undefined;
+    }
+  ).AsyncLocalStorage;
   if (typeof globalConstructor === "function") {
     return new globalConstructor<CacheScope>();
   }
 
-  const builtinConstructor = (globalThis as {
-    process?: {
-      getBuiltinModule?: (name: string) => { AsyncLocalStorage?: AsyncLocalStorageConstructor };
-    };
-  }).process?.getBuiltinModule?.("node:async_hooks")?.AsyncLocalStorage;
+  const builtinConstructor = (
+    globalThis as {
+      process?: {
+        getBuiltinModule?: (name: string) => { AsyncLocalStorage?: AsyncLocalStorageConstructor };
+      };
+    }
+  ).process?.getBuiltinModule?.("node:async_hooks")?.AsyncLocalStorage;
   return typeof builtinConstructor === "function"
     ? new builtinConstructor<CacheScope>()
     : undefined;
@@ -3139,9 +3138,7 @@ function cleanupStrictEffects(
   }
 }
 
-function collectInactiveInstances(
-  runtime: RootRuntime,
-): Array<[string, ComponentInstance]> {
+function collectInactiveInstances(runtime: RootRuntime): Array<[string, ComponentInstance]> {
   const activeInstanceKeys = runtime.activeInstanceKeys;
 
   if (activeInstanceKeys === undefined) {
@@ -3232,10 +3229,7 @@ function removeInstanceKeyFromIndex(runtime: RootRuntime, key: string): void {
   });
 }
 
-function forEachInstanceKeyPrefix(
-  key: string,
-  callback: (prefix: string) => void,
-): void {
+function forEachInstanceKeyPrefix(key: string, callback: (prefix: string) => void): void {
   let start = 0;
 
   while (start < key.length) {

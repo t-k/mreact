@@ -16,6 +16,9 @@ describe("GitHub workflows", () => {
     expect(workflow).toContain("          - name: Install Playwright Chromium");
     expect(workflow).toContain("          - name: Format\n            run: pnpm format");
     expect(workflow).toContain("- parallel:\n          - name: Test router client build");
+    expect(workflow).toContain(
+      "          - name: Typecheck package tests\n            run: node scripts/typecheck-package-tests.mjs",
+    );
     expect(workflow).not.toContain("\n      - name: Test\n        run: pnpm exec vitest run");
     expect(workflow).toContain("  test-shard:\n    name: Test shard ${{ matrix.shard }}/3");
     expect(workflow).toContain("shard: [1, 2, 3]");

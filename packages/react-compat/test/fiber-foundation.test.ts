@@ -28,33 +28,19 @@ import {
   mergeLanes,
   removeLanes,
 } from "../src/fiber-lanes.js";
-import {
-  createFiberRoot,
-  createHostRootFiber,
-  createWorkInProgress,
-} from "../src/fiber.js";
+import { createFiberRoot, createHostRootFiber, createWorkInProgress } from "../src/fiber.js";
 import { getFiberRootForContainer } from "../src/fiber-work-loop.js";
-import {
-  canRenderHostFiber,
-  commitHostFiberRoot,
-  renderHostFiberRoot,
-} from "../src/fiber-host.js";
+import { canRenderHostFiber, commitHostFiberRoot, renderHostFiberRoot } from "../src/fiber-host.js";
 
 describe("fiber lanes", () => {
   it("selects the highest priority lane from a pending lane set", () => {
-    const lanes = mergeLanes(
-      TransitionLane,
-      mergeLanes(ContinuousEventLane, SyncLane),
-    );
+    const lanes = mergeLanes(TransitionLane, mergeLanes(ContinuousEventLane, SyncLane));
 
     expect(getHighestPriorityLane(lanes)).toBe(SyncLane);
   });
 
   it("keeps hydration ahead of continuous and transition work", () => {
-    const lanes = mergeLanes(
-      TransitionLane,
-      mergeLanes(ContinuousEventLane, HydrationLane),
-    );
+    const lanes = mergeLanes(TransitionLane, mergeLanes(ContinuousEventLane, HydrationLane));
 
     expect(getHighestPriorityLane(lanes)).toBe(HydrationLane);
   });
@@ -190,9 +176,7 @@ describe("function component fiber adapter", () => {
     const root = createRoot(container);
 
     root.render(createElement(Counter, null));
-    container.querySelector("button")?.dispatchEvent(
-      new MouseEvent("click", { bubbles: true }),
-    );
+    container.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
     const fiberRoot = getFiberRootForContainer(container);
     expect(fiberRoot?.current.child?.tag).toBe("function-component");
@@ -207,11 +191,7 @@ describe("function component fiber adapter", () => {
     }
 
     function App() {
-      return createElement(
-        Theme.Provider,
-        { value: "dark" },
-        createElement(Label, null),
-      );
+      return createElement(Theme.Provider, { value: "dark" }, createElement(Label, null));
     }
 
     const container = document.createElement("div");
@@ -232,9 +212,7 @@ describe("function component fiber adapter", () => {
       return createElement(
         Theme.Provider,
         { value: "dark" },
-        createElement(Theme.Consumer, null, (value) =>
-          createElement("p", null, String(value)),
-        ),
+        createElement(Theme.Consumer, null, (value) => createElement("p", null, String(value))),
       );
     }
 
@@ -259,11 +237,7 @@ describe("function component fiber adapter", () => {
     function App() {
       return createElement(Theme.Provider, { value: "outer" }, [
         createElement(Label, { key: "outer" }),
-        createElement(
-          Theme.Provider,
-          { key: "inner", value: "inner" },
-          createElement(Label, null),
-        ),
+        createElement(Theme.Provider, { key: "inner", value: "inner" }, createElement(Label, null)),
         createElement(Label, { key: "outer-again" }),
       ]);
     }
@@ -273,16 +247,13 @@ describe("function component fiber adapter", () => {
 
     root.render(createElement(App, null));
 
-    expect(container.innerHTML).toBe(
-      "<p>outer</p><p>inner</p><p>outer</p>",
-    );
+    expect(container.innerHTML).toBe("<p>outer</p><p>inner</p><p>outer</p>");
   });
 
   it("renders forwardRef components returned from function component fibers", () => {
     const ref = { current: null as HTMLButtonElement | null };
-    const Button = forwardRef<{ label: string }, HTMLButtonElement>(
-      (props, forwardedRef) =>
-        createElement("button", { ref: forwardedRef }, props.label),
+    const Button = forwardRef<{ label: string }, HTMLButtonElement>((props, forwardedRef) =>
+      createElement("button", { ref: forwardedRef }, props.label),
     );
 
     function App() {
@@ -355,10 +326,7 @@ describe("function component fiber adapter", () => {
     const portalContainer = document.createElement("aside");
 
     function App() {
-      return createPortal(
-        createElement("strong", null, "Portal"),
-        portalContainer,
-      );
+      return createPortal(createElement("strong", null, "Portal"), portalContainer);
     }
 
     const container = document.createElement("div");
@@ -380,7 +348,7 @@ describe("function component fiber adapter", () => {
   it("renders error boundary fallbacks on the Fiber path", () => {
     const errors: string[] = [];
 
-    function Bomb() {
+    function Bomb(): never {
       throw new Error("boom");
     }
 
@@ -498,27 +466,23 @@ describe("function component fiber adapter", () => {
   it("renders SuspenseList forwards as a Fiber boundary", () => {
     const pending = new Promise<void>(() => {});
 
-    function Pending() {
+    function Pending(): never {
       throw pending;
     }
 
     function App() {
-      return createElement(
-        SuspenseList,
-        { revealOrder: "forwards" },
-        [
-          createElement(
-            Suspense,
-            { fallback: createElement("em", null, "loading"), key: "pending" },
-            createElement(Pending, null),
-          ),
-          createElement(
-            Suspense,
-            { fallback: null, key: "ready" },
-            createElement("strong", null, "later"),
-          ),
-        ],
-      );
+      return createElement(SuspenseList, { revealOrder: "forwards" }, [
+        createElement(
+          Suspense,
+          { fallback: createElement("em", null, "loading"), key: "pending" },
+          createElement(Pending, null),
+        ),
+        createElement(
+          Suspense,
+          { fallback: null, key: "ready" },
+          createElement("strong", null, "later"),
+        ),
+      ]);
     }
 
     const container = document.createElement("div");
@@ -534,27 +498,23 @@ describe("function component fiber adapter", () => {
   it("renders SuspenseList together as a Fiber boundary", () => {
     const pending = new Promise<void>(() => {});
 
-    function Pending() {
+    function Pending(): never {
       throw pending;
     }
 
     function App() {
-      return createElement(
-        SuspenseList,
-        { revealOrder: "together" },
-        [
-          createElement(
-            Suspense,
-            { fallback: createElement("em", null, "loading"), key: "pending" },
-            createElement(Pending, null),
-          ),
-          createElement(
-            Suspense,
-            { fallback: null, key: "ready" },
-            createElement("strong", null, "later"),
-          ),
-        ],
-      );
+      return createElement(SuspenseList, { revealOrder: "together" }, [
+        createElement(
+          Suspense,
+          { fallback: createElement("em", null, "loading"), key: "pending" },
+          createElement(Pending, null),
+        ),
+        createElement(
+          Suspense,
+          { fallback: null, key: "ready" },
+          createElement("strong", null, "later"),
+        ),
+      ]);
     }
 
     const container = document.createElement("div");

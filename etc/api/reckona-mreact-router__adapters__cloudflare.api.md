@@ -481,6 +481,8 @@ export interface CloudflareRequestHandlerOptions<Env = unknown> {
 // @public
 export interface CloudflareRouteModule<Data = unknown, Env = unknown> {
     // (undocumented)
+    [exportName: string]: unknown;
+    // (undocumented)
     App?: CloudflareRouteModuleComponent<Data, Env> | undefined;
     // (undocumented)
     CloudflareRouteComponent?: CloudflareRouteModuleComponent<Data, Env> | undefined;

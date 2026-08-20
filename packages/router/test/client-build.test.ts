@@ -6558,6 +6558,7 @@ export default function Page() {
     const observer: IntersectionObserver = {
       root: null,
       rootMargin: "",
+      scrollMargin: "",
       thresholds: [],
       disconnect(): void {},
       observe(target: Element): void {
@@ -7110,9 +7111,11 @@ export default function Page(props) {
   test("restores route HTML and scroll position on popstate", async () => {
     const { routeModule } = await importRouteRuntime("popstate");
     const scrollCalls: Array<[number, number]> = [];
-    globalThis.scrollTo = (x: number, y: number) => {
-      scrollCalls.push([x, y]);
-    };
+    globalThis.scrollTo = ((xOrOptions?: number | ScrollToOptions, y?: number) => {
+      if (typeof xOrOptions === "number" && y !== undefined) {
+        scrollCalls.push([xOrOptions, y]);
+      }
+    }) as typeof globalThis.scrollTo;
 
     routeModule.__mreactNavigateToHtml(
       [
@@ -7301,9 +7304,11 @@ export default function Page(props) {
   test("preserves scroll for links that opt out of top scrolling", async () => {
     await importRouteRuntime("preserve-scroll-link");
     const scrollCalls: Array<[number, number]> = [];
-    globalThis.scrollTo = (x: number, y: number) => {
-      scrollCalls.push([x, y]);
-    };
+    globalThis.scrollTo = ((xOrOptions?: number | ScrollToOptions, y?: number) => {
+      if (typeof xOrOptions === "number" && y !== undefined) {
+        scrollCalls.push([xOrOptions, y]);
+      }
+    }) as typeof globalThis.scrollTo;
     globalThis.fetch = async () =>
       new Response(
         [
@@ -7711,7 +7716,7 @@ export async function __mreactNavigate(url, options) {
       prefetch: "viewport",
       scroll: "preserve",
       transition: "auto",
-    }) as HTMLAnchorElement;
+    }) as unknown as HTMLAnchorElement;
     document.body.append(anchor);
     expect(anchor.getAttribute("data-mreact-prefetch")).toBe("viewport");
     expect(anchor.getAttribute("data-mreact-scroll")).toBe("preserve");

@@ -15,8 +15,7 @@ const baseResponse: Omit<FlightResponse, "root"> = {
   serverReferences: [],
 };
 
-const roundTrip = (response: FlightResponse) =>
-  fromReactFlightRows(toReactFlightRows(response));
+const roundTrip = (response: FlightResponse) => fromReactFlightRows(toReactFlightRows(response));
 
 describe("React Flight model round-trip coverage", () => {
   test("encodes / decodes primitives unchanged", () => {
@@ -129,20 +128,13 @@ describe("React Flight model round-trip coverage", () => {
 
 describe("Flight reference helpers", () => {
   test("createClientReference + isClientReference round-trip", () => {
-    const ref = createClientReference({
-      id: 1,
-      moduleId: "mod",
-      exportName: "Foo",
-    });
+    const ref = createClientReference("mod", "Foo");
     expect(isClientReference(ref)).toBe(true);
     expect(isServerReference(ref)).toBe(false);
   });
 
   test("createServerReference + isServerReference round-trip with bound args", () => {
-    const ref = createServerReference(
-      { id: 2, moduleId: "actions/save", exportName: "save" },
-      ["bound"],
-    );
+    const ref = createServerReference("actions/save", "save", ["bound"]);
     expect(isServerReference(ref)).toBe(true);
     expect(isClientReference(ref)).toBe(false);
   });
