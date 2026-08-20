@@ -910,7 +910,7 @@ export default {
     const devHtml = await devResponse.text();
     const builtHtml = await builtResponse.text();
     const expected =
-      "quoted &quot;&lt;/script&gt;&lt;script&gt;nope&lt;/script&gt;&quot; value::true";
+      "quoted &quot;&lt;/script&gt;&lt;script&gt;nope&lt;/script&gt;&quot; value<!-- -->::<!-- -->true";
 
     expect(devResponse.status, devHtml).toBe(200);
     expect(builtResponse.status, builtHtml).toBe(200);

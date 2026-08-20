@@ -99,7 +99,7 @@ describe("auth router integration", () => {
     const html = await responseText(response);
 
     expect(response.status).toBe(200);
-    expect(html).toContain("<main>ada:admin</main>");
+    expect(html).toContain("<main>ada<!-- -->:<!-- -->admin</main>");
     expect(html).toContain('id="__mreact_auth_session"');
     expect(html).toContain('"userId":"ada"');
     expect(html).not.toContain("server-only");
@@ -200,9 +200,9 @@ export default function ProfilePage() {
 
       expect(first.status).toBe(200);
       expect(second.status).toBe(200);
-      expect(firstHtml).toContain("ada:FIRST_USER_PRIVATE_MARKER");
+      expect(firstHtml).toContain("ada<!-- -->:<!-- -->FIRST_USER_PRIVATE_MARKER");
       expect(firstHtml).not.toContain("SECOND_USER_PRIVATE_MARKER");
-      expect(secondHtml).toContain("grace:SECOND_USER_PRIVATE_MARKER");
+      expect(secondHtml).toContain("grace<!-- -->:<!-- -->SECOND_USER_PRIVATE_MARKER");
       expect(secondHtml).not.toContain("FIRST_USER_PRIVATE_MARKER");
     } finally {
       const testGlobal = testSessionStoreGlobal();

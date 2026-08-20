@@ -2992,8 +2992,8 @@ export default function Page() {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("x-mreact-stream")).toBe("1");
-    expect(html).toContain("Loading 0");
-    expect(html).toContain("Loading 1");
+    expect(html).toContain("Loading <!-- -->0");
+    expect(html).toContain("Loading <!-- -->1");
     expect(html).toContain("<li>story-1</li>");
     expect(html).toContain("<li>story-2</li>");
     expect(html).toContain("<li>story-3</li>");

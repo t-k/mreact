@@ -34,7 +34,7 @@ describe("app router test fixture", () => {
 
     const html = await responseText(await fixture.render("/users/ada"));
 
-    expect(html).toContain("<main>User ada</main>");
+    expect(html).toContain("<main>User <!-- -->ada</main>");
   });
 
   it("returns query state from SSR HTML", async () => {

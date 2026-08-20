@@ -203,7 +203,7 @@ export default function Page() { return <main>Hook nonce</main>; }`,
     });
 
     expect(response.status).toBe(200);
-    expect(await response.text()).toContain("<main><h1>User ada</h1></main>");
+    expect(await response.text()).toContain("<main><h1>User <!-- -->ada</h1></main>");
   });
 
   test("reuses dev page modules until the dev source cache version changes", async () => {
@@ -232,9 +232,9 @@ export default function Page() {
     const second = await render("dev-source-1");
     const third = await render("dev-source-2");
 
-    expect(await first.text()).toContain("<main>loads:1</main>");
-    expect(await second.text()).toContain("<main>loads:1</main>");
-    expect(await third.text()).toContain("<main>loads:2</main>");
+    expect(await first.text()).toContain("<main>loads:<!-- -->1</main>");
+    expect(await second.text()).toContain("<main>loads:<!-- -->1</main>");
+    expect(await third.text()).toContain("<main>loads:<!-- -->2</main>");
   });
 
   test("reuses dev metadata modules until the dev source cache version changes", async () => {
@@ -303,9 +303,9 @@ export default function Page(props) {
     const second = await render("dev-source-1");
     const third = await render("dev-source-2");
 
-    expect(await first.text()).toContain("<main>loader loads:1</main>");
-    expect(await second.text()).toContain("<main>loader loads:1</main>");
-    expect(await third.text()).toContain("<main>loader loads:3</main>");
+    expect(await first.text()).toContain("<main>loader loads:<!-- -->1</main>");
+    expect(await second.text()).toContain("<main>loader loads:<!-- -->1</main>");
+    expect(await third.text()).toContain("<main>loader loads:<!-- -->3</main>");
   });
 
   test("passes loader data to page components", async () => {
@@ -1036,7 +1036,7 @@ export default function Page() {
     expect(response.status).toBe(200);
     expect(html).toContain("<title>Counter</title>");
     expect(html).toContain('<meta name="description" content="Interactive route metadata">');
-    expect(html).toContain("<main>count: 0</main>");
+    expect(html).toContain("<main>count: <!-- -->0</main>");
   });
 
   test("escapes hostile route hydration props JSON for HTML script transport", async () => {
@@ -2606,8 +2606,8 @@ export default function Page(props) {
     });
 
     expect(first.headers.get("cache-control")).toBe("s-maxage=60, stale-while-revalidate");
-    expect(await first.text()).toContain("<main>calls: 1</main>");
-    expect(await second.text()).toContain("<main>calls: 1</main>");
+    expect(await first.text()).toContain("<main>calls: <!-- -->1</main>");
+    expect(await second.text()).toContain("<main>calls: <!-- -->1</main>");
   });
 
   test("keeps generated CSP nonces request-local instead of sharing them in route cache", async () => {
@@ -2849,7 +2849,7 @@ export default function Page(props) {
     });
 
     expect(response.headers.get("cache-control")).toBe("private, no-store");
-    expect(await response.text()).toContain("<main>locale: ja</main>");
+    expect(await response.text()).toContain("<main>locale: <!-- -->ja</main>");
   });
 
   test("replays HSTS on cached routes per request scheme", async () => {
@@ -2980,8 +2980,8 @@ export default function Page(props) {
       }),
     });
 
-    expect(await first.text()).toContain("<main>ip: 203.0.113.7</main>");
-    expect(await second.text()).toContain("<main>ip: 198.51.100.42</main>");
+    expect(await first.text()).toContain("<main>ip: <!-- -->203.0.113.7</main>");
+    expect(await second.text()).toContain("<main>ip: <!-- -->198.51.100.42</main>");
   });
 
   test("does not cache headers read from a reconstructed Request", async () => {
@@ -3016,8 +3016,8 @@ export default function Page(props) {
     expect(first.headers.get("cache-control")).toBe("private, no-store");
     expect(first.headers.get("x-mreact-cache")).toBe("DYNAMIC");
     expect(second.headers.get("x-mreact-cache")).toBe("DYNAMIC");
-    expect(await first.text()).toContain("<main>ip: 203.0.113.7</main>");
-    expect(await second.text()).toContain("<main>ip: 198.51.100.42</main>");
+    expect(await first.text()).toContain("<main>ip: <!-- -->203.0.113.7</main>");
+    expect(await second.text()).toContain("<main>ip: <!-- -->198.51.100.42</main>");
   });
 
   test("does not cache Request reconstruction hidden in a local helper", async () => {
@@ -3059,8 +3059,8 @@ export default function Page(props) {
 
     expect(first.headers.get("x-mreact-cache")).toBe("DYNAMIC");
     expect(second.headers.get("x-mreact-cache")).toBe("DYNAMIC");
-    expect(await first.text()).toContain("<main>ip: 203.0.113.7</main>");
-    expect(await second.text()).toContain("<main>ip: 198.51.100.42</main>");
+    expect(await first.text()).toContain("<main>ip: <!-- -->203.0.113.7</main>");
+    expect(await second.text()).toContain("<main>ip: <!-- -->198.51.100.42</main>");
   });
 
   test("does not share external package Request reconstruction", async () => {
@@ -3107,8 +3107,8 @@ export default function Page(props) {
     expect(first.headers.get("cache-control")).toBe("private, no-store");
     expect(first.headers.get("x-mreact-cache")).toBe("DYNAMIC");
     expect(second.headers.get("x-mreact-cache")).toBe("DYNAMIC");
-    expect(await first.text()).toContain("<main>ip: 203.0.113.7</main>");
-    expect(await second.text()).toContain("<main>ip: 198.51.100.42</main>");
+    expect(await first.text()).toContain("<main>ip: <!-- -->203.0.113.7</main>");
+    expect(await second.text()).toContain("<main>ip: <!-- -->198.51.100.42</main>");
   });
 
   test("keeps external packages cacheable when they do not access Request", async () => {
@@ -3216,8 +3216,8 @@ export default function Page(props) {
 
     expect(first.headers.get("x-mreact-cache")).toBe("DYNAMIC");
     expect(second.headers.get("x-mreact-cache")).toBe("DYNAMIC");
-    expect(await first.text()).toContain("<main>origin: https://tenant-a.test</main>");
-    expect(await second.text()).toContain("<main>origin: https://tenant-b.test</main>");
+    expect(await first.text()).toContain("<main>origin: <!-- -->https://tenant-a.test</main>");
+    expect(await second.text()).toContain("<main>origin: <!-- -->https://tenant-b.test</main>");
   });
 
   test("marks a header dependent route as uncacheable for shared caches", async () => {
@@ -3244,7 +3244,7 @@ export default function Page(props) {
 
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     expect(response.headers.get("x-mreact-cache")).toBe("DYNAMIC");
-    expect(await response.text()).toContain("<main>country: JP</main>");
+    expect(await response.text()).toContain("<main>country: <!-- -->JP</main>");
   });
 
   test("does not advertise a shared lifetime when a layout sets the cache policy", async () => {
@@ -3279,8 +3279,8 @@ export default function Page(props) {
     });
 
     expect(english.headers.get("cache-control")).not.toContain("s-maxage");
-    expect(await english.text()).toContain("<main>locale: en</main>");
-    expect(await japanese.text()).toContain("<main>locale: ja</main>");
+    expect(await english.text()).toContain("<main>locale: <!-- -->en</main>");
+    expect(await japanese.text()).toContain("<main>locale: <!-- -->ja</main>");
   });
 
   test("keeps sharing cached HTML when a layout reads no request header", async () => {
@@ -3321,8 +3321,8 @@ export default function Page(props) {
 
     expect(first.headers.get("cache-control")).toBe("s-maxage=60, stale-while-revalidate");
     expect(second.headers.get("x-mreact-cache")).toBe("HIT");
-    expect(await first.text()).toContain("<main>calls: 1</main>");
-    expect(await second.text()).toContain("<main>calls: 1</main>");
+    expect(await first.text()).toContain("<main>calls: <!-- -->1</main>");
+    expect(await second.text()).toContain("<main>calls: <!-- -->1</main>");
   });
 
   test("isolates cached route HTML by Accept-Language", async () => {
@@ -3353,8 +3353,8 @@ export default function Page(props) {
       }),
     });
 
-    expect(await english.text()).toContain("<main>locale: en</main>");
-    expect(await japanese.text()).toContain("<main>locale: ja</main>");
+    expect(await english.text()).toContain("<main>locale: <!-- -->en</main>");
+    expect(await japanese.text()).toContain("<main>locale: <!-- -->ja</main>");
   });
 
   test("caches rendered route HTML for cacheControl called from a loader", async () => {
@@ -3391,8 +3391,8 @@ export default function Page(props) {
     expect(first.headers.get("cache-control")).toBe(
       "max-age=5, s-maxage=60, stale-while-revalidate=300",
     );
-    expect(await first.text()).toContain("<main>calls: 1</main>");
-    expect(await second.text()).toContain("<main>calls: 1</main>");
+    expect(await first.text()).toContain("<main>calls: <!-- -->1</main>");
+    expect(await second.text()).toContain("<main>calls: <!-- -->1</main>");
     expect(second.headers.get("x-mreact-cache")).toBe("HIT");
   });
 
@@ -3522,8 +3522,8 @@ export default function Page(props) {
     });
 
     expect(first.headers.get("cache-control")).toBe("no-store");
-    expect(await first.text()).toContain("<main>calls: 1</main>");
-    expect(await second.text()).toContain("<main>calls: 2</main>");
+    expect(await first.text()).toContain("<main>calls: <!-- -->1</main>");
+    expect(await second.text()).toContain("<main>calls: <!-- -->2</main>");
   });
 
   test("uses an injected route cache adapter for cached page responses", async () => {
@@ -3555,8 +3555,8 @@ export default function Page(props) {
       request: new Request("http://local.test/"),
     });
 
-    expect(await first.text()).toContain("<main>calls: 1</main>");
-    expect(await second.text()).toContain("<main>calls: 1</main>");
+    expect(await first.text()).toContain("<main>calls: <!-- -->1</main>");
+    expect(await second.text()).toContain("<main>calls: <!-- -->1</main>");
     expect(cache.calls.filter((call) => call.startsWith("get:"))).toHaveLength(2);
     expect(cache.calls.filter((call) => call.startsWith("set:"))).toHaveLength(1);
   });
@@ -3595,8 +3595,8 @@ export default function Page(props) {
       }),
     });
 
-    expect(await first.text()).toContain("<main>calls: 1</main>");
-    expect(await second.text()).toContain("<main>calls: 2</main>");
+    expect(await first.text()).toContain("<main>calls: <!-- -->1</main>");
+    expect(await second.text()).toContain("<main>calls: <!-- -->2</main>");
     expect(second.headers.get("x-mreact-cache")).toBe("MISS");
     expect(cache.calls.filter((call) => call.startsWith("get:"))).toHaveLength(1);
     expect(cache.calls.filter((call) => call.startsWith("set:"))).toHaveLength(2);
@@ -3718,8 +3718,8 @@ export default function Page(props) {
       request: new Request("http://local.test/"),
     });
 
-    expect(await first.text()).toContain("<main>calls: 1</main>");
-    expect(await second.text()).toContain("<main>calls: 1</main>");
+    expect(await first.text()).toContain("<main>calls: <!-- -->1</main>");
+    expect(await second.text()).toContain("<main>calls: <!-- -->1</main>");
   });
 
   test("rejects loader imports that escape the app directory", async () => {
@@ -4482,7 +4482,7 @@ export default function Page() { return <article>Body</article>; }`,
 
     expect(response.status).toBe(500);
     expect(await response.text()).toContain(
-      '<html data-mreact-layout-boundary="root"><body><main>error: tsx failed</main></body></html>',
+      '<html data-mreact-layout-boundary="root"><body><main>error: <!-- -->tsx failed</main></body></html>',
     );
   });
 
@@ -4520,9 +4520,9 @@ export default function Page() { return <article>Body</article>; }`,
     const html = await response.text();
 
     expect(response.status).toBe(500);
-    expect(html).toContain("<p>request: req-123</p>");
-    expect(html).toContain("<p>route: index</p>");
-    expect(html).toContain("<p>trace: 4bf92f3577b34da6a3ce929d0e0e4736</p>");
+    expect(html).toContain("<p>request: <!-- -->req-123</p>");
+    expect(html).toContain("<p>route: <!-- -->index</p>");
+    expect(html).toContain("<p>trace: <!-- -->4bf92f3577b34da6a3ce929d0e0e4736</p>");
     expect(html).toContain("<p>debug: yes</p>");
   });
 
@@ -4967,7 +4967,7 @@ export default function DocsPage() {
     });
 
     expect(response.status).toBe(500);
-    expect(await response.text()).toContain("<main>Docs error: docs failed</main>");
+    expect(await response.text()).toContain("<main>Docs error: <!-- -->docs failed</main>");
   });
 
   test("renders stream routes with the server stream compiler target", async () => {
@@ -6007,8 +6007,8 @@ export default function Page() {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("x-mreact-stream")).toBe("1");
-    expect(html).toContain("Loading 0");
-    expect(html).toContain("Loading 1");
+    expect(html).toContain("Loading <!-- -->0");
+    expect(html).toContain("Loading <!-- -->1");
     expect(html).toContain("<li>story-1</li>");
     expect(html).toContain("<li>story-2</li>");
     expect(html).toContain("<li>story-3</li>");
@@ -6150,7 +6150,7 @@ export default function Page() {
     expect(response.status).toBe(200);
     expect(response.headers.get("x-mreact-stream")).toBe("1");
     expect(html).toContain("Loading...");
-    expect(html).toContain("have 2 conversations");
+    expect(html).toContain("have <!-- -->2<!-- --> conversations");
     expect(html).not.toContain("[object Object]");
   });
 

@@ -1856,10 +1856,10 @@ export default function Page(props) {
       request: new Request("http://local.test/"),
     });
 
-    expect(await first.text()).toContain("<main>calls: 1</main>");
-    expect(await cached.text()).toContain("<main>calls: 1</main>");
+    expect(await first.text()).toContain("<main>calls: <!-- -->1</main>");
+    expect(await cached.text()).toContain("<main>calls: <!-- -->1</main>");
     expect(action.status).toBe(200);
-    expect(await afterRevalidate.text()).toContain("<main>calls: 2</main>");
+    expect(await afterRevalidate.text()).toContain("<main>calls: <!-- -->2</main>");
   });
 
   test("form action single-flight responses include fresh same-route navigation HTML", async () => {

@@ -165,7 +165,7 @@ describe("ssr-streaming examples", () => {
     const html = await runServerStreamComponent(output);
 
     expect(html).toContain("Ada Lovelace");
-    expect(html).toContain("failed: network down");
+    expect(html).toContain("failed: <!-- -->network down");
   });
 });
 
