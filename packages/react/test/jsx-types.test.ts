@@ -87,24 +87,14 @@ function compileApp(source: string): string[] {
         moduleResolution: ts.ModuleResolutionKind.Bundler,
         noEmit: true,
         paths: {
-          "@reckona/mreact/jsx-runtime": [
-            "packages/react/src/jsx-runtime.ts",
-          ],
-          "@reckona/mreact/jsx-dev-runtime": [
-            "packages/react/src/jsx-dev-runtime.ts",
-          ],
-          "@reckona/mreact": [
-            "packages/react/src/index.ts",
-          ],
-          "@reckona/mreact-compat/jsx-runtime": [
-            "packages/react-compat/src/jsx-runtime.ts",
-          ],
+          "@reckona/mreact/jsx-runtime": ["packages/react/src/jsx-runtime.ts"],
+          "@reckona/mreact/jsx-dev-runtime": ["packages/react/src/jsx-dev-runtime.ts"],
+          "@reckona/mreact": ["packages/react/src/index.ts"],
+          "@reckona/mreact-compat/jsx-runtime": ["packages/react-compat/src/jsx-runtime.ts"],
           "@reckona/mreact-compat/jsx-dev-runtime": [
             "packages/react-compat/src/jsx-dev-runtime.ts",
           ],
-          "@reckona/mreact-compat": [
-            "packages/react-compat/src/index.ts",
-          ],
+          "@reckona/mreact-compat": ["packages/react-compat/src/index.ts"],
         },
         strict: true,
         target: ts.ScriptTarget.ES2022,
@@ -112,19 +102,14 @@ function compileApp(source: string): string[] {
       },
     });
 
-    return ts
-      .getPreEmitDiagnostics(program)
-      .map((diagnostic) => flattenDiagnostic(diagnostic));
+    return ts.getPreEmitDiagnostics(program).map((diagnostic) => flattenDiagnostic(diagnostic));
   } finally {
     rmSync(directory, { force: true, recursive: true });
   }
 }
 
 function flattenDiagnostic(diagnostic: ts.Diagnostic): string {
-  const message = ts.flattenDiagnosticMessageText(
-    diagnostic.messageText,
-    "\n",
-  );
+  const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
 
   return `${diagnostic.code}: ${message}`;
 }

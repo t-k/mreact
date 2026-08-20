@@ -4,11 +4,7 @@ import { join } from "node:path";
 import { buildApp, renderBuiltAppRequest } from "@reckona/mreact-router";
 import { describe, expect, it } from "vitest";
 import { createAppFixture, responseText } from "@reckona/mreact-test-utils";
-import {
-  __resetAuthForTesting,
-  createMemorySessionStore,
-  createSession,
-} from "../src/index.js";
+import { __resetAuthForTesting, createMemorySessionStore, createSession } from "../src/index.js";
 
 function cookiePair(response: Response): string {
   return response.headers.get("set-cookie")?.split(";")[0] ?? "";

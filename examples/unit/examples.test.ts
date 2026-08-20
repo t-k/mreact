@@ -138,19 +138,13 @@ describe("virtual-grid example", () => {
 
 describe("ssr-streaming examples", () => {
   test("string output renders the static SSR page", async () => {
-    const output = await transformServerExample(
-      "ssr-streaming/src/StringPage.tsx",
-      "string",
-    );
+    const output = await transformServerExample("ssr-streaming/src/StringPage.tsx", "string");
 
     expect(runServerComponent(output)).toContain("<h1>Hello SSR</h1>");
   });
 
   test("stream output escapes dynamic text", async () => {
-    const output = await transformServerExample(
-      "ssr-streaming/src/StreamPage.tsx",
-      "stream",
-    );
+    const output = await transformServerExample("ssr-streaming/src/StreamPage.tsx", "stream");
 
     await expect(runServerStreamComponent(output)).resolves.toContain(
       "&lt;script&gt;alert(1)&lt;/script&gt;",
@@ -158,10 +152,7 @@ describe("ssr-streaming examples", () => {
   });
 
   test("await boundaries render resolved and rejected content", async () => {
-    const output = await transformServerExample(
-      "ssr-streaming/src/AwaitPage.tsx",
-      "stream",
-    );
+    const output = await transformServerExample("ssr-streaming/src/AwaitPage.tsx", "stream");
     const html = await runServerStreamComponent(output);
 
     expect(html).toContain("Ada Lovelace");
@@ -171,9 +162,7 @@ describe("ssr-streaming examples", () => {
 
 describe("example configuration contracts", () => {
   test("workspace installs the native dependencies required by examples", async () => {
-    const packageJson = JSON.parse(
-      await readFile(join(process.cwd(), "package.json"), "utf8"),
-    ) as {
+    const packageJson = JSON.parse(await readFile(join(process.cwd(), "package.json"), "utf8")) as {
       pnpm?: { onlyBuiltDependencies?: string[] };
     };
 
@@ -185,12 +174,7 @@ describe("example configuration contracts", () => {
   test("react-libraries discovers its E2E suite from the package directory", () => {
     const result = spawnSync(
       "pnpm",
-      [
-        "--filter",
-        "@reckona/example-react-libraries",
-        "test:e2e",
-        "--list",
-      ],
+      ["--filter", "@reckona/example-react-libraries", "test:e2e", "--list"],
       { cwd: process.cwd(), encoding: "utf8", timeout: 30_000 },
     );
 

@@ -1146,11 +1146,7 @@ function enqueueStateUpdate(
       return;
     }
   }
-  if (
-    canApplyDirectUpdate &&
-    typeof value !== "function" &&
-    optionsAllowDirectTextBinding(value)
-  ) {
+  if (canApplyDirectUpdate && typeof value !== "function" && optionsAllowDirectTextBinding(value)) {
     const updatedText = updateDirectTextBinding(slot.textBinding, value);
     const updatedState = updateDirectStateBinding(slot.stateBinding, value);
     if (updatedText || updatedState) {

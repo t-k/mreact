@@ -183,8 +183,7 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
   let ownsParent = false;
   const deferEventPromotion = options.deferEventPromotion !== false;
   const renderArity = renderItem.length;
-  const warnDuplicateKey =
-    import.meta.env?.DEV === false ? undefined : createDuplicateKeyWarning();
+  const warnDuplicateKey = import.meta.env?.DEV === false ? undefined : createDuplicateKeyWarning();
   const selectedClass = options.selectedClass as
     | BindStaticKeyedSingleNodeListSelectedClassOptions<T, TNode>
     | undefined;

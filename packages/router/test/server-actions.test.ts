@@ -82,10 +82,7 @@ export default function Page() {
   test("does not lower form action text inside string literals", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-string-literal-"));
     await mkdir(appDir, { recursive: true });
-    await writeFile(
-      join(appDir, "actions.ts"),
-      `export function save() { return { ok: true }; }`,
-    );
+    await writeFile(join(appDir, "actions.ts"), `export function save() { return { ok: true }; }`);
     await writeFile(
       join(appDir, "page.mreact.tsx"),
       `import { save } from "./actions";
@@ -372,7 +369,9 @@ export default function Page() {
       ok: false,
       error: "Unknown server action.",
     });
-    expect((globalThis as { __mreactAdminDeleteCalls?: number }).__mreactAdminDeleteCalls).toBeUndefined();
+    expect(
+      (globalThis as { __mreactAdminDeleteCalls?: number }).__mreactAdminDeleteCalls,
+    ).toBeUndefined();
   });
 
   test("rejects invalid inferred action tokens without consuming the nonce", async () => {
@@ -452,7 +451,9 @@ export default function Page() {
       ok: false,
       error: "Unknown server action.",
     });
-    expect((globalThis as { __mreactAdminDeleteCalls?: number }).__mreactAdminDeleteCalls).toBeUndefined();
+    expect(
+      (globalThis as { __mreactAdminDeleteCalls?: number }).__mreactAdminDeleteCalls,
+    ).toBeUndefined();
   });
 
   test("rejects JSON calls to rendered inferred actions", async () => {

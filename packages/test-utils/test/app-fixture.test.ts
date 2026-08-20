@@ -81,12 +81,9 @@ export default function Page(props) {
     expect(redirectResponse.status).toBe(303);
     expect(redirectResponse.headers.get("location")).toBe("/login");
 
-    const notFoundResponse = await invokeRouteHandler(
-      () => {
-        notFound();
-      },
-      new Request("https://app.test/api/missing"),
-    );
+    const notFoundResponse = await invokeRouteHandler(() => {
+      notFound();
+    }, new Request("https://app.test/api/missing"));
 
     expect(notFoundResponse.status).toBe(404);
     expect(await notFoundResponse.text()).toBe("Not Found");
