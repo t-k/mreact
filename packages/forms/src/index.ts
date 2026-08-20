@@ -208,7 +208,7 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     touched: {},
     valid: true,
     validating: {},
-    values: cloneValues(options.initialValues),
+    values: { ...initialValues },
   });
   const validationGenerations = new Map<FieldName<TValues>, number>();
   const dirtyFields = new Set<FieldName<TValues>>();
@@ -311,15 +311,16 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     value: TValues[Name],
   ): Promise<void> {
     const previous = state.get();
-    const valueChanged = !Object.is(previous.values[name], value);
+    const ownedValue = cloneValue(value);
+    updateDirtyField(name, value);
+    const valueChanged = !Object.is(previous.values[name], ownedValue);
     if (valueChanged) {
       invalidateFieldValidations([name, ...dependentFieldsFor(name)]);
     }
-    updateDirtyField(name, value);
     commit({
       values: {
         ...previous.values,
-        [name]: value,
+        [name]: ownedValue,
       },
     });
 
@@ -369,7 +370,7 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
 
     if (options.schema !== undefined) {
       try {
-        const result = await validateStandardSchema(options.schema, values);
+        const result = await validateStandardSchema(options.schema, cloneValues(values));
 
         if (!result.success) {
           mergeIssueErrors(errors, result.issues);
@@ -410,7 +411,7 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     }
     return {
       success: true,
-      value: values as TValues & TSubmitValues,
+      value: cloneValues(values) as TValues & TSubmitValues,
     };
   }
 
@@ -486,7 +487,9 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
       return existing as ReadonlyCell<FieldState<TValues[Name]>>;
     }
 
-    const next = computed(() => fieldState(state.get(), name), { equals: fieldStateEquals });
+    const next = computed(() => fieldState(state.get(), name, dirtyFields.has(name)), {
+      equals: fieldStateEquals,
+    });
     fieldStateCells.set(name, next as ReadonlyCell<FieldState<TValues[FieldName<TValues>]>>);
     return next;
   }
@@ -604,7 +607,7 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
       };
     },
     getValues() {
-      return state.get().values;
+      return cloneValues(state.get().values);
     },
     reset(values = initialValues): void {
       for (const name of Object.keys(options.validate ?? {}) as Array<FieldName<TValues>>) {
@@ -622,7 +625,7 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
         submitting: false,
         touched: {},
         validating: {},
-        values: cloneValues(values),
+        values: { ...initialValues },
       });
     },
     setErrors,
@@ -724,9 +727,10 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
 function fieldState<TValues extends FormValues, Name extends FieldName<TValues>>(
   formState: FormState<TValues>,
   name: Name,
+  dirty: boolean,
 ): FieldState<TValues[Name]> {
   return {
-    dirty: !Object.is(formState.values[name], formState.initialValues[name]),
+    dirty,
     errors: [...(formState.errors[name] ?? [])],
     touched: formState.touched[name] === true,
     validating: formState.validating[name] === true,
@@ -787,8 +791,35 @@ function eventValue(event: Event, currentValue: unknown): unknown {
   const target = event.currentTarget ?? event.target;
 
   if (target !== null && typeof target === "object") {
-    if (typeof currentValue === "boolean" && "checked" in target) {
+    const type =
+      "type" in target && typeof target.type === "string" ? target.type.toLowerCase() : "";
+
+    if (type === "checkbox" && "checked" in target) {
       return Boolean((target as { checked: unknown }).checked);
+    }
+
+    if ((type === "number" || type === "range") && "valueAsNumber" in target) {
+      return (target as { valueAsNumber: unknown }).valueAsNumber;
+    }
+
+    if (dateInputTypes.has(type) && "valueAsDate" in target) {
+      return (target as { valueAsDate: unknown }).valueAsDate;
+    }
+
+    if (type === "file" && "files" in target) {
+      return (target as { files: unknown }).files;
+    }
+
+    if (
+      "multiple" in target &&
+      target.multiple === true &&
+      "selectedOptions" in target &&
+      target.selectedOptions !== null &&
+      typeof target.selectedOptions === "object"
+    ) {
+      return Array.from(target.selectedOptions as ArrayLike<{ value: unknown }>, (option) =>
+        String(option.value),
+      );
     }
 
     if ("value" in target) {
@@ -798,6 +829,8 @@ function eventValue(event: Event, currentValue: unknown): unknown {
 
   return currentValue;
 }
+
+const dateInputTypes = new Set(["date", "month", "time", "week"]);
 
 function mergeIssueErrors<TValues extends FormValues>(
   errors: FormErrors<TValues>,
@@ -900,7 +933,11 @@ function buildDependentFields<TValues extends FormValues>(
 }
 
 function cloneValues<TValues extends FormValues>(values: TValues): TValues {
-  return { ...values };
+  return cloneValue(values);
+}
+
+function cloneValue<TValue>(value: TValue): TValue {
+  return structuredClone(value);
 }
 
 /** Re-exports Standard Schema types used by form schema options. */

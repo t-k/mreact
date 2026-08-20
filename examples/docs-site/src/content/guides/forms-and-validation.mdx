@@ -83,6 +83,10 @@ export default function Page() {
 
 Each field also has `field.state.get()` for field-local `value`, `errors`, `dirty`, `touched`, and `validating`. `field.bind()` returns `{ value, onInput, onChange, onBlur }` for component wrappers that want value and event props in one object. Use `field.bind({ event: "change" })` for controls such as `<select>` that should update from `onChange` instead of `onInput`.
 
+Bindings derive values from the DOM control kind rather than the current field value. Text and `datetime-local` controls emit strings, checkboxes emit booleans, number and range inputs emit numbers, date, month, time, and week inputs emit `Date | null`, file inputs emit `FileList | null`, and multiple selects emit `string[]`. Match the field's TypeScript value type to the control you bind. For a custom component or a different conversion rule, handle its event explicitly and pass the typed result to `field.setValue()`.
+
+Form values must be compatible with the platform `structuredClone()` algorithm. `createForm()`, `reset()`, and `setValue()` take ownership-safe copies, while `getValues()` returns a deep copy that you can normalize without changing committed state or bypassing reactive notifications. Form values that cannot be cloned, such as functions, fail at the boundary instead of being retained by shared reference. Standard Schema output may use other types because transformed output is owned by the schema and is not retained in form state.
+
 ## Validate fields
 
 Use `validate` for field-level rules and `validateOn` to decide when they run. A field validator can return `readonly string[] | string | undefined`, and it can be `async`.

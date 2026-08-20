@@ -40,7 +40,7 @@ describe("createForm", () => {
       .onInput({ currentTarget: { value: "ada@example.test" } } as unknown as Event);
     await accepted
       .bind({ event: "change" })
-      .onChange({ currentTarget: { checked: true } } as unknown as Event);
+      .onChange({ currentTarget: { checked: true, type: "checkbox" } } as unknown as Event);
     await email
       .bind()
       .onBlur({ currentTarget: { value: "ignored@example.test" } } as unknown as Event);
@@ -53,6 +53,172 @@ describe("createForm", () => {
       touched: true,
       value: "ada@example.test",
     });
+  });
+
+  it("reads standard form control values from the control kind", async () => {
+    const birthday = new Date("2001-02-03T00:00:00.000Z");
+    const files = { 0: { name: "avatar.png" }, length: 1 } as unknown as FileList;
+    const form = createForm({
+      initialValues: {
+        accepted: false,
+        avatar: null as FileList | null,
+        birthday: null as Date | null,
+        localMeeting: "",
+        languages: [] as string[],
+        newsletter: undefined as boolean | undefined,
+        nullableConsent: null as boolean | null,
+        seats: 0,
+        title: "",
+      },
+    });
+
+    const newsletter = form.field("newsletter").bind({ event: "change" });
+    const nullableConsent = form.field("nullableConsent").bind({ event: "change" });
+    await newsletter.onChange({
+      currentTarget: { checked: true, type: "checkbox", value: "on" },
+    } as unknown as Event);
+    expect(form.getValues().newsletter).toBe(true);
+    await newsletter.onChange({
+      currentTarget: { checked: false, type: "checkbox", value: "on" },
+    } as unknown as Event);
+    await nullableConsent.onChange({
+      currentTarget: { checked: true, type: "checkbox", value: "on" },
+    } as unknown as Event);
+    expect(form.getValues().nullableConsent).toBe(true);
+    await nullableConsent.onChange({
+      currentTarget: { checked: false, type: "checkbox", value: "on" },
+    } as unknown as Event);
+    await form
+      .field("accepted")
+      .bind({ event: "change" })
+      .onChange({ currentTarget: { checked: true, type: "checkbox" } } as unknown as Event);
+    await form
+      .field("seats")
+      .bind()
+      .onInput({
+        currentTarget: { type: "number", value: "3", valueAsNumber: 3 },
+      } as unknown as Event);
+    await form
+      .field("birthday")
+      .bind({ event: "change" })
+      .onChange({ currentTarget: { type: "date", valueAsDate: birthday } } as unknown as Event);
+    await form
+      .field("localMeeting")
+      .bind({ event: "change" })
+      .onChange({
+        currentTarget: {
+          type: "datetime-local",
+          value: "2001-02-03T04:05",
+          valueAsDate: null,
+        },
+      } as unknown as Event);
+    await form
+      .field("avatar")
+      .bind({ event: "change" })
+      .onChange({
+        currentTarget: { files, type: "file", value: "C:\\fakepath\\avatar.png" },
+      } as unknown as Event);
+    await form
+      .field("languages")
+      .bind({ event: "change" })
+      .onChange({
+        currentTarget: {
+          multiple: true,
+          selectedOptions: [{ value: "ja" }, { value: "en" }],
+          type: "select-multiple",
+          value: "ja",
+        },
+      } as unknown as Event);
+    await form
+      .field("title")
+      .bind()
+      .onInput({ currentTarget: { type: "text", value: "Mreact" } } as unknown as Event);
+
+    expect(form.getValues()).toEqual({
+      accepted: true,
+      avatar: files,
+      birthday,
+      languages: ["ja", "en"],
+      localMeeting: "2001-02-03T04:05",
+      newsletter: false,
+      nullableConsent: false,
+      seats: 3,
+      title: "Mreact",
+    });
+  });
+
+  it("keeps nested values isolated from callers and other forms", async () => {
+    const defaults = {
+      address: { city: "Tokyo" },
+      tags: ["docs"],
+    };
+    const first = createForm({ initialValues: defaults });
+    const second = createForm({ initialValues: defaults });
+
+    const returned = first.getValues();
+    expect(returned).not.toBe(first.state.get().values);
+    expect(first.field("address").state.get().dirty).toBe(false);
+    returned.address.city = "Kyoto";
+    returned.tags.push("router");
+    await first.setValue("address", { city: "Osaka" });
+
+    expect(first.getValues()).toEqual({ address: { city: "Osaka" }, tags: ["docs"] });
+    expect(first.state.get().dirty).toBe(true);
+    expect(first.field("address").state.get().dirty).toBe(true);
+    expect(second.getValues()).toEqual(defaults);
+    expect(defaults).toEqual({ address: { city: "Tokyo" }, tags: ["docs"] });
+  });
+
+  it("takes ownership of reset and setValue inputs", async () => {
+    const form = createForm({ initialValues: { profile: { name: "Ada" } } });
+    const resetValues = { profile: { name: "Grace" } };
+    form.reset(resetValues);
+    resetValues.profile.name = "mutated reset";
+    expect(form.getValues()).toEqual({ profile: { name: "Grace" } });
+
+    const nextProfile = { name: "Lin" };
+    await form.setValue("profile", nextProfile);
+    nextProfile.name = "mutated setValue";
+
+    expect(form.getValues()).toEqual({ profile: { name: "Lin" } });
+  });
+
+  it("clears nested dirty state when restoring the initial snapshot reference", async () => {
+    const form = createForm({ initialValues: { profile: { name: "Ada" } } });
+    const initialProfile = form.state.get().initialValues.profile;
+
+    await form.setValue("profile", { name: "Grace" });
+    expect(form.state.get().dirty).toBe(true);
+    expect(form.field("profile").state.get().dirty).toBe(true);
+
+    await form.setValue("profile", initialProfile);
+
+    expect(form.getValues()).toEqual({ profile: { name: "Ada" } });
+    expect(form.state.get().dirty).toBe(false);
+    expect(form.field("profile").state.get().dirty).toBe(false);
+  });
+
+  it("rejects non-cloneable initial values instead of sharing them", () => {
+    expect(() =>
+      createForm({
+        initialValues: { formatter: () => "unsafe shared closure" },
+      }),
+    ).toThrow();
+  });
+
+  it("keeps committed value and dirty state after setValue rejects a non-cloneable value", async () => {
+    const form = createForm({
+      initialValues: { config: {} as { formatter?: (() => string) | undefined } },
+    });
+
+    await expect(
+      form.setValue("config", { formatter: () => "cannot be cloned" }),
+    ).rejects.toThrow();
+    await form.field("config").blur();
+
+    expect(form.getValues()).toEqual({ config: {} });
+    expect(form.state.get().dirty).toBe(false);
+    expect(form.field("config").state.get().dirty).toBe(false);
   });
 
   it("field binding value reflects setValue and reset after bind time", async () => {
@@ -434,6 +600,47 @@ describe("createForm", () => {
     await expect(form.validate()).resolves.toEqual({ error: failure, success: false });
     await expect(form.submit(() => "saved")).resolves.toEqual({ error: failure, status: "error" });
     expect(form.state.get().errors).toEqual({ root: ["schema service unavailable"] });
+  });
+
+  it("preserves schema-owned output types without exposing form state", async () => {
+    const urlSchema = {
+      "~standard": {
+        version: 1 as const,
+        vendor: "test",
+        validate: () => ({ value: new URL("https://example.test/profile") }),
+        types: undefined as unknown as { input: { slug: string }; output: URL },
+      },
+    };
+    const urlForm = createForm({ initialValues: { slug: "ada" }, schema: urlSchema });
+
+    const urlValidation = await urlForm.validate();
+    expect(urlValidation.success).toBe(true);
+    if (urlValidation.success) {
+      expect(urlValidation.value).toBeInstanceOf(URL);
+      expect(urlValidation.value.href).toBe("https://example.test/profile");
+    }
+
+    const passThroughSchema = {
+      "~standard": {
+        version: 1 as const,
+        vendor: "test",
+        validate: (value: unknown) => ({ value: value as { profile: { name: string } } }),
+        types: undefined as unknown as {
+          input: { profile: { name: string } };
+          output: { profile: { name: string } };
+        },
+      },
+    };
+    const passThroughForm = createForm({
+      initialValues: { profile: { name: "Ada" } },
+      schema: passThroughSchema,
+    });
+    const passThroughValidation = await passThroughForm.validate();
+    expect(passThroughValidation.success).toBe(true);
+    if (passThroughValidation.success) {
+      passThroughValidation.value.profile.name = "mutated output";
+    }
+    expect(passThroughForm.getValues()).toEqual({ profile: { name: "Ada" } });
   });
 
   it("reset restores initial values and clears touched, errors, and submit state", async () => {

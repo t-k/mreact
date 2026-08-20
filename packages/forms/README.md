@@ -37,6 +37,10 @@ input({
 
 Use `field.bind({ event: "change" })` for controls such as `<select>` that should update on change instead of input. `binding.value` is read live from form state, so repeated reads after validation or reset return the current value.
 
+Bindings read values from the DOM control kind. Text and `datetime-local` controls emit strings, checkboxes emit booleans, number and range inputs emit numbers, date, month, time, and week inputs emit `Date | null`, file inputs emit `FileList | null`, and multiple selects emit `string[]`. Match the field's TypeScript value type to the control you bind; use an explicit event handler with `field.setValue()` when a custom component needs different conversion semantics.
+
+Form values must be compatible with the platform `structuredClone()` algorithm. The form takes ownership-safe copies of initial, reset, and `setValue()` inputs, and `getValues()` returns a deep copy that callers may normalize without mutating committed form state. Unsupported form values such as functions fail when they cross one of these boundaries instead of being shared silently. A Standard Schema may still produce a non-cloneable submit value because transformed output is owned by the schema and is not retained in form state.
+
 ## Valibot And Standard Schema
 
 `createForm` accepts Standard Schema compatible validators through the
@@ -107,7 +111,7 @@ await inviteForm.submit((values) => {
 ## Core APIs
 
 - `createForm()` creates reactive form state.
-- `form.field(name).bind()` returns `{ value, onInput, onChange, onBlur }` and handles string values and boolean checkbox-style values. Pass `{ event: "change" }` to update from `onChange`; the default updates from `onInput`.
+- `form.field(name).bind()` returns `{ value, onInput, onChange, onBlur }` and handles the standard DOM-native values described above. Pass `{ event: "change" }` to update from `onChange`; the default updates from `onInput`.
 - `form.fieldArray(name)` returns stable keyed rows and `append`, `insert`, `move`, `remove`, and `swap` helpers for array-valued form fields.
 - Field state includes `validating`, which is true while the latest async field validator is pending. Slower stale validator results are ignored.
 - Field validators can use `{ validate, deps }` when one field should be revalidated after another field changes or blurs.
