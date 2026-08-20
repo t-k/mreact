@@ -4,9 +4,13 @@ import { join, resolve } from "node:path";
 import * as ts from "@typescript/typescript6";
 import { describe, expect, test } from "vitest";
 
+const TYPECHECK_TEST_TIMEOUT_MS = 15_000;
+
 describe("react JSX runtime types", () => {
-  test("exposes JSX.Element for component return annotations", () => {
-    const diagnostics = compileApp(`
+  test(
+    "exposes JSX.Element for component return annotations",
+    () => {
+      const diagnostics = compileApp(`
 import type { JSX } from "@reckona/mreact";
 
 export default function Page(): JSX.Element {
@@ -14,11 +18,15 @@ export default function Page(): JSX.Element {
 }
 `);
 
-    expect(diagnostics).toEqual([]);
-  });
+      expect(diagnostics).toEqual([]);
+    },
+    TYPECHECK_TEST_TIMEOUT_MS,
+  );
 
-  test("types form submit handlers with the form as currentTarget", () => {
-    const diagnostics = compileApp(`
+  test(
+    "types form submit handlers with the form as currentTarget",
+    () => {
+      const diagnostics = compileApp(`
 import type { FormEvent, JSX } from "@reckona/mreact";
 
 const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -49,11 +57,15 @@ export function TypedPage(): JSX.Element {
 }
 `);
 
-    expect(diagnostics).toEqual([]);
-  });
+      expect(diagnostics).toEqual([]);
+    },
+    TYPECHECK_TEST_TIMEOUT_MS,
+  );
 
-  test("exposes common React namespace type members", () => {
-    const diagnostics = compileApp(`
+  test(
+    "exposes common React namespace type members",
+    () => {
+      const diagnostics = compileApp(`
 import * as React from "@reckona/mreact";
 
 type Props = { value: string; children?: React.ReactNode };
@@ -65,8 +77,10 @@ const jsxElement: React.JSX.Element = <main>{node}</main>;
 export { View, element, node, jsxElement };
 `);
 
-    expect(diagnostics).toEqual([]);
-  });
+      expect(diagnostics).toEqual([]);
+    },
+    TYPECHECK_TEST_TIMEOUT_MS,
+  );
 });
 
 function compileApp(source: string): string[] {

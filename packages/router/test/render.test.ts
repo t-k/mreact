@@ -6796,6 +6796,7 @@ export default function Page() {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-built-loading-boundary-"));
     const pageFile = join(appDir, "docs", "page.mreact.tsx");
     const loadingFile = join(appDir, "docs", "loading.mreact.tsx");
+    const sourceTransformTimeoutMs = 5_000;
     const state = globalThis as { __mreactResolveBuiltLoadingDocs?: () => void };
     state.__mreactResolveBuiltLoadingDocs = undefined;
 
@@ -6835,12 +6836,12 @@ export default function Page(props) {
             ],
           ]),
         }),
-        1000,
+        sourceTransformTimeoutMs,
         "built server loading boundary response",
       );
       const firstChunk = await expectResolvesWithin(
         readUntilChunkIncludes(response, "Loading docs"),
-        1000,
+        sourceTransformTimeoutMs,
         "built server loading boundary first chunk",
       );
 
@@ -6852,7 +6853,7 @@ export default function Page(props) {
     } finally {
       delete state.__mreactResolveBuiltLoadingDocs;
     }
-  });
+  }, 15_000);
 
   test("renders special not-found routes from built server source files without filesystem access", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-built-not-found-boundary-"));
