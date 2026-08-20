@@ -11,6 +11,8 @@ errors through a small reactive API.</p>
 </code><button type="button">Copy</button></pre>
 
 <p>Use <code>field.bind({ event: &quot;change&quot; })</code> for controls such as <code>&lt;select&gt;</code> that should update on change instead of input. <code>binding.value</code> is read live from form state, so repeated reads after validation or reset return the current value.</p>
+<p>Bindings read values from the DOM control kind. Text and <code>datetime-local</code> controls emit strings, checkboxes emit booleans, number and range inputs emit numbers, date, month, time, and week inputs emit <code>Date | null</code>, file inputs emit <code>FileList | null</code>, and multiple selects emit <code>string[]</code>. Match the field's TypeScript value type to the control you bind; use an explicit event handler with <code>field.setValue()</code> when a custom component needs different conversion semantics.</p>
+<p>Form values must be compatible with the platform <code>structuredClone()</code> algorithm. The form takes ownership-safe copies of initial, reset, and <code>setValue()</code> inputs, and <code>getValues()</code> returns a deep copy that callers may normalize without mutating committed form state. Unsupported form values such as functions fail when they cross one of these boundaries instead of being shared silently. A Standard Schema may still produce a non-cloneable submit value because transformed output is owned by the schema and is not retained in form state.</p>
 <h2 id="valibot-and-standard-schema" class="tsd-anchor-link">Valibot And Standard Schema<a href="#valibot-and-standard-schema" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <p><code>createForm</code> accepts Standard Schema compatible validators through the
 <code>schema</code> option. Valibot and Zod v4 expose Standard Schema metadata directly,
@@ -26,7 +28,7 @@ while <code>submit()</code> receives the schema output after transforms run.</p>
 <h2 id="core-apis" class="tsd-anchor-link">Core APIs<a href="#core-apis" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <ul>
 <li><code>createForm()</code> creates reactive form state.</li>
-<li><code>form.field(name).bind()</code> returns <code>{ value, onInput, onChange, onBlur }</code> and handles string values and boolean checkbox-style values. Pass <code>{ event: &quot;change&quot; }</code> to update from <code>onChange</code>; the default updates from <code>onInput</code>.</li>
+<li><code>form.field(name).bind()</code> returns <code>{ value, onInput, onChange, onBlur }</code> and handles the standard DOM-native values described above. Pass <code>{ event: &quot;change&quot; }</code> to update from <code>onChange</code>; the default updates from <code>onInput</code>.</li>
 <li><code>form.fieldArray(name)</code> returns stable keyed rows and <code>append</code>, <code>insert</code>, <code>move</code>, <code>remove</code>, and <code>swap</code> helpers for array-valued form fields.</li>
 <li>Field state includes <code>validating</code>, which is true while the latest async field validator is pending. Slower stale validator results are ignored.</li>
 <li>Field validators can use <code>{ validate, deps }</code> when one field should be revalidated after another field changes or blurs.</li>
