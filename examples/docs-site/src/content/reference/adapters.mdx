@@ -40,6 +40,38 @@ createServer(handler).listen(Number(process.env.PORT ?? 3000));
 
 When a trusted reverse proxy terminates TLS, pass `trustForwardedProto: true` to `createNodeRequestHandler()` only if the proxy overwrites `X-Forwarded-Proto` and the Node listener is not directly reachable. This is independent of `hostPolicy`; the default remains false.
 
+## Managed HTTP upgrades
+
+Use `startServer()` or `startDevServer()` when an application needs WebSocket or another HTTP upgrade protocol on the same Node server. Browser WebSocket handshakes are not protected by CORS or the browser same-origin policy, and matching cookies are sent with the handshake. Mreact therefore validates the exact serialized `Origin` before invoking the application handler by default. Validate origin before reading a session or other credentials, then explicitly accept or decline every upgrade.
+
+```ts
+import { startServer, validateHttpUpgradeOrigin } from "@reckona/mreact-router";
+import { WebSocketServer } from "ws";
+
+const allowedOrigins = ["https://app.example.com"];
+const wss = new WebSocketServer({ noServer: true });
+
+await startServer({
+  outDir: ".mreact",
+  port: 3000,
+  upgradeOriginPolicy: { allowedOrigins },
+  onUpgrade(request, socket, head, context) {
+    const origin = validateHttpUpgradeOrigin(request, { allowedOrigins });
+    if (!origin.ok || request.url !== "/ws") {
+      return context.decline();
+    }
+
+    context.accept();
+    // Authenticate only after Origin validation.
+    wss.handleUpgrade(request, socket, head, (websocket) => {
+      wss.emit("connection", websocket, request);
+    });
+  },
+});
+```
+
+Call `context.accept()` synchronously before delayed verification and call `context.decline()` for requests the application does not own. A handler that throws, rejects, or leaves an asynchronous decision unresolved closes the socket. `close()` lets accepted upgrades finish until `upgradeCloseTimeoutMs`, then destroys only the remaining upgrade sockets while ordinary HTTP responses retain their normal drain behavior. Non-browser clients without an `Origin` header require an explicit `{ allowedOrigins, allowMissingOrigin: true }` policy and another authentication boundary; use `"unchecked"` only as an intentional compatibility escape hatch.
+
 ## Static export
 
 ```ts

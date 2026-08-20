@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.0.204 - 2026-08-20
+
+### Added
+
+- Added a managed HTTP upgrade lifecycle for Node and Vite development servers with exact-origin validation, explicit accept or decline decisions, bounded decision and shutdown timeouts, structured rejection logs, and the public `validateHttpUpgradeOrigin()` helper.
+- Added `dehydratePolicyModule` so Vite development, prerendering, generated Node output, and generated Lambda handlers can share one buildable `shouldDehydrateQuery` policy without serializing callback closures.
+
+### Changed
+
+- Changed route loaders to settle redirects, not-found results, rewrites, and status-bearing `Response` objects before loading render artifacts or committing a streamed response. Use `defer()` and `<Await>` for non-critical fields that should continue streaming behind a loading boundary.
+- Changed session cookie defaults to use `__Host-mreact.session`, `Secure`, and `Path=/` outside explicit development and test environments, including when `NODE_ENV` is unset or set to a deployment-specific value.
+- Changed form state to take structured ownership-safe copies, return deep copies from `getValues()`, and read checkbox, numeric, date/time, file, and multiple-select bindings using their native value types.
+- Changed `@reckona/mreact-next` generation to skip dependency and build directories, mark owned outputs, migrate recognized legacy output pairs, and reject hand-written or concurrently changed output files instead of overwriting them.
+- Changed static export to emit dedicated marker-bearing client-navigation artifacts under `_mreact/navigation/` while preserving ordinary document HTML for static hosts.
+
+### Fixed
+
+- Fixed React compatibility for transition and optimistic state lanes, action lifecycles, effect and layout cleanup ordering, nested and non-bubbling event dispatch, globally unique `useId()` values, direct reducer bindings, async nodes, Flight client references, and modern scoped JSX types.
+- Fixed React-compatible hydration and controlled form handling so selective boundaries retain ownership, uncontrolled user input survives hydration, controlled values are restored after events, and non-element hydration roots fail safely.
+- Fixed server rendering for adjacent text-node boundaries, raw-text escaping, spread-prop edge cases, and explicit `dangerouslySetInnerHTML` ownership.
+- Fixed query cancellation, freshness, explicit refetch coordination, typed key isolation, infinite pagination failures, and route invalidation races.
+- Fixed Node, Lambda, Cloudflare, and streaming request lifecycles so validated origins are retained, disconnects cancel queued rendering, failed response streams are closed, loader redirects avoid render artifacts, and returned loader `Response` objects preserve their status and headers.
+- Fixed router cache and security boundaries for request-local metadata, CSP nonce responses, form referer redirects, server-action replay-store degradation, and Vite development CSS source containment across symlinks.
+- Fixed Flight serialization and decoding for binary rows, repeated collection models, built-in values, object identity, protocol boundaries, and native router round trips.
+- Fixed reactive DOM prop, ref, keyed-list, duplicate-key diagnostic, and non-Vite runtime behavior while preserving direct bindings and form control semantics.
+
 ## 0.0.203 - 2026-08-15
 
 ### Added
