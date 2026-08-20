@@ -319,6 +319,34 @@ describe("router Vite middleware", () => {
     await expect(response.text()).resolves.toContain("body { color: rebeccapurple; }");
   });
 
+  test("preserves Vite deny rules for symlinked dev CSS sources", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-vite-css-denied-symlink-"));
+    const appDir = join(projectRoot, "src", "app");
+    const deniedTarget = join(projectRoot, "src", "private.css");
+    const deniedAlias = join(projectRoot, "src", "alias.css");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(deniedTarget, "SECRET_DENIED_SYMLINK_CSS");
+    await symlink(deniedTarget, deniedAlias, "file");
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() { return <main>Denied symlink</main>; }`,
+    );
+    const server = await startDevServer({
+      port: 0,
+      projectRoot,
+      viteConfig: { server: { fs: { deny: [deniedAlias] } } },
+    });
+    devServers.push(server);
+
+    const ordinary = await fetch(`${server.url}/@fs${deniedAlias}`);
+    const devCss = await fetch(`${server.url}/_mreact/dev-css/src/alias.css`);
+    const bodies = `${await ordinary.text()}\n${await devCss.text()}`;
+
+    expect(ordinary.status).toBe(403);
+    expect(devCss.status).not.toBe(200);
+    expect(bodies).not.toContain("SECRET_DENIED_SYMLINK_CSS");
+  });
+
   test("does not let the dev CSS query bypass Vite filesystem containment", async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), "mreact-vite-css-http-project-"));
     const outsideRoot = await mkdtemp(join(tmpdir(), "mreact-vite-css-http-outside-"));
@@ -928,6 +956,47 @@ export default function Layout(props) {
     expect(css.status).toBe(200);
     expect(css.headers.get("content-type")).toContain("text/css");
     expect(cssText).toContain(".title");
+  });
+
+  test("resolves relative imports beside linked layout CSS", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-app-vite-css-relative-import-"));
+    const appDir = join(projectRoot, "src", "app");
+    const stylesDir = join(projectRoot, "src", "styles");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(stylesDir, { recursive: true });
+    await writeFile(
+      join(stylesDir, "global.css"),
+      `@import "./tokens.css";\n.title { color: var(--title-color); }`,
+    );
+    await writeFile(join(stylesDir, "tokens.css"), `:root { --title-color: rgb(7 8 9); }`);
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      `import "../styles/global.css";
+
+export default function Layout(props) {
+  return <html><body>{props.children}</body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export default function Page() {
+  return <main className="title">Styled</main>;
+}`,
+    );
+    const server = await startDevServer({
+      port: 0,
+      projectRoot,
+      routesDir: appDir,
+    });
+    devServers.push(server);
+
+    const css = await fetch(`${server.url}/_mreact/dev-css/src/styles/global.css`);
+    const cssText = await css.text();
+
+    expect(css.status).toBe(200);
+    expect(css.headers.get("content-type")).toContain("text/css");
+    expect(cssText).toContain("--title-color");
+    expect(cssText).toContain("rgb(7 8 9)");
   });
 
   test("serves linked layout CSS through configured Vite CSS plugins", async () => {

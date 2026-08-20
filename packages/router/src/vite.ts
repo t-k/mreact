@@ -1,6 +1,6 @@
 import { readFile, realpath } from "node:fs/promises";
 import type { ServerResponse } from "node:http";
-import { dirname, isAbsolute, relative, sep } from "node:path";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { formatDiagnostic } from "@reckona/mreact-compiler";
 import type { DehydrateOptions } from "@reckona/mreact-query";
 import {
@@ -137,6 +137,11 @@ type MreactRouterPlugin = Plugin & {
   [mreactRouterConfigKey]: MreactRouterPluginConfig;
 };
 
+interface DevCssViteFileSystemConfigs {
+  canonical: ResolvedConfig;
+  logical: ResolvedConfig;
+}
+
 /**
  * Creates the app-router Vite plugin for route compilation and development middleware.
  */
@@ -237,7 +242,7 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
   // built-in CSS plugin) whose `transform` requires a dev-server environment the
   // lightweight navigation scan cannot provide. Mirrors what the build forwards.
   let userVitePlugins: readonly PluginOption[] | undefined;
-  let resolvedViteConfig: Promise<ResolvedConfig> | undefined;
+  let resolvedViteConfig: Promise<DevCssViteFileSystemConfigs> | undefined;
   let devServerModuleCacheVersion = 0;
 
   const plugin: MreactRouterPlugin = {
@@ -288,7 +293,7 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
       };
     },
     configResolved(config) {
-      resolvedViteConfig = resolveCanonicalViteFileSystemConfig(config);
+      resolvedViteConfig = resolveDevCssViteFileSystemConfigs(config);
     },
     configureServer(server) {
       server.middlewares.use(createDevCssProxyMiddleware());
@@ -429,6 +434,13 @@ export function prepareReactiveEffectRunDevtoolsEvent() { return undefined; }`;
       };
     },
     async resolveId(id, importer) {
+      const devCssFile = devCssSourceRequestFile(id, project.projectRoot);
+      if (devCssFile !== undefined) {
+        const queryStart = id.indexOf("?");
+        const query = queryStart === -1 ? "" : id.slice(queryStart);
+        return `${normalizePath(devCssFile)}${query}`;
+      }
+
       const runtimePath = runtimePaths.get(id);
 
       if (id === "@reckona/mreact-reactive-core") {
@@ -945,11 +957,27 @@ function isDevCssSourceModuleId(id: string): boolean {
   return new URLSearchParams(id.slice(id.indexOf("?") + 1)).has(devCssSourceQuery);
 }
 
+function devCssSourceRequestFile(id: string, projectRoot: string): string | undefined {
+  if (!new URLSearchParams(id.slice(id.indexOf("?") + 1)).has(devCssSourceQuery)) {
+    return undefined;
+  }
+
+  const requestPath = clientRequestPath(id);
+  if (requestPath.startsWith("/@fs/")) {
+    return `/${requestPath.slice("/@fs/".length)}`;
+  }
+  if (isAbsolute(requestPath) && isPathInsideDirectory(projectRoot, requestPath)) {
+    return requestPath;
+  }
+
+  return resolve(projectRoot, `.${requestPath.startsWith("/") ? requestPath : `/${requestPath}`}`);
+}
+
 async function loadDevCssSourceModule(options: {
   allowedRoot: Promise<string | undefined>;
   cssFile: string;
   sourceDirs: readonly string[];
-  viteConfig: Promise<ResolvedConfig> | undefined;
+  viteConfig: Promise<DevCssViteFileSystemConfigs> | undefined;
 }): Promise<string | undefined> {
   const refusal = () => new Error("Dev CSS source is outside the configured project roots.");
 
@@ -959,7 +987,7 @@ async function loadDevCssSourceModule(options: {
 
   let allowedRoot: string | undefined;
   let cssFile: string;
-  let viteConfig: ResolvedConfig | undefined;
+  let viteConfig: DevCssViteFileSystemConfigs | undefined;
   try {
     [allowedRoot, cssFile, viteConfig] = await Promise.all([
       options.allowedRoot,
@@ -973,7 +1001,9 @@ async function loadDevCssSourceModule(options: {
   if (
     allowedRoot === undefined ||
     !isPathInsideDirectory(allowedRoot, cssFile) ||
-    (viteConfig !== undefined && !isFileLoadingAllowed(viteConfig, normalizePath(cssFile)))
+    (viteConfig !== undefined &&
+      (!isFileLoadingAllowed(viteConfig.logical, normalizePath(options.cssFile)) ||
+        !isFileLoadingAllowed(viteConfig.canonical, normalizePath(cssFile))))
   ) {
     throw refusal();
   }
@@ -1000,9 +1030,9 @@ async function resolveCanonicalDevCssSourceRoot(directory: string): Promise<stri
   }
 }
 
-async function resolveCanonicalViteFileSystemConfig(
+async function resolveDevCssViteFileSystemConfigs(
   config: ResolvedConfig,
-): Promise<ResolvedConfig> {
+): Promise<DevCssViteFileSystemConfigs> {
   const allow = await Promise.all(
     config.server.fs.allow.map(async (directory) => {
       try {
@@ -1014,14 +1044,17 @@ async function resolveCanonicalViteFileSystemConfig(
   );
 
   return {
-    ...config,
-    server: {
-      ...config.server,
-      fs: {
-        ...config.server.fs,
-        allow,
+    canonical: {
+      ...config,
+      server: {
+        ...config.server,
+        fs: {
+          ...config.server.fs,
+          allow,
+        },
       },
     },
+    logical: config,
   };
 }
 
