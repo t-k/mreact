@@ -158,7 +158,8 @@ function bindKeyedList<T>(
   // Function.length is stable for the lifetime of the list; reading it per
   // row update is avoidable property-access overhead.
   const renderArity = renderItem.length;
-  const warnDuplicateKey = import.meta.env.DEV ? createDuplicateKeyWarning() : undefined;
+  const warnDuplicateKey =
+    import.meta.env?.DEV === false ? undefined : createDuplicateKeyWarning();
 
   const dispose = effect(() => {
     const currentItems = items();
