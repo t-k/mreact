@@ -2006,7 +2006,9 @@ export function GET() {
     expect(workerSource).toContain("plain-define-value");
     expect(workerSource).toContain("route-define-value");
     expect(page.status).toBe(200);
-    expect(await page.text()).toContain("https://api.example.invalid::plain-define-value");
+    expect(await page.text()).toContain(
+      "https://api.example.invalid<!-- -->::<!-- -->plain-define-value",
+    );
     expect(route.status).toBe(200);
     await expect(route.json()).resolves.toEqual({ value: "route-define-value" });
   });
@@ -3982,7 +3984,7 @@ export default function Page(props) {
     const html = await readFile(join(exportDir, "users", "ada", "index.html"), "utf8");
     const cssPath = html.match(/href="\/_mreact\/client\/(?<asset>[^"]+\.css)"/u)?.groups?.asset;
 
-    expect(html).toContain('<main class="profile">User ada</main>');
+    expect(html).toContain('<main class="profile">User <!-- -->ada</main>');
     expect(cssPath).toMatch(/^assets\/routes\/users__id\.[a-f0-9]{8}\.css$/);
     await expect(
       readFile(join(exportDir, "_mreact", "client", cssPath ?? ""), "utf8"),
@@ -5238,7 +5240,7 @@ export default function Page() {
 
     expect(artifactCode).toContain("@reckona/mreact-router/native-escape");
     expect(artifactCode).toContain("[first, second]");
-    expect(await response.text()).toContain("<main>&lt;Ada&gt;&amp; Grace</main>");
+    expect(await response.text()).toContain("<main>&lt;Ada&gt;<!-- -->&amp; Grace</main>");
   });
 
   test("does not emit production client source maps by default", async () => {
@@ -8559,7 +8561,7 @@ export default function Page({ data }) {
       request: new Request("http://local.test/users/settings"),
     });
 
-    expect(await dynamicResponse.text()).toContain("<main>User ada</main>");
+    expect(await dynamicResponse.text()).toContain("<main>User <!-- -->ada</main>");
     expect(await staticResponse.text()).toContain("<main>Settings</main>");
   });
 
@@ -9314,8 +9316,8 @@ export default function Page(props) {
       }),
     });
 
-    expect(await japanese.text()).toContain("<main>country: JP</main>");
-    expect(await german.text()).toContain("<main>country: DE</main>");
+    expect(await japanese.text()).toContain("<main>country: <!-- -->JP</main>");
+    expect(await german.text()).toContain("<main>country: <!-- -->DE</main>");
   });
 
   test("does not single-flight a regenerated visitor-dependent prerender across requests", async () => {
@@ -9383,8 +9385,8 @@ export default function Page(props) {
       }),
     ]);
 
-    expect(await japanese.text()).toContain("<main>country: JP</main>");
-    expect(await german.text()).toContain("<main>country: DE</main>");
+    expect(await japanese.text()).toContain("<main>country: <!-- -->JP</main>");
+    expect(await german.text()).toContain("<main>country: <!-- -->DE</main>");
   });
 
   test("does not persist regenerated prerenders that set a visitor cookie", async () => {
@@ -9549,8 +9551,8 @@ export default function Page(props) {
 
     // The second request must replay the stored regeneration rather than
     // running the loader again.
-    expect(regeneratedHtml).toContain("run: 2");
-    expect(replayedHtml).toContain("run: 2");
+    expect(regeneratedHtml).toContain("run: <!-- -->2");
+    expect(replayedHtml).toContain("run: <!-- -->2");
   });
 
   test("prerenders dynamic routes from generateStaticParams at build time", async () => {
@@ -9576,9 +9578,11 @@ export default function Page(props) {
       await readFile(join(outDir, "server", "manifest.json"), "utf8"),
     ) as { prerenderedRoutes?: Record<string, { html?: string }> };
 
-    expect(manifest.prerenderedRoutes?.["/users/ada"]?.html).toContain("<main>User ada</main>");
+    expect(manifest.prerenderedRoutes?.["/users/ada"]?.html).toContain(
+      "<main>User <!-- -->ada</main>",
+    );
     expect(manifest.prerenderedRoutes?.["/users/grace%20hopper"]?.html).toContain(
-      "<main>User grace hopper</main>",
+      "<main>User <!-- -->grace hopper</main>",
     );
   });
 
@@ -9613,9 +9617,15 @@ export default function Page(props) {
         await readFile(join(outDir, "server", "manifest.json"), "utf8"),
       ) as { prerenderedRoutes?: Record<string, { html?: string }> };
 
-      expect(manifest.prerenderedRoutes?.["/docs/one"]?.html).toContain("<main>Doc one</main>");
-      expect(manifest.prerenderedRoutes?.["/docs/two"]?.html).toContain("<main>Doc two</main>");
-      expect(manifest.prerenderedRoutes?.["/docs/three"]?.html).toContain("<main>Doc three</main>");
+      expect(manifest.prerenderedRoutes?.["/docs/one"]?.html).toContain(
+        "<main>Doc <!-- -->one</main>",
+      );
+      expect(manifest.prerenderedRoutes?.["/docs/two"]?.html).toContain(
+        "<main>Doc <!-- -->two</main>",
+      );
+      expect(manifest.prerenderedRoutes?.["/docs/three"]?.html).toContain(
+        "<main>Doc <!-- -->three</main>",
+      );
       expect((globalThis as Record<string, unknown>)[counterKey]).toBe(2);
     } finally {
       delete (globalThis as Record<string, unknown>)[counterKey];
@@ -9684,11 +9694,11 @@ export default function Page(props) {
       request: new Request("http://local.test/"),
     });
 
-    expect(await first.text()).toContain("<main>calls: 1</main>");
+    expect(await first.text()).toContain("<main>calls: <!-- -->1</main>");
     expect(action.status).toBe(200);
     expect(action.headers.get("x-mreact-revalidate")).toBe("/");
-    expect(await regenerated.text()).toContain("<main>calls: 2</main>");
-    expect(await cachedAgain.text()).toContain("<main>calls: 2</main>");
+    expect(await regenerated.text()).toContain("<main>calls: <!-- -->2</main>");
+    expect(await cachedAgain.text()).toContain("<main>calls: <!-- -->2</main>");
   });
 
   test("uses an external prerender store and single-flight regeneration", async () => {
@@ -9761,10 +9771,10 @@ export default function Page(props) {
       }),
     ]);
 
-    expect(await first.text()).toContain("<main>single: 1</main>");
+    expect(await first.text()).toContain("<main>single: <!-- -->1</main>");
     expect(action.status).toBe(200);
-    expect(await regeneratedA.text()).toContain("<main>single: 2</main>");
-    expect(await regeneratedB.text()).toContain("<main>single: 2</main>");
+    expect(await regeneratedA.text()).toContain("<main>single: <!-- -->2</main>");
+    expect(await regeneratedB.text()).toContain("<main>single: <!-- -->2</main>");
     expect(store.calls).toContain("delete:/");
     expect(store.calls.filter((call) => call === "lock:/")).toHaveLength(1);
     expect(store.calls.filter((call) => call === "set:/")).toHaveLength(2);
