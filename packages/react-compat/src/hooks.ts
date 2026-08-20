@@ -1115,10 +1115,21 @@ function enqueueStateUpdate(
 ): void {
   const updates = slot.updates ?? [];
   let value = dispatchedValue;
+  const lane = currentTransitionContext === undefined ? "sync" : "transition";
+  const canApplyDirectUpdate =
+    lane === "sync" &&
+    updates.length === 0 &&
+    hookRenderState.hostCommitDepth === 0 &&
+    hookRenderState.currentRuntime !== runtime &&
+    hookRenderState.currentInstance !== instance &&
+    runtime.effectFlushPhase === undefined &&
+    eventBatchDepth === 0;
+  if (canApplyDirectUpdate && deferSync === false && typeof value === "function") {
+    value = (value as (previous: unknown) => unknown)(slot.value);
+  }
   if (updates.length === 0 && typeof value !== "function" && Object.is(slot.value, value)) {
     return;
   }
-  const lane = currentTransitionContext === undefined ? "sync" : "transition";
   const renderDraft =
     hookRenderState.hostCommitDepth > 0 ? stateRenderDrafts.get(runtime)?.get(slot) : undefined;
   if (
@@ -1136,14 +1147,8 @@ function enqueueStateUpdate(
     }
   }
   if (
-    lane === "sync" &&
-    updates.length === 0 &&
+    canApplyDirectUpdate &&
     typeof value !== "function" &&
-    hookRenderState.hostCommitDepth === 0 &&
-    hookRenderState.currentRuntime !== runtime &&
-    hookRenderState.currentInstance !== instance &&
-    runtime.effectFlushPhase === undefined &&
-    eventBatchDepth === 0 &&
     optionsAllowDirectTextBinding(value)
   ) {
     const updatedText = updateDirectTextBinding(slot.textBinding, value);
