@@ -739,17 +739,6 @@ function finishRenderTimingPhase(
   timing.phases[phaseName] = logDurationMs(startedAt);
 }
 
-async function readSettledPromiseAtNextTask<T>(
-  promise: Promise<T>,
-): Promise<{ settled: true; value: T } | { settled: false }> {
-  return await Promise.race([
-    promise.then((value) => ({ settled: true as const, value })),
-    new Promise<{ settled: false }>((resolve) => {
-      setTimeout(() => resolve({ settled: false }), 0);
-    }),
-  ]);
-}
-
 type ObservedPromiseSettlement<T> =
   | { status: "pending" }
   | { status: "fulfilled"; value: T }
@@ -770,40 +759,6 @@ function observePromiseSettlement<T>(promise: Promise<T>): () => ObservedPromise
   return () => settlement;
 }
 
-function createDeferredSignal(): {
-  promise: Promise<void>;
-  resolve(): void;
-} {
-  let resolve: (() => void) | undefined;
-  const promise = new Promise<void>((innerResolve) => {
-    resolve = innerResolve;
-  });
-
-  return {
-    promise,
-    resolve() {
-      resolve?.();
-    },
-  };
-}
-
-async function waitForLoaderReadyOrSettled(
-  dataPromise: Promise<unknown>,
-  loaderReady: Promise<void> | undefined,
-): Promise<void> {
-  if (loaderReady === undefined) {
-    return;
-  }
-
-  await Promise.race([
-    loaderReady,
-    dataPromise.then(
-      () => undefined,
-      () => undefined,
-    ),
-  ]);
-}
-
 function addRenderTimingPhaseDuration(
   timing: RenderTiming | undefined,
   startedAt: number | undefined,
@@ -814,14 +769,6 @@ function addRenderTimingPhaseDuration(
   }
 
   timing.phases[phaseName] = (timing.phases[phaseName] ?? 0) + logDurationMs(startedAt);
-}
-
-function routeLoaderMayReturnControlResponse(code: string): boolean {
-  return (
-    /\b(?:redirect|redirectExternal|rewrite|notFound|throwNotFound)\s*\(/.test(code) ||
-    /\bnew\s+Response\s*\(/.test(code) ||
-    /\bResponse\.(?:redirect|json)\s*\(/.test(code)
-  );
 }
 
 async function waitForRenderPreload(
@@ -1202,7 +1149,6 @@ async function renderAppRequestInternal(
         const clientInference = routeAnalysis.clientInference;
         const clientRoute = clientInference.client;
         phaseStartedAt = renderTimingPhaseStartedAt(timing);
-        const loaderReady = routeAnalysis.hasLoader ? createDeferredSignal() : undefined;
         const dataPromise = routeAnalysis.hasLoader
           ? loadRouteDataWithInstrumentation({
               appDir: options.appDir,
@@ -1228,9 +1174,12 @@ async function renderAppRequestInternal(
               define: options.define,
               vitePlugins: options.vitePlugins,
               timing,
-              onLoaderReady: loaderReady?.resolve,
             })
           : undefined;
+        // Route analysis and loading-boundary discovery can continue before the loader is awaited.
+        // Observe an early rejection immediately so strict unhandled-rejection runtimes do not
+        // terminate before the request-level control/error handler receives the same promise.
+        void dataPromise?.catch(() => {});
         finishRenderTimingPhase(timing, phaseStartedAt, "loaderStartMs");
         recoveryRoute = {
           clientRoute,
@@ -1427,34 +1376,17 @@ async function renderAppRequestInternal(
           }
 
           let streamData: unknown;
-          let streamDataPromise = dataPromise ?? Promise.resolve(undefined);
           phaseStartedAt = renderTimingPhaseStartedAt(timing);
-          if (loadingFile === undefined || routeLoaderMayReturnControlResponse(originalCode)) {
-            try {
-              streamData = dataPromise === undefined ? undefined : await dataPromise;
-            } finally {
-              finishRenderTimingPhase(timing, phaseStartedAt, "loaderWaitMs");
-            }
-            if (streamData instanceof Response) {
-              emitRenderTiming(options, timing, streamData.status);
-              return streamData;
-            }
-            streamDataPromise = Promise.resolve(streamData);
-          } else {
-            try {
-              await waitForLoaderReadyOrSettled(streamDataPromise, loaderReady?.promise);
-              const settledData = await readSettledPromiseAtNextTask(streamDataPromise);
-              if (settledData.settled) {
-                if (settledData.value instanceof Response) {
-                  emitRenderTiming(options, timing, settledData.value.status);
-                  return settledData.value;
-                }
-                streamDataPromise = Promise.resolve(settledData.value);
-              }
-            } finally {
-              finishRenderTimingPhase(timing, phaseStartedAt, "loaderWaitMs");
-            }
+          try {
+            streamData = dataPromise === undefined ? undefined : await dataPromise;
+          } finally {
+            finishRenderTimingPhase(timing, phaseStartedAt, "loaderWaitMs");
           }
+          if (streamData instanceof Response) {
+            emitRenderTiming(options, timing, streamData.status);
+            return streamData;
+          }
+          const streamDataPromise = Promise.resolve(streamData);
 
           const streamDataSettlement =
             loadingFile === undefined ? undefined : observePromiseSettlement(streamDataPromise);

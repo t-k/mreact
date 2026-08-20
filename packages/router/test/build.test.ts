@@ -2883,7 +2883,7 @@ export default function Page() {
   });
 
   test.each(["mreact-handler.mjs", "mreact-streaming-handler.mjs"])(
-    "warms middleware without evaluating unrelated pages when importing packaged %s",
+    "keeps imported loader redirects ahead of packaged %s render artifacts",
     async (handlerFile) => {
       const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-lambda-packaged-preload-plane-"));
       const appDir = join(rootDir, "app");
@@ -2902,10 +2902,44 @@ export function middleware() {}
 `,
       );
       await writeFile(
-        join(appDir, "page.tsx"),
+        join(appDir, "auth.ts"),
         `import { redirect } from "@reckona/mreact-router";
-export function loader() { redirect("/login", { status: 303 }); }
-export default function Page() { return <main>root</main>; }`,
+export async function requireSession() {
+  await Promise.resolve();
+  redirect("/login", { status: 303 });
+}`,
+      );
+      await writeFile(
+        join(appDir, "render-marker.ts"),
+        `globalThis.__mreactGeneratedLambdaPreload = [
+  ...(globalThis.__mreactGeneratedLambdaPreload ?? []),
+  "root-render-module",
+];
+export const marker = "root";`,
+      );
+      await writeFile(
+        join(appDir, "layout.tsx"),
+        `globalThis.__mreactGeneratedLambdaPreload = [
+  ...(globalThis.__mreactGeneratedLambdaPreload ?? []),
+  "root-layout-module",
+];
+export default function Layout() { return <html><body><Slot /></body></html>; }`,
+      );
+      await writeFile(
+        join(appDir, "loading.mreact.tsx"),
+        `globalThis.__mreactGeneratedLambdaPreload = [
+  ...(globalThis.__mreactGeneratedLambdaPreload ?? []),
+  "root-loading-module",
+];
+export default function Loading() { return <p>loading</p>; }`,
+      );
+      await writeFile(
+        join(appDir, "page.tsx"),
+        `import { requireSession } from "./auth";
+import { marker } from "./render-marker";
+export const stream = true;
+export async function loader() { await requireSession(); }
+export default function Page() { return <main>{marker}</main>; }`,
       );
       await writeFile(
         join(appDir, "slow", "page.tsx"),
@@ -2965,6 +2999,9 @@ export default function Slow() { return <main>slow</main>; }
 
       expect(result).toMatchObject({ kind: "response", status: 303 });
       expect(result.preloaded).toContain("middleware-module");
+      expect(result.preloaded).not.toContain("root-render-module");
+      expect(result.preloaded).not.toContain("root-layout-module");
+      expect(result.preloaded).not.toContain("root-loading-module");
       expect(result.preloaded).not.toContain("slow-page-module");
     },
   );

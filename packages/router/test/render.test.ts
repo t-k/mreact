@@ -5503,6 +5503,204 @@ export default function Page() {
     expect(timing?.phases).not.toHaveProperty("streamConstructionMs");
   });
 
+  test("returns an imported async loader redirect before loading render artifacts", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-imported-loading-redirect-"));
+    let announceStarted: () => void = () => {};
+    let releaseLoader: () => void = () => {};
+    const started = new Promise<void>((resolve) => {
+      announceStarted = resolve;
+    });
+    const release = new Promise<void>((resolve) => {
+      releaseLoader = resolve;
+    });
+    const testState = globalThis as typeof globalThis & {
+      __mreactImportedLoaderRedirectGate?: {
+        announceStarted(): void;
+        release: Promise<void>;
+      };
+    };
+    testState.__mreactImportedLoaderRedirectGate = { announceStarted, release };
+    await writeFile(
+      join(appDir, "auth.ts"),
+      `import { redirect } from "@reckona/mreact-router";
+
+export async function requireSession() {
+  const gate = globalThis.__mreactImportedLoaderRedirectGate;
+  gate.announceStarted();
+  await gate.release;
+  redirect("/login", { status: 303 });
+}`,
+    );
+    await writeFile(
+      join(appDir, "loading.mreact.tsx"),
+      `export default function Loading() {
+  return <p>loading</p>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { requireSession } from "./auth";
+
+export const stream = true;
+
+export async function loader() {
+  await requireSession();
+}
+
+export default function Page() {
+  return <main>should not render</main>;
+}`,
+    );
+    const loadedRouteFiles: string[] = [];
+
+    try {
+      const responsePromise = renderAppRequest({
+        appDir,
+        request: new Request("http://local.test/"),
+        serverRenderArtifactLoader: {
+          async load(routeFile) {
+            loadedRouteFiles.push(routeFile);
+          },
+        },
+      });
+      let responseSettled = false;
+      void responsePromise.then(() => {
+        responseSettled = true;
+      });
+      await started;
+      for (let task = 0; task < 3; task += 1) {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
+
+      expect(responseSettled).toBe(false);
+      expect(loadedRouteFiles).toEqual([]);
+      releaseLoader();
+
+      const response = await responsePromise;
+      expect(response.status).toBe(303);
+      expect(response.headers.get("location")).toBe("/login");
+      expect(response.headers.get("x-mreact-stream")).toBeNull();
+      expect(loadedRouteFiles).toEqual([]);
+    } finally {
+      delete testState.__mreactImportedLoaderRedirectGate;
+    }
+  });
+
+  test("returns an external package loader redirect before loading render artifacts", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-package-loading-redirect-"));
+    await writeFile(
+      join(appDir, "loading.mreact.tsx"),
+      "export default function Loading() { return <p>loading</p>; }",
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { createMemorySessionStore, requireSession } from "@reckona/mreact-auth";
+
+const store = createMemorySessionStore();
+
+export const stream = true;
+export async function loader({ request }) {
+  await requireSession(request, store, { redirectTo: "/login" });
+}
+export default function Page() {
+  return <main>should not render</main>;
+}`,
+    );
+    const loadedRouteFiles: string[] = [];
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+      serverRenderArtifactLoader: {
+        async load(routeFile) {
+          loadedRouteFiles.push(routeFile);
+        },
+      },
+    });
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/login");
+    expect(loadedRouteFiles).toEqual([]);
+  });
+
+  test.each([
+    {
+      expectedBody: "Not Found",
+      expectedHeader: null,
+      expectedStatus: 404,
+      expression: "notFound()",
+      name: "notFound",
+    },
+    {
+      expectedBody: "",
+      expectedHeader: "response-redirect",
+      expectedStatus: 307,
+      expression:
+        'new Response(null, { headers: { location: "/response-login", "x-control": "response-redirect" }, status: 307 })',
+      name: "returned redirect Response",
+    },
+    {
+      expectedBody: '{"ok":true}',
+      expectedHeader: "json",
+      expectedStatus: 202,
+      expression: 'Response.json({ ok: true }, { headers: { "x-control": "json" }, status: 202 })',
+      name: "returned JSON Response",
+    },
+    {
+      expectedBody: "",
+      expectedHeader: "rewrite",
+      expectedStatus: 209,
+      expression: 'rewrite("/destination", { headers: { "x-control": "rewrite" }, status: 209 })',
+      name: "returned rewrite Response",
+    },
+  ])(
+    "returns imported $name control before loading render artifacts",
+    async ({ expectedBody, expectedHeader, expectedStatus, expression }) => {
+      const appDir = await mkdtemp(join(tmpdir(), "mreact-app-imported-loader-control-"));
+      await writeFile(
+        join(appDir, "controls.ts"),
+        `import { notFound, rewrite } from "@reckona/mreact-router";
+
+export async function loadControl() {
+  await Promise.resolve();
+  return ${expression};
+}`,
+      );
+      await writeFile(
+        join(appDir, "loading.mreact.tsx"),
+        "export default function Loading() { return <p>loading</p>; }",
+      );
+      await writeFile(
+        join(appDir, "page.tsx"),
+        `import { loadControl } from "./controls";
+
+export const stream = true;
+export async function loader() {
+  return await loadControl();
+}
+export default function Page() {
+  return <main>should not render</main>;
+}`,
+      );
+      const loadedRouteFiles: string[] = [];
+
+      const response = await renderAppRequest({
+        appDir,
+        request: new Request("http://local.test/"),
+        serverRenderArtifactLoader: {
+          async load(routeFile) {
+            loadedRouteFiles.push(routeFile);
+          },
+        },
+      });
+
+      expect(response.status).toBe(expectedStatus);
+      expect(response.headers.get("x-control")).toBe(expectedHeader);
+      expect(await response.text()).toContain(expectedBody);
+      expect(loadedRouteFiles).toEqual([]);
+    },
+  );
+
   test("renders stream routes that import local server components", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-imported-server-component-"));
     const appDir = join(rootDir, "src", "app");
@@ -5999,9 +6197,27 @@ export default function Page() {
     }
   });
 
-  test("streams nearest loading boundary while async loader is pending", async () => {
+  test("streams deferred loader data only after the loader control phase settles", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loading-boundary-"));
-    const state = globalThis as { __mreactResolveLoadingDocs?: () => void };
+    let announceControlStarted: () => void = () => {};
+    let releaseControl: () => void = () => {};
+    const controlStarted = new Promise<void>((resolve) => {
+      announceControlStarted = resolve;
+    });
+    const controlRelease = new Promise<void>((resolve) => {
+      releaseControl = resolve;
+    });
+    const state = globalThis as {
+      __mreactLoadingControlGate?: {
+        announceStarted(): void;
+        release: Promise<void>;
+      };
+      __mreactResolveLoadingDocs?: () => void;
+    };
+    state.__mreactLoadingControlGate = {
+      announceStarted: announceControlStarted,
+      release: controlRelease,
+    };
     state.__mreactResolveLoadingDocs = undefined;
     await mkdir(join(appDir, "docs"), { recursive: true });
     await writeFile(
@@ -6010,28 +6226,48 @@ export default function Page() {
     );
     await writeFile(
       join(appDir, "docs", "page.mreact.tsx"),
-      `export const stream = true;
+      `import { defer } from "@reckona/mreact-router";
+
+export const stream = true;
 
 export async function loader() {
   const state = globalThis;
-  return await new Promise((resolve) => {
-    state.__mreactResolveLoadingDocs = () => resolve({ title: "Loaded docs" });
+  state.__mreactLoadingControlGate.announceStarted();
+  await state.__mreactLoadingControlGate.release;
+  return defer({
+    title: new Promise((resolve) => {
+      state.__mreactResolveLoadingDocs = () => resolve("Loaded docs");
+    }),
   });
 }
 
 export default function Page(props) {
-  return <main><h1>{props.data.title}</h1></main>;
+  return <main><Await value={props.data.title}>{title => <h1>{title}</h1>}</Await></main>;
 }`,
     );
 
     try {
+      const responsePromise = renderAppRequest({
+        appDir,
+        request: new Request("http://local.test/docs"),
+      });
+      let responseSettled = false;
+      void responsePromise.then(() => {
+        responseSettled = true;
+      });
+      await controlStarted;
+      for (let task = 0; task < 3; task += 1) {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
+
+      expect(responseSettled).toBe(false);
+      expect(state.__mreactResolveLoadingDocs).toBeUndefined();
+      releaseControl();
+
       const response = await expectResolvesWithin(
-        renderAppRequest({
-          appDir,
-          request: new Request("http://local.test/docs"),
-        }),
+        responsePromise,
         1000,
-        "stream loading boundary response",
+        "stream response after loader control phase",
       );
       const fullResponse = response.clone();
       const firstChunk = await expectResolvesWithin(
@@ -6051,7 +6287,65 @@ export default function Page(props) {
       const html = await fullResponse.text();
       expect(html).toContain("<main><h1>Loaded docs</h1></main>");
     } finally {
+      releaseControl();
+      delete state.__mreactLoadingControlGate;
       delete state.__mreactResolveLoadingDocs;
+    }
+  });
+
+  test("does not render a loading-boundary route subtree while the response is unread", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loading-backpressure-"));
+    const state = globalThis as {
+      __mreactUnreadLoadingAwaitRenders?: number;
+    };
+    state.__mreactUnreadLoadingAwaitRenders = 0;
+    await writeFile(
+      join(appDir, "loading.mreact.tsx"),
+      "export default function Loading() { return <p>Loading route...</p>; }",
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export const stream = true;
+
+function Panel(props) {
+  globalThis.__mreactUnreadLoadingAwaitRenders += 1;
+  return <span>Panel {props.value}</span>;
+}
+
+export default function Page() {
+  return <main><Await value={Promise.resolve("ready")} placeholder={<em>Panel pending</em>}>{value => <Panel value={value} />}</Await></main>;
+}`,
+    );
+
+    try {
+      const response = await renderAppRequest({
+        appDir,
+        request: new Request("http://local.test/"),
+      });
+      expect(response.headers.get("x-mreact-stream")).toBe("1");
+      for (let task = 0; task < 5; task += 1) {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+      }
+
+      expect(state.__mreactUnreadLoadingAwaitRenders).toBe(0);
+
+      const reader = response.body?.getReader();
+      expect(reader).toBeDefined();
+      const chunks: string[] = [];
+      for (;;) {
+        const chunk = await reader!.read();
+        if (chunk.done) {
+          break;
+        }
+        chunks.push(new TextDecoder().decode(chunk.value));
+      }
+
+      expect(chunks[0]).toContain("Loading route...");
+      expect(chunks[0]).not.toContain("Panel ready");
+      expect(chunks.join("")).toContain("Panel <!-- -->ready");
+      expect(state.__mreactUnreadLoadingAwaitRenders).toBe(1);
+    } finally {
+      delete state.__mreactUnreadLoadingAwaitRenders;
     }
   });
 
@@ -6076,16 +6370,20 @@ export default function Page(props) {
     );
     await writeFile(
       join(appDir, "docs", "page.mreact.tsx"),
-      `export const stream = true;
+      `import { defer } from "@reckona/mreact-router";
 
-export async function loader() {
-  return await new Promise((_resolve, reject) => {
-    globalThis.__mreactRejectLoadingRoute = reject;
+export const stream = true;
+
+export function loader() {
+  return defer({
+    result: new Promise((_resolve, reject) => {
+      globalThis.__mreactRejectLoadingRoute = reject;
+    }),
   });
 }
 
-export default function Page() {
-  return <main>Docs</main>;
+export default function Page(props) {
+  return <main><Await value={props.data.result}>{() => "Docs"}</Await></main>;
 }`,
     );
 
@@ -6237,16 +6535,20 @@ export default function Page() {
     );
     await writeFile(
       join(appDir, "page.mreact.tsx"),
-      `export const stream = true;
+      `import { defer } from "@reckona/mreact-router";
 
-export async function loader() {
-  return await new Promise((_resolve, reject) => {
-    globalThis.__mreactRejectObservedLoadingRoute = reject;
+export const stream = true;
+
+export function loader() {
+  return defer({
+    result: new Promise((_resolve, reject) => {
+      globalThis.__mreactRejectObservedLoadingRoute = reject;
+    }),
   });
 }
 
-export default function Page() {
-  return <main>Page</main>;
+export default function Page(props) {
+  return <main><Await value={props.data.result}>{() => "Page"}</Await></main>;
 }`,
     );
 
@@ -6514,17 +6816,21 @@ export default function Page() {
             [loadingFile, "export default function Loading() { return <p>Loading docs...</p>; }"],
             [
               pageFile,
-              `export const stream = true;
+              `import { defer } from "@reckona/mreact-router";
 
-export async function loader() {
+export const stream = true;
+
+export function loader() {
   const state = globalThis;
-  return await new Promise((resolve) => {
-    state.__mreactResolveBuiltLoadingDocs = () => resolve({ title: "Loaded docs" });
+  return defer({
+    title: new Promise((resolve) => {
+      state.__mreactResolveBuiltLoadingDocs = () => resolve("Loaded docs");
+    }),
   });
 }
 
 export default function Page(props) {
-  return <main><h1>{props.data.title}</h1></main>;
+  return <main><Await value={props.data.title}>{title => <h1>{title}</h1>}</Await></main>;
 }`,
             ],
           ]),

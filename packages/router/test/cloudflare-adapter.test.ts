@@ -10,6 +10,7 @@ import {
   getQueryClient,
 } from "@reckona/mreact-query";
 import { buildApp } from "../src/build.js";
+import { redirect } from "../src/navigation.js";
 import { routeSecurityHeaders } from "../src/security-headers.js";
 import {
   __resetCloudflareQueryClientFallbackForTesting,
@@ -1562,6 +1563,77 @@ export function middleware(request: Request) {
 
     expect(response.status).toBe(303);
     expect(response.headers.get("location")).toBe("https://app.example/login");
+    expect(await response.text()).toBe("");
+  });
+
+  test("passes through Response values returned from Cloudflare page loaders", async () => {
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest: { routes: [] },
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: {
+          "page.tsx": {
+            loader() {
+              return new Response("teapot", {
+                headers: { "content-type": "text/plain", "x-loader": "returned" },
+                status: 418,
+              });
+            },
+            default() {
+              throw new Error("The page component must not render for a loader Response");
+            },
+          },
+        },
+      }),
+      serverManifest: {
+        files: {},
+        routes: [{ file: "page.tsx", kind: "page", path: "/", segments: [] }],
+        version: 1,
+      },
+    });
+
+    const response = await handler.fetch(
+      new Request("https://app.example/"),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(418);
+    expect(response.headers.get("x-loader")).toBe("returned");
+    expect(await response.text()).toBe("teapot");
+  });
+
+  test("converts redirect errors thrown from Cloudflare page loaders", async () => {
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest: { routes: [] },
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: {
+          "page.tsx": {
+            loader() {
+              redirect("/login", { status: 303 });
+            },
+            default() {
+              return "<main>Home</main>";
+            },
+          },
+        },
+      }),
+      serverManifest: {
+        files: {},
+        routes: [{ file: "page.tsx", kind: "page", path: "/", segments: [] }],
+        version: 1,
+      },
+    });
+
+    const response = await handler.fetch(
+      new Request("https://app.example/"),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/login");
     expect(await response.text()).toBe("");
   });
 

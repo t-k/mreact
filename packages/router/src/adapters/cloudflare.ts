@@ -33,7 +33,7 @@ import { middlewareMatches, type MiddlewareModule } from "../middleware.js";
 import { normalizeRoutePath } from "../route-path.js";
 import type { AppRoute } from "../routes.js";
 import { contentSecurityPolicy } from "../csp.js";
-import { isNotFoundError, rewriteLocation } from "../navigation.js";
+import { isNotFoundError, isRedirectError, rewriteLocation } from "../navigation.js";
 import { validateRouteMetadata } from "../metadata.js";
 import { routeSecurityHeaders } from "../security-headers.js";
 import type { AppRouterPrerenderStore } from "../serve.js";
@@ -577,12 +577,24 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
         return error;
       }
 
+      if (isRedirectError(error)) {
+        return new Response(null, {
+          headers: { location: error.location },
+          status: error.status,
+        });
+      }
+
       if (isNotFoundError(error)) {
         return cloudflareNotFoundResponse(request);
       }
 
       throw error;
     }
+
+    if (data instanceof Response) {
+      return data;
+    }
+
     const props = {
       ...context,
       data,
@@ -594,6 +606,13 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
     try {
       rendered = await runWithCloudflareQueryClient(queryClient, () => component(props));
     } catch (error) {
+      if (isRedirectError(error)) {
+        return new Response(null, {
+          headers: { location: error.location },
+          status: error.status,
+        });
+      }
+
       if (isNotFoundError(error)) {
         return cloudflareNotFoundResponse(request);
       }
