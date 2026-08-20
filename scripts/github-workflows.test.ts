@@ -6,13 +6,17 @@ const readWorkflow = (name: string) =>
   readFile(join(process.cwd(), ".github", "workflows", name), "utf8");
 
 describe("GitHub workflows", () => {
-  test("runs independent CI verify steps in parallel groups", async () => {
+  test("builds before parallel CI verify steps that consume workspace dist", async () => {
     const workflow = await readWorkflow("ci.yml");
+    const buildIndex = workflow.indexOf("      - name: Build\n        run: pnpm build");
+    const firstParallelIndex = workflow.indexOf("      - parallel:");
 
+    expect(buildIndex).toBeGreaterThan(-1);
+    expect(buildIndex).toBeLessThan(firstParallelIndex);
     expect(workflow).toContain("- parallel:\n          - name: Lint");
     expect(workflow).not.toContain("Cache TypeScript build info");
     expect(workflow).not.toContain("tsbuildinfo");
-    expect(workflow).toContain("          - name: Build\n            run: pnpm build");
+    expect(workflow).not.toContain("          - name: Build\n            run: pnpm build");
     expect(workflow).toContain("          - name: Install Playwright Chromium");
     expect(workflow).toContain("          - name: Format\n            run: pnpm format");
     expect(workflow).toContain("- parallel:\n          - name: Test router client build");
