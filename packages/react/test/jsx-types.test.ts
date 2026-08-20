@@ -7,6 +7,8 @@ import { describe, expect, test } from "vitest";
 describe("react JSX runtime types", () => {
   test("exposes JSX.Element for component return annotations", () => {
     const diagnostics = compileApp(`
+import type { JSX } from "@reckona/mreact";
+
 export default function Page(): JSX.Element {
   return <main>Dashboard</main>;
 }
@@ -17,7 +19,7 @@ export default function Page(): JSX.Element {
 
   test("types form submit handlers with the form as currentTarget", () => {
     const diagnostics = compileApp(`
-import type { FormEvent } from "@reckona/mreact";
+import type { FormEvent, JSX } from "@reckona/mreact";
 
 const submit = (event: FormEvent<HTMLFormElement>) => {
   event.preventDefault();
