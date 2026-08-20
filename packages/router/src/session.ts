@@ -1,4 +1,4 @@
-import { deleteCookie, parseCookieHeader, setCookie } from "./cookies.js";
+import { deleteCookie, parseCookieHeader, serializeCookie, setCookie } from "./cookies.js";
 
 /**
  * Stores session data and expiration metadata for one session id.
@@ -43,32 +43,54 @@ const DEFAULT_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 const SESSION_COOKIE_DEV = "mreact.session";
 const SESSION_COOKIE_PROD = "__Host-mreact.session";
 
-function isProduction(): boolean {
-  return process.env.NODE_ENV === "production";
+function usesHardenedCookieDefaults(): boolean {
+  const nodeEnv = typeof process === "undefined" ? undefined : process["env"]?.["NODE_ENV"];
+  return nodeEnv !== "development" && nodeEnv !== "test";
 }
 
-function defaultCookieName(): string {
-  return isProduction() ? SESSION_COOKIE_PROD : SESSION_COOKIE_DEV;
-}
-
-function sessionCookieOptions(options: SessionCookieOptions = {}) {
-  const production = isProduction();
-
-  return {
+function resolveSessionCookie(options: SessionCookieOptions = {}) {
+  const hardened = usesHardenedCookieDefaults();
+  const cookieOptions = {
     httpOnly: true,
     maxAge: options.maxAgeSeconds ?? DEFAULT_MAX_AGE_SECONDS,
-    path: production ? "/" : options.path ?? "/",
+    path: options.path ?? "/",
     sameSite: options.sameSite ?? "Lax",
-    secure: options.secure ?? production,
+    secure: options.secure ?? hardened,
   } as const;
+  const canUseHostPrefix = cookieOptions.secure && cookieOptions.path === "/";
+
+  return {
+    name:
+      options.cookieName ??
+      (hardened && canUseHostPrefix ? SESSION_COOKIE_PROD : SESSION_COOKIE_DEV),
+    options: cookieOptions,
+  };
 }
 
-function readSessionId(
-  request: Request,
-  options: SessionCookieOptions = {},
-): string | undefined {
+function validateResolvedSessionCookie(cookie: ReturnType<typeof resolveSessionCookie>): void {
+  serializeCookie(cookie.name, "", cookie.options);
+}
+
+function assertMutableResponseHeaders(response: Response): void {
+  const probeName = "x-mreact-session-header-probe";
+  const previous = response.headers.get(probeName);
+
+  try {
+    response.headers.set(probeName, "1");
+    if (previous === null) {
+      response.headers.delete(probeName);
+    } else {
+      response.headers.set(probeName, previous);
+    }
+  } catch (cause) {
+    throw new TypeError("Session helpers require a Response with mutable headers.", { cause });
+  }
+}
+
+function readSessionId(request: Request, options: SessionCookieOptions = {}): string | undefined {
+  const cookie = resolveSessionCookie(options);
   const values = parseCookieHeader(request.headers.get("cookie"));
-  return values.get(options.cookieName ?? defaultCookieName());
+  return values.get(cookie.name);
 }
 
 function createSessionId(): string {
@@ -208,6 +230,9 @@ export async function createSession<TData>(
 ): Promise<SessionRecord<TData>> {
   const now = Date.now();
   const maxAgeSeconds = options.maxAgeSeconds ?? DEFAULT_MAX_AGE_SECONDS;
+  const cookie = resolveSessionCookie({ ...options, maxAgeSeconds });
+  validateResolvedSessionCookie(cookie);
+  assertMutableResponseHeaders(response);
   const record: SessionRecord<TData> = {
     createdAt: now,
     data,
@@ -216,9 +241,7 @@ export async function createSession<TData>(
   };
 
   await store.set(record);
-  setCookie(response, options.cookieName ?? defaultCookieName(), record.id, {
-    ...sessionCookieOptions({ ...options, maxAgeSeconds }),
-  });
+  setCookie(response, cookie.name, record.id, cookie.options);
 
   return record;
 }
@@ -232,16 +255,22 @@ export async function destroySession<TData>(
   store: SessionStore<TData>,
   options: SessionCookieOptions = {},
 ): Promise<void> {
+  const cookie = resolveSessionCookie(options);
+  validateResolvedSessionCookie({
+    name: cookie.name,
+    options: { ...cookie.options, maxAge: 0 },
+  });
+  assertMutableResponseHeaders(response);
   const id = readSessionId(request, options);
 
   if (id !== undefined) {
     await store.delete(id);
   }
 
-  deleteCookie(response, options.cookieName ?? defaultCookieName(), {
-    path: isProduction() ? "/" : options.path ?? "/",
-    sameSite: options.sameSite ?? "Lax",
-    secure: options.secure ?? isProduction(),
+  deleteCookie(response, cookie.name, {
+    path: cookie.options.path,
+    sameSite: cookie.options.sameSite,
+    secure: cookie.options.secure,
   });
 }
 
@@ -256,6 +285,8 @@ export async function rotateSession<TData>(
   store: SessionStore<TData>,
   options: SessionCookieOptions = {},
 ): Promise<SessionRecord<TData> | undefined> {
+  validateResolvedSessionCookie(resolveSessionCookie(options));
+  assertMutableResponseHeaders(response);
   const current = await getSession(request, store, options);
 
   if (current === undefined) {

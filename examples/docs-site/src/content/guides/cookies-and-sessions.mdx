@@ -136,7 +136,9 @@ export async function POST(request: Request): Promise<Response> {
 }
 ```
 
-In production, the default session cookie name is `__Host-mreact.session`. The helper sets `HttpOnly`, `Secure`, `SameSite=Lax`, and `Path=/` by default. In development, the default name is `mreact.session` and `Secure` follows the options you pass.
+Outside explicit development and test environments, the default session cookie name is `__Host-mreact.session`. The helper sets `HttpOnly`, `Secure`, `SameSite=Lax`, and `Path=/` by default, including when `NODE_ENV` is unset or uses a deployment-specific value such as `staging`. In development and test, the default name is `mreact.session` and `Secure` follows the options you pass. An explicit custom cookie name and cookie options continue to take precedence.
+
+Applications upgrading from a release that used `mreact.session` when `NODE_ENV` was unset or deployment-specific will require those users to sign in again. Hardened environments intentionally do not authenticate the legacy unprefixed cookie, and normal logout only expires the active configured cookie name. Revoke legacy server-side records during migration if rollback could otherwise reactivate an old session.
 
 ## Read sessions in middleware and loaders
 

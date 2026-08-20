@@ -21,7 +21,11 @@ import type { AuthSessionClaims } from "../src/index.js";
 const originalEnv = process.env.NODE_ENV;
 
 afterEach(() => {
-  process.env.NODE_ENV = originalEnv;
+  if (originalEnv === undefined) {
+    delete process.env.NODE_ENV;
+  } else {
+    process.env.NODE_ENV = originalEnv;
+  }
   vi.restoreAllMocks();
   __resetAuthForTesting();
   configureAuth({ forbiddenTo: "/forbidden", redirectTo: "/login" });
@@ -87,6 +91,19 @@ describe("auth package", () => {
     expect(cookie).toContain("Secure");
     expect(cookie).toContain("SameSite=Lax");
     expect(cookie).not.toMatch(/;\s*Domain=/i);
+  });
+
+  it("uses secure cookie defaults through session exports when NODE_ENV is unset", async () => {
+    delete process.env.NODE_ENV;
+    const store = createMemorySessionStore<{ userId: string }>();
+    const response = new Response(null);
+
+    await createSession(response, store, { userId: "ada" });
+
+    const cookie = response.headers.get("set-cookie") ?? "";
+    expect(cookie.startsWith("__Host-mreact.session=")).toBe(true);
+    expect(cookie).toContain("Path=/");
+    expect(cookie).toContain("Secure");
   });
 
   it("refreshSession rotates the current session and updates claims", async () => {
