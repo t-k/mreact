@@ -128,9 +128,12 @@ Run tests:
 
 ```bash
 pnpm test
+pnpm test:mutation
 pnpm test:e2e:smoke
 pnpm test:e2e
 ```
+
+Property-based tests run as part of the regular Vitest suite. `pnpm test:mutation` runs the focused Stryker mutation-testing pilot. Native Rust validation and scheduled deep-check commands are documented in [`packages/router-native`](packages/router-native#development).
 
 Build the documentation site locally:
 
