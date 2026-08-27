@@ -760,6 +760,9 @@ pub fn decode_flight_rows(rows: &str) -> Result<String, String> {
           explicit_root = Some(parsed);
         }
       }
+      Some(b'F') => {
+        // Server references depend on model chunks and are decoded in the second pass.
+      }
       Some(b'H') | Some(b'N') | Some(b'P') | Some(b'D') | Some(b'J') | Some(b'W')
       | Some(b'R') | Some(b'r') | Some(b'X') | Some(b'x') | Some(b'C') => {
         // Metadata rows — skipped.
@@ -1317,6 +1320,9 @@ pub fn merge_flight_rows(prev_json: &str, rows: &str) -> Result<String, String> 
       Some(b'E') => {
         error_chunks.insert(*id, parse_error_payload(body));
       }
+      Some(b'F') => {
+        // Server references depend on model chunks and are decoded in the second pass.
+      }
       Some(b'H') | Some(b'N') | Some(b'P') | Some(b'D') | Some(b'J') | Some(b'W')
       | Some(b'R') | Some(b'r') | Some(b'X') | Some(b'x') | Some(b'C') => {}
       Some(other) => {
@@ -1491,6 +1497,30 @@ mod tests {
 
     let error = parse_json_without_recursion_limit(&input).unwrap_err();
     assert!(error.to_string().contains("MR_FLIGHT_TOO_DEEP"), "{error}");
+  }
+
+  #[test]
+  fn decode_model_accepts_the_depth_limit_and_rejects_deeper_containers() {
+    let model_chunks = std::collections::HashMap::new();
+    let error_chunks = std::collections::HashMap::new();
+
+    assert_eq!(
+      decode_model(&Value::Null, &model_chunks, &error_chunks, MAX_FLIGHT_DECODE_DEPTH).unwrap(),
+      Value::Null,
+    );
+
+    let cases = [
+      (json!([null]), MAX_FLIGHT_DECODE_DEPTH),
+      (
+        json!(["$", "div", null, { "child": null }]),
+        MAX_FLIGHT_DECODE_DEPTH - 1,
+      ),
+      (json!({ "child": null }), MAX_FLIGHT_DECODE_DEPTH - 1),
+    ];
+    for (value, depth) in cases {
+      let error = decode_model(&value, &model_chunks, &error_chunks, depth).unwrap_err();
+      assert!(error.contains("MR_FLIGHT_TOO_DEEP"), "{error}");
+    }
   }
 
   #[test]
@@ -1710,6 +1740,19 @@ mod tests {
   }
 
   #[test]
+  fn decodes_string_element_keys() {
+    let decoded = decode_model(
+      &json!(["$", "div", "stable-key", {}]),
+      &std::collections::HashMap::new(),
+      &std::collections::HashMap::new(),
+      0,
+    )
+    .unwrap();
+
+    assert_eq!(decoded.get("key"), Some(&json!("stable-key")));
+  }
+
+  #[test]
   fn round_trips_dollar_prefixed_string() {
     assert_eq!(decode_root(json!("$dangerous")), json!("$dangerous"));
   }
@@ -1785,6 +1828,25 @@ mod tests {
   }
 
   #[test]
+  fn decodes_error_rows_with_metadata() {
+    let decoded = decode_flight_rows(
+      r#"0:E{"name":"BoundaryError","message":"failed","digest":"digest-1"}"#,
+    )
+    .unwrap();
+    let response: Value = serde_json::from_str(&decoded).unwrap();
+
+    assert_eq!(
+      response.get("root"),
+      Some(&json!({
+        "kind": "error",
+        "name": "BoundaryError",
+        "message": "failed",
+        "digest": "digest-1",
+      })),
+    );
+  }
+
+  #[test]
   fn merge_attaches_promise_chunks_to_root() {
     // Initial response: root references promise id 1.
     let initial_rows = "0:[\"$\",\"p\",null,{\"children\":\"$@1\"}]";
@@ -1801,5 +1863,44 @@ mod tests {
     let merged = merge_flight_rows(&initial, "1:\"$2\"\n2:\"resolved\"").unwrap();
     let response: Value = serde_json::from_str(&merged).unwrap();
     assert_eq!(response.get("root"), Some(&json!("resolved")));
+  }
+
+  #[test]
+  fn merge_collects_server_references() {
+    let merged = merge_flight_rows(
+      &flight_response(Value::Null),
+      r#"1:F{"id":"module#action","bound":[]}"#,
+    )
+    .unwrap();
+    let response: Value = serde_json::from_str(&merged).unwrap();
+
+    assert_eq!(
+      response.pointer("/serverReferences/0"),
+      Some(&json!({
+        "id": 1,
+        "moduleId": "module",
+        "exportName": "action",
+        "bound": [],
+      })),
+    );
+  }
+
+  #[test]
+  fn merge_resolves_promises_nested_in_maps_and_sets() {
+    let previous = flight_response(json!({
+      "map": {
+        "kind": "map",
+        "entries": [["key", { "kind": "promise", "id": 1 }]],
+      },
+      "set": {
+        "kind": "set",
+        "values": [{ "kind": "promise", "id": 1 }],
+      },
+    }));
+    let merged = merge_flight_rows(&previous, "1:\"resolved\"").unwrap();
+    let response: Value = serde_json::from_str(&merged).unwrap();
+
+    assert_eq!(response.pointer("/root/map/entries/0/1"), Some(&json!("resolved")));
+    assert_eq!(response.pointer("/root/set/values/0"), Some(&json!("resolved")));
   }
 }

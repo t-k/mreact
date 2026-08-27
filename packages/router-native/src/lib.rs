@@ -130,13 +130,6 @@ fn match_segments(
     return Ok(None);
   }
 
-  if let Some(index) = catch_all_index {
-    let suffix_len = route_segments.len() - index - 1;
-    if pathname_segments.len() < index + 1 + suffix_len {
-      return Ok(None);
-    }
-  }
-
   let mut params = MatchParams {
     params: HashMap::new(),
     catch_all_params: HashMap::new(),
@@ -161,7 +154,9 @@ fn match_segments(
       }
       RouteSegment::CatchAll { name } => {
         let suffix_segments = &route_segments[index + 1..];
-        let catch_all_end = pathname_segments.len() - suffix_segments.len();
+        let Some(catch_all_end) = pathname_segments.len().checked_sub(suffix_segments.len()) else {
+          return Ok(None);
+        };
 
         if catch_all_end <= index {
           return Ok(None);
@@ -206,10 +201,6 @@ fn match_segments(
 }
 
 fn normalize_path(pathname: &str) -> String {
-  if pathname.len() <= 1 {
-    return if pathname.is_empty() { "/".to_string() } else { pathname.to_string() };
-  }
-
   let trimmed = pathname.trim_end_matches('/');
 
   if trimmed.is_empty() {
@@ -265,14 +256,14 @@ fn hex_value(byte: u8) -> Option<u8> {
 }
 
 fn escape_html(value: &str) -> String {
-  escape_with_quotes(value, true)
+  escape_with_quotes(value)
 }
 
 fn escape_attribute(value: &str) -> String {
-  escape_with_quotes(value, true)
+  escape_with_quotes(value)
 }
 
-fn escape_with_quotes(value: &str, escape_quotes: bool) -> String {
+fn escape_with_quotes(value: &str) -> String {
   let mut output: Option<String> = None;
 
   for (index, character) in value.char_indices() {
@@ -280,7 +271,7 @@ fn escape_with_quotes(value: &str, escape_quotes: bool) -> String {
       '&' => "&amp;",
       '<' => "&lt;",
       '>' => "&gt;",
-      '"' if escape_quotes => "&quot;",
+      '"' => "&quot;",
       _ => {
         if let Some(escaped) = output.as_mut() {
           escaped.push(character);
@@ -429,6 +420,26 @@ mod tests {
   }
 
   #[test]
+  fn matches_catch_all_routes_with_multiple_prefix_and_suffix_segments() {
+    let matcher = RouteMatcherCore::new(
+      r#"[
+        {"index":0,"segments":[{"kind":"static","value":"api"},{"kind":"static","value":"v1"},{"kind":"catch-all","name":"slug"},{"kind":"static","value":"edit"},{"kind":"dynamic","name":"id"}]}
+      ]"#,
+    )
+    .unwrap();
+
+    assert_eq!(matcher.match_route("/api/v1/a/edit").unwrap(), None);
+    assert_eq!(
+      matcher.match_route("/api/v1/a/edit/42").unwrap().unwrap(),
+      NativeMatch {
+        index: 0,
+        params: HashMap::from([("id".to_string(), "42".to_string())]),
+        catch_all_params: HashMap::from([("slug".to_string(), vec!["a".to_string()])]),
+      },
+    );
+  }
+
+  #[test]
   fn decodes_percent_encoded_params() {
     let matcher = RouteMatcherCore::new(
       r#"[{"index":0,"segments":[{"kind":"static","value":"users"},{"kind":"dynamic","name":"id"}]}]"#
@@ -440,6 +451,14 @@ mod tests {
       NativeMatch {
         index: 0,
         params: HashMap::from([("id".to_string(), "Ada Lovelace".to_string())]),
+        catch_all_params: HashMap::new(),
+      },
+    );
+    assert_eq!(
+      matcher.match_route("/users/%c3%a9").unwrap().unwrap(),
+      NativeMatch {
+        index: 0,
+        params: HashMap::from([("id".to_string(), "é".to_string())]),
         catch_all_params: HashMap::new(),
       },
     );

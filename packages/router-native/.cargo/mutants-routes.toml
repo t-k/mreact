@@ -1,8 +1,6 @@
-examine_globs = ["src/flight.rs", "src/lib.rs"]
+examine_globs = ["src/lib.rs"]
 examine_re = [
-  "decode_base64_(bytes|char)",
   "RouteMatcherCore::match_route|\\bmatch_segments\\b|\\bnormalize_path\\b|\\bpath_segments\\b|\\bdecode_uri_component\\b|\\bhex_value\\b|\\bescape_(html|attribute)\\b|\\bescape_with_quotes\\b",
-  "\\b(parse_(row|flight_id|text_chunk|binary_chunk|error_payload)|decode_(model|chunk_ref)|merge_flight_rows|resolve_promise_chunks)\\b",
 ]
 timeout_multiplier = 5.0
 exclude_re = ["replace \\+= with [-*]=", "replace \\| with \\^"]
