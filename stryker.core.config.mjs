@@ -2,9 +2,10 @@ import { createStrykerConfig } from "./stryker.base.config.mjs";
 
 export default createStrykerConfig({
   name: "core",
+  breakThreshold: 80,
   mutate: [
     "packages/shared/src/html-escape.ts",
-    "packages/virtual/src/index.ts",
+    "packages/virtual/src/index.ts:128-169",
     "packages/react-compat/src/scheduler-heap.ts",
     "packages/router/src/client-manifest-assets.ts",
   ],

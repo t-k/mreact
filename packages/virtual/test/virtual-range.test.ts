@@ -147,7 +147,7 @@ describe("calculateVirtualRange", () => {
           ).toBe(range.totalSizePx);
         },
       ),
-      { numRuns: 1_000 },
+      { numRuns: 1_000, seed: 20_260_835 },
     );
   });
 });

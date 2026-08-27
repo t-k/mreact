@@ -75,7 +75,7 @@ describe("HTML escaping helpers", () => {
           escapeWith(value, { '"': "&quot;", "&": "&amp;" }),
         );
       }),
-      { numRuns: 500 },
+      { numRuns: 500, seed: 20_260_833 },
     );
   });
 
@@ -90,7 +90,7 @@ describe("HTML escaping helpers", () => {
           escapeHtmlQuotedAttribute(left) + escapeHtmlQuotedAttribute(right),
         );
       }),
-      { numRuns: 500 },
+      { numRuns: 500, seed: 20_260_834 },
     );
   });
 });

@@ -19,6 +19,7 @@ const c0Prefix = fc
   .array(fc.integer({ min: 0, max: 0x20 }), { maxLength: 8 })
   .map((codes) => String.fromCharCode(...codes));
 const schemeNoise = fc.constantFrom("", "\t", "\r", "\n", "\t\n");
+const propertyParameters = { numRuns: 500, seed: 20_260_828 } as const;
 
 function varyCase(value: string, mask: number): string {
   return [...value]
@@ -43,7 +44,7 @@ describe("URL safety properties", () => {
           expect(safeUrlAttributeValue(sink, value)).toBeUndefined();
         },
       ),
-      { numRuns: 500 },
+      propertyParameters,
     );
   });
 
@@ -60,7 +61,7 @@ describe("URL safety properties", () => {
         expect(isUnsafeUrlAttribute("href", value)).toBe(false);
         expect(safeUrlAttributeValue("href", value)).toBe(value);
       }),
-      { numRuns: 500 },
+      propertyParameters,
     );
   });
 
@@ -71,7 +72,7 @@ describe("URL safety properties", () => {
 
         expect(isUnsafeUrlAttribute("srcset", `/safe.png 1x, ${unsafe} 2x`)).toBe(true);
       }),
-      { numRuns: 500 },
+      propertyParameters,
     );
   });
 
@@ -83,7 +84,7 @@ describe("URL safety properties", () => {
 
         expect(isUnsafeMetaRefreshContent("refresh", `0; url=${target}`)).toBe(true);
       }),
-      { numRuns: 500 },
+      propertyParameters,
     );
   });
 });

@@ -1,4 +1,4 @@
-/** @param {{ name: string; mutate: string[]; testFiles: string[] }} profile */
+/** @param {{ name: string; mutate: string[]; testFiles: string[]; breakThreshold?: number }} profile */
 export function createStrykerConfig(profile) {
   const reportRoot = `coverage/mutation/${profile.name}`;
 
@@ -24,7 +24,7 @@ export function createStrykerConfig(profile) {
     testFiles: profile.testFiles,
     testRunner: "vitest",
     thresholds: {
-      break: 90,
+      break: profile.breakThreshold ?? 90,
       high: 90,
       low: 80,
     },

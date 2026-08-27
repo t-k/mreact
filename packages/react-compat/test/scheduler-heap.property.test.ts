@@ -18,6 +18,7 @@ interface Real {
 const compare = (left: Item, right: Item): number =>
   left.sortIndex - right.sortIndex || left.id - right.id;
 const item = fc.record({ id: fc.integer(), sortIndex: fc.integer() });
+const propertyParameters = { numRuns: 500, seed: 20_260_831 } as const;
 
 function expectHeapInvariant(heap: readonly Item[]): void {
   for (let child = 1; child < heap.length; child += 1) {
@@ -62,7 +63,7 @@ describe("scheduler heap properties", () => {
       fc.property(fc.commands([pushCommand, popCommand], { maxCommands: 100 }), (commands) => {
         fc.modelRun(() => ({ model: { items: [] }, real: { heap: [] } }), commands);
       }),
-      { numRuns: 500 },
+      propertyParameters,
     );
   });
 
@@ -79,7 +80,7 @@ describe("scheduler heap properties", () => {
         expect(popped).toEqual([...items].sort(compare));
         expect(pop(heap, compare)).toBeNull();
       }),
-      { numRuns: 500 },
+      propertyParameters,
     );
   });
 });

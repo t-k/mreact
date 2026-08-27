@@ -2,6 +2,29 @@ import { describe, expect, test } from "vitest";
 import { clientManifestAssetPaths } from "../src/client-manifest-assets.js";
 
 describe("client manifest asset paths", () => {
+  test("rejects each traversal, separator, absolute, and malformed-percent variant", () => {
+    const paths = clientManifestAssetPaths({
+      assets: [
+        "",
+        ".",
+        "..",
+        "a//b.js",
+        "a/./b.js",
+        "a/../b.js",
+        "/absolute.js",
+        "a\\b.js",
+        "a/%2e/b.js",
+        "a/%2e%2e/b.js",
+        "a/%2f/b.js",
+        "a/%5c/b.js",
+        "a/%ZZ/b.js",
+      ],
+      routes: [{}],
+    });
+
+    expect(paths).toEqual(new Set(["manifest.json"]));
+  });
+
   test("collects safe route, manifest, and extra assets with an optional prefix", () => {
     const paths = clientManifestAssetPaths(
       {

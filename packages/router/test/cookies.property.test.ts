@@ -6,6 +6,7 @@ const cookieName = fc.stringMatching(/^[A-Za-z][A-Za-z0-9_-]{0,20}$/);
 const cookieValue = fc
   .array(fc.integer({ min: 0x20, max: 0x7e }), { maxLength: 60 })
   .map((codes) => String.fromCharCode(...codes));
+const propertyParameters = { numRuns: 500, seed: 20_260_830 } as const;
 
 describe("cookie properties", () => {
   test("round trips generated cookie names and values", () => {
@@ -15,7 +16,7 @@ describe("cookie properties", () => {
 
         expect(parseCookieHeader(pair).get(name)).toBe(value);
       }),
-      { numRuns: 500 },
+      propertyParameters,
     );
   });
 
@@ -26,7 +27,7 @@ describe("cookie properties", () => {
 
         expect(parseCookieHeader(header).get(name)).toBe(last);
       }),
-      { numRuns: 500 },
+      propertyParameters,
     );
   });
 
@@ -42,7 +43,7 @@ describe("cookie properties", () => {
         expect(parsed.has("bad")).toBe(false);
         expect(parsed.get(rightName)).toBe("ok");
       }),
-      { numRuns: 500 },
+      propertyParameters,
     );
   });
 
@@ -60,7 +61,7 @@ describe("cookie properties", () => {
           expect(noneCookie).toThrow(/requires Secure/);
         }
       }),
-      { numRuns: 500 },
+      propertyParameters,
     );
   });
 
@@ -76,7 +77,7 @@ describe("cookie properties", () => {
           ).toThrow(/invalid cookie attribute/);
         },
       ),
-      { numRuns: 500 },
+      propertyParameters,
     );
   });
 });

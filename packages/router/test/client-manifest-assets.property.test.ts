@@ -9,6 +9,7 @@ const safePath = fc
 const unsafePath = fc
   .tuple(safePath, fc.constantFrom("..", ".", "%2e%2e", "%2E", "%2f", "%5c", "%ZZ", ""), safePath)
   .map(([left, segment, right]) => `${left}/${segment}/${right}`);
+const propertyParameters = { numRuns: 500, seed: 20_260_832 } as const;
 
 describe("client manifest asset path properties", () => {
   test("retains generated relative paths under the normalized prefix", () => {
@@ -20,7 +21,7 @@ describe("client manifest asset path properties", () => {
           new Set([`/${prefix}/manifest.json`, ...assets.map((asset) => `/${prefix}/${asset}`)]),
         );
       }),
-      { numRuns: 500 },
+      propertyParameters,
     );
   });
 
@@ -38,7 +39,7 @@ describe("client manifest asset path properties", () => {
           );
         },
       ),
-      { numRuns: 500 },
+      propertyParameters,
     );
   });
 
@@ -53,7 +54,7 @@ describe("client manifest asset path properties", () => {
 
         expect(reverse).toEqual(forward);
       }),
-      { numRuns: 500 },
+      propertyParameters,
     );
   });
 });

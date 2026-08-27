@@ -5,6 +5,7 @@ import { contentSecurityPolicy, responseHeadersContainCspNonce } from "../src/cs
 const directiveName = fc.stringMatching(/^[a-z][a-z0-9-]{0,20}$/);
 const directiveValue = fc.stringMatching(/^[A-Za-z0-9+/_:.*=-]{1,30}$/);
 const nonce = fc.stringMatching(/^[A-Za-z0-9+/_=-]{1,30}$/);
+const propertyParameters = { numRuns: 500, seed: 20_260_829 } as const;
 
 describe("CSP properties", () => {
   test("detects generated nonce source tokens at valid header boundaries", () => {
@@ -17,7 +18,7 @@ describe("CSP properties", () => {
 
         expect(responseHeadersContainCspNonce(headers)).toBe(true);
       }),
-      { numRuns: 500 },
+      propertyParameters,
     );
   });
 
@@ -37,7 +38,7 @@ describe("CSP properties", () => {
 
         expect(contentSecurityPolicy({ directives })).toBe(expected || undefined);
       }),
-      { numRuns: 500 },
+      propertyParameters,
     );
   });
 
@@ -57,7 +58,7 @@ describe("CSP properties", () => {
           `script-src ${value} 'nonce-${generatedNonce}'; style-src ${value} 'nonce-${generatedNonce}'; default-src ${value}`,
         );
       }),
-      { numRuns: 500 },
+      propertyParameters,
     );
   });
 
@@ -75,7 +76,7 @@ describe("CSP properties", () => {
           ).toThrow(/invalid CSP directive value/);
         },
       ),
-      { numRuns: 500 },
+      propertyParameters,
     );
   });
 
@@ -94,7 +95,7 @@ describe("CSP properties", () => {
           ).toThrow(/invalid CSP nonce/);
         },
       ),
-      { numRuns: 500 },
+      propertyParameters,
     );
   });
 });
