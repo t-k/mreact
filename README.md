@@ -128,12 +128,23 @@ Run tests:
 
 ```bash
 pnpm test
-pnpm test:mutation
+pnpm test:quality:quick
 pnpm test:e2e:smoke
 pnpm test:e2e
 ```
 
-Property-based tests run as part of the regular Vitest suite. `pnpm test:mutation` runs the focused Stryker mutation-testing pilot. Native Rust validation and scheduled deep-check commands are documented in [`packages/router-native`](packages/router-native#development).
+Property-based tests run in the regular Vitest suite. Fast quality checks used by Pull Requests can also be run locally with `pnpm test:quality:quick`.
+
+Mutation testing is intentionally local and split by responsibility:
+
+```bash
+pnpm test:mutation:security
+pnpm test:mutation:core
+pnpm test:mutation:all
+pnpm test:mutation:all:force
+```
+
+Normal runs reuse Stryker incremental results. Use the force command after broad refactors or before reviewing the complete mutation baseline. Native Rust validation, mutation cohorts, and fuzz campaigns are documented in [`packages/router-native`](packages/router-native#development).
 
 Build the documentation site locally:
 

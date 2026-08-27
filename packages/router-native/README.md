@@ -17,27 +17,28 @@ If no platform package matches, it tries `./index.node`.
 ```bash
 pnpm --filter @reckona/mreact-router-native build
 pnpm --filter @reckona/mreact-router-native test
-pnpm --filter @reckona/mreact-router-native test:nextest
-pnpm --filter @reckona/mreact-router-native test:doc
-pnpm --filter @reckona/mreact-router-native test:deny
-pnpm --filter @reckona/mreact-router-native test:deny:advisories
-pnpm --filter @reckona/mreact-router-native test:deny:fuzz
-pnpm --filter @reckona/mreact-router-native test:deny:fuzz:advisories
+pnpm --filter @reckona/mreact-router-native test:quality:quick
 ```
 
-The regular CI pipeline uses Clippy, cargo-nextest, Rust documentation tests, and cargo-deny. Unit and documentation tests disable the default N-API bindings so they exercise the portable Rust core without requiring a Node host to satisfy N-API symbols; Clippy and native artifact builds still validate the binding-enabled path. Dependency policies and RustSec advisories are blocking checks for both the native crate and its separately locked fuzz workspace.
+Pull Request CI runs Clippy, cargo-nextest, documentation tests, and cargo-deny for both the normal and fuzz dependency graphs. Unit and documentation tests disable the default N-API bindings so they exercise the portable Rust core without requiring a Node host to satisfy N-API symbols; Clippy and native artifact builds still validate the binding-enabled path. Duplicate dependency versions, dependency policies, licenses, sources, and RustSec advisories are blocking checks.
 
-Run the bounded deep checks locally after installing cargo-nextest, cargo-mutants, and cargo-fuzz:
+Mutation testing and fuzz campaigns are intentionally local-only:
 
 ```bash
-pnpm --filter @reckona/mreact-router-native test:mutants
-pnpm --filter @reckona/mreact-router-native test:fuzz:base64
-pnpm --filter @reckona/mreact-router-native test:fuzz:rows
+pnpm --filter @reckona/mreact-router-native test:mutants:base64
+pnpm --filter @reckona/mreact-router-native test:mutants:routes
+pnpm --filter @reckona/mreact-router-native test:mutants:flight
+pnpm --filter @reckona/mreact-router-native test:mutants:all
+pnpm --filter @reckona/mreact-router-native test:fuzz:build
+pnpm --filter @reckona/mreact-router-native test:fuzz:smoke
+pnpm --filter @reckona/mreact-router-native test:fuzz:campaign flight_roundtrip 3600
 ```
 
-The `Rust deep checks` workflow runs these mutation and fuzz checks every Monday and on demand. The mutation pilot targets Base64 boundary logic in `src/flight.rs`; fuzz targets exercise both Base64 decoding and Flight-row-to-JSON conversion. The fuzz package disables N-API bindings because it calls the pure Rust boundary directly, while normal package builds retain N-API bindings through the default feature.
+The fuzz runner copies tracked seeds into a temporary corpus and removes it after each run, so local campaigns do not modify tracked files. It resolves the active Xcode compiler and SDK through `xcrun` on macOS instead of depending on the shell's `cc`. The fuzz package disables N-API bindings because it calls the pure Rust boundary directly, while normal package builds retain N-API bindings through the default feature.
 
-Loom, Miri, and cargo-semver-checks are not enabled yet. The crate currently has no project-owned concurrent code or `unsafe` blocks, and its Cargo package is private rather than a published Rust API. These checks should be reconsidered when those conditions change.
+The toolchain used for this workflow is cargo-nextest 0.9.143, cargo-mutants 27.1.0, cargo-fuzz 0.13.2, and cargo-deny 0.18.7 in CI. The commands are also compatible with cargo-deny 0.20.2. Install these tools before running the deep local checks; cargo-fuzz additionally requires a nightly Rust toolchain.
+
+Loom and Miri are deferred because the crate owns no concurrent primitives or unsafe blocks. cargo-semver-checks is deferred because the Rust crate has `publish = false` and no public Cargo compatibility contract. Re-evaluate these decisions when those conditions change.
 
 ## Notes
 
