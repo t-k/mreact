@@ -75,4 +75,17 @@ describe("GitHub workflows", () => {
     expect(workflow).toContain("          - run: pnpm install --frozen-lockfile");
     expect(workflow).toContain("MREACT_DOCS_BASE_PATH: ${{ steps.pages.outputs.base_path }}");
   });
+
+  test("runs cargo-deny with root-relative policy paths and global options before check", async () => {
+    const workflow = await readWorkflow("ci.yml");
+
+    expect(workflow).toContain(
+      "cargo deny --manifest-path packages/router-native/Cargo.toml --config packages/router-native/deny.toml check bans licenses sources",
+    );
+    expect(workflow).toContain(
+      "cargo deny --manifest-path packages/router-native/fuzz/Cargo.toml --config packages/router-native/deny.toml check bans licenses sources",
+    );
+    expect(workflow).not.toContain("check --config deny.toml");
+    expect(workflow).not.toContain("check --config ../deny.toml");
+  });
 });

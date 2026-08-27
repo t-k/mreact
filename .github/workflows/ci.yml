@@ -154,13 +154,13 @@ jobs:
 
       - name: Check dependency policy
         run: |
-          cargo deny --manifest-path packages/router-native/Cargo.toml check --config deny.toml bans licenses sources
-          cargo deny --manifest-path packages/router-native/fuzz/Cargo.toml check --config ../deny.toml bans licenses sources
+          cargo deny --manifest-path packages/router-native/Cargo.toml --config packages/router-native/deny.toml check bans licenses sources
+          cargo deny --manifest-path packages/router-native/fuzz/Cargo.toml --config packages/router-native/deny.toml check bans licenses sources
 
       - name: Check RustSec advisories
         run: |
-          cargo deny --manifest-path packages/router-native/Cargo.toml check --config deny.toml advisories
-          cargo deny --manifest-path packages/router-native/fuzz/Cargo.toml check --config ../deny.toml advisories
+          cargo deny --manifest-path packages/router-native/Cargo.toml --config packages/router-native/deny.toml check advisories
+          cargo deny --manifest-path packages/router-native/fuzz/Cargo.toml --config packages/router-native/deny.toml check advisories
 
   native-artifacts:
     name: Native build (${{ matrix.os }})
