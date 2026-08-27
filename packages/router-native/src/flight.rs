@@ -62,6 +62,13 @@ pub fn decode_base64_bytes(value: &str) -> Result<Vec<u8>, String> {
     }
   }
 
+  let valid_explicit_padding = matches!((group_len, padding), (2, 1 | 2) | (3, 1));
+  if padding > 0 && !valid_explicit_padding {
+    return Err(format!(
+      "Invalid base64 padding: {padding} padding characters after {group_len} data characters"
+    ));
+  }
+
   // Implicit padding: pad the trailing partial group with zero bits.
   if group_len == 2 {
     output.push((group[0] << 2) | (group[1] >> 4));
@@ -623,16 +630,53 @@ fn format_flight_id(id: u64) -> String {
   format!("{id:x}")
 }
 
-/// Parse JSON without serde_json's default 128-level recursion limit
-/// (we enforce our own `MAX_FLIGHT_DECODE_DEPTH = 256` cap during the
-/// walk so the parser must let us see the full tree). At our cap level
-/// the platform stack is comfortable: ~300 frames * ~200 bytes ≈ 60 KB
-/// against the 8 MB default.
-fn parse_json_without_recursion_limit(input: &str) -> Result<Value, serde_json::Error> {
+/// Parse JSON without serde_json's default 128-level recursion limit.
+/// A string-aware preflight rejects excessive container nesting before
+/// recursive deserialization, and the model walk enforces the same
+/// semantic cap. At our cap level the platform stack is comfortable:
+/// ~300 frames * ~200 bytes ≈ 60 KB against the 8 MB default.
+fn parse_json_without_recursion_limit(input: &str) -> Result<Value, String> {
+  validate_json_nesting(input)?;
+
   use serde::Deserialize;
   let mut deserializer = serde_json::Deserializer::from_str(input);
   deserializer.disable_recursion_limit();
-  Value::deserialize(&mut deserializer)
+  Value::deserialize(&mut deserializer).map_err(|error| error.to_string())
+}
+
+fn validate_json_nesting(input: &str) -> Result<(), String> {
+  let mut depth = 0usize;
+  let mut escaped = false;
+  let mut in_string = false;
+
+  for byte in input.bytes() {
+    if in_string {
+      if escaped {
+        escaped = false;
+      } else if byte == b'\\' {
+        escaped = true;
+      } else if byte == b'"' {
+        in_string = false;
+      }
+      continue;
+    }
+
+    match byte {
+      b'"' => in_string = true,
+      b'[' | b'{' => {
+        depth += 1;
+        if depth > MAX_FLIGHT_DECODE_DEPTH + 1 {
+          return Err(format!(
+            "MR_FLIGHT_TOO_DEEP: nested deeper than {MAX_FLIGHT_DECODE_DEPTH} levels"
+          ));
+        }
+      }
+      b']' | b'}' => depth = depth.saturating_sub(1),
+      _ => {}
+    }
+  }
+
+  Ok(())
 }
 
 #[cfg(all(not(test), feature = "napi-bindings"))]
@@ -1427,6 +1471,34 @@ mod tests {
   fn rejects_characters_after_padding() {
     let err = decode_base64_bytes("aGVsbG8=A").unwrap_err();
     assert!(err.contains("after padding"), "{err}");
+  }
+
+  #[test]
+  fn rejects_excessive_or_misplaced_padding() {
+    for input in ["====", "AA===", "AAA==", "AAAA="] {
+      assert!(decode_base64_bytes(input).is_err(), "accepted {input}");
+    }
+  }
+
+  #[test]
+  fn rejects_json_nesting_before_unbounded_deserialization() {
+    let container_count = MAX_FLIGHT_DECODE_DEPTH + 2;
+    let input = format!(
+      "{}0{}",
+      "[".repeat(container_count),
+      "]".repeat(container_count)
+    );
+
+    let error = parse_json_without_recursion_limit(&input).unwrap_err();
+    assert!(error.to_string().contains("MR_FLIGHT_TOO_DEEP"), "{error}");
+  }
+
+  #[test]
+  fn ignores_container_characters_inside_json_strings_when_checking_depth() {
+    let value = "[{".repeat(MAX_FLIGHT_DECODE_DEPTH + 2);
+    let input = serde_json::to_string(&value).unwrap();
+
+    assert_eq!(parse_json_without_recursion_limit(&input).unwrap(), json!(value));
   }
 
   #[test]

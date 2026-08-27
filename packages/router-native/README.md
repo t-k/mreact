@@ -21,11 +21,13 @@ pnpm --filter @reckona/mreact-router-native test:nextest
 pnpm --filter @reckona/mreact-router-native test:doc
 pnpm --filter @reckona/mreact-router-native test:deny
 pnpm --filter @reckona/mreact-router-native test:deny:advisories
+pnpm --filter @reckona/mreact-router-native test:deny:fuzz
+pnpm --filter @reckona/mreact-router-native test:deny:fuzz:advisories
 ```
 
-The regular CI pipeline uses Clippy, cargo-nextest, Rust documentation tests, and cargo-deny. Advisory checks remain visible but non-blocking so a newly published advisory does not make every pull request impossible to merge before a dependency update is available.
+The regular CI pipeline uses Clippy, cargo-nextest, Rust documentation tests, and cargo-deny. Unit and documentation tests disable the default N-API bindings so they exercise the portable Rust core without requiring a Node host to satisfy N-API symbols; Clippy and native artifact builds still validate the binding-enabled path. Dependency policies and RustSec advisories are blocking checks for both the native crate and its separately locked fuzz workspace.
 
-Run the bounded deep checks locally after installing cargo-mutants and cargo-fuzz:
+Run the bounded deep checks locally after installing cargo-nextest, cargo-mutants, and cargo-fuzz:
 
 ```bash
 pnpm --filter @reckona/mreact-router-native test:mutants

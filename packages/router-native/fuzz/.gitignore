@@ -1,5 +1,4 @@
 artifacts/
-Cargo.lock
 corpus/
 coverage/
 target/

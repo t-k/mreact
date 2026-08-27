@@ -27,7 +27,9 @@ allow = [
   "Unicode-3.0",
   "Unlicense",
 ]
-exceptions = []
+exceptions = [
+  { allow = ["NCSA"], name = "libfuzzer-sys" },
+]
 
 [sources]
 unknown-registry = "deny"
