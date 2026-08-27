@@ -1,3 +1,4 @@
+import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { calculateVirtualRange, createVirtualGrid, createVirtualList } from "../src/index.js";
 
@@ -106,6 +107,48 @@ describe("calculateVirtualRange", () => {
       visibleStartIndex: 0,
       visibleStartRow: 0,
     });
+  });
+
+  it("preserves range ordering and spacer geometry for arbitrary valid inputs", () => {
+    fc.assert(
+      fc.property(
+        fc.record({
+          columnCount: fc.integer({ min: 1, max: 32 }),
+          itemCount: fc.integer({ min: 1, max: 10_000 }),
+          itemSize: fc.integer({ min: 1, max: 2_000 }),
+          overscan: fc.integer({ min: 0, max: 100 }),
+          scrollOffset: fc.integer({ min: 0, max: 20_000_000 }),
+          viewportSize: fc.integer({ min: 0, max: 20_000 }),
+        }),
+        (options) => {
+          const range = calculateVirtualRange(options);
+
+          expect(range.startRow).toBeLessThanOrEqual(range.visibleStartRow);
+          expect(range.visibleStartRow).toBeLessThanOrEqual(range.visibleEndRow);
+          expect(range.visibleEndRow).toBeLessThanOrEqual(range.endRow);
+          expect(range.endRow).toBeLessThanOrEqual(range.rowCount);
+          expect(range.startIndex).toBeLessThanOrEqual(range.visibleStartIndex);
+          expect(range.visibleStartIndex).toBeLessThanOrEqual(range.visibleEndIndex);
+          expect(range.visibleEndIndex).toBeLessThanOrEqual(range.endIndex);
+          expect(range.endIndex).toBeLessThanOrEqual(range.itemCount);
+
+          expect(range.startIndex).toBe(
+            Math.min(options.itemCount, range.startRow * options.columnCount),
+          );
+          expect(range.endIndex).toBe(
+            Math.min(options.itemCount, range.endRow * options.columnCount),
+          );
+          expect(range.topSpacerPx).toBe(range.startRow * options.itemSize);
+          expect(range.bottomSpacerPx).toBe((range.rowCount - range.endRow) * options.itemSize);
+          expect(
+            range.topSpacerPx +
+              (range.endRow - range.startRow) * options.itemSize +
+              range.bottomSpacerPx,
+          ).toBe(range.totalSizePx);
+        },
+      ),
+      { numRuns: 1_000 },
+    );
   });
 });
 

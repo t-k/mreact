@@ -1,3 +1,4 @@
+import fc from "fast-check";
 import { describe, expect, test } from "vitest";
 import {
   escapeHtmlAttribute,
@@ -6,6 +7,9 @@ import {
 } from "../src/html-escape.js";
 
 describe("HTML escaping helpers", () => {
+  const escapeWith = (value: string, replacements: Readonly<Record<string, string>>): string =>
+    Array.from(value, (character) => replacements[character] ?? character).join("");
+
   test("escapes text context characters", () => {
     expect(escapeHtmlText(`Tom & <Ada> "Grace"`)).toBe(`Tom &amp; &lt;Ada&gt; "Grace"`);
   });
@@ -44,5 +48,43 @@ describe("HTML escaping helpers", () => {
     }
 
     expect(replaceAllCalls).toBe(0);
+  });
+
+  test("matches independent escaping rules for arbitrary Unicode strings", () => {
+    fc.assert(
+      fc.property(fc.string(), (value) => {
+        expect(escapeHtmlText(value)).toBe(
+          escapeWith(value, { "&": "&amp;", "<": "&lt;", ">": "&gt;" }),
+        );
+        expect(escapeHtmlAttribute(value)).toBe(
+          escapeWith(value, {
+            '"': "&quot;",
+            "&": "&amp;",
+            "'": "&#39;",
+            "<": "&lt;",
+            ">": "&gt;",
+          }),
+        );
+        expect(escapeHtmlQuotedAttribute(value)).toBe(
+          escapeWith(value, { '"': "&quot;", "&": "&amp;" }),
+        );
+      }),
+      { numRuns: 500 },
+    );
+  });
+
+  test("preserves concatenation for every escaping context", () => {
+    fc.assert(
+      fc.property(fc.string(), fc.string(), (left, right) => {
+        expect(escapeHtmlText(left + right)).toBe(escapeHtmlText(left) + escapeHtmlText(right));
+        expect(escapeHtmlAttribute(left + right)).toBe(
+          escapeHtmlAttribute(left) + escapeHtmlAttribute(right),
+        );
+        expect(escapeHtmlQuotedAttribute(left + right)).toBe(
+          escapeHtmlQuotedAttribute(left) + escapeHtmlQuotedAttribute(right),
+        );
+      }),
+      { numRuns: 500 },
+    );
   });
 });

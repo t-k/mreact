@@ -125,6 +125,7 @@
     "@vitest/coverage-v8": "^4.1.8",
     "@vue/server-renderer": "3.5.38",
     "@xyflow/react": "12.11.0",
+    "fast-check": "^4.9.0",
     "happy-dom": "^20.10.2",
     "marked": "15.0.12",
     "marko": "^5.39.2",
