@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -47,13 +47,71 @@ if (process.platform === "darwin") {
   }).stdout.trim();
 }
 
-if (mode === "build") {
-  const result = spawnSync("cargo", ["+nightly", "fuzz", "build"], {
-    cwd: packageRoot,
-    env: fuzzEnvironment,
-    stdio: "inherit",
+const signalExitCodes = { SIGINT: 130, SIGTERM: 143 };
+
+const runCargo = (args) =>
+  new Promise((resolve, reject) => {
+    const child = spawn("cargo", args, {
+      cwd: packageRoot,
+      detached: process.platform !== "win32",
+      env: fuzzEnvironment,
+      stdio: "inherit",
+    });
+    let forwardedSignal;
+    let escalationTimer;
+
+    const signalChildTree = (signal) => {
+      if (child.pid === undefined) {
+        return;
+      }
+      try {
+        if (process.platform === "win32") {
+          child.kill(signal);
+        } else {
+          process.kill(-child.pid, signal);
+        }
+      } catch (error) {
+        if (error.code !== "ESRCH") {
+          throw error;
+        }
+      }
+    };
+    const forwardSignal = (signal) => {
+      if (forwardedSignal !== undefined) {
+        return;
+      }
+      forwardedSignal = signal;
+      signalChildTree(signal);
+      escalationTimer = setTimeout(() => signalChildTree("SIGKILL"), 5_000);
+      escalationTimer.unref();
+    };
+    const onSigint = () => forwardSignal("SIGINT");
+    const onSigterm = () => forwardSignal("SIGTERM");
+    const finish = (result) => {
+      process.off("SIGINT", onSigint);
+      process.off("SIGTERM", onSigterm);
+      if (escalationTimer !== undefined) {
+        clearTimeout(escalationTimer);
+      }
+      resolve({ ...result, forwardedSignal });
+    };
+
+    process.once("SIGINT", onSigint);
+    process.once("SIGTERM", onSigterm);
+    child.once("error", (error) => {
+      process.off("SIGINT", onSigint);
+      process.off("SIGTERM", onSigterm);
+      reject(error);
+    });
+    child.once("exit", (status, signal) => finish({ signal, status }));
   });
-  process.exitCode = result.status ?? 1;
+
+if (mode === "build") {
+  const result = await runCargo(["+nightly", "fuzz", "build"]);
+  process.exitCode =
+    result.forwardedSignal === undefined
+      ? (result.status ?? 1)
+      : signalExitCodes[result.forwardedSignal];
 } else {
   const temporaryRoot = mkdtempSync(join(tmpdir(), "mreact-fuzz-"));
 
@@ -65,22 +123,22 @@ if (mode === "build") {
         cpSync(seeds, corpus, { recursive: true });
       }
 
-      const result = spawnSync(
-        "cargo",
-        [
-          "+nightly",
-          "fuzz",
-          "run",
-          target,
-          corpus,
-          "--",
-          "-max_len=4096",
-          `-max_total_time=${seconds}`,
-          "-timeout=5",
-        ],
-        { cwd: packageRoot, env: fuzzEnvironment, stdio: "inherit" },
-      );
+      const result = await runCargo([
+        "+nightly",
+        "fuzz",
+        "run",
+        target,
+        corpus,
+        "--",
+        "-max_len=4096",
+        `-max_total_time=${seconds}`,
+        "-timeout=5",
+      ]);
 
+      if (result.forwardedSignal !== undefined) {
+        process.exitCode = signalExitCodes[result.forwardedSignal];
+        break;
+      }
       if (result.status !== 0) {
         process.exitCode = result.status ?? 1;
         break;

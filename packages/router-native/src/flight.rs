@@ -10,6 +10,8 @@
 // depth cap (`MAX_FLIGHT_DECODE_DEPTH`, matching the JS constant
 // introduced for issue 079). Rust's default 8 MB main-thread stack is
 // large enough that the cap fires long before the platform stack does.
+// Unoptimized test frames are substantially larger, so the exact depth
+// boundary tests run on a dedicated stack.
 
 use serde_json::{json, Value};
 
@@ -697,6 +699,12 @@ pub fn napi_encode_flight_payload(response_json: String) -> napi::Result<Buffer>
 // Decoder
 // ---------------------------------------------------------------------
 
+#[derive(Default)]
+struct FlightDecodeContext {
+  in_progress_chunk_ids: std::collections::HashSet<u64>,
+  completed_chunk_models: std::collections::HashMap<u64, Value>,
+}
+
 /// Decode a `\n`-separated Flight row payload into a JSON-serialized
 /// `FlightResponse` shape the JS callsite can JSON.parse back into a
 /// FlightResponse object.
@@ -783,17 +791,31 @@ pub fn decode_flight_rows(rows: &str) -> Result<String, String> {
     }
   }
 
+  let mut decode_context = FlightDecodeContext::default();
+
   // Second pass: F rows depend on model_chunks for `bound` decoding.
   for (id, tag, body) in &parsed_rows {
     if *tag == Some(b'F') {
-      server_refs.push(parse_server_reference(*id, body, &model_chunks, &error_chunks)?);
+      server_refs.push(parse_server_reference(
+        *id,
+        body,
+        &model_chunks,
+        &error_chunks,
+        &mut decode_context,
+      )?);
     }
   }
 
   let root = if let Some(explicit) = explicit_root {
     explicit
   } else if let Some(raw) = model_chunks.get(&0).cloned() {
-    decode_model(&raw, &model_chunks, &error_chunks, 0)?
+    decode_model(
+      &raw,
+      &model_chunks,
+      &error_chunks,
+      0,
+      &mut decode_context,
+    )?
   } else {
     return Err("Invalid React Flight rows.".to_string());
   };
@@ -992,6 +1014,7 @@ fn parse_server_reference(
   payload: &str,
   model_chunks: &std::collections::HashMap<u64, Value>,
   error_chunks: &std::collections::HashMap<u64, Value>,
+  context: &mut FlightDecodeContext,
 ) -> Result<Value, String> {
   let parsed = parse_json_without_recursion_limit(payload)
     .map_err(|e| format!("Invalid server reference payload at row {id}: {e}"))?;
@@ -1011,7 +1034,7 @@ fn parse_server_reference(
     Some(Value::Array(items)) => {
       let mut decoded_items = Vec::with_capacity(items.len());
       for item in items {
-        decoded_items.push(decode_model(item, model_chunks, error_chunks, 0)?);
+        decoded_items.push(decode_model(item, model_chunks, error_chunks, 0, context)?);
       }
       Some(Value::Array(decoded_items))
     }
@@ -1060,6 +1083,7 @@ fn decode_model(
   model_chunks: &std::collections::HashMap<u64, Value>,
   error_chunks: &std::collections::HashMap<u64, Value>,
   depth: usize,
+  context: &mut FlightDecodeContext,
 ) -> Result<Value, String> {
   if depth > MAX_FLIGHT_DECODE_DEPTH {
     return Err(format!(
@@ -1068,7 +1092,7 @@ fn decode_model(
   }
   match value {
     Value::Null | Value::Bool(_) | Value::Number(_) => Ok(value.clone()),
-    Value::String(s) => decode_string(s, model_chunks, error_chunks),
+    Value::String(s) => decode_string(s, model_chunks, error_chunks, depth, context),
     Value::Array(items) => {
       // Element shape: `["$", type, key, props]`.
       if items.first().and_then(Value::as_str) == Some("$") {
@@ -1080,7 +1104,13 @@ fn decode_model(
           _ => Value::Null,
         };
         let decoded_type = decode_element_type(&elem_type);
-        let decoded_props = decode_props(&props, model_chunks, error_chunks, depth + 1)?;
+        let decoded_props = decode_props(
+          &props,
+          model_chunks,
+          error_chunks,
+          depth + 1,
+          context,
+        )?;
         return Ok(json!({
           "kind": "element",
           "type": decoded_type,
@@ -1090,7 +1120,13 @@ fn decode_model(
       }
       let mut decoded = Vec::with_capacity(items.len());
       for item in items {
-        decoded.push(decode_model(item, model_chunks, error_chunks, depth + 1)?);
+        decoded.push(decode_model(
+          item,
+          model_chunks,
+          error_chunks,
+          depth + 1,
+          context,
+        )?);
       }
       Ok(Value::Array(decoded))
     }
@@ -1099,7 +1135,7 @@ fn decode_model(
       if matches!(kind, Some("array-buffer") | Some("typed-array") | Some("data-view")) {
         return Ok(value.clone());
       }
-      decode_props(value, model_chunks, error_chunks, depth + 1)
+      decode_props(value, model_chunks, error_chunks, depth + 1, context)
     }
   }
 }
@@ -1108,6 +1144,8 @@ fn decode_string(
   value: &str,
   model_chunks: &std::collections::HashMap<u64, Value>,
   error_chunks: &std::collections::HashMap<u64, Value>,
+  depth: usize,
+  context: &mut FlightDecodeContext,
 ) -> Result<Value, String> {
   if value == "$undefined" || value == "$u" {
     return Ok(json!({ "kind": "undefined" }));
@@ -1148,7 +1186,7 @@ fn decode_string(
     return Ok(json!({ "kind": "promise", "id": id }));
   }
   if let Some(rest) = value.strip_prefix("$Q") {
-    let decoded = decode_chunk_ref(rest, model_chunks, error_chunks)?;
+    let decoded = decode_chunk_ref(rest, model_chunks, error_chunks, depth + 1, context)?;
     let entries = decoded
       .as_array()
       .cloned()
@@ -1166,12 +1204,12 @@ fn decode_string(
     return Ok(json!({ "kind": "map", "entries": Value::Array(entries) }));
   }
   if let Some(rest) = value.strip_prefix("$W") {
-    let decoded = decode_chunk_ref(rest, model_chunks, error_chunks)?;
+    let decoded = decode_chunk_ref(rest, model_chunks, error_chunks, depth + 1, context)?;
     let values = decoded.as_array().cloned().unwrap_or_default();
     return Ok(json!({ "kind": "set", "values": values }));
   }
   if let Some(rest) = value.strip_prefix("$K") {
-    let decoded = decode_chunk_ref(rest, model_chunks, error_chunks)?;
+    let decoded = decode_chunk_ref(rest, model_chunks, error_chunks, depth + 1, context)?;
     let entries: Vec<Value> = decoded
       .as_array()
       .cloned()
@@ -1189,7 +1227,7 @@ fn decode_string(
     return Ok(json!({ "kind": "form-data", "entries": entries }));
   }
   if let Some(rest) = value.strip_prefix("$i") {
-    let decoded = decode_chunk_ref(rest, model_chunks, error_chunks)?;
+    let decoded = decode_chunk_ref(rest, model_chunks, error_chunks, depth + 1, context)?;
     let values = decoded.as_array().cloned().unwrap_or_default();
     return Ok(json!({ "kind": "iterable", "values": values }));
   }
@@ -1209,7 +1247,7 @@ fn decode_string(
   }
   if let Some(rest) = value.strip_prefix('$') {
     if !rest.is_empty() && rest.chars().all(|c| c.is_ascii_hexdigit()) {
-      return decode_chunk_ref(rest, model_chunks, error_chunks);
+      return decode_chunk_ref(rest, model_chunks, error_chunks, depth + 1, context);
     }
   }
   Ok(Value::String(value.to_string()))
@@ -1219,16 +1257,34 @@ fn decode_chunk_ref(
   rest: &str,
   model_chunks: &std::collections::HashMap<u64, Value>,
   error_chunks: &std::collections::HashMap<u64, Value>,
+  depth: usize,
+  context: &mut FlightDecodeContext,
 ) -> Result<Value, String> {
+  if depth > MAX_FLIGHT_DECODE_DEPTH {
+    return Err(format!(
+      "MR_FLIGHT_TOO_DEEP: nested deeper than {MAX_FLIGHT_DECODE_DEPTH} levels"
+    ));
+  }
   let id = parse_flight_id(rest)?;
   if let Some(err) = error_chunks.get(&id) {
     return Ok(err.clone());
+  }
+  if let Some(completed) = context.completed_chunk_models.get(&id) {
+    return Ok(completed.clone());
   }
   let chunk = match model_chunks.get(&id) {
     Some(c) => c.clone(),
     None => return Ok(json!({ "kind": "promise", "id": id })),
   };
-  decode_model(&chunk, model_chunks, error_chunks, 0)
+  if !context.in_progress_chunk_ids.insert(id) {
+    return Err(format!("MR_FLIGHT_CYCLE: cyclic chunk reference {id}"));
+  }
+  let result = decode_model(&chunk, model_chunks, error_chunks, depth, context);
+  context.in_progress_chunk_ids.remove(&id);
+  if let Ok(decoded) = &result {
+    context.completed_chunk_models.insert(id, decoded.clone());
+  }
+  result
 }
 
 fn decode_element_type(value: &Value) -> Value {
@@ -1251,6 +1307,7 @@ fn decode_props(
   model_chunks: &std::collections::HashMap<u64, Value>,
   error_chunks: &std::collections::HashMap<u64, Value>,
   depth: usize,
+  context: &mut FlightDecodeContext,
 ) -> Result<Value, String> {
   if depth > MAX_FLIGHT_DECODE_DEPTH {
     return Err(format!(
@@ -1263,7 +1320,13 @@ fn decode_props(
   };
   let mut out = serde_json::Map::new();
   for (key, child) in obj {
-    let decoded = decode_model(child, model_chunks, error_chunks, depth + 1)?;
+    let decoded = decode_model(
+      child,
+      model_chunks,
+      error_chunks,
+      depth + 1,
+      context,
+    )?;
     out.insert(key.clone(), decoded);
   }
   Ok(Value::Object(out))
@@ -1341,14 +1404,28 @@ pub fn merge_flight_rows(prev_json: &str, rows: &str) -> Result<String, String> 
     }
   }
 
+  let mut decode_context = FlightDecodeContext::default();
+
   for (id, tag, body) in &parsed_rows {
     if *tag == Some(b'F') {
-      server_refs.push(parse_server_reference(*id, body, &model_chunks, &error_chunks)?);
+      server_refs.push(parse_server_reference(
+        *id,
+        body,
+        &model_chunks,
+        &error_chunks,
+        &mut decode_context,
+      )?);
     }
   }
 
   let merged_root = prev.get("root").cloned().unwrap_or(Value::Null);
-  let resolved_root = resolve_promise_chunks(&merged_root, &model_chunks, &error_chunks)?;
+  let resolved_root = resolve_promise_chunks(
+    &merged_root,
+    &model_chunks,
+    &error_chunks,
+    0,
+    &mut decode_context,
+  )?;
 
   Ok(json!({
     "version": prev.get("version").cloned().unwrap_or(json!(1)),
@@ -1363,13 +1440,26 @@ fn resolve_promise_chunks(
   value: &Value,
   model_chunks: &std::collections::HashMap<u64, Value>,
   error_chunks: &std::collections::HashMap<u64, Value>,
+  depth: usize,
+  context: &mut FlightDecodeContext,
 ) -> Result<Value, String> {
+  if depth > MAX_FLIGHT_DECODE_DEPTH {
+    return Err(format!(
+      "MR_FLIGHT_TOO_DEEP: nested deeper than {MAX_FLIGHT_DECODE_DEPTH} levels"
+    ));
+  }
   match value {
     Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => Ok(value.clone()),
     Value::Array(items) => {
       let mut out = Vec::with_capacity(items.len());
       for item in items {
-        out.push(resolve_promise_chunks(item, model_chunks, error_chunks)?);
+        out.push(resolve_promise_chunks(
+          item,
+          model_chunks,
+          error_chunks,
+          depth + 1,
+          context,
+        )?);
       }
       Ok(Value::Array(out))
     }
@@ -1381,7 +1471,21 @@ fn resolve_promise_chunks(
           return Ok(err.clone());
         }
         if let Some(chunk) = model_chunks.get(&id) {
-          return decode_model(chunk, model_chunks, error_chunks, 0);
+          if !context.in_progress_chunk_ids.insert(id) {
+            return Err(format!("MR_FLIGHT_CYCLE: cyclic chunk reference {id}"));
+          }
+          let result = decode_model(
+            chunk,
+            model_chunks,
+            error_chunks,
+            depth + 1,
+            context,
+          );
+          context.in_progress_chunk_ids.remove(&id);
+          if let Ok(decoded) = &result {
+            context.completed_chunk_models.insert(id, decoded.clone());
+          }
+          return result;
         }
         return Ok(value.clone());
       }
@@ -1390,7 +1494,16 @@ fn resolve_promise_chunks(
         if let Some(Value::Object(props)) = out.get("props").cloned() {
           let mut resolved = serde_json::Map::new();
           for (key, child) in props {
-            resolved.insert(key, resolve_promise_chunks(&child, model_chunks, error_chunks)?);
+            resolved.insert(
+              key,
+              resolve_promise_chunks(
+                &child,
+                model_chunks,
+                error_chunks,
+                depth + 1,
+                context,
+              )?,
+            );
           }
           out.insert("props".to_string(), Value::Object(resolved));
         }
@@ -1405,8 +1518,20 @@ fn resolve_promise_chunks(
               let k = pair.first().cloned().unwrap_or(Value::Null);
               let v = pair.get(1).cloned().unwrap_or(Value::Null);
               resolved.push(Value::Array(vec![
-                resolve_promise_chunks(&k, model_chunks, error_chunks)?,
-                resolve_promise_chunks(&v, model_chunks, error_chunks)?,
+                resolve_promise_chunks(
+                  &k,
+                  model_chunks,
+                  error_chunks,
+                  depth + 1,
+                  context,
+                )?,
+                resolve_promise_chunks(
+                  &v,
+                  model_chunks,
+                  error_chunks,
+                  depth + 1,
+                  context,
+                )?,
               ]));
             }
           }
@@ -1419,7 +1544,13 @@ fn resolve_promise_chunks(
         if let Some(Value::Array(values)) = out.get("values").cloned() {
           let mut resolved = Vec::with_capacity(values.len());
           for v in values {
-            resolved.push(resolve_promise_chunks(&v, model_chunks, error_chunks)?);
+            resolved.push(resolve_promise_chunks(
+              &v,
+              model_chunks,
+              error_chunks,
+              depth + 1,
+              context,
+            )?);
           }
           out.insert("values".to_string(), Value::Array(resolved));
         }
@@ -1430,7 +1561,16 @@ fn resolve_promise_chunks(
       }
       let mut out = serde_json::Map::new();
       for (key, child) in obj {
-        out.insert(key.clone(), resolve_promise_chunks(child, model_chunks, error_chunks)?);
+        out.insert(
+          key.clone(),
+          resolve_promise_chunks(
+            child,
+            model_chunks,
+            error_chunks,
+            depth + 1,
+            context,
+          )?,
+        );
       }
       Ok(Value::Object(out))
     }
@@ -1503,9 +1643,17 @@ mod tests {
   fn decode_model_accepts_the_depth_limit_and_rejects_deeper_containers() {
     let model_chunks = std::collections::HashMap::new();
     let error_chunks = std::collections::HashMap::new();
+    let mut context = FlightDecodeContext::default();
 
     assert_eq!(
-      decode_model(&Value::Null, &model_chunks, &error_chunks, MAX_FLIGHT_DECODE_DEPTH).unwrap(),
+      decode_model(
+        &Value::Null,
+        &model_chunks,
+        &error_chunks,
+        MAX_FLIGHT_DECODE_DEPTH,
+        &mut context,
+      )
+      .unwrap(),
       Value::Null,
     );
 
@@ -1518,7 +1666,14 @@ mod tests {
       (json!({ "child": null }), MAX_FLIGHT_DECODE_DEPTH - 1),
     ];
     for (value, depth) in cases {
-      let error = decode_model(&value, &model_chunks, &error_chunks, depth).unwrap_err();
+      let error = decode_model(
+        &value,
+        &model_chunks,
+        &error_chunks,
+        depth,
+        &mut context,
+      )
+      .unwrap_err();
       assert!(error.contains("MR_FLIGHT_TOO_DEEP"), "{error}");
     }
   }
@@ -1740,12 +1895,112 @@ mod tests {
   }
 
   #[test]
+  fn rejects_cyclic_chunk_references_without_overflowing_the_stack() {
+    let cases = [
+      "0:\"$1\"\n1:\"$1\"",
+      "0:\"$1\"\n1:\"$2\"\n2:\"$1\"",
+      "0:\"$Q1\"\n1:[[\"k\",\"$2\"]]\n2:[[\"x\",\"$1\"]]",
+      "0:null\n1:\"$1\"\n2:F{\"id\":\"module#action\",\"bound\":[\"$1\"]}",
+    ];
+
+    for rows in cases {
+      let error = decode_flight_rows(rows).unwrap_err();
+      assert!(error.contains("MR_FLIGHT_CYCLE"), "{error}");
+    }
+  }
+
+  #[test]
+  fn rejects_cyclic_promise_chunks_during_merge() {
+    let previous = decode_flight_rows("0:\"$@1\"").unwrap();
+    let error = merge_flight_rows(&previous, "1:\"$1\"").unwrap_err();
+
+    assert!(error.contains("MR_FLIGHT_CYCLE"), "{error}");
+  }
+
+  #[test]
+  fn carries_the_depth_limit_across_chunk_references() {
+    let result = std::thread::Builder::new()
+      .stack_size(32 * 1024 * 1024)
+      .spawn(|| {
+        let chunk_chain = |reference_count: usize| {
+          let mut rows = Vec::with_capacity(reference_count + 1);
+          for id in 0..reference_count {
+            rows.push(format!("{id:x}:\"${:x}\"", id + 1));
+          }
+          rows.push(format!("{reference_count:x}:null"));
+          rows.join("\n")
+        };
+
+        decode_flight_rows(&chunk_chain(MAX_FLIGHT_DECODE_DEPTH)).unwrap();
+        decode_flight_rows(&chunk_chain(MAX_FLIGHT_DECODE_DEPTH + 1)).unwrap_err()
+      })
+      .unwrap()
+      .join()
+      .unwrap();
+
+    let error = result;
+    assert!(error.contains("MR_FLIGHT_TOO_DEEP"), "{error}");
+  }
+
+  #[test]
+  fn merge_resolution_enforces_depth_for_every_recursive_shape() {
+    let model_chunks = std::collections::HashMap::from([(1, Value::Null)]);
+    let error_chunks = std::collections::HashMap::new();
+    let cases = [
+      json!([null]),
+      json!({ "kind": "promise", "id": 1 }),
+      json!({ "kind": "element", "type": "div", "key": null, "props": { "child": null } }),
+      json!({ "kind": "set", "values": [null] }),
+      json!({ "child": null }),
+    ];
+
+    let mut context = FlightDecodeContext::default();
+    assert_eq!(
+      resolve_promise_chunks(
+        &Value::Null,
+        &model_chunks,
+        &error_chunks,
+        MAX_FLIGHT_DECODE_DEPTH,
+        &mut context,
+      )
+      .unwrap(),
+      Value::Null,
+    );
+
+    for value in cases {
+      let mut context = FlightDecodeContext::default();
+      let error = resolve_promise_chunks(
+        &value,
+        &model_chunks,
+        &error_chunks,
+        MAX_FLIGHT_DECODE_DEPTH,
+        &mut context,
+      )
+      .unwrap_err();
+      assert!(error.contains("MR_FLIGHT_TOO_DEEP"), "{error}");
+    }
+
+    let mut context = FlightDecodeContext::default();
+    let error = resolve_promise_chunks(
+      &Value::Null,
+      &model_chunks,
+      &error_chunks,
+      MAX_FLIGHT_DECODE_DEPTH + 1,
+      &mut context,
+    )
+    .unwrap_err();
+    assert!(error.contains("MR_FLIGHT_TOO_DEEP"), "{error}");
+  }
+
+  #[test]
   fn decodes_string_element_keys() {
+    let mut context = FlightDecodeContext::default();
     let decoded = decode_model(
       &json!(["$", "div", "stable-key", {}]),
       &std::collections::HashMap::new(),
       &std::collections::HashMap::new(),
       0,
+      &mut context,
     )
     .unwrap();
 
