@@ -1,0 +1,4 @@
+examine_globs = ["src/flight.rs"]
+examine_re = ["decode_base64_(bytes|char)"]
+exclude_re = ["replace \\+= with [-*]=", "replace \\| with \\^"]
+timeout_multiplier = 5.0

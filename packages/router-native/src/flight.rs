@@ -13,9 +13,9 @@
 
 use serde_json::{json, Value};
 
-#[cfg(not(test))]
+#[cfg(all(not(test), feature = "napi-bindings"))]
 use napi::{bindgen_prelude::Buffer, Error};
-#[cfg(not(test))]
+#[cfg(all(not(test), feature = "napi-bindings"))]
 use napi_derive::napi;
 
 // Issue 079 parity: hard cap on Flight tree depth to prevent
@@ -111,7 +111,7 @@ fn encode_base64_bytes(bytes: &[u8]) -> String {
   output
 }
 
-#[cfg(not(test))]
+#[cfg(all(not(test), feature = "napi-bindings"))]
 #[napi(js_name = "decodeFlightBase64")]
 pub fn napi_decode_flight_base64(value: String) -> napi::Result<Vec<u8>> {
   decode_base64_bytes(&value).map_err(Error::from_reason)
@@ -635,13 +635,13 @@ fn parse_json_without_recursion_limit(input: &str) -> Result<Value, serde_json::
   Value::deserialize(&mut deserializer)
 }
 
-#[cfg(not(test))]
+#[cfg(all(not(test), feature = "napi-bindings"))]
 #[napi(js_name = "encodeFlightResponse")]
 pub fn napi_encode_flight_response(response_json: String) -> napi::Result<String> {
   encode_flight_response(&response_json).map_err(Error::from_reason)
 }
 
-#[cfg(not(test))]
+#[cfg(all(not(test), feature = "napi-bindings"))]
 #[napi(js_name = "encodeFlightPayload")]
 pub fn napi_encode_flight_payload(response_json: String) -> napi::Result<Buffer> {
   encode_flight_payload(&response_json)
@@ -1222,13 +1222,13 @@ fn decode_props(
   Ok(Value::Object(out))
 }
 
-#[cfg(not(test))]
+#[cfg(all(not(test), feature = "napi-bindings"))]
 #[napi(js_name = "decodeFlightRows")]
 pub fn napi_decode_flight_rows(rows: String) -> napi::Result<String> {
   decode_flight_rows(&rows).map_err(Error::from_reason)
 }
 
-#[cfg(not(test))]
+#[cfg(all(not(test), feature = "napi-bindings"))]
 #[napi(js_name = "mergeFlightRows")]
 pub fn napi_merge_flight_rows(prev_json: String, rows: String) -> napi::Result<String> {
   merge_flight_rows(&prev_json, &rows).map_err(Error::from_reason)
@@ -1413,6 +1413,20 @@ mod tests {
     // the JS callsite pads to a multiple of 4 with `=` before decoding.
     let result = decode_base64_bytes("aGVsbG8").unwrap();
     assert_eq!(result, b"hello");
+  }
+
+  #[test]
+  fn decodes_one_and_two_byte_partial_groups() {
+    assert_eq!(decode_base64_bytes("AQ").unwrap(), [1]);
+    assert_eq!(decode_base64_bytes("AQ==").unwrap(), [1]);
+    assert_eq!(decode_base64_bytes("AQI").unwrap(), [1, 2]);
+    assert_eq!(decode_base64_bytes("AQI=").unwrap(), [1, 2]);
+  }
+
+  #[test]
+  fn rejects_characters_after_padding() {
+    let err = decode_base64_bytes("aGVsbG8=A").unwrap_err();
+    assert!(err.contains("after padding"), "{err}");
   }
 
   #[test]

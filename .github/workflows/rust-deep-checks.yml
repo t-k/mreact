@@ -1,0 +1,78 @@
+name: Rust deep checks
+
+on:
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+jobs:
+  mutation:
+    name: Rust mutation test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: nextest@0.9.143
+
+      - name: Install cargo-mutants
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants@27.1.0
+
+      - name: Mutate Base64 decoding boundaries
+        working-directory: packages/router-native
+        run: cargo mutants --test-tool nextest --jobs 2 --timeout 60
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: router-native-mutants
+          path: packages/router-native/mutants.out
+          if-no-files-found: warn
+
+  fuzz:
+    name: Rust fuzz test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup nightly Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly-2026-08-21
+
+      - name: Install cargo-fuzz
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-fuzz@0.13.2
+
+      - name: Fuzz Base64 decoding
+        working-directory: packages/router-native
+        run: cargo fuzz run decode_flight_base64 -- -max_len=4096 -max_total_time=60 -timeout=5
+
+      - name: Fuzz Flight row decoding
+        working-directory: packages/router-native
+        run: cargo fuzz run decode_flight_rows -- -max_len=4096 -max_total_time=60 -timeout=5
+
+      - name: Upload fuzz failures
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: router-native-fuzz-artifacts
+          path: packages/router-native/fuzz/artifacts
+          if-no-files-found: warn

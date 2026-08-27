@@ -1,9 +1,11 @@
+#![cfg_attr(not(feature = "napi-bindings"), allow(dead_code))]
+
 use serde::Deserialize;
 use std::collections::HashMap;
 
-#[cfg(not(test))]
+#[cfg(all(not(test), feature = "napi-bindings"))]
 use napi::Error;
-#[cfg(not(test))]
+#[cfg(all(not(test), feature = "napi-bindings"))]
 use napi_derive::napi;
 
 pub mod flight;
@@ -31,13 +33,13 @@ struct Route {
   segments: Vec<RouteSegment>,
 }
 
-#[cfg_attr(not(test), napi)]
+#[cfg_attr(all(not(test), feature = "napi-bindings"), napi)]
 #[cfg_attr(test, allow(dead_code))]
 pub struct NativeRouteMatcher {
   core: RouteMatcherCore,
 }
 
-#[cfg_attr(not(test), napi(object))]
+#[cfg_attr(all(not(test), feature = "napi-bindings"), napi(object))]
 #[derive(Debug, PartialEq)]
 pub struct NativeMatch {
   pub index: u32,
@@ -51,29 +53,29 @@ struct MatchParams {
   catch_all_params: HashMap<String, Vec<String>>,
 }
 
-#[cfg(not(test))]
+#[cfg(all(not(test), feature = "napi-bindings"))]
 #[napi]
 impl NativeRouteMatcher {
-  #[cfg_attr(not(test), napi(constructor))]
+  #[cfg_attr(all(not(test), feature = "napi-bindings"), napi(constructor))]
   pub fn new(routes_json: String) -> napi::Result<Self> {
     Ok(Self {
       core: RouteMatcherCore::new(&routes_json).map_err(Error::from_reason)?,
     })
   }
 
-  #[cfg_attr(not(test), napi)]
+  #[cfg_attr(all(not(test), feature = "napi-bindings"), napi)]
   pub fn match_route(&self, pathname: String) -> napi::Result<Option<NativeMatch>> {
     self.core.match_route(&pathname).map_err(Error::from_reason)
   }
 }
 
-#[cfg(not(test))]
+#[cfg(all(not(test), feature = "napi-bindings"))]
 #[napi]
 pub fn escape_html_batch(values: Vec<String>) -> Vec<String> {
   values.into_iter().map(|value| escape_html(&value)).collect()
 }
 
-#[cfg(not(test))]
+#[cfg(all(not(test), feature = "napi-bindings"))]
 #[napi]
 pub fn escape_attribute_batch(values: Vec<String>) -> Vec<String> {
   values.into_iter().map(|value| escape_attribute(&value)).collect()

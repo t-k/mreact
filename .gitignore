@@ -4,6 +4,7 @@ dist/
 .mreact/
 *.tsbuildinfo
 coverage/
+mutants.out*/
 .stryker-tmp/
 /stryker.log
 .vite/
