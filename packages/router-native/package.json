@@ -41,15 +41,18 @@
   "scripts": {
     "build": "cargo build --release && node scripts/copy-binary.cjs",
     "test": "cargo test --locked --no-default-features",
+    "test:clippy": "cargo clippy --locked --all-targets --all-features -- -D warnings",
     "test:deny": "cargo deny check --config deny.toml bans licenses sources",
     "test:deny:advisories": "cargo deny check --config deny.toml advisories",
+    "test:deny:all": "pnpm test:deny && pnpm test:deny:advisories && pnpm test:deny:fuzz && pnpm test:deny:fuzz:advisories",
     "test:deny:fuzz": "cargo deny --manifest-path fuzz/Cargo.toml check --config ../deny.toml bans licenses sources",
     "test:deny:fuzz:advisories": "cargo deny --manifest-path fuzz/Cargo.toml check --config ../deny.toml advisories",
     "test:doc": "cargo test --locked --doc --no-default-features",
     "test:fuzz:base64": "cargo +nightly fuzz run decode_flight_base64 -- -max_len=4096 -max_total_time=60 -timeout=5",
     "test:fuzz:rows": "cargo +nightly fuzz run decode_flight_rows -- -max_len=4096 -max_total_time=60 -timeout=5",
     "test:mutants": "cargo mutants --test-tool nextest --jobs 2 --timeout 60",
-    "test:nextest": "cargo nextest run --locked --no-default-features"
+    "test:nextest": "cargo nextest run --locked --no-default-features",
+    "test:quality:quick": "pnpm test:clippy && pnpm test:nextest && pnpm test:doc && pnpm test:deny:all"
   },
   "optionalDependencies": {
     "@reckona/mreact-router-native-darwin-arm64": "workspace:*",
