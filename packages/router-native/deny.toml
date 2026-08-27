@@ -11,7 +11,7 @@ unmaintained = "workspace"
 ignore = []
 
 [bans]
-multiple-versions = "warn"
+multiple-versions = "deny"
 wildcards = "deny"
 allow = []
 deny = []

@@ -1759,6 +1759,12 @@ mod tests {
   }
 
   #[test]
+  fn rejects_binary_rows_with_mismatched_declared_length() {
+    let error = decode_flight_rows("1:o5,AQIDBA==\n0:\"$1\"").unwrap_err();
+    assert!(error.contains("length did not match"), "{error}");
+  }
+
+  #[test]
   fn keeps_symbols_and_high_row_references_distinct() {
     let rows = ["f0:\"row-240\"", "0:{\"value\":\"$f0\",\"symbol\":\"$S1\"}"]
       .join("\n");
@@ -1787,5 +1793,13 @@ mod tests {
     let response: Value = serde_json::from_str(&merged).unwrap();
     let children = response.pointer("/root/props/children").unwrap();
     assert_eq!(children, &json!("Hello Ada"));
+  }
+
+  #[test]
+  fn merge_resolves_promise_through_a_model_chunk_reference() {
+    let initial = decode_flight_rows("0:\"$@1\"").unwrap();
+    let merged = merge_flight_rows(&initial, "1:\"$2\"\n2:\"resolved\"").unwrap();
+    let response: Value = serde_json::from_str(&merged).unwrap();
+    assert_eq!(response.get("root"), Some(&json!("resolved")));
   }
 }
