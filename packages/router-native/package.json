@@ -40,7 +40,9 @@
   },
   "scripts": {
     "build": "cargo build --release && node scripts/copy-binary.cjs",
-    "test": "cargo test"
+    "test": "cargo test --locked",
+    "test:doc": "cargo test --locked --doc",
+    "test:nextest": "cargo nextest run --locked"
   },
   "optionalDependencies": {
     "@reckona/mreact-router-native-darwin-arm64": "workspace:*",

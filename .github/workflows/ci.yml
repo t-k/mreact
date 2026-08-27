@@ -116,6 +116,68 @@ jobs:
       - name: Test shard
         run: pnpm exec vitest run --passWithNoTests --shard=${{ matrix.shard }}/3 --exclude packages/router/test/build.test.ts --exclude packages/router/test/client-build.test.ts
 
+  mutation-test:
+    name: Mutation test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Test HTML escaping mutants
+        run: pnpm test:mutation
+
+  rust-quality:
+    name: Rust quality
+    runs-on: ubuntu-latest
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: clippy
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: nextest@0.9.143
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny@0.18.7
+
+      - name: Lint native crate
+        run: cargo clippy --manifest-path packages/router-native/Cargo.toml --locked --all-targets --all-features -- -D warnings
+
+      - name: Test native crate
+        run: cargo nextest run --manifest-path packages/router-native/Cargo.toml --locked
+
+      - name: Test Rust documentation
+        run: cargo test --manifest-path packages/router-native/Cargo.toml --locked --doc
+
+      - name: Check dependency policy
+        run: cargo deny --manifest-path packages/router-native/Cargo.toml check --config deny.toml bans licenses sources
+
+      - name: Check RustSec advisories
+        continue-on-error: true
+        run: cargo deny --manifest-path packages/router-native/Cargo.toml check --config deny.toml advisories
+
   native-artifacts:
     name: Native build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

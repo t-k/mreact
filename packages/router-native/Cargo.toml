@@ -2,6 +2,9 @@
 name = "mreact_router_native"
 version = "0.0.1"
 edition = "2021"
+license = "MIT"
+publish = false
+repository = "https://github.com/t-k/mreact"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
