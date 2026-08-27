@@ -5,6 +5,7 @@ describe("contentSecurityPolicy() validation (Issue 063)", () => {
   test("returns undefined when no directives provided", () => {
     expect(contentSecurityPolicy(undefined)).toBeUndefined();
     expect(contentSecurityPolicy({})).toBeUndefined();
+    expect(contentSecurityPolicy({ directives: {} })).toBeUndefined();
     expect(contentSecurityPolicy({ nonce: "abc" })).toBeUndefined();
   });
 

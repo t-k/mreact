@@ -57,13 +57,7 @@ function isValidDirectiveValue(value: string): boolean {
   for (let index = 0; index < value.length; index += 1) {
     const code = value.charCodeAt(index);
 
-    if (
-      code <= 0x20 ||
-      code === 0x22 ||
-      code === 0x27 ||
-      code === 0x3b ||
-      code === 0x7f
-    ) {
+    if (code <= 0x20 || code === 0x22 || code === 0x27 || code === 0x3b || code === 0x7f) {
       return false;
     }
   }
@@ -95,9 +89,7 @@ export function contentSecurityPolicy(
 
     for (const rawValue of rawValues) {
       if (typeof rawValue !== "string" || !isValidDirectiveValue(rawValue)) {
-        throw new TypeError(
-          `invalid CSP directive value for ${name}: ${JSON.stringify(rawValue)}`,
-        );
+        throw new TypeError(`invalid CSP directive value for ${name}: ${JSON.stringify(rawValue)}`);
       }
     }
 
@@ -110,5 +102,5 @@ export function contentSecurityPolicy(
     serialized.push(`${name} ${values.join(" ")}`);
   }
 
-  return serialized.join("; ");
+  return serialized.length === 0 ? undefined : serialized.join("; ");
 }
