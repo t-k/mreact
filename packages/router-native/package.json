@@ -48,8 +48,11 @@
     "test:deny:fuzz": "cargo deny --manifest-path fuzz/Cargo.toml --config deny.toml check bans licenses sources",
     "test:deny:fuzz:advisories": "cargo deny --manifest-path fuzz/Cargo.toml --config deny.toml check advisories",
     "test:doc": "cargo test --locked --doc --no-default-features",
-    "test:fuzz:base64": "cargo +nightly fuzz run decode_flight_base64 -- -max_len=4096 -max_total_time=60 -timeout=5",
-    "test:fuzz:rows": "cargo +nightly fuzz run decode_flight_rows -- -max_len=4096 -max_total_time=60 -timeout=5",
+    "test:fuzz:base64": "node scripts/run-fuzz.mjs campaign decode_flight_base64 60",
+    "test:fuzz:build": "node scripts/run-fuzz.mjs build",
+    "test:fuzz:rows": "node scripts/run-fuzz.mjs campaign decode_flight_rows 60",
+    "test:fuzz:smoke": "node scripts/run-fuzz.mjs smoke",
+    "test:fuzz:campaign": "node scripts/run-fuzz.mjs campaign",
     "test:mutants": "cargo mutants --test-tool nextest --jobs 2 --timeout 60",
     "test:nextest": "cargo nextest run --locked --no-default-features",
     "test:quality:quick": "pnpm test:clippy && pnpm test:nextest && pnpm test:doc && pnpm test:deny:all"
