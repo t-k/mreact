@@ -4,6 +4,8 @@ dist/
 .mreact/
 *.tsbuildinfo
 coverage/
+.stryker-tmp/
+/stryker.log
 .vite/
 .next/
 .cache/

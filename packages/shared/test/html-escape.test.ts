@@ -24,6 +24,12 @@ describe("HTML escaping helpers", () => {
     expect(escapeHtmlQuotedAttribute(`<route & "id">`)).toBe("<route &amp; &quot;id&quot;>");
   });
 
+  test("escapes values made entirely of context-sensitive characters", () => {
+    expect(escapeHtmlText("&<>")).toBe("&amp;&lt;&gt;");
+    expect(escapeHtmlAttribute(`"&'<>`)).toBe("&quot;&amp;&#39;&lt;&gt;");
+    expect(escapeHtmlQuotedAttribute('"&')).toBe("&quot;&amp;");
+  });
+
   test("returns no-escape values without replaceAll passes", () => {
     const originalReplaceAll = String.prototype.replaceAll;
     let replaceAllCalls = 0;
