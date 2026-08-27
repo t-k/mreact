@@ -39,8 +39,12 @@ describe("URL safety helpers", () => {
     expect(isDangerousHtmlAttribute("srcdoc")).toBe(true);
     expect(isDangerousHtmlAttribute("srcDoc")).toBe(true);
     expect(isDangerousHtmlAttribute("SRCDOC")).toBe(true);
+    expect(isDangerousHtmlAttribute("data-srcdoc")).toBe(false);
+    expect(isDangerousHtmlAttribute("srcdoc-extra")).toBe(false);
     expect(isUrlAttribute("HREF")).toBe(true);
     expect(isSrcsetAttribute("SRCSET")).toBe(true);
+    expect(isUrlAttribute("prefix-href")).toBe(false);
+    expect(isUrlAttribute("href-suffix")).toBe(false);
   });
 
   test("requires an explicit string __html opt-in for dangerous HTML attributes", () => {
@@ -50,6 +54,10 @@ describe("URL safety helpers", () => {
     expect(isDangerousHtmlOptIn({})).toBe(false);
     expect(isDangerousHtmlOptIn(null)).toBe(false);
     expect(isDangerousHtmlOptIn("<p>trusted</p>")).toBe(false);
+    expect(isDangerousHtmlOptIn(0)).toBe(false);
+    expect(isDangerousHtmlOptIn(() => "<p>trusted</p>")).toBe(false);
+    const functionPayload = Object.assign(() => undefined, { __html: "<p>function</p>" });
+    expect(isDangerousHtmlOptIn(functionPayload)).toBe(false);
     expect(
       isDangerousHtmlOptIn(
         Object.create({ __html: "<p>prototype</p>" }) as Record<string, unknown>,
@@ -136,6 +144,10 @@ describe("URL safety helpers", () => {
 
     expect(isUnsafeUrlAttribute("href", "mailto:hello@example.test")).toBe(false);
     expect(isUnsafeUrlAttribute("href", "tel:+15555550100")).toBe(false);
+    expect(isUnsafeUrlAttribute("href", "prefix-javascript:alert(1)")).toBe(false);
+    expect(isUnsafeUrlAttribute("href", "javascriptx:alert(1)")).toBe(false);
+    expect(isUnsafeUrlAttribute("href", "xjavascript:alert(1)")).toBe(false);
+    expect(isUnsafeUrlAttribute("href", "_javascript:alert(1)")).toBe(false);
   });
 
   test("allows non-SVG data images only for image-like src and poster sinks", () => {
@@ -153,6 +165,7 @@ describe("URL safety helpers", () => {
     }
 
     for (const svg of [
+      "data:image/svg+xml",
       "data:image/svg+xml,<svg></svg>",
       "data:image/svg+xml;charset=utf-8,<svg></svg>",
       "data:image/svg+xml ,<svg></svg>",
@@ -162,6 +175,8 @@ describe("URL safety helpers", () => {
       expect(isUnsafeUrlAttribute("src", svg), svg).toBe(true);
       expect(isUnsafeUrlAttribute("poster", svg), svg).toBe(true);
     }
+
+    expect(isUnsafeUrlAttribute("src", "javascript:data:image/png;base64,AAA")).toBe(true);
   });
 
   test("taints srcset and imagesrcset when any candidate URL is unsafe", () => {
@@ -188,5 +203,12 @@ describe("URL safety helpers", () => {
     expect(isUnsafeMetaRefreshContent("refresh", "0; url=https://example.test/")).toBe(false);
     expect(isUnsafeMetaRefreshContent("content-type", "0; url=javascript:alert(1)")).toBe(false);
     expect(isUnsafeMetaRefreshContent("refresh", "5")).toBe(false);
+    expect(isUnsafeMetaRefreshContent("refresh", "0;url=javascript:alert(1)")).toBe(true);
+    expect(isUnsafeMetaRefreshContent("refresh", "10;url=javascript:alert(1)")).toBe(true);
+    expect(isUnsafeMetaRefreshContent("refresh", "0; urlx=javascript:alert(1)")).toBe(false);
+    expect(isUnsafeMetaRefreshContent("refresh", "0; xurl=javascript:alert(1)")).toBe(false);
+    expect(isUnsafeMetaRefreshContent("refresh", "ignored; 0; url=javascript:alert(1)")).toBe(
+      false,
+    );
   });
 });

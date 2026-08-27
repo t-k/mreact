@@ -1,12 +1,26 @@
 import fc from "fast-check";
 import { describe, expect, test } from "vitest";
-import { contentSecurityPolicy } from "../src/csp.js";
+import { contentSecurityPolicy, responseHeadersContainCspNonce } from "../src/csp.js";
 
 const directiveName = fc.stringMatching(/^[a-z][a-z0-9-]{0,20}$/);
 const directiveValue = fc.stringMatching(/^[A-Za-z0-9+/_:.*=-]{1,30}$/);
 const nonce = fc.stringMatching(/^[A-Za-z0-9+/_=-]{1,30}$/);
 
 describe("CSP properties", () => {
+  test("detects generated nonce source tokens at valid header boundaries", () => {
+    fc.assert(
+      fc.property(nonce, fc.constantFrom("", " ", ";", ","), (generatedNonce, boundary) => {
+        const prefix = boundary === "" ? "" : `default-src 'self'${boundary}`;
+        const headers = new Headers({
+          "content-security-policy": `${prefix}'nonce-${generatedNonce}'`,
+        });
+
+        expect(responseHeadersContainCspNonce(headers)).toBe(true);
+      }),
+      { numRuns: 500 },
+    );
+  });
+
   test("serializes generated directives in insertion order without changing tokens", () => {
     const entries = fc.uniqueArray(
       fc.tuple(directiveName, fc.array(directiveValue, { minLength: 1, maxLength: 4 })),
@@ -59,6 +73,25 @@ describe("CSP properties", () => {
               directives: { "default-src": `${left}${delimiter}${right}` },
             }),
           ).toThrow(/invalid CSP directive value/);
+        },
+      ),
+      { numRuns: 500 },
+    );
+  });
+
+  test("rejects generated nonces containing a delimiter or control character", () => {
+    fc.assert(
+      fc.property(
+        nonce,
+        fc.constantFrom(";", "'", '"', " ", "\t", "\r", "\n", "\u007f"),
+        nonce,
+        (left, delimiter, right) => {
+          expect(() =>
+            contentSecurityPolicy({
+              nonce: `${left}${delimiter}${right}`,
+              directives: { "script-src": "'self'" },
+            }),
+          ).toThrow(/invalid CSP nonce/);
         },
       ),
       { numRuns: 500 },

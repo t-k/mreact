@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { contentSecurityPolicy } from "../src/csp.js";
+import { contentSecurityPolicy, responseHeadersContainCspNonce } from "../src/csp.js";
 
 describe("contentSecurityPolicy() validation (Issue 063)", () => {
   test("returns undefined when no directives provided", () => {
@@ -7,6 +7,43 @@ describe("contentSecurityPolicy() validation (Issue 063)", () => {
     expect(contentSecurityPolicy({})).toBeUndefined();
     expect(contentSecurityPolicy({ directives: {} })).toBeUndefined();
     expect(contentSecurityPolicy({ nonce: "abc" })).toBeUndefined();
+  });
+
+  test("returns undefined when CSP output is explicitly disabled", () => {
+    expect(
+      contentSecurityPolicy({
+        disable: true,
+        directives: { "default-src": "'self'" },
+      }),
+    ).toBeUndefined();
+  });
+
+  test("detects bounded nonce sources in enforced and report-only headers", () => {
+    const enforced = new Headers({
+      "content-security-policy": "script-src 'self' 'nonce-AbCd+/='; object-src 'none'",
+    });
+    const reportOnly = new Headers({
+      "content-security-policy-report-only": "style-src 'NONCE-AbCd-_='",
+    });
+
+    expect(responseHeadersContainCspNonce(enforced)).toBe(true);
+    expect(responseHeadersContainCspNonce(reportOnly)).toBe(true);
+  });
+
+  test("does not mistake malformed or embedded nonce text for a nonce source", () => {
+    for (const value of [
+      "script-src nonce-abc",
+      "script-src x'nonce-abc'",
+      "script-src 'nonce-abc'x",
+      "script-src 'nonce-'",
+      "script-src 'nonce-abc",
+    ]) {
+      expect(
+        responseHeadersContainCspNonce(new Headers({ "content-security-policy": value })),
+      ).toBe(false);
+    }
+
+    expect(responseHeadersContainCspNonce(new Headers())).toBe(false);
   });
 
   test("serializes a basic directive", () => {
@@ -128,6 +165,14 @@ describe("contentSecurityPolicy() validation (Issue 063)", () => {
     expect(() =>
       contentSecurityPolicy({
         directives: { "default-src": ["self\nfoo"] },
+      }),
+    ).toThrow(/invalid CSP directive value/);
+  });
+
+  test("rejects an empty directive value", () => {
+    expect(() =>
+      contentSecurityPolicy({
+        directives: { "default-src": "" },
       }),
     ).toThrow(/invalid CSP directive value/);
   });

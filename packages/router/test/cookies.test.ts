@@ -1,12 +1,11 @@
 import { describe, expect, test, vi } from "vitest";
-import {
-  deleteCookie,
-  parseCookieHeader,
-  serializeCookie,
-  setCookie,
-} from "../src/cookies.js";
+import { deleteCookie, parseCookieHeader, serializeCookie, setCookie } from "../src/cookies.js";
 
 describe("router cookie helpers", () => {
+  test("serializeCookie omits every optional attribute by default", () => {
+    expect(serializeCookie("session", "value")).toBe("session=value");
+  });
+
   test("serializeCookie emits safe attributes in deterministic order", () => {
     expect(
       serializeCookie("session", "a b;c", {
@@ -17,6 +16,30 @@ describe("router cookie helpers", () => {
         secure: true,
       }),
     ).toBe("session=a%20b%3Bc; Max-Age=60; Path=/; HttpOnly; Secure; SameSite=Lax");
+  });
+
+  test("serializeCookie includes every supported attribute and rejects invalid Max-Age", () => {
+    const expires = new Date("2030-01-02T03:04:05.000Z");
+
+    expect(
+      serializeCookie("session", "value", {
+        domain: "example.test",
+        expires,
+        httpOnly: true,
+        maxAge: -1,
+        path: "/account",
+        sameSite: "Strict",
+        secure: true,
+      }),
+    ).toBe(
+      "session=value; Max-Age=-1; Domain=example.test; Path=/account; Expires=Wed, 02 Jan 2030 03:04:05 GMT; HttpOnly; Secure; SameSite=Strict",
+    );
+    expect(() => serializeCookie("session", "value", { maxAge: 1.5 })).toThrow(
+      /invalid cookie Max-Age/,
+    );
+    expect(() =>
+      serializeCookie("session", "value", { maxAge: Number.MAX_SAFE_INTEGER + 1 }),
+    ).toThrow(/invalid cookie Max-Age/);
   });
 
   test("serializeCookie rejects invalid names and attribute injection", () => {
@@ -46,12 +69,15 @@ describe("router cookie helpers", () => {
     expect(() => serializeCookie("__Host-session", "x", { secure: true })).toThrow(
       /__Host- cookies require Path=\/+/i,
     );
+    expect(() => serializeCookie("__Host-session", "x", { path: "/" })).toThrow(
+      /__Host- cookies require Secure/i,
+    );
     expect(() =>
       serializeCookie("__Host-session", "x", {
         domain: "example.test",
         path: "/",
         secure: true,
-      })
+      }),
     ).toThrow(/__Host- cookies must not set Domain/i);
     expect(serializeCookie("__Host-session", "x", { path: "/", secure: true })).toBe(
       "__Host-session=x; Path=/; Secure",
@@ -80,6 +106,14 @@ describe("router cookie helpers", () => {
     expect(values.get("b")).toBe("あ");
     expect(values.has("bad")).toBe(false);
     expect(values.get("empty")).toBe("");
+  });
+
+  test("parseCookieHeader handles absent, empty, duplicate, and equals-containing values", () => {
+    expect(parseCookieHeader(undefined)).toEqual(new Map());
+    expect(parseCookieHeader(null)).toEqual(new Map());
+    expect(parseCookieHeader(" ; =ignored; token=a=b=c; token=last")).toEqual(
+      new Map([["token", "last"]]),
+    );
   });
 
   test("parseCookieHeader skips URI decoding for raw cookie values without percent escapes", () => {
