@@ -95,6 +95,7 @@ async function parseMultipartRequest(
   let totalParts = 0;
   let started = false;
   let invalidOpeningBoundarySeen = false;
+  let firstBoundarySearchOffset = 0;
   let currentPart: PartWriter | undefined;
 
   queue.setCancel(() => {
@@ -114,7 +115,7 @@ async function parseMultipartRequest(
 
       while (true) {
         if (!started) {
-          const firstBoundaryIndex = indexOfBytes(buffer, firstBoundary);
+          const firstBoundaryIndex = indexOfBytes(buffer, firstBoundary, firstBoundarySearchOffset);
 
           if (firstBoundaryIndex < 0) {
             if (next.done) {
@@ -126,6 +127,7 @@ async function parseMultipartRequest(
             }
 
             trimBufferToTail(0);
+            firstBoundarySearchOffset = 0;
             break;
           }
 
@@ -136,7 +138,10 @@ async function parseMultipartRequest(
               throw new Error("Malformed multipart opening boundary.");
             }
 
-            buffer = buffer.slice(firstBoundaryIndex);
+            if (firstBoundaryIndex > 0) {
+              buffer = buffer.slice(firstBoundaryIndex);
+            }
+            firstBoundarySearchOffset = 0;
             break;
           }
 
@@ -147,7 +152,7 @@ async function parseMultipartRequest(
 
           if (!startsWithBytes(buffer, lineSuffix, firstBoundaryEnd)) {
             invalidOpeningBoundarySeen = true;
-            buffer = buffer.slice(firstBoundaryIndex + 1);
+            firstBoundarySearchOffset = firstBoundaryIndex + 1;
             continue;
           }
 
@@ -515,14 +520,15 @@ function indexOfAscii(bytes: Uint8Array<ArrayBufferLike>, needle: string): numbe
 function indexOfBytes(
   bytes: Uint8Array<ArrayBufferLike>,
   needle: Uint8Array<ArrayBufferLike>,
+  startOffset = 0,
 ): number {
-  if (needle.length === 0 || bytes.length < needle.length) {
+  if (needle.length === 0 || bytes.length - startOffset < needle.length) {
     return -1;
   }
 
   const first = needle[0];
 
-  for (let index = 0; index <= bytes.length - needle.length; index += 1) {
+  for (let index = startOffset; index <= bytes.length - needle.length; index += 1) {
     if (bytes[index] !== first) {
       continue;
     }

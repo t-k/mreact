@@ -116,6 +116,27 @@ describe("parseMultipartStream", () => {
     ]);
   });
 
+  test("preserves overlapping opening boundary candidates", async () => {
+    const boundary = "-";
+
+    await expect(collectTextParts(boundary, [`-${twoPartMultipartBody(boundary)}`])).resolves.toEqual([
+      ["a", "first"],
+      ["b", "second"],
+    ]);
+  });
+
+  test("scans dense invalid opening boundary candidates without quadratic copying", async () => {
+    const boundary = "b";
+    const preamble = `--${boundary}??`.repeat(160_000);
+
+    await expect(
+      collectTextParts(boundary, [`${preamble}${twoPartMultipartBody(boundary)}`]),
+    ).resolves.toEqual([
+      ["a", "first"],
+      ["b", "second"],
+    ]);
+  }, 1_000);
+
   test("rejects incomplete and invalid opening boundary suffixes", async () => {
     const boundary = "mreact-boundary";
 
