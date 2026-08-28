@@ -492,55 +492,7 @@ function indexOfAscii(bytes: Uint8Array<ArrayBufferLike>, needle: string): numbe
   return indexOfBytes(bytes, encodeAscii(needle));
 }
 
-interface MultipartBufferView {
-  indexOf(value: MultipartBufferView): number;
-}
-
-interface MultipartBufferConstructor {
-  from(
-    buffer: ArrayBufferLike,
-    byteOffset: number,
-    length: number,
-  ): MultipartBufferView;
-}
-
 function indexOfBytes(
-  bytes: Uint8Array<ArrayBufferLike>,
-  needle: Uint8Array<ArrayBufferLike>,
-): number {
-  if (needle.length === 0 || bytes.length < needle.length) {
-    return -1;
-  }
-
-  const BufferConstructor = (
-    globalThis as typeof globalThis & {
-      Buffer?: MultipartBufferConstructor;
-    }
-  ).Buffer;
-
-  if (BufferConstructor !== undefined) {
-    try {
-      const haystack = BufferConstructor.from(
-        bytes.buffer,
-        bytes.byteOffset,
-        bytes.byteLength,
-      );
-      const search = BufferConstructor.from(
-        needle.buffer,
-        needle.byteOffset,
-        needle.byteLength,
-      );
-
-      return haystack.indexOf(search);
-    } catch {
-      // Fall back when a Buffer-compatible global cannot view this backing store.
-    }
-  }
-
-  return indexOfBytesPortable(bytes, needle);
-}
-
-function indexOfBytesPortable(
   bytes: Uint8Array<ArrayBufferLike>,
   needle: Uint8Array<ArrayBufferLike>,
 ): number {
@@ -570,20 +522,6 @@ function indexOfBytesPortable(
   }
 
   return -1;
-}
-
-export function __indexOfMultipartBytesForTesting(
-  bytes: Uint8Array<ArrayBufferLike>,
-  needle: Uint8Array<ArrayBufferLike>,
-): number {
-  return indexOfBytes(bytes, needle);
-}
-
-export function __indexOfMultipartBytesPortableForTesting(
-  bytes: Uint8Array<ArrayBufferLike>,
-  needle: Uint8Array<ArrayBufferLike>,
-): number {
-  return indexOfBytesPortable(bytes, needle);
 }
 
 function startsWithBytes(
