@@ -545,8 +545,7 @@ function indexOfBytes(
           if (
             Number.isInteger(index) &&
             index >= -1 &&
-            index <= bytes.length - needle.length &&
-            (index === -1 || startsWithBytes(bytes.subarray(index), needle))
+            index <= bytes.length - needle.length
           ) {
             return index;
           }
