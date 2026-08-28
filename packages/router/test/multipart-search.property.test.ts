@@ -34,7 +34,7 @@ describe("multipart byte search", () => {
   test("matches the portable search across byte arrays and subviews", () => {
     fc.assert(
       fc.property(
-        fc.uint8Array({ maxLength: 512 }),
+        fc.uint8Array({ minLength: 512, maxLength: 2_048 }),
         fc.uint8Array({ maxLength: 80 }),
         fc.nat(16),
         (rawHaystack, needle, prefixBytes) => {
@@ -56,10 +56,12 @@ describe("multipart byte search", () => {
     Reflect.deleteProperty(globalThis, "Buffer");
 
     try {
-      const haystack = Uint8Array.from([7, 1, 2, 1, 2, 3]).subarray(1);
+      const storage = new Uint8Array(540);
+      const haystack = storage.subarray(7, 527);
       const needle = Uint8Array.from([1, 2, 3]);
+      haystack.set(needle, 300);
 
-      expect(__indexOfMultipartBytesForTesting(haystack, needle)).toBe(2);
+      expect(__indexOfMultipartBytesForTesting(haystack, needle)).toBe(300);
     } finally {
       if (descriptor !== undefined) {
         Object.defineProperty(globalThis, "Buffer", descriptor);
