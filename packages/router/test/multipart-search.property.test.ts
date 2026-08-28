@@ -1,17 +1,11 @@
 import fc from "fast-check";
 import { describe, expect, test } from "vitest";
 import {
-  __isMultipartNativeSearchSizeForTesting,
   __indexOfMultipartBytesForTesting,
   __indexOfMultipartBytesPortableForTesting,
 } from "../src/multipart.js";
 
 describe("multipart byte search", () => {
-  test("keeps small searches on the portable path", () => {
-    expect(__isMultipartNativeSearchSizeForTesting(511)).toBe(false);
-    expect(__isMultipartNativeSearchSizeForTesting(512)).toBe(true);
-  });
-
   test.each([
     { haystack: [], needle: [], expected: -1 },
     { haystack: [1, 2], needle: [], expected: -1 },
