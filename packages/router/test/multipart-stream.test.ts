@@ -190,6 +190,43 @@ describe("parseMultipartStream", () => {
     expect(sanitizeMultipartFilename("../../secret\u0000.txt")).toBe("secret_.txt");
     expect(sanitizeMultipartFilename("..\\..\\avatar.png")).toBe("avatar.png");
   });
+
+  test("parses Buffer-backed multipart chunks", async () => {
+    const boundary = "mreact-buffer-boundary";
+    const body = `--${boundary}\r\nContent-Disposition: form-data; name="file"\r\n\r\npayload\r\n--${boundary}--\r\n`;
+    const bytes = Buffer.from(body);
+    const request = multipartByteRequest(boundary, [bytes.subarray(0, 17), bytes.subarray(17)]);
+
+    await expect(readMultipartParts(request)).resolves.toEqual(["file:payload"]);
+  });
+
+  test("parses the closing search delimiter split at every byte boundary", async () => {
+    const boundary = "mreact-split-boundary";
+    const encoder = new TextEncoder();
+    const source = `--${boundary}\r\nContent-Disposition: form-data; name="field"\r\n\r\nvalue\r\n--${boundary}--\r\n`;
+    const body = encoder.encode(source);
+    const delimiter = encoder.encode(`\r\n--${boundary}`);
+    const closingBoundary = encoder.encode(`\r\n--${boundary}--\r\n`);
+    const closingDelimiterStart = body.length - closingBoundary.length;
+
+    for (let offset = 1; offset < delimiter.length; offset += 1) {
+      const split = closingDelimiterStart + offset;
+      const request = multipartByteRequest(boundary, [
+        body.subarray(0, split),
+        body.subarray(split),
+      ]);
+
+      let parts: string[];
+
+      try {
+        parts = await readMultipartParts(request);
+      } catch (error) {
+        throw new Error(`offset=${offset}, split=${split}`, { cause: error });
+      }
+
+      expect(parts, `split=${split}`).toEqual(["field:value"]);
+    }
+  });
 });
 
 function multipartRequest(boundary: string, chunks: readonly string[]): Request {
@@ -229,4 +266,33 @@ async function streamText(stream: ReadableStream<Uint8Array>): Promise<string> {
     text += decoder.decode();
     reader.releaseLock();
   }
+}
+
+function multipartByteRequest(
+  boundary: string,
+  chunks: readonly Uint8Array<ArrayBufferLike>[],
+): Request {
+  return new Request("https://app.test/upload", {
+    method: "POST",
+    headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
+    body: new ReadableStream<Uint8Array<ArrayBufferLike>>({
+      start(controller) {
+        for (const chunk of chunks) {
+          controller.enqueue(chunk);
+        }
+        controller.close();
+      },
+    }),
+    duplex: "half",
+  } as RequestInit & { duplex: "half" });
+}
+
+async function readMultipartParts(request: Request): Promise<string[]> {
+  const parts: string[] = [];
+
+  for await (const part of parseMultipartStream(request)) {
+    parts.push(`${part.name}:${await streamText(part.body)}`);
+  }
+
+  return parts;
 }
