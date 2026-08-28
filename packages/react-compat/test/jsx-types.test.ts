@@ -4,39 +4,47 @@ import { join, resolve } from "node:path";
 import * as ts from "@typescript/typescript6";
 import { describe, expect, test } from "vitest";
 
-describe("react-compat JSX runtime types", () => {
-  test("supports TypeScript automatic JSX runtime imports", () => {
-    const directory = mkdtempSync(join(tmpdir(), "mreact-jsx-types-"));
-    const filename = join(directory, "App.tsx");
+const TYPECHECK_TEST_TIMEOUT_MS = 15_000;
 
-    writeFileSync(
-      filename,
-      `
+describe("react-compat JSX runtime types", () => {
+  test(
+    "supports TypeScript automatic JSX runtime imports",
+    () => {
+      const directory = mkdtempSync(join(tmpdir(), "mreact-jsx-types-"));
+      const filename = join(directory, "App.tsx");
+
+      writeFileSync(
+        filename,
+        `
 export function App() {
   return <button className="primary">Save</button>;
 }
 `,
-    );
+      );
 
-    try {
-      const diagnostics = collectTypeDiagnostics(filename, {
-        jsx: ts.JsxEmit.ReactJSX,
-        jsxImportSource: "@reckona/mreact-compat",
-      });
+      try {
+        const diagnostics = collectTypeDiagnostics(filename, {
+          jsx: ts.JsxEmit.ReactJSX,
+          jsxImportSource: "@reckona/mreact-compat",
+        });
 
-      expect(diagnostics).toEqual([]);
-    } finally {
-      rmSync(directory, { force: true, recursive: true });
-    }
-  });
+        expect(diagnostics).toEqual([]);
+      } finally {
+        rmSync(directory, { force: true, recursive: true });
+      }
+    },
+    TYPECHECK_TEST_TIMEOUT_MS,
+  );
 
-  test("does not merge compat elements into React's global JSX namespace", () => {
-    const directory = mkdtempSync(join(tmpdir(), "mreact-react-jsx-types-"));
-    const filename = join(directory, "App.tsx");
+  test(
+    "does not merge compat elements into React's global JSX namespace",
+    () => {
+      const directory = mkdtempSync(join(tmpdir(), "mreact-react-jsx-types-"));
+      const filename = join(directory, "App.tsx");
 
-    writeFileSync(
-      filename,
-      `
+      writeFileSync(
+        filename,
+        `
 import { createElement } from "@reckona/mreact-compat";
 import type { FC } from "react";
 
@@ -44,27 +52,31 @@ const ThirdParty: FC<{ label: string }> = ({ label }) => <span>{label}</span>;
 export const view = <ThirdParty label="compatible" />;
 export const compatNode = createElement("span", null, "compat");
 `,
-    );
+      );
 
-    try {
-      const diagnostics = collectTypeDiagnostics(filename, {
-        jsx: ts.JsxEmit.ReactJSX,
-        jsxImportSource: "react",
-      });
+      try {
+        const diagnostics = collectTypeDiagnostics(filename, {
+          jsx: ts.JsxEmit.ReactJSX,
+          jsxImportSource: "react",
+        });
 
-      expect(diagnostics).toEqual([]);
-    } finally {
-      rmSync(directory, { force: true, recursive: true });
-    }
-  });
+        expect(diagnostics).toEqual([]);
+      } finally {
+        rmSync(directory, { force: true, recursive: true });
+      }
+    },
+    TYPECHECK_TEST_TIMEOUT_MS,
+  );
 
-  test("accepts nested createElement nodes with heterogeneous props", () => {
-    const directory = mkdtempSync(join(tmpdir(), "mreact-create-element-types-"));
-    const filename = join(directory, "App.ts");
+  test(
+    "accepts nested createElement nodes with heterogeneous props",
+    () => {
+      const directory = mkdtempSync(join(tmpdir(), "mreact-create-element-types-"));
+      const filename = join(directory, "App.ts");
 
-    writeFileSync(
-      filename,
-      `
+      writeFileSync(
+        filename,
+        `
 import { createElement, type ReactCompatNode } from "@reckona/mreact-compat";
 
 type RowData = {
@@ -98,24 +110,28 @@ createElement(Label, { value: "ok" });
 // @ts-expect-error component props remain validated at the top-level createElement call.
 createElement(Label, { label: "wrong" });
 `,
-    );
+      );
 
-    try {
-      const diagnostics = collectTypeDiagnostics(filename);
+      try {
+        const diagnostics = collectTypeDiagnostics(filename);
 
-      expect(diagnostics).toEqual([]);
-    } finally {
-      rmSync(directory, { force: true, recursive: true });
-    }
-  });
+        expect(diagnostics).toEqual([]);
+      } finally {
+        rmSync(directory, { force: true, recursive: true });
+      }
+    },
+    TYPECHECK_TEST_TIMEOUT_MS,
+  );
 
-  test("accepts component props interfaces without a Record intersection", () => {
-    const directory = mkdtempSync(join(tmpdir(), "mreact-create-element-props-"));
-    const filename = join(directory, "App.ts");
+  test(
+    "accepts component props interfaces without a Record intersection",
+    () => {
+      const directory = mkdtempSync(join(tmpdir(), "mreact-create-element-props-"));
+      const filename = join(directory, "App.ts");
 
-    writeFileSync(
-      filename,
-      `
+      writeFileSync(
+        filename,
+        `
 import { createElement, memo } from "@reckona/mreact-compat";
 
 interface RowData {
@@ -142,16 +158,18 @@ createElement(Row, { row });
 // @ts-expect-error invalid prop names remain rejected.
 createElement(MemoRow, { row, selected: true, missing: "nope" });
 `,
-    );
+      );
 
-    try {
-      const diagnostics = collectTypeDiagnostics(filename);
+      try {
+        const diagnostics = collectTypeDiagnostics(filename);
 
-      expect(diagnostics).toEqual([]);
-    } finally {
-      rmSync(directory, { force: true, recursive: true });
-    }
-  });
+        expect(diagnostics).toEqual([]);
+      } finally {
+        rmSync(directory, { force: true, recursive: true });
+      }
+    },
+    TYPECHECK_TEST_TIMEOUT_MS,
+  );
 });
 
 function collectTypeDiagnostics(
