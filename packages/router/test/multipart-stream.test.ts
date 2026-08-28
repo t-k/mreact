@@ -193,11 +193,12 @@ describe("parseMultipartStream", () => {
 
   test("parses Buffer-backed multipart chunks", async () => {
     const boundary = "mreact-buffer-boundary";
-    const body = `--${boundary}\r\nContent-Disposition: form-data; name="file"\r\n\r\npayload\r\n--${boundary}--\r\n`;
+    const payload = "x".repeat(1_024);
+    const body = `--${boundary}\r\nContent-Disposition: form-data; name="file"\r\n\r\n${payload}\r\n--${boundary}--\r\n`;
     const bytes = Buffer.from(body);
-    const request = multipartByteRequest(boundary, [bytes.subarray(0, 17), bytes.subarray(17)]);
+    const request = multipartByteRequest(boundary, [bytes.subarray(0, 700), bytes.subarray(700)]);
 
-    await expect(readMultipartParts(request)).resolves.toEqual(["file:payload"]);
+    await expect(readMultipartParts(request)).resolves.toEqual([`file:${payload}`]);
   });
 
   test("parses the closing search delimiter split at every byte boundary", async () => {

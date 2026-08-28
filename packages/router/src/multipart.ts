@@ -494,6 +494,9 @@ function indexOfAscii(bytes: Uint8Array<ArrayBufferLike>, needle: string): numbe
 }
 
 interface MultipartBufferView {
+  readonly buffer: ArrayBufferLike;
+  readonly byteLength: number;
+  readonly byteOffset: number;
   indexOf(value: MultipartBufferView): number;
 }
 
@@ -513,26 +516,41 @@ function indexOfBytes(
     return -1;
   }
 
-  const BufferConstructor = (
-    globalThis as typeof globalThis & {
-      Buffer?: MultipartBufferConstructor;
-    }
-  ).Buffer;
-
-  if (BufferConstructor !== undefined && isNativeSearchSize(bytes.byteLength)) {
+  if (isNativeSearchSize(bytes.byteLength)) {
     try {
-      const haystack = BufferConstructor.from(
-        bytes.buffer,
-        bytes.byteOffset,
-        bytes.byteLength,
-      );
-      const search = BufferConstructor.from(
-        needle.buffer,
-        needle.byteOffset,
-        needle.byteLength,
-      );
+      const BufferConstructor = (
+        globalThis as typeof globalThis & {
+          Buffer?: MultipartBufferConstructor;
+        }
+      ).Buffer;
 
-      return haystack.indexOf(search);
+      if (BufferConstructor !== undefined) {
+        const haystack = BufferConstructor.from(
+          bytes.buffer,
+          bytes.byteOffset,
+          bytes.byteLength,
+        );
+        const search = BufferConstructor.from(
+          needle.buffer,
+          needle.byteOffset,
+          needle.byteLength,
+        );
+
+        if (
+          isZeroCopyView(haystack, bytes) &&
+          isZeroCopyView(search, needle)
+        ) {
+          const index = haystack.indexOf(search);
+
+          if (
+            Number.isInteger(index) &&
+            index >= -1 &&
+            index <= bytes.length - needle.length
+          ) {
+            return index;
+          }
+        }
+      }
     } catch {
       // Fall back when a Buffer-compatible global cannot view this backing store.
     }
@@ -543,6 +561,17 @@ function indexOfBytes(
 
 function isNativeSearchSize(byteLength: number): boolean {
   return byteLength >= minNativeSearchBytes;
+}
+
+function isZeroCopyView(
+  view: Pick<MultipartBufferView, "buffer" | "byteLength" | "byteOffset">,
+  source: Uint8Array<ArrayBufferLike>,
+): boolean {
+  return (
+    view.buffer === source.buffer &&
+    view.byteOffset === source.byteOffset &&
+    view.byteLength === source.byteLength
+  );
 }
 
 function indexOfBytesPortable(

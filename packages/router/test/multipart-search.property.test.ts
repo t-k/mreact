@@ -63,19 +63,77 @@ describe("multipart byte search", () => {
 
       expect(__indexOfMultipartBytesForTesting(haystack, needle)).toBe(300);
     } finally {
-      if (descriptor !== undefined) {
-        Object.defineProperty(globalThis, "Buffer", descriptor);
-      }
+      restoreGlobalBuffer(descriptor);
+    }
+  });
+
+  test("uses portable semantics when the Buffer getter throws", () => {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, "Buffer");
+    Object.defineProperty(globalThis, "Buffer", {
+      configurable: true,
+      get() {
+        throw new Error("broken Buffer global");
+      },
+    });
+
+    try {
+      const haystack = new Uint8Array(520);
+      const needle = Uint8Array.from([1, 2, 3]);
+      haystack.set(needle, 300);
+
+      expect(__indexOfMultipartBytesForTesting(haystack, needle)).toBe(300);
+    } finally {
+      restoreGlobalBuffer(descriptor);
+    }
+  });
+
+  test("rejects invalid indices from a Buffer-compatible global", () => {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, "Buffer");
+    Object.defineProperty(globalThis, "Buffer", {
+      configurable: true,
+      value: {
+        from(buffer: ArrayBufferLike, byteOffset: number, byteLength: number) {
+          return {
+            buffer,
+            byteLength,
+            byteOffset,
+            indexOf() {
+              return Number.NaN;
+            },
+          };
+        },
+      },
+    });
+
+    try {
+      const haystack = new Uint8Array(520);
+      const needle = Uint8Array.from([1, 2, 3]);
+      haystack.set(needle, 300);
+
+      expect(__indexOfMultipartBytesForTesting(haystack, needle)).toBe(300);
+    } finally {
+      restoreGlobalBuffer(descriptor);
     }
   });
 
   test("matches on SharedArrayBuffer-backed subviews", () => {
-    const storage = new SharedArrayBuffer(16);
-    const haystack = new Uint8Array(storage, 3, 8);
-    haystack.set([9, 1, 2, 1, 2, 3, 8, 7]);
+    const storage = new SharedArrayBuffer(540);
+    const haystack = new Uint8Array(storage, 7, 520);
     const needle = Uint8Array.from([1, 2, 3]);
+    haystack.set(needle, 300);
 
-    expect(__indexOfMultipartBytesForTesting(haystack, needle)).toBe(3);
-    expect(__indexOfMultipartBytesPortableForTesting(haystack, needle)).toBe(3);
+    expect(__indexOfMultipartBytesForTesting(haystack, needle)).toBe(300);
+    expect(__indexOfMultipartBytesPortableForTesting(haystack, needle)).toBe(
+      300,
+    );
   });
 });
+
+function restoreGlobalBuffer(descriptor: PropertyDescriptor | undefined): void {
+  if (descriptor === undefined) {
+    Reflect.deleteProperty(globalThis, "Buffer");
+    return;
+  }
+
+  Object.defineProperty(globalThis, "Buffer", descriptor);
+}
