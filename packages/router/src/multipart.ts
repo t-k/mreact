@@ -94,6 +94,7 @@ async function parseMultipartRequest(
   let totalBytes = 0;
   let totalParts = 0;
   let started = false;
+  let invalidOpeningBoundarySeen = false;
   let currentPart: PartWriter | undefined;
 
   queue.setCancel(() => {
@@ -117,6 +118,10 @@ async function parseMultipartRequest(
 
           if (firstBoundaryIndex < 0) {
             if (next.done) {
+              if (invalidOpeningBoundarySeen) {
+                throw new Error("Malformed multipart opening boundary.");
+              }
+
               throw new Error("Multipart request body does not contain the opening boundary.");
             }
 
@@ -141,7 +146,9 @@ async function parseMultipartRequest(
           }
 
           if (!startsWithBytes(buffer, lineSuffix, firstBoundaryEnd)) {
-            throw new Error("Malformed multipart opening boundary.");
+            invalidOpeningBoundarySeen = true;
+            buffer = buffer.slice(firstBoundaryIndex + 1);
+            continue;
           }
 
           buffer = buffer.slice(firstBoundaryEnd + lineSuffix.length);

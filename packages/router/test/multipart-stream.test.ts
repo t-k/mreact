@@ -104,6 +104,18 @@ describe("parseMultipartStream", () => {
     }
   });
 
+  test("skips a split boundary-like token in the preamble when its suffix is invalid", async () => {
+    const boundary = "mreact-boundary";
+    const preamble = `preamble --${boundary}`;
+
+    await expect(
+      collectTextParts(boundary, [preamble, `?? ignored\r\n${twoPartMultipartBody(boundary)}`]),
+    ).resolves.toEqual([
+      ["a", "first"],
+      ["b", "second"],
+    ]);
+  });
+
   test("rejects incomplete and invalid opening boundary suffixes", async () => {
     const boundary = "mreact-boundary";
 
