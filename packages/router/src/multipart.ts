@@ -48,6 +48,7 @@ interface PartWriter {
 const crlf = "\r\n";
 const headerSeparator = "\r\n\r\n";
 const maxHeaderBytes = 64 * 1024;
+const minNativeSearchBytes = 512;
 export const defaultMultipartMaxBytes = 10 * 1024 * 1024;
 export const defaultMultipartMaxParts = 1_000;
 
@@ -518,7 +519,7 @@ function indexOfBytes(
     }
   ).Buffer;
 
-  if (BufferConstructor !== undefined) {
+  if (BufferConstructor !== undefined && isNativeSearchSize(bytes.byteLength)) {
     try {
       const haystack = BufferConstructor.from(
         bytes.buffer,
@@ -538,6 +539,10 @@ function indexOfBytes(
   }
 
   return indexOfBytesPortable(bytes, needle);
+}
+
+function isNativeSearchSize(byteLength: number): boolean {
+  return byteLength >= minNativeSearchBytes;
 }
 
 function indexOfBytesPortable(
@@ -584,6 +589,12 @@ export function __indexOfMultipartBytesPortableForTesting(
   needle: Uint8Array<ArrayBufferLike>,
 ): number {
   return indexOfBytesPortable(bytes, needle);
+}
+
+export function __isMultipartNativeSearchSizeForTesting(
+  byteLength: number,
+): boolean {
+  return isNativeSearchSize(byteLength);
 }
 
 function startsWithBytes(
