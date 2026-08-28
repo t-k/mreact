@@ -87,7 +87,7 @@ describe("multipart byte search", () => {
     }
   });
 
-  test("rejects invalid indices from a Buffer-compatible global", () => {
+  test("rejects incorrect in-range indices from a Buffer-compatible global", () => {
     const descriptor = Object.getOwnPropertyDescriptor(globalThis, "Buffer");
     Object.defineProperty(globalThis, "Buffer", {
       configurable: true,
@@ -98,7 +98,7 @@ describe("multipart byte search", () => {
             byteLength,
             byteOffset,
             indexOf() {
-              return Number.NaN;
+              return 0;
             },
           };
         },
