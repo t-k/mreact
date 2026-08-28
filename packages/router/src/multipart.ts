@@ -48,6 +48,7 @@ interface PartWriter {
 const crlf = "\r\n";
 const headerSeparator = "\r\n\r\n";
 const maxHeaderBytes = 64 * 1024;
+const maxMultipartBoundaryCharacters = 70;
 export const defaultMultipartMaxBytes = 10 * 1024 * 1024;
 export const defaultMultipartMaxParts = 1_000;
 
@@ -424,7 +425,9 @@ function parseMultipartBoundary(contentType: string | null): string | undefined 
       ? value.slice(1, -1)
       : value;
 
-    return unquoted === "" ? undefined : unquoted;
+    return unquoted === "" || unquoted.length > maxMultipartBoundaryCharacters
+      ? undefined
+      : unquoted;
   }
 
   return undefined;

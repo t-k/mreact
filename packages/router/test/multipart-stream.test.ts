@@ -175,6 +175,24 @@ describe("parseMultipartStream", () => {
     }).rejects.toThrow(/boundary/i);
   });
 
+  test("rejects multipart boundaries longer than 70 characters", async () => {
+    const boundary = "b".repeat(71);
+
+    await expect(collectTextParts(boundary, [`--${boundary}--\r\n`])).rejects.toThrow(/boundary/i);
+  });
+
+  test("bounds near-match scanning for a maximum-length multipart boundary", async () => {
+    const boundary = `${"-".repeat(69)}x`;
+    const preamble = "-".repeat(100_000);
+
+    await expect(
+      collectTextParts(boundary, [`${preamble}${twoPartMultipartBody(boundary)}`]),
+    ).resolves.toEqual([
+      ["a", "first"],
+      ["b", "second"],
+    ]);
+  }, 1_000);
+
   test("enforces per-part byte limits while streaming", async () => {
     const boundary = "mreact-boundary";
     const request = multipartRequest(boundary, [
