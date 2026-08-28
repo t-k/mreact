@@ -43,6 +43,91 @@ describe("parseMultipartStream", () => {
     ]);
   });
 
+  test("preserves opening and part boundary suffixes split into a later chunk", async () => {
+    const boundary = "mreact-boundary";
+    const body = twoPartMultipartBody(boundary);
+    const openingBoundaryEnd = `--${boundary}`.length;
+    const delimiter = `\r\n--${boundary}`;
+    const nextBoundaryEnd = body.indexOf(delimiter) + delimiter.length;
+    const closingBoundaryEnd = body.lastIndexOf(delimiter) + delimiter.length;
+    const splitCases = [
+      ["after opening boundary", openingBoundaryEnd],
+      ["inside opening boundary suffix", openingBoundaryEnd + 1],
+      ["after next-part boundary", nextBoundaryEnd],
+      ["inside next-part boundary suffix", nextBoundaryEnd + 1],
+      ["after closing boundary", closingBoundaryEnd],
+      ["inside closing boundary suffix", closingBoundaryEnd + 1],
+    ] as const;
+
+    for (const [label, split] of splitCases) {
+      expect(
+        await collectTextParts(boundary, [body.slice(0, split), body.slice(split)]),
+        label,
+      ).toEqual([
+        ["a", "first"],
+        ["b", "second"],
+      ]);
+    }
+  });
+
+  test("parses the same parts at every single split position", async () => {
+    const boundary = "mreact-boundary";
+    const body = twoPartMultipartBody(boundary);
+    const expected = await collectTextParts(boundary, [body]);
+
+    for (let split = 1; split < body.length; split += 1) {
+      expect(
+        await collectTextParts(boundary, [body.slice(0, split), body.slice(split)]),
+        `split at byte ${split}`,
+      ).toEqual(expected);
+    }
+  });
+
+  test("parses multipart input delivered one byte per chunk", async () => {
+    const boundary = "mreact-boundary";
+
+    await expect(collectTextParts(boundary, Array.from(twoPartMultipartBody(boundary)))).resolves.toEqual([
+      ["a", "first"],
+      ["b", "second"],
+    ]);
+  });
+
+  test("parses an empty multipart body when its closing suffix is split", async () => {
+    const boundary = "mreact-boundary";
+    const body = `--${boundary}--\r\n`;
+    const openingBoundaryEnd = `--${boundary}`.length;
+
+    for (const split of [openingBoundaryEnd, openingBoundaryEnd + 1]) {
+      await expect(
+        collectTextParts(boundary, [body.slice(0, split), body.slice(split)]),
+      ).resolves.toEqual([]);
+    }
+  });
+
+  test("rejects incomplete and invalid opening boundary suffixes", async () => {
+    const boundary = "mreact-boundary";
+
+    await expect(collectTextParts(boundary, [`--${boundary}`])).rejects.toThrow(
+      "Malformed multipart opening boundary.",
+    );
+    await expect(collectTextParts(boundary, [`--${boundary}??`])).rejects.toThrow(
+      "Malformed multipart opening boundary.",
+    );
+  });
+
+  test("rejects incomplete and invalid part boundary suffixes", async () => {
+    const boundary = "mreact-boundary";
+    const part = `--${boundary}\r\nContent-Disposition: form-data; name="a"\r\n\r\nvalue`;
+    const delimiter = `\r\n--${boundary}`;
+
+    await expect(collectTextParts(boundary, [`${part}${delimiter}`])).rejects.toThrow(
+      "Malformed multipart boundary delimiter.",
+    );
+    await expect(collectTextParts(boundary, [`${part}${delimiter}??`])).rejects.toThrow(
+      "Malformed multipart boundary delimiter.",
+    );
+  });
+
   test("rejects multipart requests without a boundary before reading the body", async () => {
     const request = new Request("https://app.test/upload", {
       method: "POST",
@@ -229,4 +314,29 @@ async function streamText(stream: ReadableStream<Uint8Array>): Promise<string> {
     text += decoder.decode();
     reader.releaseLock();
   }
+}
+
+function twoPartMultipartBody(boundary: string): string {
+  return [
+    `--${boundary}\r\n`,
+    `Content-Disposition: form-data; name="a"\r\n\r\n`,
+    `first\r\n`,
+    `--${boundary}\r\n`,
+    `Content-Disposition: form-data; name="b"\r\n\r\n`,
+    `second\r\n`,
+    `--${boundary}--\r\n`,
+  ].join("");
+}
+
+async function collectTextParts(
+  boundary: string,
+  chunks: readonly string[],
+): Promise<ReadonlyArray<readonly [string, string]>> {
+  const parts: Array<readonly [string, string]> = [];
+
+  for await (const part of parseMultipartStream(multipartRequest(boundary, chunks))) {
+    parts.push([part.name, await part.text()]);
+  }
+
+  return parts;
 }

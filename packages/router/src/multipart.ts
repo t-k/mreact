@@ -124,21 +124,27 @@ async function parseMultipartRequest(
             break;
           }
 
-          buffer = buffer.slice(firstBoundaryIndex + firstBoundary.length);
+          const firstBoundaryEnd = firstBoundaryIndex + firstBoundary.length;
 
-          if (startsWithBytes(buffer, closeSuffix)) {
+          if (buffer.length < firstBoundaryEnd + closeSuffix.length) {
+            if (next.done) {
+              throw new Error("Malformed multipart opening boundary.");
+            }
+
+            buffer = buffer.slice(firstBoundaryIndex);
+            break;
+          }
+
+          if (startsWithBytes(buffer, closeSuffix, firstBoundaryEnd)) {
             queue.close();
             return;
           }
 
-          if (!startsWithBytes(buffer, lineSuffix)) {
-            if (next.done) {
-              throw new Error("Malformed multipart opening boundary.");
-            }
-            break;
+          if (!startsWithBytes(buffer, lineSuffix, firstBoundaryEnd)) {
+            throw new Error("Malformed multipart opening boundary.");
           }
 
-          buffer = buffer.slice(lineSuffix.length);
+          buffer = buffer.slice(firstBoundaryEnd + lineSuffix.length);
           started = true;
         }
 
@@ -185,25 +191,32 @@ async function parseMultipartRequest(
         }
 
         await writePartChunk(currentPart, buffer.slice(0, delimiterIndex));
-        await currentPart.writer.close();
-        buffer = buffer.slice(delimiterIndex + delimiter.length);
-        currentPart = undefined;
+        buffer = buffer.slice(delimiterIndex);
 
-        if (startsWithBytes(buffer, closeSuffix)) {
+        if (buffer.length < delimiter.length + closeSuffix.length) {
+          if (next.done) {
+            throw new Error("Malformed multipart boundary delimiter.");
+          }
+
+          break;
+        }
+
+        const closesMultipart = startsWithBytes(buffer, closeSuffix, delimiter.length);
+
+        if (!closesMultipart && !startsWithBytes(buffer, lineSuffix, delimiter.length)) {
+          throw new Error("Malformed multipart boundary delimiter.");
+        }
+
+        await currentPart.writer.close();
+        currentPart = undefined;
+        buffer = buffer.slice(delimiter.length + closeSuffix.length);
+
+        if (closesMultipart) {
           queue.close();
           return;
         }
 
-        if (startsWithBytes(buffer, lineSuffix)) {
-          buffer = buffer.slice(lineSuffix.length);
-          continue;
-        }
-
-        if (next.done) {
-          throw new Error("Malformed multipart boundary delimiter.");
-        }
-
-        break;
+        continue;
       }
 
       if (next.done) {
@@ -527,13 +540,14 @@ function indexOfBytes(
 function startsWithBytes(
   bytes: Uint8Array<ArrayBufferLike>,
   prefix: Uint8Array<ArrayBufferLike>,
+  offset = 0,
 ): boolean {
-  if (bytes.length < prefix.length) {
+  if (bytes.length - offset < prefix.length) {
     return false;
   }
 
   for (let index = 0; index < prefix.length; index += 1) {
-    if (bytes[index] !== prefix[index]) {
+    if (bytes[offset + index] !== prefix[index]) {
       return false;
     }
   }
