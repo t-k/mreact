@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.205 - 2026-08-28
+
+### Fixed
+
+- Fixed route CSP serialization so an empty directive set omits the header instead of emitting an empty value.
+- Fixed native Flight decoding and merging to accept server references while rejecting cyclic or over-deep chunk references, including depth-aware cache reuse.
+
 ## 0.0.204 - 2026-08-20
 
 ### Added

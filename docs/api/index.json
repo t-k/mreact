@@ -212376,7 +212376,7 @@
 		}
 	],
 	"packageName": "mreact",
-	"packageVersion": "0.0.204",
+	"packageVersion": "0.0.205",
 	"readme": [
 		{
 			"kind": "text",
@@ -212631,11 +212631,45 @@
 		},
 		{
 			"kind": "code",
-			"text": "```bash\npnpm test\npnpm test:e2e:smoke\npnpm test:e2e\n```"
+			"text": "```bash\npnpm test\npnpm test:quality:quick\npnpm test:e2e:smoke\npnpm test:e2e\n```"
 		},
 		{
 			"kind": "text",
-			"text": "\n\nBuild the documentation site locally:\n\n"
+			"text": "\n\nProperty-based tests run in the regular Vitest suite. Fast quality checks used by Pull Requests can also be run locally with "
+		},
+		{
+			"kind": "code",
+			"text": "`pnpm test:quality:quick`"
+		},
+		{
+			"kind": "text",
+			"text": ".\n\nMutation testing is intentionally local and split by responsibility:\n\n"
+		},
+		{
+			"kind": "code",
+			"text": "```bash\npnpm test:mutation:security\npnpm test:mutation:core\npnpm test:mutation:all\npnpm test:mutation:all:force\n```"
+		},
+		{
+			"kind": "text",
+			"text": "\n\nNormal runs reuse Stryker incremental results. Use the force command after broad refactors or before reviewing the complete mutation baseline. Native Rust validation, mutation cohorts, and fuzz campaigns are documented in ["
+		},
+		{
+			"kind": "code",
+			"text": "`packages/router-native`"
+		},
+		{
+			"kind": "text",
+			"text": "]("
+		},
+		{
+			"kind": "relative-link",
+			"text": "packages/router-native#development",
+			"target": 114,
+			"targetAnchor": "development"
+		},
+		{
+			"kind": "text",
+			"text": ").\n\nBuild the documentation site locally:\n\n"
 		},
 		{
 			"kind": "code",
@@ -212656,7 +212690,7 @@
 		{
 			"kind": "relative-link",
 			"text": "docs/api",
-			"target": 114
+			"target": 115
 		},
 		{
 			"kind": "text",
@@ -212665,7 +212699,7 @@
 		{
 			"kind": "relative-link",
 			"text": "etc/api",
-			"target": 115
+			"target": 116
 		},
 		{
 			"kind": "text",
@@ -257524,10 +257558,11 @@
 			"111": "examples/reactive-primitives",
 			"112": "examples/store",
 			"113": "examples/virtual-grid",
-			"114": "docs/api",
-			"115": "etc/api",
-			"116": "README.md",
-			"117": ""
+			"114": "packages/router-native",
+			"115": "docs/api",
+			"116": "etc/api",
+			"117": "README.md",
+			"118": ""
 		},
 		"reflections": {
 			"1": 8988,
@@ -257636,8 +257671,8 @@
 			"104": 17948,
 			"105": 17948,
 			"106": 17948,
-			"116": 8987,
-			"117": 8987
+			"117": 8987,
+			"118": 8987
 		}
 	}
 }
