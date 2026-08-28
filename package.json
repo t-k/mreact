@@ -21,6 +21,7 @@
     "bench:js-framework:generate-compat": "tsx benchmarks/js-framework-benchmark/generate-compat-fixture.mts",
     "bench:html-escape": "NODE_ENV=production pnpm build && NODE_ENV=production tsx benchmarks/primitive/html-escape.ts",
     "bench:request-fastpaths": "NODE_ENV=production pnpm build && NODE_ENV=production tsx benchmarks/primitive/request-fastpaths.ts",
+    "bench:multipart": "NODE_ENV=production pnpm build && NODE_ENV=production tsx benchmarks/primitive/multipart.ts",
     "bench:non-router": "NODE_ENV=production pnpm build && NODE_ENV=production tsx benchmarks/non-router/run.ts",
     "bench:router": "NODE_ENV=production pnpm build && NODE_ENV=production tsx benchmarks/router/run.ts",
     "bench:router-build": "NODE_ENV=production pnpm build && NODE_ENV=production tsx benchmarks/router/build-time.ts",
