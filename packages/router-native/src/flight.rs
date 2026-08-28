@@ -702,7 +702,7 @@ pub fn napi_encode_flight_payload(response_json: String) -> napi::Result<Buffer>
 #[derive(Default)]
 struct FlightDecodeContext {
   in_progress_chunk_ids: std::collections::HashSet<u64>,
-  completed_chunk_models: std::collections::HashMap<u64, Value>,
+  completed_chunk_models: std::collections::HashMap<(u64, usize), Value>,
 }
 
 /// Decode a `\n`-separated Flight row payload into a JSON-serialized
@@ -1269,7 +1269,7 @@ fn decode_chunk_ref(
   if let Some(err) = error_chunks.get(&id) {
     return Ok(err.clone());
   }
-  if let Some(completed) = context.completed_chunk_models.get(&id) {
+  if let Some(completed) = context.completed_chunk_models.get(&(id, depth)) {
     return Ok(completed.clone());
   }
   let chunk = match model_chunks.get(&id) {
@@ -1282,7 +1282,9 @@ fn decode_chunk_ref(
   let result = decode_model(&chunk, model_chunks, error_chunks, depth, context);
   context.in_progress_chunk_ids.remove(&id);
   if let Ok(decoded) = &result {
-    context.completed_chunk_models.insert(id, decoded.clone());
+    context
+      .completed_chunk_models
+      .insert((id, depth), decoded.clone());
   }
   result
 }
@@ -1482,9 +1484,6 @@ fn resolve_promise_chunks(
             context,
           );
           context.in_progress_chunk_ids.remove(&id);
-          if let Ok(decoded) = &result {
-            context.completed_chunk_models.insert(id, decoded.clone());
-          }
           return result;
         }
         return Ok(value.clone());
@@ -1907,6 +1906,47 @@ mod tests {
       let error = decode_flight_rows(rows).unwrap_err();
       assert!(error.contains("MR_FLIGHT_CYCLE"), "{error}");
     }
+  }
+
+  #[test]
+  fn cached_chunks_cannot_bypass_the_cumulative_depth_limit() {
+    let error = std::thread::Builder::new()
+      .stack_size(32 * 1024 * 1024)
+      .spawn(|| {
+        let nested = |depth: usize, leaf: Value| {
+          (0..depth).fold(leaf, |value, _| Value::Array(vec![value]))
+        };
+        let cached_chunk = nested(100, json!("leaf"));
+        let model_chunks = std::collections::HashMap::from([(1, cached_chunk)]);
+        let error_chunks = std::collections::HashMap::new();
+        let mut context = FlightDecodeContext::default();
+
+        decode_chunk_ref(
+          "1",
+          &model_chunks,
+          &error_chunks,
+          0,
+          &mut context,
+        )
+        .unwrap();
+        match decode_chunk_ref(
+          "1",
+          &model_chunks,
+          &error_chunks,
+          200,
+          &mut context,
+        ) {
+          Ok(value) => {
+            std::mem::forget(value);
+            "accepted an over-deep cached chunk".to_string()
+          }
+          Err(error) => error,
+        }
+      })
+      .unwrap()
+      .join()
+      .unwrap();
+    assert!(error.contains("MR_FLIGHT_TOO_DEEP"), "{error}");
   }
 
   #[test]
