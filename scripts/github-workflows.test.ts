@@ -76,16 +76,15 @@ describe("GitHub workflows", () => {
     expect(workflow).toContain("MREACT_DOCS_BASE_PATH: ${{ steps.pages.outputs.base_path }}");
   });
 
-  test("runs cargo-deny with root-relative policy paths and global options before check", async () => {
+  test("runs cargo-deny from the native package with compatible policy lookup", async () => {
     const workflow = await readWorkflow("ci.yml");
 
     expect(workflow).toContain(
-      "cargo deny --manifest-path packages/router-native/Cargo.toml --config packages/router-native/deny.toml check bans licenses sources",
+      "      - name: Check dependency policy\n        working-directory: packages/router-native\n        run: |\n          cargo deny check bans licenses sources\n          cargo deny --manifest-path fuzz/Cargo.toml check bans licenses sources",
     );
     expect(workflow).toContain(
-      "cargo deny --manifest-path packages/router-native/fuzz/Cargo.toml --config packages/router-native/deny.toml check bans licenses sources",
+      "      - name: Check RustSec advisories\n        working-directory: packages/router-native\n        run: |\n          cargo deny check advisories\n          cargo deny --manifest-path fuzz/Cargo.toml check advisories",
     );
-    expect(workflow).not.toContain("check --config deny.toml");
-    expect(workflow).not.toContain("check --config ../deny.toml");
+    expect(workflow).not.toContain("cargo deny --config");
   });
 });
