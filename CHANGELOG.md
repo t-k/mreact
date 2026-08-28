@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.206 - 2026-08-28
+
+### Fixed
+
+- Fixed streaming multipart parsing across arbitrary request-body chunk boundaries, preserved valid opening boundaries after malformed preamble lookalikes, and bounded boundary length and scanning work to prevent event-loop stalls.
+
 ## 0.0.205 - 2026-08-28
 
 ### Fixed

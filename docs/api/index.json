@@ -148609,9 +148609,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/multipart.ts",
-									"line": 57,
+									"line": 58,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/multipart.ts#L57"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/multipart.ts#L58"
 								}
 							],
 							"signatures": [
@@ -148632,9 +148632,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/multipart.ts",
-											"line": 57,
+											"line": 58,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/multipart.ts#L57"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/multipart.ts#L58"
 										}
 									],
 									"parameters": [
@@ -212376,7 +212376,7 @@
 		}
 	],
 	"packageName": "mreact",
-	"packageVersion": "0.0.205",
+	"packageVersion": "0.0.206",
 	"readme": [
 		{
 			"kind": "text",
