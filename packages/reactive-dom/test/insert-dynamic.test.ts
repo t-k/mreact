@@ -325,6 +325,35 @@ describe("insertDynamic", () => {
     dispose();
   });
 
+  test("retargets one-argument keyed list render values without replacing their nodes", async () => {
+    const items = cell([{ id: "a", label: "One" }]);
+    const parent = document.createElement("div");
+    const marker = document.createComment("marker");
+    parent.append(marker);
+
+    const dispose = insertDynamic(parent, marker, () =>
+      createList(
+        () => items.get(),
+        (item) => {
+          const article = document.createElement("article");
+          const text = document.createTextNode("");
+          article.append(text);
+          bindText(text, () => item.label);
+          return article;
+        },
+        { key: (item) => item.id },
+      ),
+    );
+    const row = parent.querySelector("article");
+
+    items.set([{ id: "a", label: "Updated" }]);
+    await flushEffects();
+
+    expect(parent.querySelector("article")).toBe(row);
+    expect(row?.textContent).toBe("Updated");
+    dispose();
+  });
+
   test("does not throw when the marker has been removed before a queued update", async () => {
     const value = cell<RenderValue>("first");
     const parent = document.createElement("div");

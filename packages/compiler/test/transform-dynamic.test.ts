@@ -151,6 +151,54 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.code).toContain("_keyedChildren[1].firstChild[_keyedEventSlot] = 0;");
   });
 
+  test.each([
+    [
+      "logical branch",
+      "visible && rows.map((row) => <article key={row.id}>{row.label}</article>)",
+      "createList(",
+    ],
+    [
+      "conditional true branch",
+      "visible ? rows.map((row) => <article key={row.id}>{row.label}</article>) : null",
+      "createList(",
+    ],
+    [
+      "conditional false branch",
+      "visible ? null : rows.map((row) => <article key={row.id}>{row.label}</article>)",
+      "createList(",
+    ],
+    [
+      "nested element branch",
+      "visible ? <section>{rows.map((row) => <article key={row.id}>{row.label}</article>)}</section> : null",
+      "bindCompilerKeyedSingleNodeList(",
+    ],
+    [
+      "fragment branch",
+      "visible ? <>{rows.map((row) => <article key={row.id}>{row.label}</article>)}</> : null",
+      "createList(",
+    ],
+  ])("emits valid keyed text bindings for a %s", (_name, expression, listHelper) => {
+    const output = transform({
+      code: `
+        export function App() {
+          const visible = true;
+          const rows = [{ id: 1, label: "A" }];
+          return <main>{${expression}}</main>;
+        }
+      `,
+      filename: "conditional-keyed-list.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain(listHelper);
+    if (listHelper === "createList(") {
+      expect(output.code).toContain("bindText(");
+    }
+    expect(output.code).not.toContain("Missing compiler keyed row context");
+  });
+
   test("reuses a compiler keyed event element for its direct text binding", () => {
     const output = transform({
       code: `

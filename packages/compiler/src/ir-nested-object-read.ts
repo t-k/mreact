@@ -4,7 +4,12 @@ import { escapeRegExp } from "./string-utils.js";
 export function listReadsNestedItemObject(
   node: Extract<JsxNodeIr, { kind: "list" }>,
   itemName: string,
+  emittedRoot?: JsxNodeIr,
 ): boolean {
+  if (emittedRoot !== undefined) {
+    return nodeReadsNestedItemObject(emittedRoot, itemName);
+  }
+
   return node.children.some((child) => nodeReadsNestedItemObject(child, itemName));
 }
 

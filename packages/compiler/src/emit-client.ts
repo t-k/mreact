@@ -196,7 +196,7 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
   }
 
   for (const component of ir.components) {
-    visit(component.root, (node) => {
+    visitForClientImports(component.root, "setup", (node) => {
       if (node.kind === "expr") {
         if (node.renderMode === "dynamic") {
           specifiers.add("insertDynamic");
@@ -785,7 +785,10 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
         optionEntries.push(`key: (${parameters}) => (${child.keyCode})`);
       }
 
-      if (child.keyCode !== undefined && listReadsNestedItemObject(child, child.itemName)) {
+      if (
+        child.keyCode !== undefined &&
+        listReadsNestedItemObject(child, child.itemName, child.compiledSingleNode?.root)
+      ) {
         optionEntries.push("nestedObjectFallback: true");
       }
 
@@ -1464,6 +1467,73 @@ function visit(node: JsxNodeIr, fn: (node: JsxNodeIr) => void): void {
       for (const child of node.catchChildren) {
         visit(child, fn);
       }
+    }
+  }
+}
+
+function visitForClientImports(
+  node: JsxNodeIr,
+  context: "render-value" | "setup",
+  fn: (node: JsxNodeIr) => void,
+): void {
+  fn(node);
+
+  if (node.kind === "conditional") {
+    for (const child of [...node.whenTrue, ...node.whenFalse]) {
+      visitForClientImports(child, "render-value", fn);
+    }
+    return;
+  }
+
+  if (node.kind === "list") {
+    if (context === "setup" && node.compiledSingleNode !== undefined) {
+      visitForClientImports(node.compiledSingleNode.root, "setup", fn);
+    } else {
+      for (const child of node.children) {
+        visitForClientImports(child, "render-value", fn);
+      }
+    }
+    return;
+  }
+
+  if (node.kind === "component") {
+    for (const prop of node.props) {
+      if (prop.kind === "render-prop") {
+        for (const child of prop.children) {
+          visitForClientImports(child, "render-value", fn);
+        }
+      }
+    }
+
+    for (const child of node.children) {
+      visitForClientImports(child, "render-value", fn);
+    }
+    return;
+  }
+
+  if (node.kind === "element") {
+    for (const child of node.children) {
+      visitForClientImports(child, "setup", fn);
+    }
+    return;
+  }
+
+  if (node.kind === "fragment") {
+    for (const child of node.children) {
+      visitForClientImports(child, context, fn);
+    }
+    return;
+  }
+
+  if (node.kind === "async-boundary") {
+    for (const child of node.children) {
+      visitForClientImports(child, "render-value", fn);
+    }
+    for (const child of node.placeholderChildren ?? []) {
+      visitForClientImports(child, "render-value", fn);
+    }
+    for (const child of node.catchChildren ?? []) {
+      visitForClientImports(child, "render-value", fn);
     }
   }
 }

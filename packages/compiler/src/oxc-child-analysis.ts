@@ -838,8 +838,6 @@ function markCompilerKeyedCellText(
       const property = sourceNode.code.slice(prefix.length, -suffix.length);
 
       if (/^[A-Za-z_$][\w$]*$/.test(property)) {
-        sourceNode.renderMode = "compiler-keyed-cell-text";
-        sourceNode.compilerKeyedProperty = property;
         compiledNode.renderMode = "compiler-keyed-cell-text";
         compiledNode.compilerKeyedProperty = property;
       }
@@ -874,8 +872,6 @@ function markCompilerKeyedText(
       /^[A-Za-z_$][\w$]*$/.test(sourceNode.code.slice(itemName.length + 1))
     ) {
       const property = sourceNode.code.slice(itemName.length + 1);
-      sourceNode.renderMode = "compiler-keyed-text";
-      sourceNode.compilerKeyedProperty = property;
       compiledNode.renderMode = "compiler-keyed-text";
       compiledNode.compilerKeyedProperty = property;
     }
@@ -1053,7 +1049,6 @@ function markCompilerKeyedInitialText(
 ): void {
   if (sourceNode.kind === "expr" && compiledNode.kind === "expr") {
     if (sourceNode.code === keyCode) {
-      sourceNode.renderMode = "compiler-keyed-initial-text";
       compiledNode.renderMode = "compiler-keyed-initial-text";
     }
     return;

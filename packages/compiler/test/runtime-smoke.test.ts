@@ -6,6 +6,45 @@ import { transform } from "../src/index.js";
 import { compileClientComponent, runClientComponent } from "./helpers.js";
 
 describe("compiler runtime smoke", () => {
+  test("conditional keyed single-node lists preserve row text context", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+        const visible = cell(true);
+        const rows = cell([{ id: 1, label: "One" }]);
+        export function App() {
+          return <main>
+            <button id="replace" onClick={() => rows.set([{ id: 1, label: "Updated" }])}>Replace</button>
+            <button id="hide" onClick={() => visible.set(false)}>Hide</button>
+            <section>{visible.get() && rows.get().map((row) => (
+              <article key={row.id}><span>{row.label}</span></article>
+            ))}</section>
+          </main>;
+        }`,
+      filename: "conditional-keyed-list.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("createList(");
+    expect(output.code).toContain("bindText(");
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const row = node.querySelector("article") as HTMLElement;
+
+    expect(row.textContent).toBe("One");
+    node.querySelector<HTMLButtonElement>("#replace")?.click();
+    await flushEffects();
+    expect(node.querySelector("article")).toBe(row);
+    expect(row.textContent).toBe("Updated");
+
+    node.querySelector<HTMLButtonElement>("#hide")?.click();
+    await flushEffects();
+    expect(node.querySelector("article")).toBeNull();
+    node.querySelector<HTMLButtonElement>("#replace")?.click();
+    await flushEffects();
+    expect(row.textContent).toBe("Updated");
+  });
+
   test("compiler keyed cell text retargets same-key rows and detaches old cells", async () => {
     const output = transform({
       code: `

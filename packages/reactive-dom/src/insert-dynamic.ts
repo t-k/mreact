@@ -5,6 +5,7 @@ import {
 } from "@reckona/mreact-reactive-core/internal";
 import { bindList } from "./bind-list.js";
 import { isListRenderValue } from "./create-list.js";
+import { createDynamicListRenderer } from "./dynamic-list-renderer.js";
 import {
   isDynamicHydrationEnabled,
   markDynamicNode,
@@ -104,11 +105,13 @@ export function insertDynamic(
       next.dispose();
       const nextKeyed = nextValue.options?.key !== undefined;
       const nextNestedObjectFallback = nextValue.options?.nestedObjectFallback === true;
+      const nextRenderArity = nextValue.renderItem.length;
 
       if (
         currentList !== undefined &&
         currentList.keyed === nextKeyed &&
-        currentList.nestedObjectFallback === nextNestedObjectFallback
+        currentList.nestedObjectFallback === nextNestedObjectFallback &&
+        currentList.renderArity === nextRenderArity
       ) {
         currentList.value.set(nextValue);
         if (firstError !== undefined) {
@@ -149,11 +152,12 @@ export function insertDynamic(
         value: listValue,
         keyed: nextKeyed,
         nestedObjectFallback: nextNestedObjectFallback,
+        renderArity: nextRenderArity,
         dispose: bindList(
           insertionParent,
           marker,
           () => listValue.get().items(),
-          (item, index, items) => listValue.get().renderItem(item, index, items),
+          createDynamicListRenderer(listValue, nextRenderArity),
           options,
         ),
       };
@@ -231,6 +235,7 @@ interface BoundDynamicList {
   value: Cell<ListRenderValue>;
   keyed: boolean;
   nestedObjectFallback: boolean;
+  renderArity: number;
   dispose: Dispose;
 }
 

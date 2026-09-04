@@ -6,6 +6,7 @@ import {
 import { isMemoRenderValue } from "./create-memo.js";
 import { bindList } from "./bind-list.js";
 import { isListRenderValue } from "./create-list.js";
+import { createDynamicListRenderer } from "./dynamic-list-renderer.js";
 import {
   isDynamicHydrationEnabled,
   markDynamicNode,
@@ -139,11 +140,13 @@ export function insertMemoDynamic(
       }
       const nextKeyed = resolvedValue.options?.key !== undefined;
       const nextNestedObjectFallback = resolvedValue.options?.nestedObjectFallback === true;
+      const nextRenderArity = resolvedValue.renderItem.length;
 
       if (
         currentList !== undefined &&
         currentList.keyed === nextKeyed &&
-        currentList.nestedObjectFallback === nextNestedObjectFallback
+        currentList.nestedObjectFallback === nextNestedObjectFallback &&
+        currentList.renderArity === nextRenderArity
       ) {
         currentList.value.set(resolvedValue);
         currentMemo = nextMemo;
@@ -187,11 +190,12 @@ export function insertMemoDynamic(
           value: listValue,
           keyed: nextKeyed,
           nestedObjectFallback: nextNestedObjectFallback,
+          renderArity: nextRenderArity,
           dispose: bindList(
             insertionParent,
             marker,
             () => listValue.get().items(),
-            (item, index, items) => listValue.get().renderItem(item, index, items),
+            createDynamicListRenderer(listValue, nextRenderArity),
             listOptions,
           ),
         };
@@ -270,6 +274,7 @@ interface BoundMemoDynamicList {
   value: Cell<ListRenderValue>;
   keyed: boolean;
   nestedObjectFallback: boolean;
+  renderArity: number;
   dispose: Dispose;
 }
 
