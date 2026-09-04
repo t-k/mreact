@@ -1458,6 +1458,85 @@ export default function Page() {
   }
 });
 
+test("keyed SVG rows use SVG namespace", async ({ page }) => {
+  const { close, url } = await startFixtureServer({
+    "page.mreact.tsx": `import { cell } from "@reckona/mreact-reactive-core";
+
+const rows = cell([]);
+
+export default function Page() {
+  const spread = { "data-generic-row": "true" };
+  return <main>
+    <button type="button" onClick={() => rows.set([{ id: "a", label: "Alpha" }])}>Load graph</button>
+    <svg viewBox="0 0 100 100">
+      <defs><marker id="dot" /></defs>
+      <g data-optimized-list>{rows.get().map((row) => <g key={row.id}><rect width="10" height="10" /><text>{row.label}</text></g>)}</g>
+      <g data-generic-list>{rows.get().map((row) => <g key={row.id} {...spread}><circle r="4" /></g>)}</g>
+      <foreignObject>{rows.get().map((row) => <div key={row.id} data-html-row>{row.label}</div>)}</foreignObject>
+      <text data-svg-tail>tail</text>
+    </svg>
+  </main>;
+}`,
+  });
+
+  try {
+    await page.goto(url);
+    await expect(page.locator("[data-optimized-list] > g")).toHaveCount(0);
+    await page.getByRole("button", { name: "Load graph" }).click();
+    await expect(page.locator("[data-optimized-list] > g")).toHaveCount(1);
+
+    const namespaces = await page.evaluate(() => ({
+      optimized: document.querySelector("[data-optimized-list] > g")?.namespaceURI,
+      optimizedChild: document.querySelector("[data-optimized-list] rect")?.namespaceURI,
+      generic: document.querySelector("[data-generic-list] > g")?.namespaceURI,
+      html: document.querySelector("foreignObject > [data-html-row]")?.namespaceURI,
+      tail: document.querySelector("[data-svg-tail]")?.namespaceURI,
+    }));
+
+    expect(namespaces).toEqual({
+      optimized: "http://www.w3.org/2000/svg",
+      optimizedChild: "http://www.w3.org/2000/svg",
+      generic: "http://www.w3.org/2000/svg",
+      html: "http://www.w3.org/1999/xhtml",
+      tail: "http://www.w3.org/2000/svg",
+    });
+  } finally {
+    await close();
+  }
+});
+
+test("native boundary returning null mounts no text", async ({ page }) => {
+  const { close, url } = await startFixtureServer({
+    "AppBoot.client.tsx": `export function AppBoot() {
+  document.documentElement.dataset.booted = "true";
+  return null;
+}`,
+    "page.mreact.tsx": `import { AppBoot } from "./AppBoot.client";
+
+export default function Page() {
+  return <><AppBoot /><main><h1>Ready</h1></main></>;
+}`,
+  });
+
+  try {
+    await page.goto(url);
+    await expect(page.getByRole("heading", { name: "Ready" })).toBeVisible();
+    await expect(page.locator("template[data-mreact-client-boundary]")).toHaveCount(0);
+    await expect(page.locator("script[data-mreact-client-boundary-props]")).toHaveCount(0);
+    expect(
+      await page.evaluate(() =>
+        Array.from(document.body.childNodes)
+          .filter((node) => node.nodeType === Node.TEXT_NODE)
+          .map((node) => node.textContent?.trim())
+          .filter(Boolean),
+      ),
+    ).not.toContain("null");
+    expect(await page.evaluate(() => document.documentElement.dataset.booted)).toBe("true");
+  } finally {
+    await close();
+  }
+});
+
 async function startFixtureServer(files: Record<string, string>): Promise<{
   close(): Promise<void>;
   url: string;

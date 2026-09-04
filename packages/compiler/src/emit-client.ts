@@ -74,6 +74,8 @@ type RuntimeHelperName =
   | "bindText"
   | "createList"
   | "createMemo"
+  | "createSvgTemplate"
+  | "createSvgTemplateElement"
   | "createTemplate"
   | "createTemplateElement"
   | "insertDynamic"
@@ -111,6 +113,8 @@ function allocateRuntimeHelperNames(
     bindText: "bindText",
     createList: "createList",
     createMemo: "createMemo",
+    createSvgTemplate: "createSvgTemplate",
+    createSvgTemplateElement: "createSvgTemplateElement",
     createTemplate: "createTemplate",
     createTemplateElement: "createTemplateElement",
     insertDynamic: "insertDynamic",
@@ -221,12 +225,19 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
         if (node.compiledSingleNode === undefined) {
           specifiers.add("bindList");
         } else {
-          specifiers.add("createTemplateElement");
+          specifiers.add(
+            node.compiledSingleNode.root.namespace === "svg"
+              ? "createSvgTemplateElement"
+              : "createTemplateElement",
+          );
           internalSpecifiers.add("bindCompilerKeyedSingleNodeList");
         }
       }
 
       if (node.kind === "element") {
+        if (node.namespace === "svg") {
+          specifiers.add("createSvgTemplate");
+        }
         for (const attr of node.attributes) {
           if (attr.kind === "dynamic-attr") {
             specifiers.add("bindProp");
@@ -473,7 +484,7 @@ function emitComponent(
     debugLabel,
   });
   return [
-    `const ${templateName} = ${helperNames.createTemplate}(${templateHtml});`,
+    `const ${templateName} = ${component.root.kind === "element" && component.root.namespace === "svg" ? helperNames.createSvgTemplate : helperNames.createTemplate}(${templateHtml});`,
     `${functionKeyword} ${component.name}(${parameters}) {`,
     ...body,
     `  const ${fragmentName} = ${templateName}();`,
@@ -815,7 +826,7 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
       } else {
         const templateName = state.allocateName("_keyedTemplate");
         lines.push(
-          `  const ${templateName} = ${state.helperNames.createTemplateElement}(${JSON.stringify(renderStaticHtml(child.compiledSingleNode.root))});`,
+          `  const ${templateName} = ${child.compiledSingleNode.root.namespace === "svg" ? state.helperNames.createSvgTemplateElement : state.helperNames.createTemplateElement}(${JSON.stringify(renderStaticHtml(child.compiledSingleNode.root))});`,
         );
         lines.push(
           `  ${state.helperNames.bindCompilerKeyedSingleNodeList}(${currentPath}, ${childPath}, () => (${child.itemsCode}), ${emitCompilerKeyedSingleNodeRenderer(child, templateName, state, eventSlotKeys)}${options});`,
@@ -1076,7 +1087,7 @@ function emitNodeRenderValueExpression(
 
   return [
     "(() => {",
-    `  const ${templateName} = ${state.helperNames.createTemplate}(${templateHtml});`,
+    `  const ${templateName} = ${node.kind === "element" && node.namespace === "svg" ? state.helperNames.createSvgTemplate : state.helperNames.createTemplate}(${templateHtml});`,
     `  const ${fragmentName} = ${templateName}();`,
     `  const ${rootName} = ${fragmentName}.firstChild;`,
     ...setupLines,

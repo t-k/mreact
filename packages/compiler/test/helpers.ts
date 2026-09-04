@@ -6,6 +6,8 @@ import {
   bindSpreadProps,
   bindText,
   createList,
+  createSvgTemplate,
+  createSvgTemplateElement,
   createTemplate,
   createTemplateElement,
   insertDynamic,
@@ -392,7 +394,7 @@ function extractClientRuntimeEntries(code: string): { localName: string; value: 
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>bindDomRef|bindEvent|bindList|bindProp|bindSpreadProps|bindText|createList|createMemo|createTemplate|createTemplateElement|effect|insertDynamic)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+      /^(?<importedName>bindDomRef|bindEvent|bindList|bindProp|bindSpreadProps|bindText|createList|createMemo|createSvgTemplate|createSvgTemplateElement|createTemplate|createTemplateElement|effect|insertDynamic)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
     );
 
     if (match?.groups === undefined) {
@@ -509,6 +511,14 @@ function getClientRuntimeValue(importedName: string): unknown {
 
   if (importedName === "createTemplateElement") {
     return createTemplateElement;
+  }
+
+  if (importedName === "createSvgTemplate") {
+    return createSvgTemplate;
+  }
+
+  if (importedName === "createSvgTemplateElement") {
+    return createSvgTemplateElement;
   }
 
   if (importedName === "createList") {

@@ -76,6 +76,7 @@ export interface OxcChildAnalysisContext {
   componentBodyBindings?: ReadonlyMap<string, Record<string, unknown>>;
   componentConstBindings?: ReadonlySet<string>;
   compilerKeyedEventParent?: boolean;
+  jsxNamespace?: "html" | "svg";
   reactiveAliasBindings?: ReadonlyMap<string, string>;
   bodyLowerers: OxcBodyLowerers;
   lowerNestedJsxExpression: (
@@ -250,10 +251,14 @@ export function analyzeOxcJsxNode(
 
   const keyCode = findOxcJsxAttributeCode(code, attributes, "key");
   const allowRef = bodyStatementJsx === "compat-object";
+  const namespace = tagName === "svg" || context.jsxNamespace === "svg" ? "svg" : undefined;
+  const childNamespace =
+    namespace === "svg" && tagName === "foreignObject" ? "html" : (namespace ?? context.jsxNamespace);
 
   return {
     kind: "element",
     tagName,
+    ...(namespace === undefined ? {} : { namespace }),
     ...(keyCode === undefined ? {} : { keyCode }),
     attributes: attributes
       .flatMap((attr) =>
@@ -267,7 +272,11 @@ export function analyzeOxcJsxNode(
     children: analyzeOxcChildren(
       code,
       readArray(node.children),
-      { ...context, compilerKeyedEventParent: true },
+      {
+        ...context,
+        compilerKeyedEventParent: true,
+        ...(childNamespace === undefined ? {} : { jsxNamespace: childNamespace }),
+      },
       bodyStatementJsx,
     ),
   } satisfies JsxElementIr;

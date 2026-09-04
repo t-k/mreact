@@ -1,7 +1,12 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, test } from "vitest";
-import { createTemplate, createTemplateElement } from "../src/index.js";
+import {
+  createSvgTemplate,
+  createSvgTemplateElement,
+  createTemplate,
+  createTemplateElement,
+} from "../src/index.js";
 
 describe("createTemplate", () => {
   test("returns independent cloned fragments", () => {
@@ -39,5 +44,28 @@ describe("createTemplate", () => {
     expect(() => createTemplateElement("<span>A</span><span>B</span>")).toThrow(
       "single root element",
     );
+  });
+
+  test("creates SVG template nodes in SVG namespace with XHTML foreignObject children", () => {
+    const cloneFragment = createSvgTemplate(
+      '<g data-row><rect width="10"></rect></g><foreignObject><div data-html>HTML</div></foreignObject><text data-tail>tail</text>',
+    );
+    const cloneElement = createSvgTemplateElement<SVGGElement>(
+      '<g data-single><circle r="4"></circle></g>',
+    );
+    const fragment = cloneFragment();
+    const group = fragment.querySelector("[data-row]");
+    const foreignObject = fragment.querySelector("foreignObject");
+    const html = fragment.querySelector("[data-html]");
+    const tail = fragment.querySelector("[data-tail]");
+    const single = cloneElement();
+
+    expect(group?.namespaceURI).toBe("http://www.w3.org/2000/svg");
+    expect(group?.firstElementChild?.namespaceURI).toBe("http://www.w3.org/2000/svg");
+    expect(foreignObject?.namespaceURI).toBe("http://www.w3.org/2000/svg");
+    expect(html?.namespaceURI).toBe("http://www.w3.org/1999/xhtml");
+    expect(tail?.namespaceURI).toBe("http://www.w3.org/2000/svg");
+    expect(single.namespaceURI).toBe("http://www.w3.org/2000/svg");
+    expect(single.firstElementChild?.namespaceURI).toBe("http://www.w3.org/2000/svg");
   });
 });

@@ -43,6 +43,7 @@ export type JsxNodeIr =
 export interface JsxElementIr {
   kind: "element";
   tagName: string;
+  namespace?: "svg";
   keyCode?: string;
   attributes: AttributeIr[];
   children: JsxNodeIr[];

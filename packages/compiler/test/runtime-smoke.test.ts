@@ -67,6 +67,42 @@ describe("compiler runtime smoke", () => {
     expect(node.querySelector("[data-object]")?.textContent).toBe("Administrators");
   });
 
+  test("compiled SVG keyed rows preserve namespace", async () => {
+    const output = transform({
+      code: `export function App() {
+        const rows = [{ id: "a", label: "Alpha" }];
+        const spread = { "data-generic": "true" };
+        return <svg>
+          <g data-optimized-list>{rows.map((row) => <g key={row.id}><rect width="10" /><text>{row.label}</text></g>)}</g>
+          <g data-generic-list>{rows.map((row) => <g key={row.id} {...spread}><circle r="4" /></g>)}</g>
+          <foreignObject>{rows.map((row) => <div key={row.id}>{row.label}</div>)}</foreignObject>
+          <text data-tail>tail</text>
+        </svg>;
+      }`,
+      filename: "svg-keyed-list.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("createSvgTemplateElement(");
+    expect(output.code).toContain("createSvgTemplate(");
+    const node = (await runClientComponent(output.code)) as SVGSVGElement;
+
+    expect(node.querySelector("[data-optimized-list] > g")?.namespaceURI).toBe(
+      "http://www.w3.org/2000/svg",
+    );
+    expect(node.querySelector("[data-generic-list] > g")?.namespaceURI).toBe(
+      "http://www.w3.org/2000/svg",
+    );
+    expect(node.querySelector("foreignObject > div")?.namespaceURI).toBe(
+      "http://www.w3.org/1999/xhtml",
+    );
+    expect(node.querySelector("[data-tail]")?.namespaceURI).toBe(
+      "http://www.w3.org/2000/svg",
+    );
+  });
+
   test("compiler keyed cell text retargets same-key rows and detaches old cells", async () => {
     const output = transform({
       code: `
