@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
 import ts from "typescript";
 
@@ -64,9 +64,10 @@ const packagePaths = Object.fromEntries(
 );
 
 if (process.argv.includes("--list-files")) {
-  for (const file of projects.flatMap((project) => project.testFiles)) {
-    process.stdout.write(`${relative(rootDir, file).split(sep).join("/")}\n`);
-  }
+  const files = projects
+    .flatMap((project) => project.testFiles)
+    .map((file) => relative(rootDir, file).split(sep).join("/"));
+  writeFileSync(process.stdout.fd, `${files.join("\n")}\n`);
   process.exit(0);
 }
 
