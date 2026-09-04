@@ -155,17 +155,17 @@ describe("compiler dynamic JSX transform", () => {
     [
       "logical branch",
       "visible && rows.map((row) => <article key={row.id}>{row.label}</article>)",
-      "createList(",
+      "createListWithRenderArity(",
     ],
     [
       "conditional true branch",
       "visible ? rows.map((row) => <article key={row.id}>{row.label}</article>) : null",
-      "createList(",
+      "createListWithRenderArity(",
     ],
     [
       "conditional false branch",
       "visible ? null : rows.map((row) => <article key={row.id}>{row.label}</article>)",
-      "createList(",
+      "createListWithRenderArity(",
     ],
     [
       "nested element branch",
@@ -175,7 +175,7 @@ describe("compiler dynamic JSX transform", () => {
     [
       "fragment branch",
       "visible ? <>{rows.map((row) => <article key={row.id}>{row.label}</article>)}</> : null",
-      "createList(",
+      "createListWithRenderArity(",
     ],
   ])("emits valid keyed text bindings for a %s", (_name, expression, listHelper) => {
     const output = transform({
@@ -193,7 +193,7 @@ describe("compiler dynamic JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain(listHelper);
-    if (listHelper === "createList(") {
+    if (listHelper === "createListWithRenderArity(") {
       expect(output.code).toContain("bindText(");
     }
     expect(output.code).not.toContain("Missing compiler keyed row context");
@@ -222,6 +222,49 @@ describe("compiler dynamic JSX transform", () => {
       }),
     );
     expect(output.code).not.toContain("key: (entry) => (actor)");
+  });
+
+  test.each([
+    ["native server", "server", undefined],
+    ["compat client", "client", "compat"],
+  ] as const)("keeps callback-local keys valid for %s output", (_name, target, mode) => {
+    const output = transform({
+      code: `export function App() {
+        const rows = [{ id: "a" }];
+        return <ul>{rows.map((row) => {
+          const key = row.id;
+          return <li key={key}>{row.id}</li>;
+        })}</ul>;
+      }`,
+      filename: "callback-local-key.tsx",
+      target,
+      ...(mode === undefined ? {} : { mode }),
+      dev: false,
+    });
+
+    expect(output.diagnostics).not.toContainEqual(
+      expect.objectContaining({ code: "MR_UNSUPPORTED_CALLBACK_LOCAL_LIST_KEY" }),
+    );
+  });
+
+  test("does not treat string-literal property names as callback-local key reads", () => {
+    const output = transform({
+      code: `export function App() {
+        const rows = [{ id: "a" }];
+        return <ul>{rows.map((item) => {
+          const id = "local";
+          return <li key={item["id"]}>{id}</li>;
+        })}</ul>;
+      }`,
+      filename: "string-property-key.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).not.toContainEqual(
+      expect.objectContaining({ code: "MR_UNSUPPORTED_CALLBACK_LOCAL_LIST_KEY" }),
+    );
+    expect(output.code).toContain('key: (item) => (item["id"])');
   });
 
   test("reuses a compiler keyed event element for its direct text binding", () => {

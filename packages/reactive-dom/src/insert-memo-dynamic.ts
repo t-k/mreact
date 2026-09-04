@@ -13,11 +13,12 @@ import {
 } from "./dynamic-node.js";
 import { createScopedRenderNodes } from "./render-scope.js";
 import { registerDispose } from "./scope.js";
-import type {
-  Dispose,
-  ListRenderValue,
-  MemoRenderValue,
-  RenderValue,
+import {
+  LIST_RENDER_ARITY,
+  type Dispose,
+  type ListRenderValue,
+  type MemoRenderValue,
+  type RenderValue,
 } from "./types.js";
 
 type MemoDynamicValue = RenderValue | MemoRenderValue;
@@ -139,7 +140,12 @@ export function insertMemoDynamic(
       }
       const nextKeyed = resolvedValue.options?.key !== undefined;
       const nextNestedObjectFallback = resolvedValue.options?.nestedObjectFallback === true;
-      const nextRenderArity = resolvedValue.renderItem.length;
+      const nextRenderArity =
+        (
+          resolvedValue as ListRenderValue & {
+            [LIST_RENDER_ARITY]?: number;
+          }
+        )[LIST_RENDER_ARITY] ?? 3;
       const nextListShape =
         +nextKeyed +
         +nextNestedObjectFallback * 2 +

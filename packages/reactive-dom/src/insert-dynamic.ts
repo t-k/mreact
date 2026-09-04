@@ -12,7 +12,12 @@ import {
 } from "./dynamic-node.js";
 import { createScopedRenderNodes } from "./render-scope.js";
 import { registerDispose } from "./scope.js";
-import type { Dispose, ListRenderValue, RenderValue } from "./types.js";
+import {
+  LIST_RENDER_ARITY,
+  type Dispose,
+  type ListRenderValue,
+  type RenderValue,
+} from "./types.js";
 
 /** Inserts and updates a dynamic render value before a marker node. */
 export function insertDynamic(
@@ -104,7 +109,12 @@ export function insertDynamic(
       next.dispose();
       const nextKeyed = nextValue.options?.key !== undefined;
       const nextNestedObjectFallback = nextValue.options?.nestedObjectFallback === true;
-      const nextRenderArity = nextValue.renderItem.length;
+      const nextRenderArity =
+        (
+          nextValue as ListRenderValue & {
+            [LIST_RENDER_ARITY]?: number;
+          }
+        )[LIST_RENDER_ARITY] ?? 3;
       const nextListShape =
         +nextKeyed +
         +nextNestedObjectFallback * 2 +

@@ -11,12 +11,14 @@ describe("compiler runtime smoke", () => {
       code: `import { cell } from "@reckona/mreact-reactive-core";
         const visible = cell(true);
         const rows = cell([{ id: 1, label: "One" }]);
+        const selected = cell(1);
         export function App() {
           return <main>
             <button id="replace" onClick={() => rows.set([{ id: 1, label: "Updated" }])}>Replace</button>
+            <button id="clear-selection" onClick={() => selected.set(null)}>Clear selection</button>
             <button id="hide" onClick={() => visible.set(false)}>Hide</button>
             <section>{visible.get() && rows.get().map((row) => (
-              <article key={row.id}><span>{row.label}</span></article>
+              <article key={row.id} class={row.id === selected.get() ? "danger" : ""}><span>{row.label}</span></article>
             ))}</section>
           </main>;
         }`,
@@ -26,12 +28,16 @@ describe("compiler runtime smoke", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain("createList(");
+    expect(output.code).toContain("createListWithRenderArity(");
     expect(output.code).toContain("bindText(");
     const node = (await runClientComponent(output.code)) as HTMLElement;
     const row = node.querySelector("article") as HTMLElement;
 
     expect(row.textContent).toBe("One");
+    expect(row.className).toBe("danger");
+    node.querySelector<HTMLButtonElement>("#clear-selection")?.click();
+    await flushEffects();
+    expect(row.className).toBe("");
     node.querySelector<HTMLButtonElement>("#replace")?.click();
     await flushEffects();
     expect(node.querySelector("article")).toBe(row);
@@ -65,6 +71,30 @@ describe("compiler runtime smoke", () => {
 
     expect(node.querySelector("[data-array]")?.textContent).toBe("Ada:2Byron:1");
     expect(node.querySelector("[data-object]")?.textContent).toBe("Administrators");
+  });
+
+  test("destructured keyed rows refresh values after same-key item replacement", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+        const rows = cell([["a", "Old"]]);
+        export function App() {
+          return <main>
+            <button onClick={() => rows.set([["a", "New"]])}>Replace</button>
+            <ul>{rows.get().map(([id, label]) => <li key={id}>{label}</li>)}</ul>
+          </main>;
+        }`,
+      filename: "destructured-list-replacement.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+
+    expect(node.querySelector("li")?.textContent).toBe("Old");
+    node.querySelector("button")?.click();
+    await flushEffects();
+    expect(node.querySelector("li")?.textContent).toBe("New");
   });
 
   test("compiled SVG keyed rows preserve namespace", async () => {

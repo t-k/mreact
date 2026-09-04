@@ -67,12 +67,13 @@ export function emitClient(
 
 type RuntimeHelperName =
   | "bindList"
+  | "bindListWithRenderArity"
   | "bindDomRef"
   | "bindEvent"
   | "bindProp"
   | "bindSpreadProps"
   | "bindText"
-  | "createList"
+  | "createListWithRenderArity"
   | "createMemo"
   | "createSvgTemplate"
   | "createSvgTemplateElement"
@@ -106,12 +107,13 @@ function allocateRuntimeHelperNames(
   const occupiedNames = new Set(bindingNames);
   const helperNames: RuntimeHelperNames = {
     bindList: "bindList",
+    bindListWithRenderArity: "bindListWithRenderArity",
     bindDomRef: "bindDomRef",
     bindEvent: "bindEvent",
     bindProp: "bindProp",
     bindSpreadProps: "bindSpreadProps",
     bindText: "bindText",
-    createList: "createList",
+    createListWithRenderArity: "createListWithRenderArity",
     createMemo: "createMemo",
     createSvgTemplate: "createSvgTemplate",
     createSvgTemplateElement: "createSvgTemplateElement",
@@ -227,7 +229,11 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
 
       if (node.kind === "list") {
         if (node.compiledSingleNode === undefined) {
-          specifiers.add("bindList");
+          if (requiresExplicitListRenderArity(node)) {
+            internalSpecifiers.add("bindListWithRenderArity");
+          } else {
+            specifiers.add("bindList");
+          }
         } else {
           if (node.compiledSingleNode.root.namespace === "svg") {
             internalSpecifiers.add("createSvgTemplateElement");
@@ -265,7 +271,7 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
     });
 
     if (componentUsesCreateList(component.root)) {
-      specifiers.add("createList");
+      internalSpecifiers.add("createListWithRenderArity");
     }
   }
 
@@ -824,8 +830,10 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
 
       const options = optionEntries.length === 0 ? "" : `, { ${optionEntries.join(", ")} }`;
       if (child.compiledSingleNode === undefined) {
+        const explicitRenderArity = requiresExplicitListRenderArity(child);
+        const listOptions = explicitRenderArity && options === "" ? ", undefined" : options;
         lines.push(
-          `  ${state.helperNames.bindList}(${currentPath}, ${childPath}, () => (${child.itemsCode}), ${emitListRenderer(child, parameters, state)}${options});`,
+          `  ${explicitRenderArity ? state.helperNames.bindListWithRenderArity : state.helperNames.bindList}(${currentPath}, ${childPath}, () => (${child.itemsCode}), ${emitListRenderer(child, parameters, state)}${listOptions}${explicitRenderArity ? `, ${emitListRenderArity(child)}` : ""});`,
         );
       } else {
         const templateName = state.allocateName("_keyedTemplate");
@@ -1075,7 +1083,7 @@ function emitNodeRenderValueExpression(
     const parameters = emitListParameters(node);
     const options = emitListOptions(node, parameters);
 
-    return `${state.helperNames.createList}(() => (${node.itemsCode}), ${emitListRenderer(node, parameters, state)}${options})`;
+    return `${state.helperNames.createListWithRenderArity}(() => (${node.itemsCode}), ${emitListRenderer(node, parameters, state)}, ${emitListRenderArity(node)}${options})`;
   }
 
   if (node.kind === "async-boundary") {
@@ -1342,6 +1350,28 @@ function emitListParameters(node: Extract<JsxNodeIr, { kind: "list" }>): string 
   return [node.itemName, node.indexName, node.arrayName]
     .filter((name): name is string => name !== undefined)
     .join(", ");
+}
+
+function emitListRenderArity(node: Extract<JsxNodeIr, { kind: "list" }>): number {
+  const patterns = node.parameterPatterns;
+  if (patterns !== undefined) {
+    if (patterns.some((pattern) => pattern.trimStart().startsWith("..."))) {
+      return 3;
+    }
+    if (patterns[0] !== undefined && !/^[A-Za-z_$][\w$]*$/u.test(patterns[0])) {
+      return 3;
+    }
+    return Math.min(patterns.length, 3);
+  }
+
+  return Math.min(
+    [node.itemName, node.indexName, node.arrayName].filter((name) => name !== undefined).length,
+    3,
+  );
+}
+
+function requiresExplicitListRenderArity(node: Extract<JsxNodeIr, { kind: "list" }>): boolean {
+  return node.parameterPatterns?.some((pattern) => !/^[A-Za-z_$][\w$]*$/u.test(pattern)) === true;
 }
 
 function emitComponentCall(

@@ -719,10 +719,10 @@ function analyzeOxcListExpression(
 
   const { children, bodyStatements } = rendererBody;
   const discoveredKeyCode = findOxcKeyCodeInChildren(children);
-  const callbackLocalKeyBinding = findOxcCallbackLocalKeyBinding(
-    renderer,
-    discoveredKeyCode,
-  );
+  const callbackLocalKeyBinding =
+    context.target === "client" && bodyStatementJsx !== "compat-object"
+      ? findOxcCallbackLocalKeyBinding(renderer, discoveredKeyCode)
+      : undefined;
   if (callbackLocalKeyBinding !== undefined) {
     context.diagnostics.push(
       unsupportedCallbackLocalListKeyDiagnostic(
@@ -792,12 +792,82 @@ function findOxcCallbackLocalKeyBinding(
     return undefined;
   }
 
-  return collectBindingNames(body).find((name) => codeReadsIdentifier(keyCode, name));
+  const keyExpressions = collectOxcKeyExpressions(body);
+  return collectBindingNames(body).find((name) =>
+    keyExpressions.some((expression) => oxcExpressionReadsIdentifier(expression, name)),
+  );
 }
 
-function codeReadsIdentifier(code: string, name: string): boolean {
-  const escapedName = name.replaceAll(/[$()*+.?[\]^{|}]/g, "\\$&");
-  return new RegExp(`(?:^|[^\\w$.])${escapedName}(?![\\w$])`, "u").test(code);
+function collectOxcKeyExpressions(node: unknown, expressions: Record<string, unknown>[] = []) {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      collectOxcKeyExpressions(child, expressions);
+    }
+    return expressions;
+  }
+
+  const object = readObject(node);
+  if (Object.keys(object).length === 0) {
+    return expressions;
+  }
+
+  if (object.type === "JSXAttribute" && readObject(object.name).name === "key") {
+    const value = readObject(object.value);
+    const expression = readObject(value.expression);
+    if (value.type === "JSXExpressionContainer" && Object.keys(expression).length > 0) {
+      expressions.push(expression);
+    }
+    return expressions;
+  }
+
+  for (const value of Object.values(object)) {
+    if (typeof value === "object" && value !== null) {
+      collectOxcKeyExpressions(value, expressions);
+    }
+  }
+  return expressions;
+}
+
+function oxcExpressionReadsIdentifier(
+  node: unknown,
+  name: string,
+  parent?: Record<string, unknown>,
+  parentField?: string,
+): boolean {
+  if (Array.isArray(node)) {
+    return node.some((child) => oxcExpressionReadsIdentifier(child, name, parent, parentField));
+  }
+
+  const object = readObject(node);
+  if (Object.keys(object).length === 0) {
+    return false;
+  }
+
+  if (object.type === "Identifier" && object.name === name) {
+    if (
+      parent?.type === "MemberExpression" &&
+      parentField === "property" &&
+      parent.computed !== true
+    ) {
+      return false;
+    }
+    if (
+      (parent?.type === "Property" || parent?.type === "ObjectProperty") &&
+      parentField === "key" &&
+      parent.computed !== true &&
+      parent.shorthand !== true
+    ) {
+      return false;
+    }
+    return true;
+  }
+
+  return Object.entries(object).some(
+    ([field, value]) =>
+      typeof value === "object" &&
+      value !== null &&
+      oxcExpressionReadsIdentifier(value, name, object, field),
+  );
 }
 
 function analyzeCompiledSingleNodeList(
@@ -849,7 +919,6 @@ function analyzeCompiledSingleNodeList(
     rendererContext.componentConstBindings,
   );
   if (selectedClass !== undefined) {
-    replaceCompilerSelectedClassAttribute(sourceRoot);
     replaceCompilerSelectedClassAttribute(root);
   }
   const eventPrograms =

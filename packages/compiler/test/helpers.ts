@@ -57,6 +57,8 @@ import {
   bindCompilerKeyedPropertyText,
   bindCompilerKeyedSingleNodeList,
   bindCompilerKeyedText,
+  bindListWithRenderArity,
+  createListWithRenderArity,
   createSvgTemplate,
   createSvgTemplateElement,
   markCompilerKeyedEventSlot,
@@ -422,7 +424,7 @@ function extractClientInternalRuntimeEntries(
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>bindCompilerKeyedCellText|bindCompilerKeyedPropertyText|bindCompilerKeyedSingleNodeList|bindCompilerKeyedText|createMemo|createSvgTemplate|createSvgTemplateElement|insertMemo|insertMemoDynamic|markCompilerKeyedEventSlot)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+      /^(?<importedName>bindCompilerKeyedCellText|bindCompilerKeyedPropertyText|bindCompilerKeyedSingleNodeList|bindCompilerKeyedText|bindListWithRenderArity|createListWithRenderArity|createMemo|createSvgTemplate|createSvgTemplateElement|insertMemo|insertMemoDynamic|markCompilerKeyedEventSlot)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
     );
 
     if (match?.groups === undefined) {
@@ -432,7 +434,11 @@ function extractClientInternalRuntimeEntries(
     return {
       localName: match.groups.localName ?? match.groups.importedName,
       value:
-        match.groups.importedName === "createSvgTemplate"
+        match.groups.importedName === "bindListWithRenderArity"
+          ? bindListWithRenderArity
+          : match.groups.importedName === "createListWithRenderArity"
+            ? createListWithRenderArity
+            : match.groups.importedName === "createSvgTemplate"
           ? createSvgTemplate
           : match.groups.importedName === "createSvgTemplateElement"
             ? createSvgTemplateElement

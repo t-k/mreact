@@ -7,6 +7,8 @@ export {
 } from "./bind-static-keyed-single-node-list.js";
 export { markCompilerKeyedEventSlot } from "./compiler-keyed-events.js";
 export { createMemo } from "./create-memo.js";
+export { createListWithRenderArity } from "./create-list.js";
+export { bindListWithRenderArity } from "./bind-list.js";
 export { insertMemo } from "./insert-memo.js";
 export { insertMemoDynamic } from "./insert-memo-dynamic.js";
 export { setDomAttribute } from "./dom-prop-application.js";

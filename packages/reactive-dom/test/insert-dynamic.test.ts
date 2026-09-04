@@ -30,6 +30,59 @@ function jsx(type: unknown, props: Record<string, unknown>) {
 const jsxs = jsx;
 
 describe("insertDynamic", () => {
+  test("updates rest-parameter list renderers when keyed indexes change", async () => {
+    const rows = cell([
+      { id: "a" },
+      { id: "b" },
+    ]);
+    const parent = document.createElement("div");
+    const marker = document.createComment("marker");
+    parent.append(marker);
+
+    const dispose = insertDynamic(parent, marker, () =>
+      createList(
+        () => rows.get(),
+        (...args) => {
+          const [row, index] = args;
+          return `${row.id}:${index}`;
+        },
+        { key: (row) => row.id },
+      ),
+    );
+
+    expect(parent.textContent).toBe("a:0b:1");
+    rows.set([rows.get()[1] as { id: string }, rows.get()[0] as { id: string }]);
+    await flushEffects();
+    expect(parent.textContent).toBe("b:0a:1");
+
+    dispose();
+  });
+
+  test("updates default-parameter list renderers when keyed indexes change", async () => {
+    const rows = cell([
+      { id: "a" },
+      { id: "b" },
+    ]);
+    const parent = document.createElement("div");
+    const marker = document.createComment("marker");
+    parent.append(marker);
+
+    const dispose = insertDynamic(parent, marker, () =>
+      createList(
+        () => rows.get(),
+        (row, index = 0) => `${row.id}:${index}`,
+        { key: (row) => row.id },
+      ),
+    );
+
+    expect(parent.textContent).toBe("a:0b:1");
+    rows.set([rows.get()[1] as { id: string }, rows.get()[0] as { id: string }]);
+    await flushEffects();
+    expect(parent.textContent).toBe("b:0a:1");
+
+    dispose();
+  });
+
   test("replaces only the dynamic range before the marker", async () => {
     const value = cell<RenderValue>("first");
     const parent = document.createElement("div");
