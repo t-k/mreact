@@ -61,7 +61,7 @@ import {
 } from "../src/oxc-runtime-emit.js";
 import { lowerOxcDomNodeExpression } from "../src/oxc-dom-lowering.js";
 import { containsRawJsxInIr } from "../src/oxc-raw-jsx.js";
-import type { ModuleIr } from "../src/ir.js";
+import type { JsxNodeIr, ModuleIr } from "../src/ir.js";
 import type { Diagnostic } from "../src/types.js";
 import type { TopLevelExportRenderInfo } from "../src/internal.js";
 
@@ -1363,11 +1363,11 @@ export default function Page() {
   });
 
   test("preserves explicit zero-parameter lists in nested runtime emitters", () => {
-    const list = {
-      children: [{ kind: "expr", code: "_item" }] as const,
+    const list: JsxNodeIr = {
+      children: [{ kind: "expr", code: "_item" }],
       itemName: "_item",
       itemsCode: "rows",
-      kind: "list" as const,
+      kind: "list",
       parameterPatterns: [],
     };
 
