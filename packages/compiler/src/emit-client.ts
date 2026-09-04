@@ -76,8 +76,8 @@ type RuntimeHelperName =
   | "createSvgTemplateElement"
   | "createTemplate"
   | "createTemplateElement"
-  | "cell"
   | "computed"
+  | "createCompilerListBindingCache"
   | "insertDynamic"
   | "insertMemo"
   | "insertMemoDynamic"
@@ -119,8 +119,8 @@ function allocateRuntimeHelperNames(
     createSvgTemplateElement: "createSvgTemplateElement",
     createTemplate: "createTemplate",
     createTemplateElement: "createTemplateElement",
-    cell: "cell",
     computed: "computed",
+    createCompilerListBindingCache: "createCompilerListBindingCache",
     insertDynamic: "insertDynamic",
     insertMemo: "insertMemo",
     insertMemoDynamic: "insertMemoDynamic",
@@ -234,7 +234,7 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
         if (node.parameterBinding !== undefined) {
           reactiveCoreSpecifiers.add("computed");
           if (node.keyCode !== undefined) {
-            reactiveCoreSpecifiers.add("cell");
+            internalSpecifiers.add("createCompilerListBindingCache");
             internalSpecifiers.add("trackCompilerKeyedItem");
           }
         }
@@ -1299,13 +1299,13 @@ function emitListRenderer(
 
     if (cacheName !== undefined) {
       const indexName = parameterBinding.argumentNames[1] as string;
-      const rowKeyName = state.allocateName("_listRowKey");
       const itemCellName = state.allocateName("_listItemCell");
+      const bindingCellName = state.allocateName("_listBindingCell");
       return `(${parameters}, ${itemCellName}) => {
-${ownerDeclarations.join("\n")}${ownerDeclarations.length === 0 ? "" : "\n"}    const ${rowKeyName} = ${cacheName}.byIndex[${indexName}];
+${ownerDeclarations.join("\n")}${ownerDeclarations.length === 0 ? "" : "\n"}    const ${bindingCellName} = ${cacheName}.binding(${indexName});
     const ${parameterBinding.cellName} = ${state.helperNames.computed}(() => {
       ${state.helperNames.trackCompilerKeyedItem}(${itemCellName});
-      return ${cacheName}.byKey.get(${rowKeyName}).get();
+      return ${bindingCellName}.get();
     });
     ${parameterBinding.cellName}.get();
     return ${valueExpression};
@@ -1413,42 +1413,28 @@ function emitListKeyOption(
   }
 
   const parameters = parameterBinding.argumentNames.join(", ");
-  const sourceParameters = parameterBinding.sourcePatterns.join(", ");
-  const boundValues = parameterBinding.bindingNames.join(", ");
   const indexName = parameterBinding.argumentNames[1] as string;
-  const keyName = state.allocateName("_listKey");
-  const bindingsName = state.allocateName("_listBindingValues");
-  const cachedBindingsName = state.allocateName("_cachedListBindings");
 
-  return `key: (${parameters}) => {
-    if (${indexName} in ${cacheName}.byIndex) return ${cacheName}.byIndex[${indexName}];
-    return ((${sourceParameters}) => {
-      const ${keyName} = (${node.keyCode});
-      const ${bindingsName} = [${boundValues}];
-      ${cacheName}.byIndex[${indexName}] = ${keyName};
-      if (!${cacheName}.active.has(${keyName})) {
-        ${cacheName}.active.add(${keyName});
-        const ${cachedBindingsName} = ${cacheName}.byKey.get(${keyName});
-        if (${cachedBindingsName} === undefined) ${cacheName}.byKey.set(${keyName}, ${state.helperNames.cell}(${bindingsName}));
-        else ${cachedBindingsName}.set(${bindingsName});
-      }
-      return ${keyName};
-    })(${parameters});
-  }`;
+  return `key: (${parameters}) => ${cacheName}.key(${indexName})`;
 }
 
 function emitListItems(node: Extract<JsxNodeIr, { kind: "list" }>, state: EmitSetupState): string {
   const cacheName = getListBindingCache(node, state);
-  return cacheName === undefined
-    ? `() => (${node.itemsCode})`
-    : `() => {
-    for (const key of ${cacheName}.byKey.keys()) {
-      if (!${cacheName}.active.has(key)) ${cacheName}.byKey.delete(key);
-    }
-    ${cacheName}.active.clear();
-    ${cacheName}.byIndex.length = 0;
-    return (${node.itemsCode});
-  }`;
+  if (
+    cacheName === undefined ||
+    node.parameterBinding === undefined ||
+    node.keyCode === undefined
+  ) {
+    return `() => (${node.itemsCode})`;
+  }
+
+  const sourceParameters = node.parameterBinding.sourcePatterns.join(", ");
+  const boundValues = node.parameterBinding.bindingNames.join(", ");
+  const keyName = state.allocateName("_listKey");
+  return `() => ${cacheName}.prepare((${node.itemsCode}), (${sourceParameters}) => {
+    const ${keyName} = (${node.keyCode});
+    return [${keyName}, [${boundValues}]];
+  })`;
 }
 
 function getListBindingCache(
@@ -1467,7 +1453,7 @@ function getListBindingCache(
   const cacheName = state.allocateName("_listBindingCache");
   state.listBindingCaches.set(node, cacheName);
   state.ownerDeclarations.push(
-    `const ${cacheName} = { active: new Set(), byIndex: [], byKey: new Map() };`,
+    `const ${cacheName} = ${state.helperNames.createCompilerListBindingCache}();`,
   );
   return cacheName;
 }

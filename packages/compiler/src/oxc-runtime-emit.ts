@@ -251,6 +251,10 @@ function emitOxcCompatObjectElement(
 }
 
 function emitOxcListParameters(node: Extract<JsxNodeIr, { kind: "list" }>): string {
+  if (node.parameterPatterns !== undefined) {
+    return node.parameterPatterns.join(", ");
+  }
+
   return [node.itemName, node.indexName, node.arrayName]
     .filter((name): name is string => name !== undefined)
     .join(", ");

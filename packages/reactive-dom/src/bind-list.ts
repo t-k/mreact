@@ -1,4 +1,4 @@
-import { effect, untrack } from "@reckona/mreact-reactive-core";
+import { cell, effect, untrack, type Cell } from "@reckona/mreact-reactive-core";
 import {
   notifySubscribers,
   runtimeState,
@@ -144,6 +144,83 @@ export const bindListWithRenderArity = bindList as <T>(
   options: BindListOptions<T> | undefined,
   renderArity: number,
 ) => Dispose;
+
+type CompilerListBinding = readonly unknown[];
+type CompilerListBindingResult = readonly [key: unknown, binding: CompilerListBinding];
+
+export interface CompilerListBindingCache {
+  prepare<T>(
+    items: readonly T[],
+    bind: (item: T, index: number, items: readonly T[]) => CompilerListBindingResult,
+  ): readonly T[];
+  key(index: number): unknown;
+  binding(index: number): Cell<CompilerListBinding>;
+}
+
+/** @internal Prepares compiler list keys and bindings atomically before keyed reconciliation. */
+export function createCompilerListBindingCache(): CompilerListBindingCache {
+  let keys: readonly unknown[] = [];
+  let bindings = new Map<unknown, Cell<CompilerListBinding>>();
+
+  return {
+    prepare(items, bind) {
+      const nextKeys = new Array<unknown>(items.length);
+      const nextValues = new Map<unknown, CompilerListBinding>();
+
+      for (let index = 0; index < items.length; index += 1) {
+        const [key, binding] = bind(items[index] as (typeof items)[number], index, items);
+        nextKeys[index] = key;
+        if (!nextValues.has(key)) {
+          nextValues.set(key, binding);
+        }
+      }
+
+      const nextBindings = new Map<unknown, Cell<CompilerListBinding>>();
+      for (const [key, nextBinding] of nextValues) {
+        const current = bindings.get(key);
+        if (current === undefined) {
+          nextBindings.set(key, cell(nextBinding));
+        } else {
+          if (!sameCompilerListBinding(untrack(() => current.get()), nextBinding)) {
+            current.set(nextBinding);
+          }
+          nextBindings.set(key, current);
+        }
+      }
+
+      keys = nextKeys;
+      bindings = nextBindings;
+      return items;
+    },
+    key(index) {
+      return keys[index];
+    },
+    binding(index) {
+      const binding = bindings.get(keys[index]);
+      if (binding === undefined) {
+        throw new Error("Missing compiler list binding for keyed row.");
+      }
+      return binding;
+    },
+  };
+}
+
+function sameCompilerListBinding(
+  previous: CompilerListBinding,
+  next: CompilerListBinding,
+): boolean {
+  if (previous.length !== next.length) {
+    return false;
+  }
+
+  for (let index = 0; index < previous.length; index += 1) {
+    if (!Object.is(previous[index], next[index])) {
+      return false;
+    }
+  }
+
+  return true;
+}
 
 interface KeyedRecord {
   dom: Node[];

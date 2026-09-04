@@ -164,6 +164,23 @@ describe("compiler runtime smoke", () => {
     expect(node.textContent).toBe("outer:a");
   });
 
+  test("destructured keyed binding caches ignore shadowed collection globals", async () => {
+    const output = transform({
+      code: `const Map = undefined;
+        const Set = undefined;
+        export function App() {
+          return <ul>{[{ id: "a", label: "Alpha" }].map(({ id, label }) => <li key={id}>{label}</li>)}</ul>;
+        }`,
+      filename: "destructured-list-collection-hygiene.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    expect(node.textContent).toBe("Alpha");
+  });
+
   test("destructured keyed rows preserve whole-parameter defaults", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";
@@ -357,6 +374,67 @@ describe("compiler runtime smoke", () => {
     const updatedRows = Array.from(node.querySelectorAll("li"));
     expect(updatedRows).toEqual([initialRows[1], initialRows[0]]);
     expect(updatedRows.map((row) => row.textContent)).toEqual(["B2", "A3"]);
+  });
+
+  test("throwing keyed binding evaluation leaves prior rows atomic and recoverable", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+        const rows = cell([{ id: "a", label: "A0" }, { id: "b", label: "B0" }]);
+        const broken = { get id() { throw new Error("key failed"); }, label: "broken" };
+        export function App() {
+          return <main>
+            <button data-fail onClick={() => rows.set([{ id: "a", label: "A1" }, broken])}>Fail</button>
+            <button data-recover onClick={() => rows.set([{ id: "a", label: "A2" }, { id: "b", label: "B2" }])}>Recover</button>
+            <ul>{rows.get().map(({ id, label }) => <li key={id}>{label}</li>)}</ul>
+          </main>;
+        }`,
+      filename: "destructured-list-atomic-binding-cache.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const initialRows = Array.from(node.querySelectorAll("li"));
+
+    node.querySelector<HTMLButtonElement>("[data-fail]")?.click();
+    await expect(flushEffects()).rejects.toThrow("key failed");
+    expect(Array.from(node.querySelectorAll("li"))).toEqual(initialRows);
+    expect(initialRows.map((row) => row.textContent)).toEqual(["A0", "B0"]);
+
+    node.querySelector<HTMLButtonElement>("[data-recover]")?.click();
+    await flushEffects();
+    expect(Array.from(node.querySelectorAll("li"))).toEqual(initialRows);
+    expect(initialRows.map((row) => row.textContent)).toEqual(["A2", "B2"]);
+  });
+
+  test("unchanged keyed bindings do not invalidate sibling rows", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+        const fallback = cell("A0");
+        let stableRuns = 0;
+        const rows = [{ id: "a" }, { id: "b", label: "B" }];
+        const renderStable = (label) => label + ":" + ++stableRuns;
+        export function App() {
+          return <main>
+            <button onClick={() => fallback.set("A1")}>Update</button>
+            <ul>{rows.map(({ id, label = fallback.get() }) => <li key={id}>{id === "b" ? renderStable(label) : label}</li>)}</ul>
+          </main>;
+        }`,
+      filename: "destructured-list-binding-equality.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const initialRows = Array.from(node.querySelectorAll("li"));
+    expect(initialRows.map((row) => row.textContent)).toEqual(["A0", "B:1"]);
+
+    node.querySelector("button")?.click();
+    await flushEffects();
+    expect(Array.from(node.querySelectorAll("li"))).toEqual(initialRows);
+    expect(initialRows.map((row) => row.textContent)).toEqual(["A1", "B:1"]);
   });
 
   test("nested destructured lists isolate same-key binding caches per owner row", async () => {

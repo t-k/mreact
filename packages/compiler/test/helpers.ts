@@ -59,6 +59,7 @@ import {
   bindCompilerKeyedText,
   bindListWithRenderArity,
   createListWithRenderArity,
+  createCompilerListBindingCache,
   createSvgTemplate,
   createSvgTemplateElement,
   markCompilerKeyedEventSlot,
@@ -425,7 +426,7 @@ function extractClientInternalRuntimeEntries(
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>bindCompilerKeyedCellText|bindCompilerKeyedPropertyText|bindCompilerKeyedSingleNodeList|bindCompilerKeyedText|bindListWithRenderArity|createListWithRenderArity|createMemo|createSvgTemplate|createSvgTemplateElement|insertMemo|insertMemoDynamic|markCompilerKeyedEventSlot|trackCompilerKeyedItem)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+      /^(?<importedName>bindCompilerKeyedCellText|bindCompilerKeyedPropertyText|bindCompilerKeyedSingleNodeList|bindCompilerKeyedText|bindListWithRenderArity|createCompilerListBindingCache|createListWithRenderArity|createMemo|createSvgTemplate|createSvgTemplateElement|insertMemo|insertMemoDynamic|markCompilerKeyedEventSlot|trackCompilerKeyedItem)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
     );
 
     if (match?.groups === undefined) {
@@ -437,29 +438,31 @@ function extractClientInternalRuntimeEntries(
       value:
         match.groups.importedName === "bindListWithRenderArity"
           ? bindListWithRenderArity
-          : match.groups.importedName === "createListWithRenderArity"
-            ? createListWithRenderArity
-            : match.groups.importedName === "createSvgTemplate"
-              ? createSvgTemplate
-              : match.groups.importedName === "createSvgTemplateElement"
-                ? createSvgTemplateElement
-                : match.groups.importedName === "insertMemo"
-                  ? insertMemo
-                  : match.groups.importedName === "insertMemoDynamic"
-                    ? insertMemoDynamic
-                    : match.groups.importedName === "createMemo"
-                      ? createMemo
-                      : match.groups.importedName === "markCompilerKeyedEventSlot"
-                        ? markCompilerKeyedEventSlot
-                        : match.groups.importedName === "trackCompilerKeyedItem"
-                          ? trackCompilerKeyedItem
-                          : match.groups.importedName === "bindCompilerKeyedCellText"
-                            ? bindCompilerKeyedCellText
-                            : match.groups.importedName === "bindCompilerKeyedPropertyText"
-                              ? bindCompilerKeyedPropertyText
-                              : match.groups.importedName === "bindCompilerKeyedText"
-                                ? bindCompilerKeyedText
-                                : bindCompilerKeyedSingleNodeList,
+          : match.groups.importedName === "createCompilerListBindingCache"
+            ? createCompilerListBindingCache
+            : match.groups.importedName === "createListWithRenderArity"
+              ? createListWithRenderArity
+              : match.groups.importedName === "createSvgTemplate"
+                ? createSvgTemplate
+                : match.groups.importedName === "createSvgTemplateElement"
+                  ? createSvgTemplateElement
+                  : match.groups.importedName === "insertMemo"
+                    ? insertMemo
+                    : match.groups.importedName === "insertMemoDynamic"
+                      ? insertMemoDynamic
+                      : match.groups.importedName === "createMemo"
+                        ? createMemo
+                        : match.groups.importedName === "markCompilerKeyedEventSlot"
+                          ? markCompilerKeyedEventSlot
+                          : match.groups.importedName === "trackCompilerKeyedItem"
+                            ? trackCompilerKeyedItem
+                            : match.groups.importedName === "bindCompilerKeyedCellText"
+                              ? bindCompilerKeyedCellText
+                              : match.groups.importedName === "bindCompilerKeyedPropertyText"
+                                ? bindCompilerKeyedPropertyText
+                                : match.groups.importedName === "bindCompilerKeyedText"
+                                  ? bindCompilerKeyedText
+                                  : bindCompilerKeyedSingleNodeList,
     };
   });
 }

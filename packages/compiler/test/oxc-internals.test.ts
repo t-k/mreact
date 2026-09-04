@@ -1362,6 +1362,19 @@ export default function Page() {
     ).toContain("const label = item.label.toUpperCase();");
   });
 
+  test("preserves explicit zero-parameter lists in nested runtime emitters", () => {
+    const list = {
+      children: [{ kind: "expr", code: "_item" }] as const,
+      itemName: "_item",
+      itemsCode: "rows",
+      kind: "list" as const,
+      parameterPatterns: [],
+    };
+
+    expect(emitOxcServerStringChildren([list])).toContain("map(() => _escapeHtml(_item))");
+    expect(emitOxcCompatObjectChildren([list])).toContain("map(() => (_item))");
+  });
+
   test("lowers DOM JSX elements into imperative node creation", () => {
     const code = '<button className="primary" disabled>{label}<span>Child</span></button>';
     const labelStart = code.indexOf("label");
