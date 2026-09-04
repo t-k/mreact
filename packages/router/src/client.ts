@@ -1853,6 +1853,11 @@ function isClientBoundaryFallbackEligibleSource(source: string, filename?: strin
     }
   }
 
+  sourceWithoutGuardedUndefinedCallbacks = removeSelfContainedIntrinsicHandlerAttributes(
+    sourceWithoutGuardedUndefinedCallbacks,
+    callbackPropNames,
+  );
+
   return (
     !/\bon[A-Z][A-Za-z0-9_$]*\s*=/u.test(sourceWithoutGuardedUndefinedCallbacks) &&
     !/\bglobalThis\b/u.test(source)
@@ -2007,6 +2012,56 @@ function removeSafeCallbackHandlerAttributes(
   }
 
   return cursor === 0 ? source : result + source.slice(cursor);
+}
+
+function removeSelfContainedIntrinsicHandlerAttributes(
+  source: string,
+  callbackNames: ReadonlySet<string>,
+): string {
+  const attributePattern = /\bon[A-Z][A-Za-z0-9_$]*\s*=\s*\{/gu;
+  let result = "";
+  let cursor = 0;
+
+  for (const match of source.matchAll(attributePattern)) {
+    const start = match.index;
+    const expressionStart = start + match[0].length;
+    const end = matchingBraceEnd(source, expressionStart - 1);
+
+    if (end === undefined || !isIntrinsicJsxAttribute(source, start)) {
+      continue;
+    }
+
+    const expression = source.slice(expressionStart, end);
+    if (
+      !isInlineFunctionExpression(expression) ||
+      Array.from(callbackNames).some((name) =>
+        new RegExp(String.raw`\b${escapeRegExp(name)}\b`, "u").test(expression),
+      )
+    ) {
+      continue;
+    }
+
+    result += source.slice(cursor, start);
+    cursor = end + 1;
+  }
+
+  return cursor === 0 ? source : result + source.slice(cursor);
+}
+
+function isIntrinsicJsxAttribute(source: string, attributeStart: number): boolean {
+  const tagStart = source.lastIndexOf("<", attributeStart);
+  if (tagStart === -1 || source.lastIndexOf(">", attributeStart) > tagStart) {
+    return false;
+  }
+
+  return /^<\s*[a-z][A-Za-z0-9:_-]*(?:\s|$)/u.test(source.slice(tagStart, attributeStart));
+}
+
+function isInlineFunctionExpression(expression: string): boolean {
+  return (
+    /^\s*(?:async\s+)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>/u.test(expression) ||
+    /^\s*(?:async\s+)?function(?:\s+[A-Za-z_$][\w$]*)?\s*\(/u.test(expression)
+  );
 }
 
 function matchingBraceEnd(source: string, openBraceIndex: number): number | undefined {
@@ -3372,10 +3427,10 @@ function __mreactResolveRouteNode(value) {
 `
     : `function __mreactSyncDomRefBindings() {}
 `;
-  const boundaryOnlyHydrationBlock = routeRequiresFullHydration
-    || clientReferenceManifest.length === 0
-    ? ""
-    : `${routeCellHydrationIndent}if (!__mreactHasNonSerializableClientBoundaries(__mreactMarker) && __mreactHydrateClientBoundaries(document, __mreactClientReferences, __mreactClientReferenceComponents)) {
+  const boundaryOnlyHydrationBlock =
+    routeRequiresFullHydration || clientReferenceManifest.length === 0
+      ? ""
+      : `${routeCellHydrationIndent}if (!__mreactHasNonSerializableClientBoundaries(__mreactMarker) && __mreactHydrateClientBoundaries(document, __mreactClientReferences, __mreactClientReferenceComponents)) {
 ${routeCellHydrationIndent}  __mreactMarker.setAttribute(${JSON.stringify(routeHydrationContract.hydratedAttribute)}, "true");
 ${routeCellHydrationIndent}  __mreactMarkRouteHydrated();
 ${routeCellHydrationIndent}  return;

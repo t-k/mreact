@@ -1981,6 +1981,50 @@ export default function AppShell() {
     expect(html.indexOf("Albums")).toBeLessThan(html.indexOf("Page content"));
   });
 
+  test("renders an inferred interactive client boundary inside a shared wrapper during SSR", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-shared-wrapper-interactive-"));
+    const file = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      join(appDir, "Rail.tsx"),
+      `import { cell, computed } from "@reckona/mreact-reactive-core";
+
+const selected = cell("Queue");
+const label = computed(() => selected.get());
+
+export function Rail() {
+  return <aside><button type="button" onClick={() => { selected.set("Updated"); }}>{label.get()}</button></aside>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "AppShell.tsx"),
+      `import { Rail } from "./Rail";
+
+export function AppShell(props) {
+  return <div class="shell"><Rail /><main>{props.children}</main></div>;
+}`,
+    );
+    await writeFile(
+      file,
+      `"use client";
+import { AppShell } from "./AppShell";
+
+export default function Page() {
+  return <AppShell><p>Tickets</p></AppShell>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain('data-mreact-client-boundary="Rail"');
+    expect(html).toContain('<aside><button type="button">Queue</button></aside>');
+    expect(html).toContain("<p>Tickets</p>");
+    expect(html).not.toContain("onclick=");
+  });
+
   test("hydrates an AppShell client boundary that initially returns null inside a list", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-shell-null-boundary-"));
     const file = join(appDir, "page.mreact.tsx");

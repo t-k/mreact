@@ -2054,9 +2054,38 @@ export default function Settings() {
     });
 
     expect(inferred.clientBoundaryImports).toEqual(["./components/inferred-card"]);
-    expect(inferred.clientBoundaryFallbackImports).toEqual([]);
+    expect(inferred.clientBoundaryFallbackImports).toEqual(["./components/inferred-card"]);
     expect(explicit.clientBoundaryImports).toEqual(["./components/explicit-card"]);
     expect(explicit.clientBoundaryFallbackImports).toEqual([]);
+  });
+
+  test("marks inferred components with local DOM event handlers as SSR fallback eligible", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-local-dom-handler-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "interactive-card.tsx"),
+      `import { cell, computed } from "@reckona/mreact-reactive-core";
+
+const selected = cell("Queue");
+const label = computed(() => selected.get());
+
+export function InteractiveCard() {
+  return <button type="button" onClick={() => { if (selected.get() === "Queue") { selected.set("Updated"); } }}>{label.get()}</button>;
+}`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { InteractiveCard } from "./components/interactive-card";
+
+export default function Page() {
+  return <main><InteractiveCard /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.clientBoundaryImports).toEqual(["./components/interactive-card"]);
+    expect(result.clientBoundaryFallbackImports).toEqual(["./components/interactive-card"]);
   });
 
   test("does not let unused interactive sibling exports poison rendered server exports", async () => {
