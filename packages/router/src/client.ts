@@ -4922,7 +4922,11 @@ function __mreactHydrateClientBoundaries(marker, references, components) {
 
     const node = component(props);
 
-    placeholder.replaceWith(node);
+    if (node === null || node === undefined || typeof node === "boolean") {
+      placeholder.remove();
+    } else {
+      placeholder.replaceWith(node);
+    }
     propsElement?.remove();
     hydrated = true;
   }

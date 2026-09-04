@@ -2079,6 +2079,60 @@ export default function Page() {
     expect(document.querySelector("nav a[href='/upload']")?.textContent).toBe("Upload");
   });
 
+  test("hydrates a native client boundary returning null as no DOM", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-null-client-boundary-"));
+    const file = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      join(appDir, "AppBoot.client.tsx"),
+      `export function AppBoot() {
+  globalThis.__mreactBootRuns = (globalThis.__mreactBootRuns ?? 0) + 1;
+  return null;
+}`,
+    );
+    const code = `import { AppBoot } from "./AppBoot.client";
+
+export default function Page() {
+  return <><AppBoot /><main data-page-shell>Page content</main></>;
+}`;
+    await writeFile(file, code);
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).not.toContain(">null<");
+    setDocumentBodyFromHtml(html);
+    const pageShell = document.querySelector("[data-page-shell]");
+
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#null-client-boundary`
+    );
+
+    expect((globalThis as { __mreactBootRuns?: number }).__mreactBootRuns).toBe(1);
+    expect(
+      Array.from(document.body.childNodes)
+        .filter((node) => node.nodeType === Node.TEXT_NODE)
+        .map((node) => node.textContent),
+    ).not.toContain("null");
+    expect(pageShell?.isConnected).toBe(true);
+    expect(document.querySelector("template[data-mreact-client-boundary]")).toBeNull();
+    expect(document.querySelector("script[data-mreact-client-boundary-props]")).toBeNull();
+  });
+
   test("hydrates an initially-null client boundary after a window event cell update", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-window-event-null-boundary-"));
     const file = join(appDir, "page.mreact.tsx");
