@@ -148,6 +148,65 @@ describe("compiler runtime smoke", () => {
     expect(node.querySelector("li")?.textContent).toBe("New");
   });
 
+  test("destructured keyed rows preserve outer bindings named like compiler temporaries", async () => {
+    const output = transform({
+      code: `const _item = "outer";
+        export function App() {
+          return <ul>{[{ id: "a" }].map(({ id }) => <li key={id}>{_item}:{id}</li>)}</ul>;
+        }`,
+      filename: "destructured-list-hygiene.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    expect(node.textContent).toBe("outer:a");
+  });
+
+  test("destructured keyed rows preserve whole-parameter defaults", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+        const fallback = { id: "fallback", label: "Fallback" };
+        const rows = cell([undefined]);
+        export function App() {
+          return <ul>{rows.get().map(({ id, label } = fallback) => <li key={id}>{label}</li>)}</ul>;
+        }`,
+      filename: "destructured-list-parameter-default.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    expect(node.textContent).toBe("Fallback");
+  });
+
+  test("array-destructured keyed rows preserve iterable semantics", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+        const rows = cell([new Set(["a", "Old"])]);
+        export function App() {
+          return <main>
+            <button onClick={() => rows.set([new Set(["a", "New"])])}>Replace</button>
+            <ul>{rows.get().map(([id, label]) => <li key={id}>{label}</li>)}</ul>
+          </main>;
+        }`,
+      filename: "iterable-destructured-list.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const row = node.querySelector("li");
+    expect(row?.textContent).toBe("Old");
+
+    node.querySelector("button")?.click();
+    await flushEffects();
+    expect(node.querySelector("li")?.textContent).toBe("New");
+  });
+
   test("compiled SVG keyed rows preserve namespace", async () => {
     const output = transform({
       code: `export function App() {

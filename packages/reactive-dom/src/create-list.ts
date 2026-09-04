@@ -23,12 +23,13 @@ export function createListWithRenderArity<T>(
 ): ListRenderValue<T> {
   return {
     [LIST_RENDER_VALUE]: true,
-    // Kept short because dynamic insertion is included in compatibility bundles.
-    a: renderArity,
-    items,
+    items: ((_0: unknown, _1: unknown, _2: unknown) => items()).bind(
+      null,
+      ...Array<unknown>(3 - renderArity),
+    ),
     renderItem,
     ...(options === undefined ? {} : { options }),
-  } as ListRenderValue<T>;
+  } as unknown as ListRenderValue<T>;
 }
 
 export function isListRenderValue(value: unknown): value is ListRenderValue {

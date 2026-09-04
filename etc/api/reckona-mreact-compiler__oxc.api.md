@@ -300,6 +300,8 @@ export interface JsxElementIr {
     // (undocumented)
     kind: "element";
     // (undocumented)
+    namespace?: "svg";
+    // (undocumented)
     tagName: string;
 }
 
@@ -336,6 +338,22 @@ export interface ListIr {
     keyCode?: string;
     // (undocumented)
     kind: "list";
+    // (undocumented)
+    parameterBinding?: ListParameterBindingIr;
+    // (undocumented)
+    parameterPatterns?: string[];
+}
+
+// @public
+export interface ListParameterBindingIr {
+    // (undocumented)
+    argumentNames: string[];
+    // (undocumented)
+    bindingNames: string[];
+    // (undocumented)
+    cellName: string;
+    // (undocumented)
+    sourcePatterns: string[];
 }
 
 // @public

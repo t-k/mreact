@@ -130,6 +130,16 @@ function bindUnkeyedList<T>(
   });
 }
 
+/** @internal Preserves compiler-known renderer dependencies without widening the public overload. */
+export const bindListWithRenderArity = bindList as <T>(
+  parent: ParentNode,
+  marker: ChildNode,
+  items: () => readonly T[],
+  renderItem: (item: T, index: number, items: readonly T[]) => RenderValue,
+  options: BindListOptions<T> | undefined,
+  renderArity: number,
+) => Dispose;
+
 interface KeyedRecord {
   nodes: Node[];
   prevIndex?: number | undefined;
@@ -1074,7 +1084,7 @@ function updateKeyedRecord(
   nextIndex: number,
   nextItems: readonly unknown[],
 ): boolean {
-  if (!isObjectLike(record.currentItem) && !Object.is(record.currentItem, nextItem)) {
+  if (!record.itemCell && !Object.is(record.currentItem, nextItem)) {
     return false;
   }
 
@@ -1086,7 +1096,7 @@ function updateKeyedRecord(
     return false;
   }
 
-  if (record.itemCell !== null) {
+  if (record.itemCell) {
     setKeyedItemValue(record.itemCell, nextItem);
   }
   record.currentItem = nextItem;
@@ -1107,7 +1117,11 @@ function createKeyedRecord<T>(
   let itemCell: KeyedItemCell | null = null;
   let renderedItem: T = item;
 
-  if (options.itemMode !== "static" && isObjectLike(item)) {
+  if (
+    isObjectLike(item) &&
+    options.itemMode !== "static" &&
+    shouldProxyNestedValue(item, true)
+  ) {
     itemCell = createKeyedItemCell(item);
     renderedItem = (
       options.nestedObjectFallback === true
@@ -1371,7 +1385,7 @@ function valueAtPath(value: unknown, path: readonly PropertyKey[]): unknown {
   return current;
 }
 
-function shouldProxyNestedValue(value: object): boolean {
+function shouldProxyNestedValue(value: object, allowFunctions?: boolean): boolean {
   if (Array.isArray(value)) {
     return true;
   }
@@ -1382,9 +1396,11 @@ function shouldProxyNestedValue(value: object): boolean {
     return false;
   }
 
-  for (const property of Reflect.ownKeys(value)) {
-    if (typeof Reflect.get(value, property, value) === "function") {
-      return false;
+  if (!allowFunctions) {
+    for (const property of Reflect.ownKeys(value)) {
+      if (typeof Reflect.get(value, property, value) === "function") {
+        return false;
+      }
     }
   }
 

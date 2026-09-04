@@ -287,6 +287,29 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.code).toContain("key: (row) => (row.id)");
   });
 
+  test("diagnoses a row key that shadows an outer reactive alias", () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+        const state = cell("outer");
+        export function App() {
+          const key = state.get();
+          const rows = [{ id: "a" }];
+          return <ul>{rows.map((row) => {
+            const key = row.id;
+            return <li key={key}>{row.id}</li>;
+          })}</ul>;
+        }`,
+      filename: "shadowed-reactive-alias-key.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toContainEqual(
+      expect.objectContaining({ code: "MR_UNSUPPORTED_CALLBACK_LOCAL_LIST_KEY" }),
+    );
+    expect(output.code).not.toContain("key: (row) => (state.get())");
+  });
+
   test("reuses a compiler keyed event element for its direct text binding", () => {
     const output = transform({
       code: `

@@ -435,28 +435,28 @@ function extractClientInternalRuntimeEntries(
       localName: match.groups.localName ?? match.groups.importedName,
       value:
         match.groups.importedName === "bindListWithRenderArity"
-          ? bindListWithRenderArity
-          : match.groups.importedName === "createListWithRenderArity"
-            ? createListWithRenderArity
-            : match.groups.importedName === "createSvgTemplate"
-          ? createSvgTemplate
-          : match.groups.importedName === "createSvgTemplateElement"
-            ? createSvgTemplateElement
-            : match.groups.importedName === "insertMemo"
-              ? insertMemo
-              : match.groups.importedName === "insertMemoDynamic"
-                ? insertMemoDynamic
-                : match.groups.importedName === "createMemo"
-                  ? createMemo
-                  : match.groups.importedName === "markCompilerKeyedEventSlot"
-                    ? markCompilerKeyedEventSlot
-                    : match.groups.importedName === "bindCompilerKeyedCellText"
-                      ? bindCompilerKeyedCellText
-                      : match.groups.importedName === "bindCompilerKeyedPropertyText"
-                        ? bindCompilerKeyedPropertyText
-                        : match.groups.importedName === "bindCompilerKeyedText"
-                          ? bindCompilerKeyedText
-                          : bindCompilerKeyedSingleNodeList,
+            ? bindListWithRenderArity
+            : match.groups.importedName === "createListWithRenderArity"
+              ? createListWithRenderArity
+              : match.groups.importedName === "createSvgTemplate"
+                ? createSvgTemplate
+                : match.groups.importedName === "createSvgTemplateElement"
+                  ? createSvgTemplateElement
+                  : match.groups.importedName === "insertMemo"
+                    ? insertMemo
+                    : match.groups.importedName === "insertMemoDynamic"
+                      ? insertMemoDynamic
+                      : match.groups.importedName === "createMemo"
+                        ? createMemo
+                        : match.groups.importedName === "markCompilerKeyedEventSlot"
+                          ? markCompilerKeyedEventSlot
+                          : match.groups.importedName === "bindCompilerKeyedCellText"
+                            ? bindCompilerKeyedCellText
+                            : match.groups.importedName === "bindCompilerKeyedPropertyText"
+                              ? bindCompilerKeyedPropertyText
+                              : match.groups.importedName === "bindCompilerKeyedText"
+                                ? bindCompilerKeyedText
+                                : bindCompilerKeyedSingleNodeList,
     };
   });
 }

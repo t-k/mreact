@@ -3,10 +3,7 @@ import type { RuntimeImport } from "./types.js";
 import { listReadsNestedItemObject } from "./ir-nested-object-read.js";
 import { OXC_BIND_DOM_REF_PLACEHOLDER } from "./oxc-dom-lowering.js";
 import { OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER } from "./oxc-render-values.js";
-import {
-  getCompatInlineMemo,
-  type CompatInlineMemo,
-} from "./compat-inline-memo.js";
+import { getCompatInlineMemo, type CompatInlineMemo } from "./compat-inline-memo.js";
 import { escapeHtmlAttribute as escapeHtml } from "@reckona/mreact-shared/html-escape";
 import { isStaticUrlValueUnsafe, isUrlAttribute } from "./emit-server-shared.js";
 
@@ -79,6 +76,7 @@ type RuntimeHelperName =
   | "createSvgTemplateElement"
   | "createTemplate"
   | "createTemplateElement"
+  | "computed"
   | "insertDynamic"
   | "insertMemo"
   | "insertMemoDynamic"
@@ -119,6 +117,7 @@ function allocateRuntimeHelperNames(
     createSvgTemplateElement: "createSvgTemplateElement",
     createTemplate: "createTemplate",
     createTemplateElement: "createTemplateElement",
+    computed: "computed",
     insertDynamic: "insertDynamic",
     insertMemo: "insertMemo",
     insertMemoDynamic: "insertMemoDynamic",
@@ -228,6 +227,9 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
       }
 
       if (node.kind === "list") {
+        if (node.parameterBinding !== undefined) {
+          reactiveCoreSpecifiers.add("computed");
+        }
         if (node.compiledSingleNode === undefined) {
           if (requiresExplicitListRenderArity(node)) {
             internalSpecifiers.add("bindListWithRenderArity");
@@ -792,6 +794,7 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
 
     if (child.kind === "list") {
       const parameters = emitListParameters(child);
+      const keyParameters = emitListKeyParameters(child);
       const optionEntries: string[] = [];
       const eventPrograms = child.compiledSingleNode?.eventPrograms;
       const eventSlotKeys = eventPrograms?.map(() => state.allocateName("_keyedEventSlot"));
@@ -803,7 +806,7 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
       }
 
       if (child.keyCode !== undefined) {
-        optionEntries.push(`key: (${parameters}) => (${child.keyCode})`);
+        optionEntries.push(`key: (${keyParameters}) => (${child.keyCode})`);
       }
 
       if (
@@ -1081,7 +1084,7 @@ function emitNodeRenderValueExpression(
 
   if (node.kind === "list") {
     const parameters = emitListParameters(node);
-    const options = emitListOptions(node, parameters);
+    const options = emitListOptions(node);
 
     return `${state.helperNames.createListWithRenderArity}(() => (${node.itemsCode}), ${emitListRenderer(node, parameters, state)}, ${emitListRenderArity(node)}${options})`;
   }
@@ -1127,9 +1130,7 @@ function isOwnerScopedMemoConditional(
           branch[0]?.kind === "component" &&
           state.inlineMemoComponents.has(branch[0].name)) ||
         (branch.length === 1 &&
-          (branch[0]?.kind === "expr" ||
-            branch[0]?.kind === "text" ||
-            branch[0]?.kind === "list")),
+          (branch[0]?.kind === "expr" || branch[0]?.kind === "text" || branch[0]?.kind === "list")),
     )
   );
 }
@@ -1155,8 +1156,7 @@ function treeUsesOwnerScopedMemo(
   if (
     node.kind === "conditional" &&
     isOwnerScopedMemoBranches(node.whenTrue, node.whenFalse, inlineMemoComponentNames) &&
-    ownerScopedMemoBranchesNeedListSupport(node.whenTrue, node.whenFalse) ===
-      requiresListSupport
+    ownerScopedMemoBranchesNeedListSupport(node.whenTrue, node.whenFalse) === requiresListSupport
   ) {
     return true;
   }
@@ -1210,9 +1210,7 @@ function ownerScopedMemoBranchesNeedListSupport(
   whenFalse: readonly JsxNodeIr[],
 ): boolean {
   return [whenTrue, whenFalse].some(
-    (branch) =>
-      branch.length === 1 &&
-      (branch[0]?.kind === "expr" || branch[0]?.kind === "list"),
+    (branch) => branch.length === 1 && (branch[0]?.kind === "expr" || branch[0]?.kind === "list"),
   );
 }
 
@@ -1236,9 +1234,7 @@ function isOwnerScopedMemoBranches(
           branch[0]?.kind === "component" &&
           inlineMemoComponentNames.has(branch[0].name)) ||
         (branch.length === 1 &&
-          (branch[0]?.kind === "expr" ||
-            branch[0]?.kind === "text" ||
-            branch[0]?.kind === "list")),
+          (branch[0]?.kind === "expr" || branch[0]?.kind === "text" || branch[0]?.kind === "list")),
     )
   );
 }
@@ -1264,6 +1260,18 @@ function emitListRenderer(
   state: EmitSetupState,
 ): string {
   const valueExpression = emitRenderValueExpression(node.children, state);
+  const parameterBinding = node.parameterBinding;
+
+  if (parameterBinding !== undefined) {
+    const sourceParameters = parameterBinding.sourcePatterns.join(", ");
+    const boundValues = parameterBinding.bindingNames.join(", ");
+    const argumentsCode = parameterBinding.argumentNames.join(", ");
+    return `(${parameters}) => {
+    const ${parameterBinding.cellName} = ${state.helperNames.computed}(() => ((${sourceParameters}) => [${boundValues}])(${argumentsCode}));
+    ${parameterBinding.cellName}.get();
+    return ${valueExpression};
+  }`;
+  }
 
   if (node.bodyStatements === undefined || node.bodyStatements.length === 0) {
     return `(${parameters}) => ${valueExpression}`;
@@ -1328,11 +1336,11 @@ function emitCompilerKeyedEventPrograms(
     .join(", ")}]`;
 }
 
-function emitListOptions(node: Extract<JsxNodeIr, { kind: "list" }>, parameters: string): string {
+function emitListOptions(node: Extract<JsxNodeIr, { kind: "list" }>): string {
   const optionEntries: string[] = [];
 
   if (node.keyCode !== undefined) {
-    optionEntries.push(`key: (${parameters}) => (${node.keyCode})`);
+    optionEntries.push(`key: (${emitListKeyParameters(node)}) => (${node.keyCode})`);
   }
 
   if (node.keyCode !== undefined && listReadsNestedItemObject(node, node.itemName)) {
@@ -1340,6 +1348,10 @@ function emitListOptions(node: Extract<JsxNodeIr, { kind: "list" }>, parameters:
   }
 
   return optionEntries.length === 0 ? "" : `, { ${optionEntries.join(", ")} }`;
+}
+
+function emitListKeyParameters(node: Extract<JsxNodeIr, { kind: "list" }>): string {
+  return node.parameterBinding?.sourcePatterns.join(", ") ?? emitListParameters(node);
 }
 
 function emitListParameters(node: Extract<JsxNodeIr, { kind: "list" }>): string {
@@ -1353,6 +1365,9 @@ function emitListParameters(node: Extract<JsxNodeIr, { kind: "list" }>): string 
 }
 
 function emitListRenderArity(node: Extract<JsxNodeIr, { kind: "list" }>): number {
+  if (node.parameterBinding !== undefined) {
+    return Math.min(node.parameterBinding.argumentNames.length, 3);
+  }
   const patterns = node.parameterPatterns;
   if (patterns !== undefined) {
     if (patterns.some((pattern) => pattern.trimStart().startsWith("..."))) {
@@ -1371,7 +1386,10 @@ function emitListRenderArity(node: Extract<JsxNodeIr, { kind: "list" }>): number
 }
 
 function requiresExplicitListRenderArity(node: Extract<JsxNodeIr, { kind: "list" }>): boolean {
-  return node.parameterPatterns?.some((pattern) => !/^[A-Za-z_$][\w$]*$/u.test(pattern)) === true;
+  return (
+    node.parameterBinding === undefined &&
+    node.parameterPatterns?.some((pattern) => !/^[A-Za-z_$][\w$]*$/u.test(pattern)) === true
+  );
 }
 
 function emitComponentCall(

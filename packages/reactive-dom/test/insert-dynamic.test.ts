@@ -12,7 +12,7 @@ import { insertMemoDynamic } from "../src/insert-memo-dynamic.js";
 import { bindText } from "../src/bind-text.js";
 import { installCompatRenderValueNormalizer } from "../src/compat-normalize.js";
 import { registerDispose } from "../src/scope.js";
-import type { RenderValue } from "../src/types.js";
+import { LIST_RENDER_VALUE, type RenderValue } from "../src/types.js";
 
 const REACT_COMPAT_ELEMENT_TYPE = Symbol.for("react.transitional.element");
 
@@ -118,6 +118,27 @@ describe("insertDynamic", () => {
     rows.set([["a", "New"]]);
     await flushEffects();
     expect(parent.textContent).toBe("a:New");
+
+    dispose();
+  });
+
+  test("ignores unrelated properties on hand-built public list values", async () => {
+    const rows = cell([{ id: "a" }, { id: "b" }]);
+    const parent = document.createElement("div");
+    const marker = document.createComment("marker");
+    parent.append(marker);
+
+    const dispose = insertDynamic(parent, marker, () => ({
+      [LIST_RENDER_VALUE]: true as const,
+      a: 1,
+      items: () => rows.get(),
+      renderItem: (row: { id: string }, index: number) => `${row.id}:${String(index)}`,
+      options: { key: (row: { id: string }) => row.id },
+    }));
+
+    rows.set([rows.get()[1] as { id: string }, rows.get()[0] as { id: string }]);
+    await flushEffects();
+    expect(parent.textContent).toBe("b:0a:1");
 
     dispose();
   });

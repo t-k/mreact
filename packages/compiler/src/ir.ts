@@ -117,10 +117,19 @@ export interface ListIr {
   indexName?: string;
   arrayName?: string;
   parameterPatterns?: string[];
+  parameterBinding?: ListParameterBindingIr;
   keyCode?: string;
   bodyStatements?: string[];
   children: JsxNodeIr[];
   compiledSingleNode?: CompiledSingleNodeListIr;
+}
+
+/** Preserves JavaScript parameter binding semantics while exposing live row values. */
+export interface ListParameterBindingIr {
+  argumentNames: string[];
+  bindingNames: string[];
+  cellName: string;
+  sourcePatterns: string[];
 }
 
 /** Describes a conservatively eligible compiler keyed single-node list. */

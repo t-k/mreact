@@ -97,11 +97,12 @@ export function insertDynamic(
 
     if (isListRenderValue(nextValue)) {
       next.dispose();
-      const nextKeyed = nextValue.options?.key !== undefined;
-      const nextNestedObjectFallback = nextValue.options?.nestedObjectFallback === true;
-      const nextRenderArity = (nextValue as ListRenderValue & { a?: number }).a ?? 3;
+      const nextKeyed = !!nextValue.options?.key;
+      const nextNestedObjectFallback = !!nextValue.options?.nestedObjectFallback;
       const nextListShape =
-        +nextKeyed + +nextNestedObjectFallback * 2 + Math.min(nextRenderArity, 3) * 4;
+        +nextKeyed |
+        (+nextNestedObjectFallback << 1) |
+        ((nextValue.items.length || 3) << 2);
 
       if (currentList !== undefined && currentList.shape === nextListShape) {
         currentList.value.set(nextValue);
@@ -148,7 +149,7 @@ export function insertDynamic(
           () => listValue.get().items(),
           (item, index, items) => listValue.get().renderItem(item, index, items),
           options,
-          nextRenderArity,
+          nextListShape >> 2,
         ),
       };
       if (firstError !== undefined) {

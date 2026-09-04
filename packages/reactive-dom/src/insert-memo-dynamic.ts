@@ -131,11 +131,12 @@ export function insertMemoDynamic(
       if (nextMemoScope === undefined) {
         next.dispose();
       }
-      const nextKeyed = resolvedValue.options?.key !== undefined;
-      const nextNestedObjectFallback = resolvedValue.options?.nestedObjectFallback === true;
-      const nextRenderArity = (resolvedValue as ListRenderValue & { a?: number }).a ?? 3;
+      const nextKeyed = !!resolvedValue.options?.key;
+      const nextNestedObjectFallback = !!resolvedValue.options?.nestedObjectFallback;
       const nextListShape =
-        +nextKeyed + +nextNestedObjectFallback * 2 + Math.min(nextRenderArity, 3) * 4;
+        +nextKeyed |
+        (+nextNestedObjectFallback << 1) |
+        ((resolvedValue.items.length || 3) << 2);
 
       if (currentList !== undefined && currentList.shape === nextListShape) {
         currentList.value.set(resolvedValue);
@@ -185,7 +186,7 @@ export function insertMemoDynamic(
             () => listValue.get().items(),
             (item, index, items) => listValue.get().renderItem(item, index, items),
             listOptions,
-            nextRenderArity,
+            nextListShape >> 2,
           ),
         };
       } catch (error) {

@@ -129,6 +129,7 @@ export type {
   JsxFragmentIr,
   JsxNodeIr,
   ListIr,
+  ListParameterBindingIr,
   ModuleIr,
   PropAliasIr,
   SpreadAttributeIr,

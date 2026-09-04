@@ -262,7 +262,6 @@ export function mount(container) {
 }`,
         );
         const result = executePackedBundle(root, scenario.name, chunk.code);
-
         expect(result.tagName).toBe("MAIN");
         expect(result.text).toBe(scenario.text);
         expect(result.html).not.toContain("[object Object]");
