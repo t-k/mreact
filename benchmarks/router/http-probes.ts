@@ -1,4 +1,8 @@
+import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 export interface ConcurrentRequestProbeResult {
   p99Ms: number;
@@ -71,6 +75,19 @@ export async function measureConcurrentRequestsWithServerRss(
 }
 
 async function readProcessRssBytes(pid: number): Promise<number> {
+  if (process.platform === "darwin") {
+    const { stdout } = await execFileAsync("ps", ["-o", "rss=", "-p", String(pid)], {
+      encoding: "utf8",
+    });
+    const rssKiB = Number(stdout.trim());
+
+    if (!Number.isSafeInteger(rssKiB) || rssKiB < 0) {
+      throw new Error(`process ${pid} RSS is not available`);
+    }
+
+    return rssKiB * 1024;
+  }
+
   const status = await readFile(`/proc/${pid}/status`, "utf8");
   const match = /^VmRSS:\s+(\d+)\s+kB$/m.exec(status);
 

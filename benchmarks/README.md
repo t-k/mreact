@@ -27,12 +27,11 @@ This directory contains fair, repeatable benchmark fixtures for mreact and peer 
 - Validate DOM or HTML output before recording a completed result.
 - Record unsupported cases with explicit reasons.
 - Keep mreact-specific diagnostics out of cross-framework score tables.
-- Use warmup runs before measured runs, and report the median of measured samples
-  as the primary value to reduce sensitivity to transient system load.
+- Use warmup runs before measured runs, and report the median of measured samples as the primary value to reduce sensitivity to transient system load.
 - The Nuxt, SvelteKit, and Analog router adapters use generated production app fixtures. Their SSR and client-bundle rows come from each framework's build/start path rather than the shared lightweight proxy fixture.
 - Store raw samples, percentile summaries, and markdown reports under `benchmarks/results/<date>/<run>/`, where `<run>` is a same-day sequence such as `001` or `002`.
 - The Benchmarks GitHub Actions workflow commits changed result directories back to the selected branch; do not rely on Actions artifacts for long-term access. A single workflow dispatch writes all selected public benchmark reports into the same run directory, so `all` produces `primitive.md`, `primitive-browser.md`, `non-router.md`, and `router.md` side by side. Microbenchmarks such as `html-escape` and `request-fastpaths` are local investigation tools and are not published by the workflow.
-- The router `app concurrent RSS delta` case measures the benchmark runner process. The mreact fixtures serve in-process, so their delta includes server-side allocation, while adapters that spawn child-process servers only expose the HTTP client side; treat the mreact number as an upper bound rather than a same-kind comparison.
+- The router `app concurrent RSS delta` case measures the production server process used by each fixture, including adapters that spawn child-process servers, so all rows report the same kind of server-side allocation delta.
 - The primitive Vue, Svelte, and Angular adapters use framework-runtime fixtures: Vue mounts `createApp` components, Svelte mounts compiler-generated components, and Angular mounts JIT standalone components with signals. Source-primitive rows remain unsupported unless the framework has a directly comparable fine-grained source primitive.
 - Treat benchmark numbers as same-machine comparisons, not absolute truth.
 
