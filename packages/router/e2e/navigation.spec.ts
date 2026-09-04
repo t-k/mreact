@@ -1537,6 +1537,106 @@ export default function Page() {
   }
 });
 
+test("domRef siblings preserve memoized route DOM during unrelated updates", async ({ page }) => {
+  const { close, url } = await startFixtureServer({
+    "page.mreact.tsx": `import { memo } from "@reckona/mreact";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const scrollOffset = cell(0);
+const selectionMode = cell(false);
+const hasMore = cell(true);
+const items = [{ id: "a", label: "Alpha" }, { id: "b", label: "Beta" }];
+
+const state = globalThis as typeof globalThis & {
+  __domRefEvents?: string[];
+  __timelineRenders?: number;
+};
+
+function observe(name: string) {
+  return (element: Element) => {
+    state.__domRefEvents ??= [];
+    state.__domRefEvents.push("attach:" + name + ":" + element.isConnected);
+    return () => state.__domRefEvents?.push("cleanup:" + name + ":" + element.isConnected);
+  };
+}
+
+const Timeline = memo(
+  function Timeline(props: { readonly revision: number; readonly signature: string }) {
+    state.__timelineRenders = (state.__timelineRenders ?? 0) + 1;
+    return <section data-timeline data-revision={props.revision}>{items.map((item) => (
+      <article key={item.id} data-card={item.id}><img alt={item.label} /></article>
+    ))}</section>;
+  },
+  (previous, next) => previous.signature === next.signature,
+);
+
+export default function Page() {
+  return <main>
+    <button type="button" onClick={() => scrollOffset.set(scrollOffset.get() + 120)}>Scroll</button>
+    <button type="button" onClick={() => selectionMode.set(!selectionMode.get())}>Selection</button>
+    {scrollOffset.get() >= 0 ? <Timeline revision={scrollOffset.get()} signature="stable" /> : null}
+    <div data-always-sentinel domRef={observe("always")} />
+    {hasMore.get() && <div data-conditional-sentinel domRef={observe("conditional")} />}
+    <output data-offset>{scrollOffset.get()}</output>
+    {selectionMode.get() && <aside data-bulk-actions>Bulk actions</aside>}
+  </main>;
+}`,
+  });
+
+  try {
+    await page.goto(url);
+    await expect(page.locator("[data-card]")).toHaveCount(2);
+    await expect(page.locator("[data-always-sentinel]")).toHaveCount(1);
+    await expect(page.locator("[data-conditional-sentinel]")).toHaveCount(1);
+    await page.evaluate(() => {
+      const state = globalThis as typeof globalThis & {
+        __stableCards?: Element[];
+        __stableImages?: Element[];
+        __stableTimeline?: Element | null;
+      };
+      state.__stableCards = Array.from(document.querySelectorAll("[data-card]"));
+      state.__stableImages = Array.from(document.querySelectorAll("[data-card] img"));
+      state.__stableTimeline = document.querySelector("[data-timeline]");
+    });
+
+    await page.getByRole("button", { name: "Scroll" }).click();
+    await expect(page.locator("[data-offset]")).toHaveText("120");
+    await page.getByRole("button", { name: "Selection" }).click();
+    await expect(page.locator("[data-bulk-actions]")).toHaveCount(1);
+
+    const report = await page.evaluate(() => {
+      const state = globalThis as typeof globalThis & {
+        __domRefEvents?: string[];
+        __stableCards?: Element[];
+        __stableImages?: Element[];
+        __stableTimeline?: Element | null;
+        __timelineRenders?: number;
+      };
+      const cards = Array.from(document.querySelectorAll("[data-card]"));
+      const images = Array.from(document.querySelectorAll("[data-card] img"));
+      return {
+        cardIdentity: cards.every((card, index) => card === state.__stableCards?.[index]),
+        imageIdentity: images.every((image, index) => image === state.__stableImages?.[index]),
+        timelineIdentity: document.querySelector("[data-timeline]") === state.__stableTimeline,
+        connected: state.__stableCards?.every((card) => card.isConnected),
+        domRefEvents: state.__domRefEvents,
+        timelineRenders: state.__timelineRenders,
+      };
+    });
+
+    expect(report).toEqual({
+      cardIdentity: true,
+      imageIdentity: true,
+      timelineIdentity: true,
+      connected: true,
+      domRefEvents: ["attach:always:true", "attach:conditional:true"],
+      timelineRenders: 1,
+    });
+  } finally {
+    await close();
+  }
+});
+
 async function startFixtureServer(files: Record<string, string>): Promise<{
   close(): Promise<void>;
   url: string;
