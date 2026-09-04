@@ -2,6 +2,10 @@ import { describe, expect, test } from "vitest";
 import { transform } from "../src/index.js";
 import { runServerStreamComponent } from "./helpers.js";
 
+interface TestStreamSink {
+  append(chunk: string): void;
+}
+
 describe("compiler server stream JSX transform", () => {
   test("zero-parameter list callbacks preserve outer synthetic-name bindings", async () => {
     const output = transform({
@@ -1361,15 +1365,55 @@ export function App() {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain(
-      'await _renderClientBoundary("AppShell", { currentPath: ("/settings/email") }, (_childrenHtml) => ((_value) => _value == null || typeof _value === "boolean" ? "" : _value)(AppShell({ currentPath: ("/settings/email"), children: _childrenHtml }))',
+      'await _renderClientBoundary("AppShell", { currentPath: ("/settings/email") }, (_childrenHtml) => async (_clientBoundaryFallbackSink) => { await AppShell(_clientBoundaryFallbackSink, { currentPath: ("/settings/email"), children: _childrenHtml }); }',
     );
     expect(output.code).toContain("<!--mreact-client-boundary-children-start-->");
     expect(output.code).toContain("<!--mreact-client-boundary-children-end-->");
     expect(output.code).toContain("data-mreact-client-boundary-fallback");
     expect(output.code).toContain("data-mreact-client-boundary-children");
-    expect(output.code).toContain("), true,");
+    expect(output.code).toContain("; }, true,");
     expect(output.code).toContain('data-testid=\\"settings-email-ready-state\\"');
     expect(output.code).toContain("Body");
+  });
+
+  test("emitted client boundary fallback calls stream components with a sink", async () => {
+    const output = transform({
+      code: `import { Counter } from "./Counter";
+
+      export function App() {
+        return <main><Counter initial={2} /></main>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+      clientBoundaryImports: ["./Counter"],
+      clientBoundaryFallbackImports: ["./Counter"],
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const globalWithCounter = globalThis as typeof globalThis & {
+      Counter?: (sink: TestStreamSink, props: { initial: number }) => void;
+    };
+    const previousCounter = globalWithCounter.Counter;
+    globalWithCounter.Counter = (sink, props) => {
+      sink.append(`<button>${props.initial}</button>`);
+    };
+    let html: string;
+
+    try {
+      html = await runServerStreamComponent(output.code);
+    } finally {
+      if (previousCounter === undefined) {
+        delete globalWithCounter.Counter;
+      } else {
+        globalWithCounter.Counter = previousCounter;
+      }
+    }
+
+    expect(html).toContain(
+      '<template data-mreact-client-boundary="Counter" data-mreact-client-boundary-fallback="component"></template><button>2</button>',
+    );
   });
 
   test("emitted client boundary protocol renders async original children instead of function source", async () => {
@@ -1393,10 +1437,12 @@ export function App() {
 
     expect(output.diagnostics).toEqual([]);
     const globalWithShell = globalThis as typeof globalThis & {
-      AppShell?: (props: { children?: string }) => string;
+      AppShell?: (sink: TestStreamSink, props: { children?: string }) => void;
     };
     const previousShell = globalWithShell.AppShell;
-    globalWithShell.AppShell = (props) => `<main>${props.children ?? ""}</main>`;
+    globalWithShell.AppShell = (sink, props) => {
+      sink.append(`<main>${props.children ?? ""}</main>`);
+    };
     let html: string;
 
     try {
@@ -1439,10 +1485,12 @@ export function App() {
 
     expect(output.diagnostics).toEqual([]);
     const globalWithShell = globalThis as typeof globalThis & {
-      AppShell?: (props: { children?: string }) => string;
+      AppShell?: (sink: TestStreamSink, props: { children?: string }) => void;
     };
     const previousShell = globalWithShell.AppShell;
-    globalWithShell.AppShell = (props) => `<main>${props.children ?? ""}</main>`;
+    globalWithShell.AppShell = (sink, props) => {
+      sink.append(`<main>${props.children ?? ""}</main>`);
+    };
     let html: string;
 
     try {
@@ -1490,10 +1538,12 @@ export function App() {
 
     expect(output.diagnostics).toEqual([]);
     const globalWithShell = globalThis as typeof globalThis & {
-      AppShell?: () => string;
+      AppShell?: (sink: TestStreamSink) => void;
     };
     const previousShell = globalWithShell.AppShell;
-    globalWithShell.AppShell = () => "<main>Fallback</main>";
+    globalWithShell.AppShell = (sink) => {
+      sink.append("<main>Fallback</main>");
+    };
     let html: string;
 
     try {
@@ -1528,10 +1578,12 @@ export function App() {
       }`,
     ];
     const globalWithShell = globalThis as typeof globalThis & {
-      AppShell?: (props: { children?: string }) => string;
+      AppShell?: (sink: TestStreamSink, props: { children?: string }) => void;
     };
     const previousShell = globalWithShell.AppShell;
-    globalWithShell.AppShell = (props) => `<main>${props.children ?? ""}</main>`;
+    globalWithShell.AppShell = (sink, props) => {
+      sink.append(`<main>${props.children ?? ""}</main>`);
+    };
 
     try {
       for (const [index, code] of sources.entries()) {

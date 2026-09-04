@@ -51,6 +51,7 @@ export interface EmitServerStreamOptions {
 
 let currentUrlSafeHelperName: string = "_urlAttrSafe";
 let currentClientBoundaryHelperName: string | undefined;
+let currentClientBoundaryFallbackSinkName: string = "_clientBoundaryFallbackSink";
 let currentSpreadAttributesHelperName: string = "_renderSpreadAttributes";
 let currentStreamNodeHelperName: string = "_renderStreamNode";
 let currentAsyncBoundaryHelperName: string = "_renderAsyncBoundary";
@@ -86,11 +87,13 @@ export function emitServerStream(
   const clientBoundaryHelperName = usesClientBoundary(ir, options.serverHydration === true)
     ? allocateHelperName(ir, "_renderClientBoundary")
     : undefined;
+  const clientBoundaryFallbackSinkName = allocateHelperName(ir, "_clientBoundaryFallbackSink");
   const spreadAttributesHelperName = allocateHelperName(ir, "_renderSpreadAttributes");
   const urlSafeHelperName = allocateHelperName(ir, "_urlAttrSafe");
   currentUrlSafeHelperName = urlSafeHelperName;
   setOxcServerStringUrlSafeHelperName(urlSafeHelperName);
   currentClientBoundaryHelperName = clientBoundaryHelperName;
+  currentClientBoundaryFallbackSinkName = clientBoundaryFallbackSinkName;
   currentSpreadAttributesHelperName = spreadAttributesHelperName;
   currentStreamNodeHelperName = streamNodeHelperName;
   currentAsyncBoundaryHelperName = asyncBoundaryHelperName;
@@ -1643,9 +1646,7 @@ function collectHtmlParts(
         const hasComponentFallback = shouldRenderClientBoundaryFallback(node);
         const boundaryProps = emitPropsObject(node.props, [], escapeHelperName);
         const fallbackHtml = hasComponentFallback
-          ? `(_childrenHtml) => ${emitRenderableHtmlExpression(
-              `${node.name}(${emitPropsObject(node.props, node.children, escapeHelperName, node.name, "_childrenHtml")})`,
-            )}`
+          ? `(_childrenHtml) => async (${currentClientBoundaryFallbackSinkName}) => { await ${node.name}(${currentClientBoundaryFallbackSinkName}, ${emitPropsObject(node.props, node.children, escapeHelperName, node.name, "_childrenHtml")}); }`
           : emitHtmlExpressionFromChildren(node.children, escapeHelperName);
         const originalChildrenHtml = hasComponentFallback
           ? (emitStreamRendererFromChildren(node.children, escapeHelperName, true) ??

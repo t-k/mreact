@@ -1108,7 +1108,7 @@ export default function Page() {
     expect(html).toContain('"exportName":"Counter"');
   });
 
-  test("serializes inferred client boundary props next to the server placeholder", async () => {
+  test("serializes inferred client boundary props after its SSR fallback markup", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-client-boundary-props-"));
     await writeFile(
       join(appDir, "Counter.tsx"),
@@ -1134,7 +1134,11 @@ export default function Page() {
     });
     const html = await response.text();
 
-    expect(html).toContain('<template data-mreact-client-boundary="Counter"></template>');
+    expect(html).toContain(
+      '<template data-mreact-client-boundary="Counter" data-mreact-client-boundary-fallback="component"></template>',
+    );
+    expect(html).toContain('<button type="button">Count<!-- -->: <!-- -->2</button>');
+    expect(html).not.toContain("onclick");
     expect(html).toContain('data-mreact-client-boundary-props="Counter"');
     expect(html).toContain('{"initial":2,"label":"Count"}');
   });
@@ -1441,7 +1445,11 @@ export default function Page() {
     expect(html).toContain('id="mreact-client-references-index"');
     expect(html).toContain('"moduleId":"./Counter"');
     expect(html).toContain('"exportName":"Counter"');
-    expect(html).toContain('<template data-mreact-client-boundary="Counter"></template>');
+    expect(html).toContain(
+      '<template data-mreact-client-boundary="Counter" data-mreact-client-boundary-fallback="component"></template>',
+    );
+    expect(html).toContain('<button type="button">count: <!-- -->0</button>');
+    expect(html).not.toContain("onclick");
     expect(html).toContain('data-mreact-client-boundary-props="Counter"');
   });
 

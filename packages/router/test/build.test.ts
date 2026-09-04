@@ -6709,7 +6709,7 @@ export default function Page() {
     expect(clientManifest.routes[0]?.script).toBeUndefined();
   });
 
-  test("passes inferred client boundary imports to production server artifacts", async () => {
+  test("preserves inferred client boundary fallback imports in production server artifacts", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-inferred-boundary-"));
     const appDir = join(rootDir, "app");
     const outDir = join(rootDir, ".mreact");
@@ -6734,6 +6734,7 @@ export default function Page() {
 
     await buildApp({ appDir, outDir });
     const pageArtifact = await readBuiltServerModuleArtifact<{
+      analysis?: { clientBoundaryFallbackImports?: string[] };
       string?: {
         code?: string;
         metadata?: { clientReferenceManifest?: Array<{ moduleId: string; name: string }> };
@@ -6741,10 +6742,22 @@ export default function Page() {
     }>(outDir, "page.tsx");
     const artifactCode = pageArtifact?.string?.code ?? "";
     const metadata = pageArtifact?.string?.metadata;
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
 
+    expect(pageArtifact?.analysis?.clientBoundaryFallbackImports).toEqual(["./Counter"]);
     expect(artifactCode).toContain('import { Counter } from "./Counter";');
     expect(artifactCode).toContain("data-mreact-client-boundary=");
-    expect(artifactCode).not.toContain("Counter(");
+    expect(artifactCode).toContain('_renderClientBoundary("Counter",');
+    expect(artifactCode).toContain("Counter(");
+    expect(html).toContain(
+      '<template data-mreact-client-boundary="Counter" data-mreact-client-boundary-fallback="component"></template>',
+    );
+    expect(html).toContain('<button type="button">count: <!-- -->0</button>');
+    expect(html).not.toContain("onclick");
     expect(metadata?.clientReferenceManifest).toEqual([
       {
         name: "Counter",
