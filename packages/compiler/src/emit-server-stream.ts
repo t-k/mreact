@@ -87,7 +87,10 @@ export function emitServerStream(
   const clientBoundaryHelperName = usesClientBoundary(ir, options.serverHydration === true)
     ? allocateHelperName(ir, "_renderClientBoundary")
     : undefined;
-  const clientBoundaryFallbackSinkName = allocateHelperName(ir, "_clientBoundaryFallbackSink");
+  const clientBoundaryFallbackSinkName = allocateNestedBindingSafeName(
+    ir,
+    "_clientBoundaryFallbackSink",
+  );
   const spreadAttributesHelperName = allocateHelperName(ir, "_renderSpreadAttributes");
   const urlSafeHelperName = allocateHelperName(ir, "_urlAttrSafe");
   currentUrlSafeHelperName = urlSafeHelperName;
@@ -3096,7 +3099,6 @@ function allocateHelperName(ir: ModuleIr, baseName: string): string {
       reservedNames.add(bindingName);
     }
 
-    collectNestedBindingNames(component.root, reservedNames);
   }
 
   let name = baseName;
@@ -3110,66 +3112,21 @@ function allocateHelperName(ir: ModuleIr, baseName: string): string {
   return name;
 }
 
-function collectNestedBindingNames(node: JsxNodeIr, names: Set<string>): void {
-  if (node.kind === "list") {
-    names.add(node.itemName);
-    if (node.indexName !== undefined) names.add(node.indexName);
-    if (node.arrayName !== undefined) names.add(node.arrayName);
-    if (node.parameterBinding !== undefined) {
-      names.add(node.parameterBinding.cellName);
-      for (const name of [
-        ...node.parameterBinding.argumentNames,
-        ...node.parameterBinding.bindingNames,
-      ]) {
-        names.add(name);
-      }
-    }
-    if (node.compiledSingleNode !== undefined) {
-      collectNestedBindingNames(node.compiledSingleNode.root, names);
-    }
-  }
+function allocateNestedBindingSafeName(ir: ModuleIr, baseName: string): string {
+  const serializedIr = JSON.stringify(ir);
+  let name = allocateHelperName(ir, baseName);
+  let index = name === baseName ? 1 : Number(name.slice(baseName.length + 1)) + 1;
 
-  if (node.kind === "conditional" && node.conditionValueName !== undefined) {
-    names.add(node.conditionValueName);
-  }
-
-  if (node.kind === "async-boundary") {
-    names.add(node.valueName);
-    if (node.catchName !== undefined) names.add(node.catchName);
-    for (const child of [
-      ...node.children,
-      ...(node.placeholderChildren ?? []),
-      ...(node.catchChildren ?? []),
-    ]) {
-      collectNestedBindingNames(child, names);
-    }
-    return;
-  }
-
-  if (node.kind === "conditional") {
-    for (const child of [...node.whenTrue, ...node.whenFalse]) {
-      collectNestedBindingNames(child, names);
-    }
-    return;
-  }
-
-  if (node.kind === "component") {
-    for (const prop of node.props) {
-      if (prop.kind === "render-prop") {
-        if (prop.valueName !== undefined) names.add(prop.valueName);
-        for (const child of prop.children) collectNestedBindingNames(child, names);
-      }
-    }
-  }
-
-  if (
-    node.kind === "list" ||
-    node.kind === "component" ||
-    node.kind === "element" ||
-    node.kind === "fragment"
+  while (
+    new RegExp(`(?<![A-Za-z0-9_$])${name.replaceAll("$", "\\$")}(?![A-Za-z0-9_$])`).test(
+      serializedIr,
+    )
   ) {
-    for (const child of node.children) collectNestedBindingNames(child, names);
+    name = allocateHelperName(ir, `${baseName}$${index}`);
+    index += 1;
   }
+
+  return name;
 }
 
 function stringLiteral(value: string): string {

@@ -2088,6 +2088,47 @@ export default function Page() {
     expect(result.clientBoundaryFallbackImports).toEqual(["./components/interactive-card"]);
   });
 
+  test("keeps computed callback prop handlers ineligible for SSR fallback", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-computed-callback-handler-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "direct-card.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function DirectCard(props) {
+  const label = cell("Direct").get();
+  return <button type="button" onClick={() => props["onConfirm"]()}>{label}</button>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "components", "alias-card.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function AliasCard(props) {
+  const label = cell("Alias").get();
+  const handler = props["onConfirm"];
+  return <button type="button" onClick={() => handler()}>{label}</button>;
+}`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { DirectCard } from "./components/direct-card";
+import { AliasCard } from "./components/alias-card";
+
+export default function Page() {
+  return <main><DirectCard /><AliasCard /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.clientBoundaryImports).toEqual([
+      "./components/direct-card",
+      "./components/alias-card",
+    ]);
+    expect(result.clientBoundaryFallbackImports).toEqual([]);
+  });
+
   test("does not let unused interactive sibling exports poison rendered server exports", async () => {
     const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-unused-sibling-"));
     const appDir = join(dir, "app");

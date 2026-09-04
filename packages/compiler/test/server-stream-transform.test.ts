@@ -1416,23 +1416,27 @@ export function App() {
     );
   });
 
-  test("client boundary fallback sink does not shadow a list callback binding", async () => {
-    const output = transform({
-      code: `import { Counter } from "./Counter";
-
-      export function App() {
-        const rows = [7];
-        return <main>{rows.map((_clientBoundaryFallbackSink) => <Counter initial={_clientBoundaryFallbackSink} />)}</main>;
-      }`,
-      filename: "App.tsx",
-      target: "server",
-      dev: true,
-      serverOutput: "stream",
-      clientBoundaryImports: ["./Counter"],
-      clientBoundaryFallbackImports: ["./Counter"],
-    });
-
-    expect(output.diagnostics).toEqual([]);
+  test("client boundary fallback sink does not shadow nested list bindings", async () => {
+    const cases = [
+      {
+        expected: 7,
+        render:
+          "rows.map((_clientBoundaryFallbackSink) => <Counter initial={_clientBoundaryFallbackSink} />)",
+        rows: "[7]",
+      },
+      {
+        expected: 9,
+        render:
+          "rows.map(({ value: _clientBoundaryFallbackSink }) => <Counter initial={_clientBoundaryFallbackSink} />)",
+        rows: "[{ value: 9 }]",
+      },
+      {
+        expected: 11,
+        render:
+          "rows.map((row) => { const _clientBoundaryFallbackSink = row; return <Counter initial={_clientBoundaryFallbackSink} />; })",
+        rows: "[11]",
+      },
+    ];
     const globalWithCounter = globalThis as typeof globalThis & {
       Counter?: (sink: TestStreamSink, props: { initial: number }) => void;
     };
@@ -1440,10 +1444,29 @@ export function App() {
     globalWithCounter.Counter = (sink, props) => {
       sink.append(`<b>${props.initial}</b>`);
     };
-    let html: string;
 
     try {
-      html = await runServerStreamComponent(output.code);
+      for (const testCase of cases) {
+        const output = transform({
+          code: `import { Counter } from "./Counter";
+
+          export function App() {
+            const rows = ${testCase.rows};
+            return <main>{${testCase.render}}</main>;
+          }`,
+          filename: "App.tsx",
+          target: "server",
+          dev: true,
+          serverOutput: "stream",
+          clientBoundaryImports: ["./Counter"],
+          clientBoundaryFallbackImports: ["./Counter"],
+        });
+
+        expect(output.diagnostics).toEqual([]);
+        await expect(runServerStreamComponent(output.code)).resolves.toContain(
+          `<b>${testCase.expected}</b>`,
+        );
+      }
     } finally {
       if (previousCounter === undefined) {
         delete globalWithCounter.Counter;
@@ -1452,7 +1475,6 @@ export function App() {
       }
     }
 
-    expect(html).toContain("<b>7</b>");
   });
 
   test("emitted client boundary protocol renders async original children instead of function source", async () => {
