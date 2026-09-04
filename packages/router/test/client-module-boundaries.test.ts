@@ -979,12 +979,12 @@ export default function Page() { return <A />; }`;
     const appDir = join(dir, "app");
     await mkdir(appDir, { recursive: true });
     await writeFile(
-      join(appDir, "Page.tsx"),
+      join(appDir, "ImportedPage.tsx"),
       `import { Link } from "@reckona/mreact-router/link";
 export default function Page() { return <main><Link href="/x">x</Link></main>; }`,
     );
     const pageFile = join(appDir, "page.tsx");
-    const code = `import Page from "./Page";
+    const code = `import Page from "./ImportedPage";
 export default Page;`;
     await writeFile(pageFile, code);
     const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
@@ -996,12 +996,12 @@ export default Page;`;
     const appDir = join(dir, "app");
     await mkdir(appDir, { recursive: true });
     await writeFile(
-      join(appDir, "Page.tsx"),
+      join(appDir, "ImportedPage.tsx"),
       `"use client";
 export default function Page() { return <button onClick={() => undefined}>ok</button>; }`,
     );
     const pageFile = join(appDir, "page.tsx");
-    const code = `import Page from "./Page";
+    const code = `import Page from "./ImportedPage";
 export default Page;`;
     await writeFile(pageFile, code);
     const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
