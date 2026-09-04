@@ -67,6 +67,28 @@ export function App() {
     expect(node.querySelector("section")?.textContent).not.toContain("null");
   });
 
+  test("nested component children preserve outer synthetic-like bindings", async () => {
+    const output = transform({
+      code: `function Panel(props) {
+  return <span>{props.value}</span>;
+}
+
+export function App() {
+  const _child = "outer child";
+  const _children = " and children";
+  return <main>{(() => <section><Panel value={_child + _children} /></section>)()}</main>;
+}`,
+      filename: "nested-child-binding-collision.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+
+    expect(node.querySelector("span")?.textContent).toBe("outer child and children");
+  });
+
   test("conditional keyed single-node lists preserve row text context", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";

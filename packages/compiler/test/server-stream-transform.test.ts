@@ -1416,6 +1416,45 @@ export function App() {
     );
   });
 
+  test("client boundary fallback sink does not shadow a list callback binding", async () => {
+    const output = transform({
+      code: `import { Counter } from "./Counter";
+
+      export function App() {
+        const rows = [7];
+        return <main>{rows.map((_clientBoundaryFallbackSink) => <Counter initial={_clientBoundaryFallbackSink} />)}</main>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+      clientBoundaryImports: ["./Counter"],
+      clientBoundaryFallbackImports: ["./Counter"],
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const globalWithCounter = globalThis as typeof globalThis & {
+      Counter?: (sink: TestStreamSink, props: { initial: number }) => void;
+    };
+    const previousCounter = globalWithCounter.Counter;
+    globalWithCounter.Counter = (sink, props) => {
+      sink.append(`<b>${props.initial}</b>`);
+    };
+    let html: string;
+
+    try {
+      html = await runServerStreamComponent(output.code);
+    } finally {
+      if (previousCounter === undefined) {
+        delete globalWithCounter.Counter;
+      } else {
+        globalWithCounter.Counter = previousCounter;
+      }
+    }
+
+    expect(html).toContain("<b>7</b>");
+  });
+
   test("emitted client boundary protocol renders async original children instead of function source", async () => {
     const output = transform({
       code: `import { AppShell } from "./AppShell";

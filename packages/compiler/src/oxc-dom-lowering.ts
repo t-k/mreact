@@ -322,6 +322,6 @@ function lowerOxcDomChildren(
   });
 }
 
-function lowerOxcNormalizedDomChildAppend(target: string, lowered: string): string {
-  return `  { const _child = (${lowered}); const _children = Array.isArray(_child) ? _child.flat(Infinity) : [_child]; ${target}.append(..._children.filter((_value) => _value != null && typeof _value !== "boolean")); }`;
+export function lowerOxcNormalizedDomChildAppend(target: string, lowered: string): string {
+  return `  ${target}.append(...[(${lowered})].flat(Infinity).filter((_value) => _value != null && typeof _value !== "boolean"));`;
 }

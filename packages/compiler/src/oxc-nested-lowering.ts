@@ -2,7 +2,10 @@ import type { OxcBodyStatementJsxMode } from "./oxc-analysis-types.js";
 import { type OxcBodyLowerers } from "./oxc-body-lowering.js";
 import { analyzeOxcExpressionChild, type OxcChildAnalysisContext } from "./oxc-child-analysis.js";
 import { markOxcCompatRuntimeReferences } from "./oxc-component-references.js";
-import { lowerOxcDomNodeExpression } from "./oxc-dom-lowering.js";
+import {
+  lowerOxcDomNodeExpression,
+  lowerOxcNormalizedDomChildAppend,
+} from "./oxc-dom-lowering.js";
 import { readOxcJsxTagName } from "./oxc-jsx-attributes.js";
 import { normalizeOxcJsxText } from "./oxc-jsx-text.js";
 import { readArray, readObject, readSource, unwrapOxcParentheses } from "./oxc-node-utils.js";
@@ -168,10 +171,7 @@ export function lowerOxcReactiveValueExpression(
     return [
       "(() => {",
       "  const _fragment = document.createDocumentFragment();",
-      ...children.map(
-        (child) =>
-          `  { const _child = (${child}); const _children = Array.isArray(_child) ? _child.flat(Infinity) : [_child]; _fragment.append(..._children.filter((_value) => _value != null && typeof _value !== "boolean")); }`,
-      ),
+      ...children.map((child) => lowerOxcNormalizedDomChildAppend("_fragment", child)),
       "  return _fragment;",
       "})()",
     ].join("\n");

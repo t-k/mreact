@@ -3095,6 +3095,8 @@ function allocateHelperName(ir: ModuleIr, baseName: string): string {
     for (const bindingName of component.bindingNames) {
       reservedNames.add(bindingName);
     }
+
+    collectNestedBindingNames(component.root, reservedNames);
   }
 
   let name = baseName;
@@ -3106,6 +3108,68 @@ function allocateHelperName(ir: ModuleIr, baseName: string): string {
   }
 
   return name;
+}
+
+function collectNestedBindingNames(node: JsxNodeIr, names: Set<string>): void {
+  if (node.kind === "list") {
+    names.add(node.itemName);
+    if (node.indexName !== undefined) names.add(node.indexName);
+    if (node.arrayName !== undefined) names.add(node.arrayName);
+    if (node.parameterBinding !== undefined) {
+      names.add(node.parameterBinding.cellName);
+      for (const name of [
+        ...node.parameterBinding.argumentNames,
+        ...node.parameterBinding.bindingNames,
+      ]) {
+        names.add(name);
+      }
+    }
+    if (node.compiledSingleNode !== undefined) {
+      collectNestedBindingNames(node.compiledSingleNode.root, names);
+    }
+  }
+
+  if (node.kind === "conditional" && node.conditionValueName !== undefined) {
+    names.add(node.conditionValueName);
+  }
+
+  if (node.kind === "async-boundary") {
+    names.add(node.valueName);
+    if (node.catchName !== undefined) names.add(node.catchName);
+    for (const child of [
+      ...node.children,
+      ...(node.placeholderChildren ?? []),
+      ...(node.catchChildren ?? []),
+    ]) {
+      collectNestedBindingNames(child, names);
+    }
+    return;
+  }
+
+  if (node.kind === "conditional") {
+    for (const child of [...node.whenTrue, ...node.whenFalse]) {
+      collectNestedBindingNames(child, names);
+    }
+    return;
+  }
+
+  if (node.kind === "component") {
+    for (const prop of node.props) {
+      if (prop.kind === "render-prop") {
+        if (prop.valueName !== undefined) names.add(prop.valueName);
+        for (const child of prop.children) collectNestedBindingNames(child, names);
+      }
+    }
+  }
+
+  if (
+    node.kind === "list" ||
+    node.kind === "component" ||
+    node.kind === "element" ||
+    node.kind === "fragment"
+  ) {
+    for (const child of node.children) collectNestedBindingNames(child, names);
+  }
 }
 
 function stringLiteral(value: string): string {
