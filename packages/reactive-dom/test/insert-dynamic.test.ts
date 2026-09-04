@@ -143,6 +143,46 @@ describe("insertDynamic", () => {
     dispose();
   });
 
+  test.each([
+    ["optional", (read: () => readonly { id: string }[]) => (_unused?: unknown) => read()],
+    [
+      "default",
+      (read: () => readonly { id: string }[]) =>
+        (_unused = undefined) =>
+          read(),
+    ],
+    [
+      "rest",
+      (read: () => readonly { id: string }[]) =>
+        (..._unused: unknown[]) =>
+          read(),
+    ],
+  ])(
+    "does not infer renderer dependencies from a public %s items accessor",
+    async (_name, items) => {
+      const rows = cell([{ id: "a" }, { id: "b" }]);
+      const parent = document.createElement("div");
+      const marker = document.createComment("marker");
+      parent.append(marker);
+
+      const dispose = insertDynamic(parent, marker, () =>
+        createList(
+          items(() => rows.get()),
+          (row, index) => `${row.id}:${String(index)}`,
+          {
+            key: (row) => row.id,
+          },
+        ),
+      );
+
+      rows.set([rows.get()[1] as { id: string }, rows.get()[0] as { id: string }]);
+      await flushEffects();
+      expect(parent.textContent).toBe("b:0a:1");
+
+      dispose();
+    },
+  );
+
   test("replaces only the dynamic range before the marker", async () => {
     const value = cell<RenderValue>("first");
     const parent = document.createElement("div");
@@ -465,6 +505,39 @@ describe("insertDynamic", () => {
 
     expect(parent.querySelector("article")).toBe(row);
     expect(row?.textContent).toBe("Updated");
+    dispose();
+  });
+
+  test.each([
+    ["dynamic", insertDynamic],
+    ["memo dynamic", insertMemoDynamic],
+  ])("retains compiler-owned zero-argument rows through %s insertion", async (_name, insert) => {
+    const items = cell([{}]);
+    const parent = document.createElement("div");
+    const marker = document.createComment("marker");
+    let renders = 0;
+    parent.append(marker);
+
+    const dispose = insert(parent, marker, () =>
+      createListWithRenderArity(
+        () => items.get(),
+        () => {
+          renders += 1;
+          const row = document.createElement("article");
+          row.textContent = "constant";
+          return row;
+        },
+        0,
+        { key: () => "same" },
+      ),
+    );
+    const row = parent.querySelector("article");
+
+    items.set([{}]);
+    await flushEffects();
+
+    expect(parent.querySelector("article")).toBe(row);
+    expect(renders).toBe(1);
     dispose();
   });
 

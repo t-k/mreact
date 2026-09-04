@@ -207,6 +207,104 @@ describe("compiler runtime smoke", () => {
     expect(node.querySelector("li")?.textContent).toBe("New");
   });
 
+  test("destructured keyed rows share one parameter evaluation between key and render", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+        let propertyRuns = 0;
+        let getterRuns = 0;
+        let defaultRuns = 0;
+        const propertyName = () => { propertyRuns += 1; return "value"; };
+        const fallback = () => { defaultRuns += 1; return propertyRuns + ":" + getterRuns + ":" + defaultRuns; };
+        const makeRow = (label) => ({ key: "a", get value() { getterRuns += 1; return undefined; }, label });
+        const rows = cell([makeRow("Old")]);
+        export function App() {
+          return <main>
+            <button onClick={() => rows.set([makeRow("New")])}>Replace</button>
+            <ul>{rows.get().map(({ key, [propertyName()]: value = fallback(), label }) => <li key={key}>{value}:{label}</li>)}</ul>
+          </main>;
+        }`,
+      filename: "destructured-list-single-evaluation.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const row = node.querySelector("li");
+    expect(row?.textContent).toBe("1:1:1:Old");
+
+    node.querySelector("button")?.click();
+    await flushEffects();
+    expect(node.querySelector("li")).toBe(row);
+    expect(row?.textContent).toBe("2:2:2:New");
+  });
+
+  test("dynamic destructured keyed lists retain row ownership across list values", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+        let getterRuns = 0;
+        const makeRow = (label) => ({ key: "a", get label() { getterRuns += 1; return getterRuns + ":" + label; } });
+        const rows = cell([makeRow("Old")]);
+        const visible = cell(true);
+        export function App() {
+          return <main>
+            <button onClick={() => rows.set([makeRow("New")])}>Replace</button>
+            <ul>{visible.get() ? rows.get().map(({ key, label }) => <li key={key}>{label}</li>) : null}</ul>
+          </main>;
+        }`,
+      filename: "dynamic-destructured-list-ownership.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const row = node.querySelector("li");
+    expect(row?.textContent).toBe("1:Old");
+
+    node.querySelector("button")?.click();
+    await flushEffects();
+    expect(node.querySelector("li")).toBe(row);
+    expect(row?.textContent).toBe("2:New");
+  });
+
+  test("array-destructured keyed rows rebuild when a same-key item becomes branded", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+        class PrivateRow {
+          #values;
+          constructor(values) { this.#values = values; }
+          [Symbol.iterator]() { return this.#values[Symbol.iterator](); }
+        }
+        const rows = cell([ ["a", "Old"] ]);
+        export function App() {
+          return <main>
+            <button data-set onClick={() => rows.set([new Set(["a", "Set"])])}>Set</button>
+            <button data-class onClick={() => rows.set([new PrivateRow(["a", "Class"])])}>Class</button>
+            <ul>{rows.get().map(([id, label]) => <li key={id}>{label}</li>)}</ul>
+          </main>;
+        }`,
+      filename: "iterable-destructured-list-transition.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const row = node.querySelector("li");
+
+    node.querySelector<HTMLButtonElement>("[data-set]")?.click();
+    await flushEffects();
+    expect(node.querySelector("li")?.textContent).toBe("Set");
+    expect(node.querySelector("li")).not.toBe(row);
+
+    const setRow = node.querySelector("li");
+    node.querySelector<HTMLButtonElement>("[data-class]")?.click();
+    await flushEffects();
+    expect(node.querySelector("li")?.textContent).toBe("Class");
+    expect(node.querySelector("li")).not.toBe(setRow);
+  });
+
   test("compiled SVG keyed rows preserve namespace", async () => {
     const output = transform({
       code: `export function App() {

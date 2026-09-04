@@ -85,6 +85,7 @@ type RuntimeHelperName =
   | "bindCompilerKeyedPropertyText"
   | "bindCompilerKeyedText"
   | "markCompilerKeyedEventSlot"
+  | "trackCompilerKeyedItem"
   | "untrack";
 
 type RuntimeHelperNames = Record<RuntimeHelperName, string>;
@@ -126,6 +127,7 @@ function allocateRuntimeHelperNames(
     bindCompilerKeyedPropertyText: "bindCompilerKeyedPropertyText",
     bindCompilerKeyedText: "bindCompilerKeyedText",
     markCompilerKeyedEventSlot: "markCompilerKeyedEventSlot",
+    trackCompilerKeyedItem: "trackCompilerKeyedItem",
     untrack: "untrack",
   };
 
@@ -229,6 +231,9 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
       if (node.kind === "list") {
         if (node.parameterBinding !== undefined) {
           reactiveCoreSpecifiers.add("computed");
+          if (node.keyCode !== undefined) {
+            internalSpecifiers.add("trackCompilerKeyedItem");
+          }
         }
         if (node.compiledSingleNode === undefined) {
           if (requiresExplicitListRenderArity(node)) {
@@ -436,49 +441,57 @@ function emitComponent(
       : undefined;
 
   if (component.root.kind === "component") {
-    const state = {
+    const state: EmitSetupState = {
       allocateName: allocator,
       textIndex: 0,
       helperNames,
       clientBoundaryHelperName,
       inlineMemoComponents,
       debugLabel,
+      ownerDeclarations: [],
+      listBindingCaches: new Map(),
     };
+    const componentCall = emitComponentCall(
+      component.root.name,
+      component.root.props,
+      component.root.children,
+      state,
+      component.root.clientReference === undefined
+        ? undefined
+        : { moduleId: component.root.clientReference.moduleId, name: component.root.name },
+    );
     return [
       `${functionKeyword} ${component.name}(${parameters}) {`,
       ...body,
-      `  return ${emitComponentCall(
-        component.root.name,
-        component.root.props,
-        component.root.children,
-        state,
-        component.root.clientReference === undefined
-          ? undefined
-          : { moduleId: component.root.clientReference.moduleId, name: component.root.name },
-      )};`,
+      ...state.ownerDeclarations.map((declaration) => `  ${declaration}`),
+      `  return ${componentCall};`,
       `}`,
     ].join("\n");
   }
 
   if (component.root.kind === "conditional") {
-    const state = {
+    const state: EmitSetupState = {
       allocateName: allocator,
       textIndex: 0,
       helperNames,
       clientBoundaryHelperName,
       inlineMemoComponents,
       debugLabel,
+      ownerDeclarations: [],
+      listBindingCaches: new Map(),
     };
     const fragmentName = allocator("_fragment");
     const markerName = allocator("_marker");
     const ownerScopedMemoHelper = ownerScopedMemoInsertionHelper(component.root, state);
+    const renderValue = emitNodeRenderValueExpression(component.root, state);
     return [
       `${functionKeyword} ${component.name}(${parameters}) {`,
       ...body,
+      ...state.ownerDeclarations.map((declaration) => `  ${declaration}`),
       `  const ${fragmentName} = document.createDocumentFragment();`,
       `  const ${markerName} = document.createComment("");`,
       `  ${fragmentName}.append(${markerName});`,
-      `  ${ownerScopedMemoHelper ?? helperNames.insertDynamic}(${fragmentName}, ${markerName}, () => ${emitNodeRenderValueExpression(component.root, state)}${emitDynamicOptions(debugLabel)});`,
+      `  ${ownerScopedMemoHelper ?? helperNames.insertDynamic}(${fragmentName}, ${markerName}, () => ${renderValue}${emitDynamicOptions(debugLabel)});`,
       `  return ${fragmentName};`,
       `}`,
     ].join("\n");
@@ -487,18 +500,22 @@ function emitComponent(
   const fragmentName = allocator("_fragment");
   const rootName = allocator("_root");
   const templateHtml = JSON.stringify(renderStaticHtml(component.root));
-  const setup = emitSetup(component.root, rootName, {
+  const state: EmitSetupState = {
     allocateName: allocator,
     textIndex: 0,
     helperNames,
     clientBoundaryHelperName,
     inlineMemoComponents,
     debugLabel,
-  });
+    ownerDeclarations: [],
+    listBindingCaches: new Map(),
+  };
+  const setup = emitSetup(component.root, rootName, state);
   return [
     `const ${templateName} = ${component.root.kind === "element" && component.root.namespace === "svg" ? helperNames.createSvgTemplate : helperNames.createTemplate}(${templateHtml});`,
     `${functionKeyword} ${component.name}(${parameters}) {`,
     ...body,
+    ...state.ownerDeclarations.map((declaration) => `  ${declaration}`),
     `  const ${fragmentName} = ${templateName}();`,
     component.root.kind === "fragment"
       ? `  const ${rootName} = ${fragmentName};`
@@ -590,6 +607,8 @@ interface EmitSetupState {
   compilerKeyedEventSlotKeys?: ReadonlyMap<string, string> | undefined;
   compilerKeyedElementPath?: string | undefined;
   compilerKeyedRowContext?: string | undefined;
+  ownerDeclarations: string[];
+  listBindingCaches: Map<Extract<JsxNodeIr, { kind: "list" }>, string>;
 }
 
 function emitDynamicOptions(debugLabel: string | undefined, memo = false): string {
@@ -794,7 +813,6 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
 
     if (child.kind === "list") {
       const parameters = emitListParameters(child);
-      const keyParameters = emitListKeyParameters(child);
       const optionEntries: string[] = [];
       const eventPrograms = child.compiledSingleNode?.eventPrograms;
       const eventSlotKeys = eventPrograms?.map(() => state.allocateName("_keyedEventSlot"));
@@ -806,7 +824,7 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
       }
 
       if (child.keyCode !== undefined) {
-        optionEntries.push(`key: (${keyParameters}) => (${child.keyCode})`);
+        optionEntries.push(emitListKeyOption(child, state));
       }
 
       if (
@@ -836,7 +854,7 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
         const explicitRenderArity = requiresExplicitListRenderArity(child);
         const listOptions = explicitRenderArity && options === "" ? ", undefined" : options;
         lines.push(
-          `  ${explicitRenderArity ? state.helperNames.bindListWithRenderArity : state.helperNames.bindList}(${currentPath}, ${childPath}, () => (${child.itemsCode}), ${emitListRenderer(child, parameters, state)}${listOptions}${explicitRenderArity ? `, ${emitListRenderArity(child)}` : ""});`,
+          `  ${explicitRenderArity ? state.helperNames.bindListWithRenderArity : state.helperNames.bindList}(${currentPath}, ${childPath}, ${emitListItems(child, state)}, ${emitListRenderer(child, parameters, state)}${listOptions}${explicitRenderArity ? `, ${emitListRenderArity(child)}` : ""});`,
         );
       } else {
         const templateName = state.allocateName("_keyedTemplate");
@@ -1084,9 +1102,9 @@ function emitNodeRenderValueExpression(
 
   if (node.kind === "list") {
     const parameters = emitListParameters(node);
-    const options = emitListOptions(node);
+    const options = emitListOptions(node, state);
 
-    return `${state.helperNames.createListWithRenderArity}(() => (${node.itemsCode}), ${emitListRenderer(node, parameters, state)}, ${emitListRenderArity(node)}${options})`;
+    return `${state.helperNames.createListWithRenderArity}(${emitListItems(node, state)}, ${emitListRenderer(node, parameters, state)}, ${emitListRenderArity(node)}${options})`;
   }
 
   if (node.kind === "async-boundary") {
@@ -1259,25 +1277,52 @@ function emitListRenderer(
   parameters: string,
   state: EmitSetupState,
 ): string {
-  const valueExpression = emitRenderValueExpression(node.children, state);
+  const rendererState: EmitSetupState = {
+    ...state,
+    ownerDeclarations: [],
+    listBindingCaches: new Map(),
+  };
+  const valueExpression = emitRenderValueExpression(node.children, rendererState);
+  const ownerDeclarations = rendererState.ownerDeclarations.map(
+    (declaration) => `    ${declaration}`,
+  );
   const parameterBinding = node.parameterBinding;
 
   if (parameterBinding !== undefined) {
     const sourceParameters = parameterBinding.sourcePatterns.join(", ");
     const boundValues = parameterBinding.bindingNames.join(", ");
     const argumentsCode = parameterBinding.argumentNames.join(", ");
+    const cacheName = getListBindingCache(node, state);
+
+    if (cacheName !== undefined) {
+      const indexName = parameterBinding.argumentNames[1] as string;
+      const rowKeyName = state.allocateName("_listRowKey");
+      const itemCellName = state.allocateName("_listItemCell");
+      return `(${parameters}, ${itemCellName}) => {
+${ownerDeclarations.join("\n")}${ownerDeclarations.length === 0 ? "" : "\n"}    const ${rowKeyName} = ${cacheName}.byIndex[${indexName}];
+    const ${parameterBinding.cellName} = ${state.helperNames.computed}(() => {
+      ${state.helperNames.trackCompilerKeyedItem}(${itemCellName});
+      return ${cacheName}.byKey.get(${rowKeyName});
+    });
+    ${parameterBinding.cellName}.get();
+    return ${valueExpression};
+  }`;
+    }
+
     return `(${parameters}) => {
-    const ${parameterBinding.cellName} = ${state.helperNames.computed}(() => ((${sourceParameters}) => [${boundValues}])(${argumentsCode}));
+${ownerDeclarations.join("\n")}${ownerDeclarations.length === 0 ? "" : "\n"}    const ${parameterBinding.cellName} = ${state.helperNames.computed}(() => ((${sourceParameters}) => [${boundValues}])(${argumentsCode}));
     ${parameterBinding.cellName}.get();
     return ${valueExpression};
   }`;
   }
 
   if (node.bodyStatements === undefined || node.bodyStatements.length === 0) {
-    return `(${parameters}) => ${valueExpression}`;
+    return ownerDeclarations.length === 0
+      ? `(${parameters}) => ${valueExpression}`
+      : `(${parameters}) => {\n${ownerDeclarations.join("\n")}\n    return ${valueExpression};\n  }`;
   }
 
-  return `(${parameters}) => {\n${node.bodyStatements.map((statement) => `    ${statement}`).join("\n")}\n    return ${valueExpression};\n  }`;
+  return `(${parameters}) => {\n${ownerDeclarations.join("\n")}${ownerDeclarations.length === 0 ? "" : "\n"}${node.bodyStatements.map((statement) => `    ${statement}`).join("\n")}\n    return ${valueExpression};\n  }`;
 }
 
 function emitCompilerKeyedSingleNodeRenderer(
@@ -1336,11 +1381,14 @@ function emitCompilerKeyedEventPrograms(
     .join(", ")}]`;
 }
 
-function emitListOptions(node: Extract<JsxNodeIr, { kind: "list" }>): string {
+function emitListOptions(
+  node: Extract<JsxNodeIr, { kind: "list" }>,
+  state: EmitSetupState,
+): string {
   const optionEntries: string[] = [];
 
   if (node.keyCode !== undefined) {
-    optionEntries.push(`key: (${emitListKeyParameters(node)}) => (${node.keyCode})`);
+    optionEntries.push(emitListKeyOption(node, state));
   }
 
   if (node.keyCode !== undefined && listReadsNestedItemObject(node, node.itemName)) {
@@ -1350,8 +1398,60 @@ function emitListOptions(node: Extract<JsxNodeIr, { kind: "list" }>): string {
   return optionEntries.length === 0 ? "" : `, { ${optionEntries.join(", ")} }`;
 }
 
-function emitListKeyParameters(node: Extract<JsxNodeIr, { kind: "list" }>): string {
-  return node.parameterBinding?.sourcePatterns.join(", ") ?? emitListParameters(node);
+function emitListKeyOption(
+  node: Extract<JsxNodeIr, { kind: "list" }>,
+  state: EmitSetupState,
+): string {
+  const parameterBinding = node.parameterBinding;
+  const cacheName = getListBindingCache(node, state);
+
+  if (parameterBinding === undefined || cacheName === undefined) {
+    return `key: (${emitListParameters(node)}) => (${node.keyCode})`;
+  }
+
+  const parameters = parameterBinding.argumentNames.join(", ");
+  const sourceParameters = parameterBinding.sourcePatterns.join(", ");
+  const boundValues = parameterBinding.bindingNames.join(", ");
+  const indexName = parameterBinding.argumentNames[1] as string;
+  const keyName = state.allocateName("_listKey");
+  const bindingsName = state.allocateName("_listBindingValues");
+
+  return `key: (${parameters}) => {
+    if (${indexName} in ${cacheName}.byIndex) return ${cacheName}.byIndex[${indexName}];
+    return ((${sourceParameters}) => {
+      const ${keyName} = (${node.keyCode});
+      const ${bindingsName} = [${boundValues}];
+      ${cacheName}.byIndex[${indexName}] = ${keyName};
+      if (!${cacheName}.byKey.has(${keyName})) ${cacheName}.byKey.set(${keyName}, ${bindingsName});
+      return ${keyName};
+    })(${parameters});
+  }`;
+}
+
+function emitListItems(node: Extract<JsxNodeIr, { kind: "list" }>, state: EmitSetupState): string {
+  const cacheName = getListBindingCache(node, state);
+  return cacheName === undefined
+    ? `() => (${node.itemsCode})`
+    : `() => (${cacheName}.byIndex.length = 0, ${cacheName}.byKey.clear(), (${node.itemsCode}))`;
+}
+
+function getListBindingCache(
+  node: Extract<JsxNodeIr, { kind: "list" }>,
+  state: EmitSetupState,
+): string | undefined {
+  if (node.parameterBinding === undefined || node.keyCode === undefined) {
+    return undefined;
+  }
+
+  const existing = state.listBindingCaches.get(node);
+  if (existing !== undefined) {
+    return existing;
+  }
+
+  const cacheName = state.allocateName("_listBindingCache");
+  state.listBindingCaches.set(node, cacheName);
+  state.ownerDeclarations.push(`const ${cacheName} = { byIndex: [], byKey: new Map() };`);
+  return cacheName;
 }
 
 function emitListParameters(node: Extract<JsxNodeIr, { kind: "list" }>): string {
@@ -1366,7 +1466,11 @@ function emitListParameters(node: Extract<JsxNodeIr, { kind: "list" }>): string 
 
 function emitListRenderArity(node: Extract<JsxNodeIr, { kind: "list" }>): number {
   if (node.parameterBinding !== undefined) {
-    return Math.min(node.parameterBinding.argumentNames.length, 3);
+    return node.parameterBinding.sourcePatterns.some((pattern) =>
+      pattern.trimStart().startsWith("..."),
+    )
+      ? 3
+      : Math.min(node.parameterBinding.sourcePatterns.length, 3);
   }
   const patterns = node.parameterPatterns;
   if (patterns !== undefined) {
@@ -1387,7 +1491,7 @@ function emitListRenderArity(node: Extract<JsxNodeIr, { kind: "list" }>): number
 
 function requiresExplicitListRenderArity(node: Extract<JsxNodeIr, { kind: "list" }>): boolean {
   return (
-    node.parameterBinding === undefined &&
+    node.parameterBinding !== undefined ||
     node.parameterPatterns?.some((pattern) => !/^[A-Za-z_$][\w$]*$/u.test(pattern)) === true
   );
 }

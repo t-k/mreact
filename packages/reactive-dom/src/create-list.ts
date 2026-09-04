@@ -22,11 +22,9 @@ export function createListWithRenderArity<T>(
   options?: ListRenderValue<T>["options"],
 ): ListRenderValue<T> {
   return {
-    [LIST_RENDER_VALUE]: true,
-    items: ((_0: unknown, _1: unknown, _2: unknown) => items()).bind(
-      null,
-      ...Array<unknown>(3 - renderArity),
-    ),
+    [LIST_RENDER_VALUE]: false,
+    a: renderArity,
+    items,
     renderItem,
     ...(options === undefined ? {} : { options }),
   } as unknown as ListRenderValue<T>;
@@ -34,8 +32,7 @@ export function createListWithRenderArity<T>(
 
 export function isListRenderValue(value: unknown): value is ListRenderValue {
   return (
-    typeof value === "object" &&
-    value !== null &&
-    (value as { [LIST_RENDER_VALUE]?: unknown })[LIST_RENDER_VALUE] === true
+    (value as { [LIST_RENDER_VALUE]?: boolean } | null | undefined)?.[LIST_RENDER_VALUE] !==
+    undefined
   );
 }

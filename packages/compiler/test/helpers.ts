@@ -62,6 +62,7 @@ import {
   createSvgTemplate,
   createSvgTemplateElement,
   markCompilerKeyedEventSlot,
+  trackCompilerKeyedItem,
 } from "../../reactive-dom/src/internal.js";
 import { createMemo } from "../../reactive-dom/src/create-memo.js";
 import { insertMemo } from "../../reactive-dom/src/insert-memo.js";
@@ -424,7 +425,7 @@ function extractClientInternalRuntimeEntries(
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>bindCompilerKeyedCellText|bindCompilerKeyedPropertyText|bindCompilerKeyedSingleNodeList|bindCompilerKeyedText|bindListWithRenderArity|createListWithRenderArity|createMemo|createSvgTemplate|createSvgTemplateElement|insertMemo|insertMemoDynamic|markCompilerKeyedEventSlot)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+      /^(?<importedName>bindCompilerKeyedCellText|bindCompilerKeyedPropertyText|bindCompilerKeyedSingleNodeList|bindCompilerKeyedText|bindListWithRenderArity|createListWithRenderArity|createMemo|createSvgTemplate|createSvgTemplateElement|insertMemo|insertMemoDynamic|markCompilerKeyedEventSlot|trackCompilerKeyedItem)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
     );
 
     if (match?.groups === undefined) {
@@ -435,21 +436,23 @@ function extractClientInternalRuntimeEntries(
       localName: match.groups.localName ?? match.groups.importedName,
       value:
         match.groups.importedName === "bindListWithRenderArity"
-            ? bindListWithRenderArity
-            : match.groups.importedName === "createListWithRenderArity"
-              ? createListWithRenderArity
-              : match.groups.importedName === "createSvgTemplate"
-                ? createSvgTemplate
-                : match.groups.importedName === "createSvgTemplateElement"
-                  ? createSvgTemplateElement
-                  : match.groups.importedName === "insertMemo"
-                    ? insertMemo
-                    : match.groups.importedName === "insertMemoDynamic"
-                      ? insertMemoDynamic
-                      : match.groups.importedName === "createMemo"
-                        ? createMemo
-                        : match.groups.importedName === "markCompilerKeyedEventSlot"
-                          ? markCompilerKeyedEventSlot
+          ? bindListWithRenderArity
+          : match.groups.importedName === "createListWithRenderArity"
+            ? createListWithRenderArity
+            : match.groups.importedName === "createSvgTemplate"
+              ? createSvgTemplate
+              : match.groups.importedName === "createSvgTemplateElement"
+                ? createSvgTemplateElement
+                : match.groups.importedName === "insertMemo"
+                  ? insertMemo
+                  : match.groups.importedName === "insertMemoDynamic"
+                    ? insertMemoDynamic
+                    : match.groups.importedName === "createMemo"
+                      ? createMemo
+                      : match.groups.importedName === "markCompilerKeyedEventSlot"
+                        ? markCompilerKeyedEventSlot
+                        : match.groups.importedName === "trackCompilerKeyedItem"
+                          ? trackCompilerKeyedItem
                           : match.groups.importedName === "bindCompilerKeyedCellText"
                             ? bindCompilerKeyedCellText
                             : match.groups.importedName === "bindCompilerKeyedPropertyText"

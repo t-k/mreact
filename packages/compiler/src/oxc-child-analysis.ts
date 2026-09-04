@@ -845,14 +845,8 @@ function createOxcListParameterBinding(
     occupiedNames.add(candidate);
     return candidate;
   };
-  const argumentCount = parameters.some((parameter) => readObject(parameter).type === "RestElement")
-    ? 3
-    : parameters.length;
-
   return {
-    argumentNames: Array.from({ length: argumentCount }, (_, index) =>
-      allocate(`__mreactListArg${index}`),
-    ),
+    argumentNames: Array.from({ length: 3 }, (_, index) => allocate(`__mreactListArg${index}`)),
     bindingNames,
     cellName: allocate("__mreactListBindings"),
     sourcePatterns,

@@ -22,7 +22,12 @@ export interface BindListOptions<T> {
   nestedObjectFallback?: boolean;
 }
 
-type ListItemRenderer<T> = (item: T, index: number, items: readonly T[]) => RenderValue;
+type ListItemRenderer<T> = (
+  item: T,
+  index: number,
+  items: readonly T[],
+  itemCell?: KeyedItemCell | null,
+) => RenderValue;
 type ListParentNode = ParentNode & Node & { replaceChildren(...nodes: Node[]): void };
 const MAX_TARGETED_OWNED_PARENT_MOVES = 32;
 
@@ -141,16 +146,17 @@ export const bindListWithRenderArity = bindList as <T>(
 ) => Dispose;
 
 interface KeyedRecord {
-  nodes: Node[];
-  prevIndex?: number | undefined;
+  dom: Node[];
+  prev?: number | undefined;
   dispose: Dispose;
-  promoteEvents?: (() => void) | undefined;
+  promote?: (() => void) | undefined;
   // Update state lives on the record so one shared update function replaces a
-  // per-record closure; itemCell is null for primitive items.
-  itemCell: KeyedItemCell | null;
-  currentItem: unknown;
-  currentIndex: number;
-  currentItems: readonly unknown[];
+  // per-record closure; cell is null for dynamic primitive items and undefined
+  // for static rows.
+  cell: KeyedItemCell | null | undefined;
+  item: unknown;
+  index: number;
+  items: readonly unknown[];
 }
 
 interface KeyedItems<T> {
@@ -233,8 +239,8 @@ function bindKeyedList<T>(
       );
 
       if (swappedRecords !== undefined) {
-        records = swappedRecords.records;
-        recordNodeCount = swappedRecords.nodeCount;
+        records = swappedRecords.map;
+        recordNodeCount = swappedRecords.count;
         ownsParent = true;
         return;
       }
@@ -283,8 +289,8 @@ function bindKeyedList<T>(
       );
 
       if (replacedRecords !== undefined) {
-        records = replacedRecords.records;
-        recordNodeCount = replacedRecords.nodeCount;
+        records = replacedRecords.map;
+        recordNodeCount = replacedRecords.count;
         ownsParent = true;
         return;
       }
@@ -300,8 +306,8 @@ function bindKeyedList<T>(
       );
 
       if (swappedRecords !== undefined) {
-        records = swappedRecords.records;
-        recordNodeCount = swappedRecords.nodeCount;
+        records = swappedRecords.map;
+        recordNodeCount = swappedRecords.count;
         ownsParent = true;
         return;
       }
@@ -319,8 +325,8 @@ function bindKeyedList<T>(
       );
 
       if (appendedRecords !== undefined) {
-        records = appendedRecords.records;
-        recordNodeCount += appendedRecords.appendedNodeCount;
+        records = appendedRecords.map;
+        recordNodeCount += appendedRecords.count;
         ownsParent = true;
         return;
       }
@@ -348,7 +354,7 @@ function bindKeyedList<T>(
     let previousIndex = 0;
 
     for (const record of records.values()) {
-      record.prevIndex = previousIndex;
+      record.prev = previousIndex;
       previousIndex += 1;
     }
 
@@ -392,7 +398,7 @@ function bindKeyedList<T>(
 
       nextRecords.set(itemKey, record);
       orderedRecords.push(record);
-      orderedNodeCount += record.nodes.length;
+      orderedNodeCount += record.dom.length;
     }
 
     const canClaimEmptyParent =
@@ -454,7 +460,7 @@ function replaceWithOrderedRecords(
   const fragment = document.createDocumentFragment();
 
   for (const record of orderedRecords) {
-    for (const node of record.nodes) {
+    for (const node of record.dom) {
       fragment.appendChild(node);
     }
   }
@@ -532,7 +538,7 @@ function tryAppendKeyedRecords<T>(
   options: BindListOptions<T>,
   markRecordsForHydration: boolean,
   renderArity: number,
-): { appendedNodeCount: number; records: Map<unknown, KeyedRecord> } | undefined {
+): { count: number; map: Map<unknown, KeyedRecord> } | undefined {
   const keys = currentKeyedItems.keys;
   const items = currentKeyedItems.items;
   const indexes = currentKeyedItems.indexes;
@@ -575,7 +581,7 @@ function tryAppendKeyedRecords<T>(
   const appendToParentTail = marker.nextSibling === null;
   const appendFragment = appendToParentTail ? document.createDocumentFragment() : undefined;
 
-  let appendedNodeCount = 0;
+  let count = 0;
   for (let slot = records.size; slot < keys.length; slot += 1) {
     const record = createKeyedRecord(
       items[slot] as T,
@@ -588,9 +594,9 @@ function tryAppendKeyedRecords<T>(
     );
 
     records.set(keys[slot], record);
-    appendedNodeCount += record.nodes.length;
+    count += record.dom.length;
 
-    for (const node of record.nodes) {
+    for (const node of record.dom) {
       if (appendFragment !== undefined) {
         appendFragment.appendChild(node);
       } else {
@@ -600,12 +606,12 @@ function tryAppendKeyedRecords<T>(
     promoteRecordEvents([record]);
   }
 
-  if (appendToParentTail && appendedNodeCount > 0) {
+  if (appendToParentTail && count > 0) {
     parent.appendChild(appendFragment as DocumentFragment);
     parent.appendChild(marker);
   }
 
-  return { appendedNodeCount, records };
+  return { count, map: records };
 }
 
 function tryReorderSwappedKeyedRecordsFromItems<T>(
@@ -616,7 +622,7 @@ function tryReorderSwappedKeyedRecordsFromItems<T>(
   key: (item: T, index: number, items: readonly T[]) => unknown,
   renderArity: number,
   maxMovedNodes: number,
-): { records: Map<unknown, KeyedRecord>; nodeCount: number } | undefined {
+): { count: number; map: Map<unknown, KeyedRecord> } | undefined {
   if (
     !Number.isFinite(maxMovedNodes) ||
     renderArity >= 2 ||
@@ -689,7 +695,7 @@ function tryReorderSwappedKeyedRecordsFromItems<T>(
     }
 
     nextRecords.set(itemKey, record);
-    nodeCount += record.nodes.length;
+    nodeCount += record.dom.length;
   }
 
   const firstRecord = nextRecords.get(firstNextKey);
@@ -699,32 +705,32 @@ function tryReorderSwappedKeyedRecordsFromItems<T>(
     return undefined;
   }
 
-  const movedNodes = firstRecord.nodes.length + secondRecord.nodes.length;
+  const movedNodes = firstRecord.dom.length + secondRecord.dom.length;
 
   if (movedNodes > maxMovedNodes) {
     return undefined;
   }
 
-  const firstAnchor = secondRecord.nodes[0] as ChildNode | undefined;
+  const firstAnchor = secondRecord.dom[0] as ChildNode | undefined;
   const secondAnchor =
     secondIndex + 1 < currentItems.length
       ? (nextRecords.get(key(currentItems[secondIndex + 1] as T, secondIndex + 1, currentItems))
-          ?.nodes[0] as ChildNode | undefined)
+          ?.dom[0] as ChildNode | undefined)
       : marker;
 
   if (firstAnchor === undefined || secondAnchor === undefined) {
     return undefined;
   }
 
-  for (const node of firstRecord.nodes) {
+  for (const node of firstRecord.dom) {
     parent.insertBefore(node, firstAnchor);
   }
 
-  for (const node of secondRecord.nodes) {
+  for (const node of secondRecord.dom) {
     parent.insertBefore(node, secondAnchor);
   }
 
-  return { records: nextRecords, nodeCount };
+  return { count: nodeCount, map: nextRecords };
 }
 
 function tryReorderSwappedKeyedRecords<T>(
@@ -735,7 +741,7 @@ function tryReorderSwappedKeyedRecords<T>(
   currentItems: readonly T[],
   renderArity: number,
   maxMovedNodes: number,
-): { records: Map<unknown, KeyedRecord>; nodeCount: number } | undefined {
+): { count: number; map: Map<unknown, KeyedRecord> } | undefined {
   const keys = currentKeyedItems.keys;
 
   if (
@@ -806,7 +812,7 @@ function tryReorderSwappedKeyedRecords<T>(
     }
 
     nextRecords.set(keys[slot], record);
-    nodeCount += record.nodes.length;
+    nodeCount += record.dom.length;
   }
 
   const firstRecord = nextRecords.get(keys[firstIndex]);
@@ -816,29 +822,29 @@ function tryReorderSwappedKeyedRecords<T>(
     return undefined;
   }
 
-  const movedNodes = firstRecord.nodes.length + secondRecord.nodes.length;
+  const movedNodes = firstRecord.dom.length + secondRecord.dom.length;
 
   if (movedNodes > maxMovedNodes) {
     return undefined;
   }
 
-  const firstAnchor = secondRecord.nodes[0] as ChildNode | undefined;
+  const firstAnchor = secondRecord.dom[0] as ChildNode | undefined;
   const secondAnchor =
-    (nextRecords.get(keys[secondIndex + 1])?.nodes[0] as ChildNode | undefined) ?? marker;
+    (nextRecords.get(keys[secondIndex + 1])?.dom[0] as ChildNode | undefined) ?? marker;
 
   if (firstAnchor === undefined) {
     return undefined;
   }
 
-  for (const node of firstRecord.nodes) {
+  for (const node of firstRecord.dom) {
     parent.insertBefore(node, firstAnchor);
   }
 
-  for (const node of secondRecord.nodes) {
+  for (const node of secondRecord.dom) {
     parent.insertBefore(node, secondAnchor);
   }
 
-  return { records: nextRecords, nodeCount };
+  return { count: nodeCount, map: nextRecords };
 }
 
 function canSkipKeyedRecordUpdate(
@@ -849,9 +855,9 @@ function canSkipKeyedRecordUpdate(
   nextItems: readonly unknown[],
 ): boolean {
   return (
-    Object.is(record.currentItem, nextItem) &&
-    (renderArity < 2 || record.currentIndex === nextIndex) &&
-    (renderArity < 3 || record.currentItems === nextItems)
+    Object.is(record.item, nextItem) &&
+    (renderArity < 2 || record.index === nextIndex) &&
+    (renderArity < 3 || record.items === nextItems)
   );
 }
 
@@ -882,7 +888,7 @@ function reconcileKeyedRecordOrderWithMoveLimit(
 
   const previousOrder: number[] = [];
   for (let index = 0; index < orderedRecords.length; index += 1) {
-    previousOrder.push(orderedRecords[index]?.prevIndex ?? -1);
+    previousOrder.push(orderedRecords[index]?.prev ?? -1);
   }
   const stableIndexes = new Set(longestIncreasingSubsequenceIndexes(previousOrder));
 
@@ -891,7 +897,7 @@ function reconcileKeyedRecordOrderWithMoveLimit(
     const record = orderedRecords[index];
 
     if (record !== undefined && !stableIndexes.has(index)) {
-      movedNodes += record.nodes.length;
+      movedNodes += record.dom.length;
 
       if (movedNodes > maxMovedNodes) {
         return false;
@@ -904,18 +910,18 @@ function reconcileKeyedRecordOrderWithMoveLimit(
   for (let index = orderedRecords.length - 1; index >= 0; index -= 1) {
     const record = orderedRecords[index];
 
-    if (record === undefined || record.nodes.length === 0) {
+    if (record === undefined || record.dom.length === 0) {
       continue;
     }
 
-    const firstNode = record.nodes[0] as ChildNode;
+    const firstNode = record.dom[0] as ChildNode;
 
     if (stableIndexes.has(index)) {
       anchor = firstNode;
       continue;
     }
 
-    for (const node of record.nodes) {
+    for (const node of record.dom) {
       parent.insertBefore(node, anchor);
     }
 
@@ -941,7 +947,7 @@ function reconcileSwappedKeyedRecordPair(
 
   for (let index = 0; index < orderedRecords.length; index += 1) {
     const record = orderedRecords[index];
-    const previousIndex = record?.prevIndex ?? -1;
+    const previousIndex = record?.prev ?? -1;
 
     if (previousIndex === index) {
       continue;
@@ -959,7 +965,7 @@ function reconcileSwappedKeyedRecordPair(
       return undefined;
     }
 
-    movedNodes += record.nodes.length;
+    movedNodes += record.dom.length;
   }
 
   if (firstMovedIndex === -1 || secondMovedIndex === -1) {
@@ -972,8 +978,8 @@ function reconcileSwappedKeyedRecordPair(
   if (
     firstRecord === undefined ||
     secondRecord === undefined ||
-    firstRecord.prevIndex !== secondMovedIndex ||
-    secondRecord.prevIndex !== firstMovedIndex
+    firstRecord.prev !== secondMovedIndex ||
+    secondRecord.prev !== firstMovedIndex
   ) {
     return undefined;
   }
@@ -982,19 +988,19 @@ function reconcileSwappedKeyedRecordPair(
     return false;
   }
 
-  const firstAnchor = secondRecord.nodes[0] as ChildNode | undefined;
+  const firstAnchor = secondRecord.dom[0] as ChildNode | undefined;
   const secondAnchor =
-    (orderedRecords[secondMovedIndex + 1]?.nodes[0] as ChildNode | undefined) ?? marker;
+    (orderedRecords[secondMovedIndex + 1]?.dom[0] as ChildNode | undefined) ?? marker;
 
   if (firstAnchor === undefined) {
     return undefined;
   }
 
-  for (const node of firstRecord.nodes) {
+  for (const node of firstRecord.dom) {
     parent.insertBefore(node, firstAnchor);
   }
 
-  for (const node of secondRecord.nodes) {
+  for (const node of secondRecord.dom) {
     parent.insertBefore(node, secondAnchor);
   }
 
@@ -1084,24 +1090,27 @@ function updateKeyedRecord(
   nextIndex: number,
   nextItems: readonly unknown[],
 ): boolean {
-  if (!record.itemCell && !Object.is(record.currentItem, nextItem)) {
+  if (
+    (record.cell === null && !Object.is(record.item, nextItem)) ||
+    (record.cell && (!isObjectLike(nextItem) || !shouldProxyNestedValue(nextItem, true)))
+  ) {
     return false;
   }
 
-  if (renderArity >= 2 && record.currentIndex !== nextIndex) {
+  if (renderArity >= 2 && record.index !== nextIndex) {
     return false;
   }
 
-  if (renderArity >= 3 && record.currentItems !== nextItems) {
+  if (renderArity >= 3 && record.items !== nextItems) {
     return false;
   }
 
-  if (record.itemCell) {
-    setKeyedItemValue(record.itemCell, nextItem);
+  if (record.cell) {
+    setKeyedItemValue(record.cell, nextItem);
   }
-  record.currentItem = nextItem;
-  record.currentIndex = nextIndex;
-  record.currentItems = nextItems;
+  record.item = nextItem;
+  record.index = nextIndex;
+  record.items = nextItems;
   return true;
 }
 
@@ -1114,49 +1123,48 @@ function createKeyedRecord<T>(
   markRecordsForHydration: boolean,
   deferEventPromotion: boolean,
 ): KeyedRecord {
-  let itemCell: KeyedItemCell | null = null;
+  let itemCell: KeyedItemCell | null | undefined;
   let renderedItem: T = item;
 
-  if (
-    isObjectLike(item) &&
-    options.itemMode !== "static" &&
-    shouldProxyNestedValue(item, true)
-  ) {
-    itemCell = createKeyedItemCell(item);
-    renderedItem = (
-      options.nestedObjectFallback === true
-        ? createNestedFallbackItemProxy(itemCell)
-        : createItemProxy(itemCell)
-    ) as T;
+  if (options.itemMode !== "static") {
+    itemCell = null;
+    if (isObjectLike(item) && shouldProxyNestedValue(item, true)) {
+      itemCell = createKeyedItemCell(item);
+      renderedItem = (
+        options.nestedObjectFallback === true
+          ? createNestedFallbackItemProxy(itemCell)
+          : createItemProxy(itemCell)
+      ) as T;
+    }
   }
 
   const deferred = deferEventPromotion
     ? untrack(() =>
         withDeferredDelegatedEventPromotions(() =>
-          createScopedRenderNodes(() => renderItem(renderedItem, index, items)),
+          createScopedRenderNodes(() => renderItem(renderedItem, index, items, itemCell)),
         ),
       )
     : undefined;
   const scoped =
     deferred?.value ??
-    untrack(() => createScopedRenderNodes(() => renderItem(renderedItem, index, items)));
-  const nodes = markRecordsForHydration ? markDynamicNodes(scoped.nodes) : scoped.nodes;
+    untrack(() => createScopedRenderNodes(() => renderItem(renderedItem, index, items, itemCell)));
+  const dom = markRecordsForHydration ? markDynamicNodes(scoped.nodes) : scoped.nodes;
 
   return {
-    nodes,
+    dom,
     dispose: scoped.dispose,
-    promoteEvents: deferred?.promote,
-    itemCell,
-    currentItem: item,
-    currentIndex: index,
-    currentItems: items,
+    promote: deferred?.promote,
+    cell: itemCell,
+    item,
+    index,
+    items,
   };
 }
 
 function promoteRecordEvents(records: Iterable<KeyedRecord>): void {
   for (const record of records) {
-    record.promoteEvents?.();
-    record.promoteEvents = undefined;
+    record.promote?.();
+    record.promote = undefined;
   }
 }
 
@@ -1296,6 +1304,13 @@ function createNestedFallbackItemProxy<T extends object>(current: KeyedItemCell)
   });
 }
 
+/** @internal Tracks a compiler-owned row proxy without observing the source object. */
+export function trackCompilerKeyedItem(cell: unknown): void {
+  if (cell) {
+    getKeyedItemValue(cell as KeyedItemCell);
+  }
+}
+
 function createNestedItemProxy(current: KeyedItemCell, path: readonly PropertyKey[]): object {
   let childProxies: Map<PropertyKey, object> | undefined;
   let rawObjectProperties: Set<PropertyKey> | undefined;
@@ -1426,7 +1441,7 @@ function tryReplaceDisjointKeyedRecords<T>(
   renderItem: ListItemRenderer<T>,
   options: BindListOptions<T>,
   markRecordsForHydration: boolean,
-): { nodeCount: number; records: Map<unknown, KeyedRecord> } | undefined {
+): { count: number; map: Map<unknown, KeyedRecord> } | undefined {
   const keys = currentKeyedItems.keys;
 
   if (keys.length !== records.size || keys.length === 0) {
@@ -1457,9 +1472,9 @@ function tryReplaceDisjointKeyedRecords<T>(
     );
 
     nextRecords.set(keys[slot], record);
-    nodeCount += record.nodes.length;
+    nodeCount += record.dom.length;
 
-    for (const node of record.nodes) {
+    for (const node of record.dom) {
       fragment.appendChild(node);
     }
   }
@@ -1472,7 +1487,7 @@ function tryReplaceDisjointKeyedRecords<T>(
     throw disposeError;
   }
 
-  return { nodeCount, records: nextRecords };
+  return { count: nodeCount, map: nextRecords };
 }
 
 function tryRemoveKeyedRecords<T>(
@@ -1591,7 +1606,7 @@ function removeRecordNodes(records: Iterable<KeyedRecord>): void {
         firstError ??= error;
       }
 
-      for (const node of record.nodes) {
+      for (const node of record.dom) {
         node.parentNode?.removeChild(node);
       }
     }
@@ -1614,7 +1629,7 @@ function countRecordNodes(records: readonly KeyedRecord[]): number {
   let count = 0;
 
   for (const record of records) {
-    count += record.nodes.length;
+    count += record.dom.length;
   }
 
   return count;
@@ -1632,7 +1647,7 @@ function ownsWholeParent(
   let expectedNodes = 0;
 
   for (const record of records.values()) {
-    expectedNodes += record.nodes.length;
+    expectedNodes += record.dom.length;
   }
 
   if (parent.childNodes.length !== expectedNodes + 1) {
@@ -1642,7 +1657,7 @@ function ownsWholeParent(
   let childIndex = 0;
 
   for (const record of records.values()) {
-    for (const node of record.nodes) {
+    for (const node of record.dom) {
       if (parent.childNodes[childIndex] !== node) {
         return false;
       }

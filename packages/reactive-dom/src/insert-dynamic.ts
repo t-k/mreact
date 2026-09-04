@@ -5,7 +5,12 @@ import { isListRenderValue } from "./create-list.js";
 import { isDynamicHydrationEnabled, markDynamicNode, markDynamicNodes } from "./dynamic-node.js";
 import { createScopedRenderNodes } from "./render-scope.js";
 import { registerDispose } from "./scope.js";
-import { type Dispose, type ListRenderValue, type RenderValue } from "./types.js";
+import {
+  LIST_RENDER_VALUE,
+  type Dispose,
+  type ListRenderValue,
+  type RenderValue,
+} from "./types.js";
 
 type BindListWithRenderArity = (...args: [...Parameters<typeof bindList>, number]) => Dispose;
 
@@ -102,7 +107,8 @@ export function insertDynamic(
       const nextListShape =
         +nextKeyed |
         (+nextNestedObjectFallback << 1) |
-        ((nextValue.items.length || 3) << 2);
+        ((nextValue[LIST_RENDER_VALUE] ? 3 : (nextValue as unknown as { readonly a: number }).a) <<
+          2);
 
       if (currentList !== undefined && currentList.shape === nextListShape) {
         currentList.value.set(nextValue);
@@ -147,7 +153,8 @@ export function insertDynamic(
           insertionParent,
           marker,
           () => listValue.get().items(),
-          (item, index, items) => listValue.get().renderItem(item, index, items),
+          (...renderArgs) =>
+            (listValue.get().renderItem as (...args: unknown[]) => RenderValue)(...renderArgs),
           options,
           nextListShape >> 2,
         ),

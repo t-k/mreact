@@ -7,6 +7,7 @@ import { isDynamicHydrationEnabled, markDynamicNode, markDynamicNodes } from "./
 import { createScopedRenderNodes } from "./render-scope.js";
 import { registerDispose } from "./scope.js";
 import {
+  LIST_RENDER_VALUE,
   type Dispose,
   type ListRenderValue,
   type MemoRenderValue,
@@ -136,7 +137,10 @@ export function insertMemoDynamic(
       const nextListShape =
         +nextKeyed |
         (+nextNestedObjectFallback << 1) |
-        ((resolvedValue.items.length || 3) << 2);
+        ((resolvedValue[LIST_RENDER_VALUE]
+          ? 3
+          : (resolvedValue as unknown as { readonly a: number }).a) <<
+          2);
 
       if (currentList !== undefined && currentList.shape === nextListShape) {
         currentList.value.set(resolvedValue);
@@ -184,7 +188,8 @@ export function insertMemoDynamic(
             insertionParent,
             marker,
             () => listValue.get().items(),
-            (item, index, items) => listValue.get().renderItem(item, index, items),
+            (...renderArgs) =>
+              (listValue.get().renderItem as (...args: unknown[]) => RenderValue)(...renderArgs),
             listOptions,
             nextListShape >> 2,
           ),
