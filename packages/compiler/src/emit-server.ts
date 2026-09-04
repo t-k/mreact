@@ -438,10 +438,11 @@ function collectHtmlStatements(
 
     // Sync list — inline for-loop appending to the caller's accumulator.
     // No inner IIFE wrapper and no intermediate string concat per iteration.
-    const itemBinding = `const ${node.itemName} = _arr[_i];`;
-    const indexBinding = node.indexName === undefined ? undefined : `const ${node.indexName} = _i;`;
-    const arrayBinding =
-      node.arrayName === undefined ? undefined : `const ${node.arrayName} = _arr;`;
+    const itemBinding = `const ${node.parameterPatterns?.[0] ?? node.itemName} = _arr[_i];`;
+    const indexPattern = node.parameterPatterns?.[1] ?? node.indexName;
+    const arrayPattern = node.parameterPatterns?.[2] ?? node.arrayName;
+    const indexBinding = indexPattern === undefined ? undefined : `const ${indexPattern} = _i;`;
+    const arrayBinding = arrayPattern === undefined ? undefined : `const ${arrayPattern} = _arr;`;
     const bodyStatements = node.bodyStatements ?? [];
     const childStatements = node.children.flatMap((child) =>
       collectHtmlStatements(
@@ -1684,9 +1685,11 @@ function emitSyncListIife(
     contextConsumerHelperName,
     reactNodeRenderHelperName,
   );
-  const itemBinding = `const ${node.itemName} = _arr[_i];`;
-  const indexBinding = node.indexName === undefined ? "" : ` const ${node.indexName} = _i;`;
-  const arrayBinding = node.arrayName === undefined ? "" : ` const ${node.arrayName} = _arr;`;
+  const itemBinding = `const ${node.parameterPatterns?.[0] ?? node.itemName} = _arr[_i];`;
+  const indexPattern = node.parameterPatterns?.[1] ?? node.indexName;
+  const arrayPattern = node.parameterPatterns?.[2] ?? node.arrayName;
+  const indexBinding = indexPattern === undefined ? "" : ` const ${indexPattern} = _i;`;
+  const arrayBinding = arrayPattern === undefined ? "" : ` const ${arrayPattern} = _arr;`;
   const bodyStatements =
     node.bodyStatements === undefined || node.bodyStatements.length === 0
       ? ""
@@ -1728,6 +1731,10 @@ function emitListRenderer(
 }
 
 function emitListParameters(node: Extract<JsxNodeIr, { kind: "list" }>): string {
+  if (node.parameterPatterns !== undefined) {
+    return node.parameterPatterns.join(", ");
+  }
+
   return [node.itemName, node.indexName, node.arrayName]
     .filter((name): name is string => name !== undefined)
     .join(", ");

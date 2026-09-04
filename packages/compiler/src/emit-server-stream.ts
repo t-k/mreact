@@ -899,11 +899,13 @@ function emitListPart(
   indent: string,
 ): string {
   const innerIndent = indent + "    ";
-  const itemBinding = `${innerIndent}const ${part.itemName} = _arr[_i];`;
+  const itemBinding = `${innerIndent}const ${part.itemPattern ?? part.itemName} = _arr[_i];`;
+  const indexPattern = part.indexPattern ?? part.indexName;
+  const arrayPattern = part.arrayPattern ?? part.arrayName;
   const indexBinding =
-    part.indexName === undefined ? undefined : `${innerIndent}const ${part.indexName} = _i;`;
+    indexPattern === undefined ? undefined : `${innerIndent}const ${indexPattern} = _i;`;
   const arrayBinding =
-    part.arrayName === undefined ? undefined : `${innerIndent}const ${part.arrayName} = _arr;`;
+    arrayPattern === undefined ? undefined : `${innerIndent}const ${arrayPattern} = _arr;`;
   const bodyLines = part.bodyStatements.map((statement) => `${innerIndent}${statement}`);
   const coalescedParts = coalesceAdjacentStaticParts(part.parts);
 
@@ -1030,7 +1032,7 @@ function emitListPartAsStringExpression(
   }
 
   const concatLines = stringExpressions.map((expr) => `_listOut += ${expr};`);
-  return `(() => { const _arr = (${part.itemsCode}); let _listOut = ""; for (let _i = 0, _len = _arr.length; _i < _len; _i++) { const ${part.itemName} = _arr[_i];${part.indexName === undefined ? "" : ` const ${part.indexName} = _i;`}${part.arrayName === undefined ? "" : ` const ${part.arrayName} = _arr;`}${part.bodyStatements.length === 0 ? "" : ` ${part.bodyStatements.join(" ")}`} ${concatLines.join(" ")} } return _listOut; })()`;
+  return `(() => { const _arr = (${part.itemsCode}); let _listOut = ""; for (let _i = 0, _len = _arr.length; _i < _len; _i++) { const ${part.itemPattern ?? part.itemName} = _arr[_i];${(part.indexPattern ?? part.indexName) === undefined ? "" : ` const ${part.indexPattern ?? part.indexName} = _i;`}${(part.arrayPattern ?? part.arrayName) === undefined ? "" : ` const ${part.arrayPattern ?? part.arrayName} = _arr;`}${part.bodyStatements.length === 0 ? "" : ` ${part.bodyStatements.join(" ")}`} ${concatLines.join(" ")} } return _listOut; })()`;
 }
 
 function emitNestedAppendStatements(
@@ -1195,8 +1197,11 @@ type HtmlPart =
       kind: "list";
       itemsCode: string;
       itemName: string;
+      itemPattern?: string;
       indexName?: string;
+      indexPattern?: string;
       arrayName?: string;
+      arrayPattern?: string;
       bodyStatements: string[];
       parts: HtmlPart[];
     };
@@ -1357,6 +1362,15 @@ function collectHtmlParts(
         kind: "list",
         itemsCode: node.itemsCode,
         itemName: node.itemName,
+        ...(node.parameterPatterns?.[0] === undefined
+          ? {}
+          : { itemPattern: node.parameterPatterns[0] }),
+        ...(node.parameterPatterns?.[1] === undefined
+          ? {}
+          : { indexPattern: node.parameterPatterns[1] }),
+        ...(node.parameterPatterns?.[2] === undefined
+          ? {}
+          : { arrayPattern: node.parameterPatterns[2] }),
         ...(node.indexName === undefined ? {} : { indexName: node.indexName }),
         ...(node.arrayName === undefined ? {} : { arrayName: node.arrayName }),
         bodyStatements: node.bodyStatements ?? [],

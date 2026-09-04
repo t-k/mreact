@@ -915,6 +915,27 @@ export function App() {
     expect(runServerComponent(output.code)).toBe("<ul><li>0:A</li><li>1:B</li></ul>");
   });
 
+  test("emitted server component preserves destructured list callback scope", () => {
+    const output = transform({
+      code: `export function App() {
+        const entries = [["Ada", [1, 2]], ["Byron", [3]]];
+        const groups = [{ id: "admin", label: "Administrators" }];
+        return <main>
+          <ul>{entries.map(([actor, runs]) => <li key={actor}>{actor}:{runs.length}</li>)}</ul>
+          <ul>{groups.map(({ id, label }) => <li key={id}>{label}</li>)}</ul>
+        </main>;
+      }`,
+      filename: "destructured-list-callback.tsx",
+      target: "server",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe(
+      "<main><ul><li>Ada<!-- -->:<!-- -->2</li><li>Byron<!-- -->:<!-- -->1</li></ul><ul><li>Administrators</li></ul></main>",
+    );
+  });
+
   test("emitted server component renders conditional returns in list renderers", () => {
     const output = transform({
       code: `export function App() {

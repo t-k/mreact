@@ -115,6 +115,7 @@ export interface ListIr {
   itemName: string;
   indexName?: string;
   arrayName?: string;
+  parameterPatterns?: string[];
   keyCode?: string;
   bodyStatements?: string[];
   children: JsxNodeIr[];

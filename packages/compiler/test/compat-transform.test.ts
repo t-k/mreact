@@ -40,6 +40,29 @@ const reactJsxTransformParityFamilies = [
 ] as const;
 
 describe("compiler compat mode", () => {
+  test("preserves destructured list callback scope for keyed rows", async () => {
+    const output = transform({
+      code: `export function App() {
+        const entries = [["Ada", [1, 2]], ["Byron", [3]]];
+        const groups = [{ id: "admin", label: "Administrators" }];
+        return <main>
+          <ul data-array>{entries.map(([actor, runs]) => <li key={actor}>{actor}:{runs.length}</li>)}</ul>
+          <ul data-object>{groups.map(({ id, label }) => <li key={id}>{label}</li>)}</ul>
+        </main>;
+      }`,
+      filename: "destructured-list-callback.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const container = await runCompatComponent(output.code);
+
+    expect(container.querySelector("[data-array]")?.textContent).toBe("Ada:2Byron:1");
+    expect(container.querySelector("[data-object]")?.textContent).toBe("Administrators");
+  });
+
   test("keeps React JSX transform parity families explicit", () => {
     expect([...reactJsxTransformParityFamilies].sort()).toEqual([
       "block-body-list-renderers",

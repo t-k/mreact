@@ -1,10 +1,16 @@
 import {
   invalidJsxExpressionDiagnostic,
+  unsupportedCallbackLocalListKeyDiagnostic,
   unserializableAwaitValueDiagnostic,
   unsupportedComponentReferenceDiagnostic,
   unsupportedJsxNamespaceTagDiagnostic,
   unsupportedJsxSpreadChildDiagnostic,
 } from "./diagnostics.js";
+import {
+  collectBindingNames,
+  collectBindingNamesFromPattern,
+  readOxcParameterName,
+} from "./oxc-bindings.js";
 import type {
   AsyncBoundaryIr,
   CompiledSingleNodeListIr,
@@ -681,12 +687,20 @@ function analyzeOxcListExpression(
     return undefined;
   }
 
-  const itemName = String(readObject(readArray(renderer.params)[0]).name ?? "_item");
-  const indexName = readObject(readArray(renderer.params)[1]).name;
-  const arrayName = readObject(readArray(renderer.params)[2]).name;
+  const parameters = readArray(renderer.params);
+  const itemParameter = readObject(parameters[0]);
+  const itemName = typeof itemParameter.name === "string" ? itemParameter.name : "_item";
+  const indexName = readObject(parameters[1]).name;
+  const arrayName = readObject(parameters[2]).name;
+  const parameterPatterns = parameters.map((parameter) =>
+    readOxcListParameterPattern(code, parameter),
+  );
+  const parameterBindingNames = parameters.flatMap((parameter) =>
+    collectBindingNamesFromPattern(readObject(parameter)),
+  );
   const rendererContext = shadowOxcReactiveAliases(
     context,
-    [itemName, indexName, arrayName].filter((name): name is string => typeof name === "string"),
+    parameterBindingNames,
   );
   const rendererBody = analyzeOxcListRenderer(code, renderer, rendererContext, bodyStatementJsx);
 
@@ -695,18 +709,34 @@ function analyzeOxcListExpression(
   }
 
   const { children, bodyStatements } = rendererBody;
-  const keyCode = findOxcKeyCodeInChildren(children);
-  const compiledSingleNode = analyzeCompiledSingleNodeList(
-    code,
+  const discoveredKeyCode = findOxcKeyCodeInChildren(children);
+  const callbackLocalKeyBinding = findOxcCallbackLocalKeyBinding(
     renderer,
-    rendererContext,
-    rendererBody,
-    bodyStatementJsx,
-    keyCode,
-    itemName,
-    typeof indexName === "string" ? indexName : undefined,
-    typeof arrayName === "string" ? arrayName : undefined,
+    discoveredKeyCode,
   );
+  if (callbackLocalKeyBinding !== undefined) {
+    context.diagnostics.push(
+      unsupportedCallbackLocalListKeyDiagnostic(
+        callbackLocalKeyBinding,
+        getOxcLocation(code, renderer),
+      ),
+    );
+  }
+  const keyCode = callbackLocalKeyBinding === undefined ? discoveredKeyCode : undefined;
+  const compiledSingleNode =
+    itemParameter.type !== "Identifier"
+      ? undefined
+      : analyzeCompiledSingleNodeList(
+          code,
+          renderer,
+          rendererContext,
+          rendererBody,
+          bodyStatementJsx,
+          keyCode,
+          itemName,
+          typeof indexName === "string" ? indexName : undefined,
+          typeof arrayName === "string" ? arrayName : undefined,
+        );
 
   return {
     kind: "list",
@@ -717,11 +747,48 @@ function analyzeOxcListExpression(
     itemName,
     ...(typeof indexName === "string" ? { indexName } : {}),
     ...(typeof arrayName === "string" ? { arrayName } : {}),
+    ...(parameterPatterns.length === 0 ? {} : { parameterPatterns }),
     ...(keyCode === undefined ? {} : { keyCode }),
     ...(bodyStatements.length === 0 ? {} : { bodyStatements }),
     children,
     ...(compiledSingleNode === undefined ? {} : { compiledSingleNode }),
   };
+}
+
+function readOxcListParameterPattern(code: string, parameter: unknown): string {
+  const object = readObject(parameter);
+  const typeAnnotation = readObject(object.typeAnnotation);
+
+  if (
+    typeof object.start === "number" &&
+    typeof object.end === "number" &&
+    typeof typeAnnotation.start === "number"
+  ) {
+    return code.slice(object.start, typeAnnotation.start).trim();
+  }
+
+  return readOxcParameterName(code, parameter);
+}
+
+function findOxcCallbackLocalKeyBinding(
+  renderer: Record<string, unknown>,
+  keyCode: string | undefined,
+): string | undefined {
+  if (keyCode === undefined) {
+    return undefined;
+  }
+
+  const body = readObject(renderer.body);
+  if (body.type !== "BlockStatement") {
+    return undefined;
+  }
+
+  return collectBindingNames(body).find((name) => codeReadsIdentifier(keyCode, name));
+}
+
+function codeReadsIdentifier(code: string, name: string): boolean {
+  const escapedName = name.replaceAll(/[$()*+.?[\]^{|}]/g, "\\$&");
+  return new RegExp(`(?:^|[^\\w$.])${escapedName}(?![\\w$])`, "u").test(code);
 }
 
 function analyzeCompiledSingleNodeList(

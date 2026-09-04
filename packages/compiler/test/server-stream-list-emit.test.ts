@@ -64,4 +64,22 @@ describe("server stream list emit shape (issue 085)", () => {
     expect(output.code).toContain("const item = _arr[_i];");
     expect(output.code).toContain("const index = _i;");
   });
+
+  test("destructured list callback parameters keep the streaming loop fast path", () => {
+    const output = transform({
+      code: `export function App() {
+        const entries = [["Ada", [1, 2]]];
+        return <ul>{entries.map(([actor, runs]) => <li key={actor}>{actor}:{runs.length}</li>)}</ul>;
+      }`,
+      filename: "destructured-list-callback.tsx",
+      target: "server",
+      dev: false,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("const [actor, runs] = _arr[_i];");
+    expect(output.code).toContain("for (let _i = 0, _len = _arr.length;");
+    expect(output.code).toContain("$sink.append(_listOut);");
+  });
 });

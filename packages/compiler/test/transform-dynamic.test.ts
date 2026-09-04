@@ -199,6 +199,31 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.code).not.toContain("Missing compiler keyed row context");
   });
 
+  test("rejects callback-local keyed list bindings without emitting an invalid selector", () => {
+    const output = transform({
+      code: `export function App() {
+        const entries = [["Ada", 1]];
+        return <ul>{entries.map((entry) => {
+          globalThis.__keyPreludeRuns = (globalThis.__keyPreludeRuns ?? 0) + 1;
+          const actor = entry[0];
+          return <li key={actor}>{actor}</li>;
+        })}</ul>;
+      }`,
+      filename: "callback-local-key.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MR_UNSUPPORTED_CALLBACK_LOCAL_LIST_KEY",
+        level: "error",
+        message: expect.stringContaining("actor"),
+      }),
+    );
+    expect(output.code).not.toContain("key: (entry) => (actor)");
+  });
+
   test("reuses a compiler keyed event element for its direct text binding", () => {
     const output = transform({
       code: `

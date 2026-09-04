@@ -193,6 +193,21 @@ export function unsupportedJsxSpreadChildDiagnostic(loc?: SourceLocation): Diagn
   };
 }
 
+export function unsupportedCallbackLocalListKeyDiagnostic(
+  name: string,
+  loc?: SourceLocation,
+): Diagnostic {
+  return {
+    level: "error",
+    code: "MR_UNSUPPORTED_CALLBACK_LOCAL_LIST_KEY",
+    message: `A keyed list key cannot depend on callback-local binding '${name}' because the key selector executes outside the callback body.`,
+    suggestion: {
+      title: "Derive the key directly from a callback parameter or move the stable key onto the item.",
+    },
+    ...(loc === undefined ? {} : { loc }),
+  };
+}
+
 export function invalidJsxExpressionDiagnostic(
   loc?: SourceLocation,
   context: "text" | "attribute" | "unknown" = "unknown",

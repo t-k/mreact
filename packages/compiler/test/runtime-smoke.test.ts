@@ -45,6 +45,28 @@ describe("compiler runtime smoke", () => {
     expect(row.textContent).toBe("Updated");
   });
 
+  test("destructured list callback scope is preserved for keyed rows", async () => {
+    const output = transform({
+      code: `export function App() {
+        const entries = [["Ada", [1, 2]], ["Byron", [3]]];
+        const groups = [{ id: "admin", label: "Administrators" }];
+        return <main>
+          <ul data-array>{entries.map(([actor, runs]: [string, number[]]) => <li key={actor}>{actor}:{runs.length}</li>)}</ul>
+          <ul data-object>{groups.map(({ id, label }: { id: string; label: string }) => <li key={id}>{label}</li>)}</ul>
+        </main>;
+      }`,
+      filename: "destructured-list-callback.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+
+    expect(node.querySelector("[data-array]")?.textContent).toBe("Ada:2Byron:1");
+    expect(node.querySelector("[data-object]")?.textContent).toBe("Administrators");
+  });
+
   test("compiler keyed cell text retargets same-key rows and detaches old cells", async () => {
     const output = transform({
       code: `

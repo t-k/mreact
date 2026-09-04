@@ -44,7 +44,7 @@ export function collectBindingNames(statement: unknown): string[] {
   });
 }
 
-function collectBindingNamesFromPattern(pattern: Record<string, unknown>): string[] {
+export function collectBindingNamesFromPattern(pattern: Record<string, unknown>): string[] {
   if (typeof pattern.name === "string") {
     return [pattern.name];
   }
