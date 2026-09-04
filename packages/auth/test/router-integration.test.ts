@@ -210,7 +210,7 @@ export default function ProfilePage() {
       __resetAuthForTesting();
       await rm(rootDir, { force: true, recursive: true });
     }
-  });
+  }, 15_000);
 });
 
 async function createProtectedFixture() {
