@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.0.207 - 2026-09-04
+
+### Fixed
+
+- Fixed native client boundaries so `null`, `undefined`, and boolean results mount no text nodes, while routes without client references omit unused boundary-only hydration output.
+- Fixed the portable HTML escape fallback so batched server text matches the native and Cloudflare implementations without changing shared attribute escaping.
+- Fixed compiler-generated keyed lists inside conditional branches and callbacks with destructured, defaulted, rest, or zero parameters so bindings are evaluated once, remain reactive across same-key updates, preserve nested ownership and duplicate-key semantics, and commit atomically when key evaluation succeeds.
+- Fixed keyed list reconciliation across static rows, dynamic primitive rows, reactive object rows, and non-proxyable iterables so same-key updates preserve the intended DOM identity without stale values or invalid proxy transitions.
+- Fixed optimized and generic keyed rows under SVG elements so their roots and descendants use the SVG namespace while `foreignObject` descendants continue using the HTML namespace.
+
 ## 0.0.206 - 2026-08-28
 
 ### Fixed
