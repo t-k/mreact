@@ -4,9 +4,6 @@ export type Dispose = () => void;
 /** Marker symbol used to distinguish list render values from plain objects. */
 export const LIST_RENDER_VALUE = Symbol.for("mreact.list-render-value");
 
-/** @internal Carries compiler-known callback dependency arity through dynamic insertion. */
-export const LIST_RENDER_ARITY = Symbol("mreact.list-render-arity");
-
 /** Marker symbol used to distinguish memo render values from plain objects. */
 export const MEMO_RENDER_VALUE = Symbol.for("mreact.memo-render-value");
 

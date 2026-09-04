@@ -6,6 +6,7 @@ import { withCleanupScope } from "@reckona/mreact-reactive-core/internal";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { bindDomRef, createList, insertDynamic } from "../src/index.js";
 import { createMemo } from "../src/create-memo.js";
+import { createListWithRenderArity } from "../src/create-list.js";
 import { insertMemo } from "../src/insert-memo.js";
 import { insertMemoDynamic } from "../src/insert-memo-dynamic.js";
 import { bindText } from "../src/bind-text.js";
@@ -31,10 +32,7 @@ const jsxs = jsx;
 
 describe("insertDynamic", () => {
   test("updates rest-parameter list renderers when keyed indexes change", async () => {
-    const rows = cell([
-      { id: "a" },
-      { id: "b" },
-    ]);
+    const rows = cell([{ id: "a" }, { id: "b" }]);
     const parent = document.createElement("div");
     const marker = document.createComment("marker");
     parent.append(marker);
@@ -59,10 +57,7 @@ describe("insertDynamic", () => {
   });
 
   test("updates default-parameter list renderers when keyed indexes change", async () => {
-    const rows = cell([
-      { id: "a" },
-      { id: "b" },
-    ]);
+    const rows = cell([{ id: "a" }, { id: "b" }]);
     const parent = document.createElement("div");
     const marker = document.createComment("marker");
     parent.append(marker);
@@ -79,6 +74,50 @@ describe("insertDynamic", () => {
     rows.set([rows.get()[1] as { id: string }, rows.get()[0] as { id: string }]);
     await flushEffects();
     expect(parent.textContent).toBe("b:0a:1");
+
+    dispose();
+  });
+
+  test("updates function renderers that read keyed indexes through arguments", async () => {
+    const rows = cell([{ id: "a" }, { id: "b" }]);
+    const parent = document.createElement("div");
+    const marker = document.createComment("marker");
+    parent.append(marker);
+
+    const dispose = insertDynamic(parent, marker, () =>
+      createList(
+        () => rows.get(),
+        function (row) {
+          return `${row.id}:${String(arguments[1])}`;
+        },
+        { key: (row) => row.id },
+      ),
+    );
+
+    rows.set([rows.get()[1] as { id: string }, rows.get()[0] as { id: string }]);
+    await flushEffects();
+    expect(parent.textContent).toBe("b:0a:1");
+
+    dispose();
+  });
+
+  test("refreshes public destructured renderers after same-key replacement", async () => {
+    const rows = cell<readonly (readonly [string, string])[]>([["a", "Old"]]);
+    const parent = document.createElement("div");
+    const marker = document.createComment("marker");
+    parent.append(marker);
+
+    const dispose = insertDynamic(parent, marker, () =>
+      createList(
+        () => rows.get(),
+        ([id, label]) => `${id}:${label}`,
+        { key: ([id]) => id },
+      ),
+    );
+
+    rows.set([["a", "New"]]);
+    await flushEffects();
+    expect(parent.textContent).toBe("a:New");
 
     dispose();
   });
@@ -378,14 +417,14 @@ describe("insertDynamic", () => {
     dispose();
   });
 
-  test("retargets one-argument keyed list render values without replacing their nodes", async () => {
+  test("retargets compiler-owned one-argument keyed list render values without replacing nodes", async () => {
     const items = cell([{ id: "a", label: "One" }]);
     const parent = document.createElement("div");
     const marker = document.createComment("marker");
     parent.append(marker);
 
     const dispose = insertDynamic(parent, marker, () =>
-      createList(
+      createListWithRenderArity(
         () => items.get(),
         (item) => {
           const article = document.createElement("article");
@@ -394,6 +433,7 @@ describe("insertDynamic", () => {
           bindText(text, () => item.label);
           return article;
         },
+        1,
         { key: (item) => item.id },
       ),
     );

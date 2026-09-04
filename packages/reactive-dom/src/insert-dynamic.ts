@@ -1,23 +1,13 @@
 import { cell, effect, type Cell } from "@reckona/mreact-reactive-core";
-import {
-  effectWithDebugLabel,
-  registerCleanup,
-} from "@reckona/mreact-reactive-core/internal";
-import { bindListWithRenderArity } from "./bind-list.js";
+import { effectWithDebugLabel, registerCleanup } from "@reckona/mreact-reactive-core/internal";
+import { bindList } from "./bind-list.js";
 import { isListRenderValue } from "./create-list.js";
-import {
-  isDynamicHydrationEnabled,
-  markDynamicNode,
-  markDynamicNodes,
-} from "./dynamic-node.js";
+import { isDynamicHydrationEnabled, markDynamicNode, markDynamicNodes } from "./dynamic-node.js";
 import { createScopedRenderNodes } from "./render-scope.js";
 import { registerDispose } from "./scope.js";
-import {
-  LIST_RENDER_ARITY,
-  type Dispose,
-  type ListRenderValue,
-  type RenderValue,
-} from "./types.js";
+import { type Dispose, type ListRenderValue, type RenderValue } from "./types.js";
+
+type BindListWithRenderArity = (...args: [...Parameters<typeof bindList>, number]) => Dispose;
 
 /** Inserts and updates a dynamic render value before a marker node. */
 export function insertDynamic(
@@ -109,16 +99,9 @@ export function insertDynamic(
       next.dispose();
       const nextKeyed = nextValue.options?.key !== undefined;
       const nextNestedObjectFallback = nextValue.options?.nestedObjectFallback === true;
-      const nextRenderArity =
-        (
-          nextValue as ListRenderValue & {
-            [LIST_RENDER_ARITY]?: number;
-          }
-        )[LIST_RENDER_ARITY] ?? 3;
+      const nextRenderArity = (nextValue as ListRenderValue & { a?: number }).a ?? 3;
       const nextListShape =
-        +nextKeyed +
-        +nextNestedObjectFallback * 2 +
-        Math.min(nextRenderArity, 3) * 4;
+        +nextKeyed + +nextNestedObjectFallback * 2 + Math.min(nextRenderArity, 3) * 4;
 
       if (currentList !== undefined && currentList.shape === nextListShape) {
         currentList.value.set(nextValue);
@@ -159,7 +142,7 @@ export function insertDynamic(
       currentList = {
         value: listValue,
         shape: nextListShape,
-        dispose: bindListWithRenderArity(
+        dispose: (bindList as BindListWithRenderArity)(
           insertionParent,
           marker,
           () => listValue.get().items(),
@@ -226,9 +209,7 @@ export function insertDynamic(
     }
   };
   const dispose =
-    options?.debugLabel === undefined
-      ? effect(run)
-      : effectWithDebugLabel(run, options.debugLabel);
+    options?.debugLabel === undefined ? effect(run) : effectWithDebugLabel(run, options.debugLabel);
 
   const disposeOwnedDynamic = registerDispose(() => {
     dispose();
@@ -245,8 +226,5 @@ interface BoundDynamicList {
 }
 
 function isSameNodeList(left: readonly Node[], right: readonly Node[]): boolean {
-  return (
-    left.length === right.length &&
-    left.every((node, index) => node === right[index])
-  );
+  return left.length === right.length && left.every((node, index) => node === right[index]);
 }

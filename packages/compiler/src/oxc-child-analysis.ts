@@ -253,7 +253,9 @@ export function analyzeOxcJsxNode(
   const allowRef = bodyStatementJsx === "compat-object";
   const namespace = tagName === "svg" || context.jsxNamespace === "svg" ? "svg" : undefined;
   const childNamespace =
-    namespace === "svg" && tagName === "foreignObject" ? "html" : (namespace ?? context.jsxNamespace);
+    namespace === "svg" && tagName === "foreignObject"
+      ? "html"
+      : (namespace ?? context.jsxNamespace);
 
   return {
     kind: "element",
@@ -707,10 +709,23 @@ function analyzeOxcListExpression(
   const parameterBindingNames = parameters.flatMap((parameter) =>
     collectBindingNamesFromPattern(readObject(parameter)),
   );
-  const rendererContext = shadowOxcReactiveAliases(
-    context,
-    parameterBindingNames,
-  );
+  let rendererContext = shadowOxcReactiveAliases(context, parameterBindingNames);
+  const nativeParameterAliases =
+    context.target === "client" &&
+    bodyStatementJsx !== "compat-object" &&
+    itemParameter.type !== "Identifier" &&
+    readObject(renderer.body).type !== "BlockStatement"
+      ? collectOxcPatternAccessBindings(code, itemParameter, itemName)
+      : undefined;
+  if (nativeParameterAliases !== undefined) {
+    rendererContext = {
+      ...rendererContext,
+      reactiveAliasBindings: new Map([
+        ...(rendererContext.reactiveAliasBindings ?? []),
+        ...nativeParameterAliases,
+      ]),
+    };
+  }
   const rendererBody = analyzeOxcListRenderer(code, renderer, rendererContext, bodyStatementJsx);
 
   if (rendererBody === undefined) {
@@ -718,10 +733,10 @@ function analyzeOxcListExpression(
   }
 
   const { children, bodyStatements } = rendererBody;
-  const discoveredKeyCode = findOxcKeyCodeInChildren(children);
+  const discoveredSourceKeyCode = findOxcKeyCodeInChildren(children);
   const callbackLocalKeyBinding =
     context.target === "client" && bodyStatementJsx !== "compat-object"
-      ? findOxcCallbackLocalKeyBinding(renderer, discoveredKeyCode)
+      ? findOxcCallbackLocalKeyBinding(code, renderer, discoveredSourceKeyCode)
       : undefined;
   if (callbackLocalKeyBinding !== undefined) {
     context.diagnostics.push(
@@ -731,7 +746,10 @@ function analyzeOxcListExpression(
       ),
     );
   }
-  const keyCode = callbackLocalKeyBinding === undefined ? discoveredKeyCode : undefined;
+  const keyCode =
+    callbackLocalKeyBinding === undefined
+      ? rewriteOxcListKeyCode(code, renderer, discoveredSourceKeyCode, nativeParameterAliases)
+      : undefined;
   const compiledSingleNode =
     itemParameter.type !== "Identifier"
       ? undefined
@@ -756,7 +774,14 @@ function analyzeOxcListExpression(
     itemName,
     ...(typeof indexName === "string" ? { indexName } : {}),
     ...(typeof arrayName === "string" ? { arrayName } : {}),
-    ...(parameterPatterns.length === 0 ? {} : { parameterPatterns }),
+    ...(parameterPatterns.length === 0
+      ? {}
+      : {
+          parameterPatterns:
+            nativeParameterAliases === undefined
+              ? parameterPatterns
+              : [itemName, ...parameterPatterns.slice(1)],
+        }),
     ...(keyCode === undefined ? {} : { keyCode }),
     ...(bodyStatements.length === 0 ? {} : { bodyStatements }),
     children,
@@ -779,7 +804,86 @@ function readOxcListParameterPattern(code: string, parameter: unknown): string {
   return readOxcParameterName(code, parameter);
 }
 
+function collectOxcPatternAccessBindings(
+  code: string,
+  pattern: Record<string, unknown>,
+  baseCode: string,
+  bindings = new Map<string, string>(),
+): Map<string, string> | undefined {
+  if (pattern.type === "Identifier" && typeof pattern.name === "string") {
+    bindings.set(pattern.name, baseCode);
+    return bindings;
+  }
+
+  if (pattern.type === "AssignmentPattern") {
+    return undefined;
+  }
+
+  if (pattern.type === "ArrayPattern") {
+    const elements = readArray(pattern.elements);
+    for (let index = 0; index < elements.length; index += 1) {
+      const element = readObject(elements[index]);
+      if (
+        Object.keys(element).length > 0 &&
+        collectOxcPatternAccessBindings(code, element, `${baseCode}[${index}]`, bindings) ===
+          undefined
+      ) {
+        return undefined;
+      }
+    }
+    return bindings;
+  }
+
+  if (pattern.type === "ObjectPattern") {
+    for (const propertyValue of readArray(pattern.properties)) {
+      const property = readObject(propertyValue);
+      if (property.type === "RestElement") {
+        return undefined;
+      }
+      const key = readObject(property.key);
+      const propertyAccess =
+        property.computed === true
+          ? `${baseCode}[${readSource(code, key)}]`
+          : typeof key.name === "string" && /^[A-Za-z_$][\w$]*$/u.test(key.name)
+            ? `${baseCode}.${key.name}`
+            : `${baseCode}[${JSON.stringify(key.value)}]`;
+      if (
+        collectOxcPatternAccessBindings(
+          code,
+          readObject(property.value),
+          propertyAccess,
+          bindings,
+        ) === undefined
+      ) {
+        return undefined;
+      }
+    }
+    return bindings;
+  }
+
+  return undefined;
+}
+
+function rewriteOxcListKeyCode(
+  code: string,
+  renderer: Record<string, unknown>,
+  keyCode: string | undefined,
+  aliases: ReadonlyMap<string, string> | undefined,
+): string | undefined {
+  if (keyCode === undefined || aliases === undefined) {
+    return keyCode;
+  }
+
+  const keyExpression = collectOxcKeyExpressions(renderer.body).find(
+    (expression) => readSource(code, expression) === keyCode,
+  );
+  return keyExpression === undefined
+    ? keyCode
+    : (rewriteOxcReactiveAliasExpressionCode(code, keyExpression, aliases) ?? keyCode);
+}
+
 function findOxcCallbackLocalKeyBinding(
+  code: string,
   renderer: Record<string, unknown>,
   keyCode: string | undefined,
 ): string | undefined {
@@ -792,7 +896,9 @@ function findOxcCallbackLocalKeyBinding(
     return undefined;
   }
 
-  const keyExpressions = collectOxcKeyExpressions(body);
+  const keyExpressions = collectOxcKeyExpressions(body).filter(
+    (expression) => readSource(code, expression) === keyCode,
+  );
   return collectBindingNames(body).find((name) =>
     keyExpressions.some((expression) => oxcExpressionReadsIdentifier(expression, name)),
   );

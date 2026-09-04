@@ -267,6 +267,26 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.code).toContain('key: (item) => (item["id"])');
   });
 
+  test("ignores callback-local keys on descendants when the list row key is valid", () => {
+    const output = transform({
+      code: `export function App() {
+        const rows = [{ id: "a" }];
+        return <ul>{rows.map((row) => {
+          const childKey = row.id + "-child";
+          return <li key={row.id}><span key={childKey}>{row.id}</span></li>;
+        })}</ul>;
+      }`,
+      filename: "nested-callback-local-key.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).not.toContainEqual(
+      expect.objectContaining({ code: "MR_UNSUPPORTED_CALLBACK_LOCAL_LIST_KEY" }),
+    );
+    expect(output.code).toContain("key: (row) => (row.id)");
+  });
+
   test("reuses a compiler keyed event element for its direct text binding", () => {
     const output = transform({
       code: `

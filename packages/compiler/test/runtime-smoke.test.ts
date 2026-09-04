@@ -92,6 +92,57 @@ describe("compiler runtime smoke", () => {
     const node = (await runClientComponent(output.code)) as HTMLElement;
 
     expect(node.querySelector("li")?.textContent).toBe("Old");
+    const row = node.querySelector("li");
+    node.querySelector("button")?.click();
+    await flushEffects();
+    expect(node.querySelector("li")).toBe(row);
+    expect(node.querySelector("li")?.textContent).toBe("New");
+  });
+
+  test("object-destructured keyed rows retain identity after same-key replacement", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+        const rows = cell([{ id: "a", label: "Old" }]);
+        export function App() {
+          return <main>
+            <button onClick={() => rows.set([{ id: "a", label: "New" }])}>Replace</button>
+            <ul>{rows.get().map(({ id, label }) => <li key={id}>{label}</li>)}</ul>
+          </main>;
+        }`,
+      filename: "object-destructured-list-replacement.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const row = node.querySelector("li");
+
+    node.querySelector("button")?.click();
+    await flushEffects();
+    expect(node.querySelector("li")).toBe(row);
+    expect(row?.textContent).toBe("New");
+  });
+
+  test("object-destructured keyed rows preserve parameter defaults", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+        const rows = cell([{ id: "a" }]);
+        export function App() {
+          return <main>
+            <button onClick={() => rows.set([{ id: "a", label: "New" }])}>Replace</button>
+            <ul>{rows.get().map(({ id, label = "Fallback" }) => <li key={id}>{label}</li>)}</ul>
+          </main>;
+        }`,
+      filename: "object-destructured-list-default.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    expect(node.querySelector("li")?.textContent).toBe("Fallback");
+
     node.querySelector("button")?.click();
     await flushEffects();
     expect(node.querySelector("li")?.textContent).toBe("New");
@@ -128,9 +179,7 @@ describe("compiler runtime smoke", () => {
     expect(node.querySelector("foreignObject > div")?.namespaceURI).toBe(
       "http://www.w3.org/1999/xhtml",
     );
-    expect(node.querySelector("[data-tail]")?.namespaceURI).toBe(
-      "http://www.w3.org/2000/svg",
-    );
+    expect(node.querySelector("[data-tail]")?.namespaceURI).toBe("http://www.w3.org/2000/svg");
   });
 
   test("compiler keyed cell text retargets same-key rows and detaches old cells", async () => {

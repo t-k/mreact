@@ -1,20 +1,12 @@
 import { cell, effect, type Cell } from "@reckona/mreact-reactive-core";
-import {
-  effectWithDebugLabel,
-  registerCleanup,
-} from "@reckona/mreact-reactive-core/internal";
+import { effectWithDebugLabel, registerCleanup } from "@reckona/mreact-reactive-core/internal";
 import { isMemoRenderValue } from "./create-memo.js";
-import { bindListWithRenderArity } from "./bind-list.js";
+import { bindList } from "./bind-list.js";
 import { isListRenderValue } from "./create-list.js";
-import {
-  isDynamicHydrationEnabled,
-  markDynamicNode,
-  markDynamicNodes,
-} from "./dynamic-node.js";
+import { isDynamicHydrationEnabled, markDynamicNode, markDynamicNodes } from "./dynamic-node.js";
 import { createScopedRenderNodes } from "./render-scope.js";
 import { registerDispose } from "./scope.js";
 import {
-  LIST_RENDER_ARITY,
   type Dispose,
   type ListRenderValue,
   type MemoRenderValue,
@@ -22,6 +14,7 @@ import {
 } from "./types.js";
 
 type MemoDynamicValue = RenderValue | MemoRenderValue;
+type BindListWithRenderArity = (...args: [...Parameters<typeof bindList>, number]) => Dispose;
 
 /** Inserts a compiler-owned memo render value before a marker node. */
 export function insertMemoDynamic(
@@ -140,16 +133,9 @@ export function insertMemoDynamic(
       }
       const nextKeyed = resolvedValue.options?.key !== undefined;
       const nextNestedObjectFallback = resolvedValue.options?.nestedObjectFallback === true;
-      const nextRenderArity =
-        (
-          resolvedValue as ListRenderValue & {
-            [LIST_RENDER_ARITY]?: number;
-          }
-        )[LIST_RENDER_ARITY] ?? 3;
+      const nextRenderArity = (resolvedValue as ListRenderValue & { a?: number }).a ?? 3;
       const nextListShape =
-        +nextKeyed +
-        +nextNestedObjectFallback * 2 +
-        Math.min(nextRenderArity, 3) * 4;
+        +nextKeyed + +nextNestedObjectFallback * 2 + Math.min(nextRenderArity, 3) * 4;
 
       if (currentList !== undefined && currentList.shape === nextListShape) {
         currentList.value.set(resolvedValue);
@@ -193,7 +179,7 @@ export function insertMemoDynamic(
         currentList = {
           value: listValue,
           shape: nextListShape,
-          dispose: bindListWithRenderArity(
+          dispose: (bindList as BindListWithRenderArity)(
             insertionParent,
             marker,
             () => listValue.get().items(),
@@ -262,9 +248,7 @@ export function insertMemoDynamic(
   };
 
   const dispose =
-    options?.debugLabel === undefined
-      ? effect(run)
-      : effectWithDebugLabel(run, options.debugLabel);
+    options?.debugLabel === undefined ? effect(run) : effectWithDebugLabel(run, options.debugLabel);
   const disposeOwnedDynamic = registerDispose(() => {
     dispose();
     clear();
