@@ -10,6 +10,7 @@ export { createMemo } from "./create-memo.js";
 export { insertMemo } from "./insert-memo.js";
 export { insertMemoDynamic } from "./insert-memo-dynamic.js";
 export { setDomAttribute } from "./dom-prop-application.js";
+export { createSvgTemplate, createSvgTemplateElement } from "./template.js";
 export { MEMO_RENDER_VALUE, type MemoRenderValue } from "./types.js";
 export type {
   CompilerKeyedRowContext,

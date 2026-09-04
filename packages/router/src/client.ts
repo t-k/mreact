@@ -3373,6 +3373,7 @@ function __mreactResolveRouteNode(value) {
     : `function __mreactSyncDomRefBindings() {}
 `;
   const boundaryOnlyHydrationBlock = routeRequiresFullHydration
+    || clientReferenceManifest.length === 0
     ? ""
     : `${routeCellHydrationIndent}if (!__mreactHasNonSerializableClientBoundaries(__mreactMarker) && __mreactHydrateClientBoundaries(document, __mreactClientReferences, __mreactClientReferenceComponents)) {
 ${routeCellHydrationIndent}  __mreactMarker.setAttribute(${JSON.stringify(routeHydrationContract.hydratedAttribute)}, "true");
@@ -3426,8 +3427,7 @@ ${restoreRequestUrl ? "  if (__mreactProps.request) __mreactProps.request.url = 
   }
 ${routeCellHydrationStart}${routeCleanupHydrationStart}${boundaryOnlyHydrationBlock}${routeComponentGuard}${routeCellHydrationIndent}const __mreactNode = ${routeHydrationNodeExpression};
 ${routeCellHydrationIndent}__mreactResumeRoute(__mreactMarker, __mreactNode);
-${routeCellHydrationIndent}__mreactHydrateClientBoundaries(document, __mreactClientReferences, __mreactClientReferenceComponents);
-${routeCellHydrationIndent}__mreactMarker.setAttribute(__mreactRouteHydratedAttribute, "true");
+${clientReferenceManifest.length === 0 ? "" : `${routeCellHydrationIndent}__mreactHydrateClientBoundaries(document, __mreactClientReferences, __mreactClientReferenceComponents);\n`}${routeCellHydrationIndent}__mreactMarker.setAttribute(__mreactRouteHydratedAttribute, "true");
 ${routeCellHydrationIndent}__mreactMarkRouteHydrated();
 ${routeCellHydrationEnd}}
 ${routeCellDropFunction}
@@ -4893,9 +4893,7 @@ function __mreactHydrateClientBoundaries(marker, references, components) {
     }
 
     const propsElement = __mreactClientBoundaryPropsElement(placeholder, name);
-    const props = propsElement?.textContent === undefined || propsElement.textContent === ""
-      ? {}
-      : JSON.parse(propsElement.textContent);
+    let props = propsElement?.textContent ? JSON.parse(propsElement.textContent) : {};
     const fallbackChildren = __mreactClientBoundaryFallbackChildren(placeholder, propsElement);
 
     if (fallbackChildren !== undefined) {
@@ -4920,13 +4918,8 @@ function __mreactHydrateClientBoundaries(marker, references, components) {
       continue;
     }
 
-    const node = component(props);
-
-    if (node === null || node === undefined || typeof node === "boolean") {
-      placeholder.remove();
-    } else {
-      placeholder.replaceWith(node);
-    }
+    props = component(props);
+    placeholder.replaceWith(...(props == null || typeof props === "boolean" ? [] : [props]));
     propsElement?.remove();
     hydrated = true;
   }

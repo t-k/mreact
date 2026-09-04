@@ -33,6 +33,7 @@ export function bindList<T>(
   items: () => readonly T[],
   renderItem: (item: T, index: number, items: readonly T[]) => RenderValue,
   options: BindListOptions<T> = {},
+  renderArity = renderItem.length,
 ): Dispose {
   const markRecordsForHydration = isDynamicHydrationEnabled();
 
@@ -52,6 +53,7 @@ export function bindList<T>(
     options.key,
     options,
     markRecordsForHydration,
+    renderArity,
   );
 }
 
@@ -151,13 +153,13 @@ function bindKeyedList<T>(
   key: (item: T, index: number, items: readonly T[]) => unknown,
   options: BindListOptions<T>,
   markRecordsForHydration: boolean,
+  renderArity: number,
 ): Dispose {
   let records = new Map<unknown, KeyedRecord>();
   let ownsParent = false;
   let recordNodeCount = 0;
   // Function.length is stable for the lifetime of the list; reading it per
   // row update is avoidable property-access overhead.
-  const renderArity = renderItem.length;
   const warnDuplicateKey = import.meta.env?.DEV === false ? undefined : createDuplicateKeyWarning();
 
   const dispose = effect(() => {

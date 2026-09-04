@@ -1,12 +1,8 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, test } from "vitest";
-import {
-  createSvgTemplate,
-  createSvgTemplateElement,
-  createTemplate,
-  createTemplateElement,
-} from "../src/index.js";
+import { createTemplate, createTemplateElement } from "../src/index.js";
+import { createSvgTemplate, createSvgTemplateElement } from "../src/template.js";
 
 describe("createTemplate", () => {
   test("returns independent cloned fragments", () => {

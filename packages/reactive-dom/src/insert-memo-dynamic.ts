@@ -6,7 +6,6 @@ import {
 import { isMemoRenderValue } from "./create-memo.js";
 import { bindList } from "./bind-list.js";
 import { isListRenderValue } from "./create-list.js";
-import { createDynamicListRenderer } from "./dynamic-list-renderer.js";
 import {
   isDynamicHydrationEnabled,
   markDynamicNode,
@@ -141,13 +140,12 @@ export function insertMemoDynamic(
       const nextKeyed = resolvedValue.options?.key !== undefined;
       const nextNestedObjectFallback = resolvedValue.options?.nestedObjectFallback === true;
       const nextRenderArity = resolvedValue.renderItem.length;
+      const nextListShape =
+        +nextKeyed +
+        +nextNestedObjectFallback * 2 +
+        Math.min(nextRenderArity, 3) * 4;
 
-      if (
-        currentList !== undefined &&
-        currentList.keyed === nextKeyed &&
-        currentList.nestedObjectFallback === nextNestedObjectFallback &&
-        currentList.renderArity === nextRenderArity
-      ) {
+      if (currentList !== undefined && currentList.shape === nextListShape) {
         currentList.value.set(resolvedValue);
         currentMemo = nextMemo;
         disposeCurrentScope = nextMemoScope;
@@ -188,15 +186,14 @@ export function insertMemoDynamic(
       try {
         currentList = {
           value: listValue,
-          keyed: nextKeyed,
-          nestedObjectFallback: nextNestedObjectFallback,
-          renderArity: nextRenderArity,
+          shape: nextListShape,
           dispose: bindList(
             insertionParent,
             marker,
             () => listValue.get().items(),
-            createDynamicListRenderer(listValue, nextRenderArity),
+            (item, index, items) => listValue.get().renderItem(item, index, items),
             listOptions,
+            nextRenderArity,
           ),
         };
       } catch (error) {
@@ -272,9 +269,7 @@ export function insertMemoDynamic(
 
 interface BoundMemoDynamicList {
   value: Cell<ListRenderValue>;
-  keyed: boolean;
-  nestedObjectFallback: boolean;
-  renderArity: number;
+  shape: number;
   dispose: Dispose;
 }
 

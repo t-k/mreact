@@ -26,12 +26,7 @@ export type { BindTextBatchOptions, BindTextOptions } from "./bind-text.js";
 export { effect } from "@reckona/mreact-reactive-core";
 export { createList } from "./create-list.js";
 export { createRoot } from "./root.js";
-export {
-  createSvgTemplate,
-  createSvgTemplateElement,
-  createTemplate,
-  createTemplateElement,
-} from "./template.js";
+export { createTemplate, createTemplateElement } from "./template.js";
 export { bindDomRef, getDomRefBindings } from "./dom-ref.js";
 export type { DomRefBinding, DomRefCallback } from "./dom-ref.js";
 export { insertDynamic } from "./insert-dynamic.js";

@@ -200,7 +200,11 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
   }
 
   for (const component of ir.components) {
-    visitForClientImports(component.root, "setup", (node) => {
+    if (component.root.kind === "element" && component.root.namespace === "svg") {
+      internalSpecifiers.add("createSvgTemplate");
+    }
+
+    visitForClientImports(component.root, "setup", (node, context) => {
       if (node.kind === "expr") {
         if (node.renderMode === "dynamic") {
           specifiers.add("insertDynamic");
@@ -225,18 +229,18 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
         if (node.compiledSingleNode === undefined) {
           specifiers.add("bindList");
         } else {
-          specifiers.add(
-            node.compiledSingleNode.root.namespace === "svg"
-              ? "createSvgTemplateElement"
-              : "createTemplateElement",
-          );
+          if (node.compiledSingleNode.root.namespace === "svg") {
+            internalSpecifiers.add("createSvgTemplateElement");
+          } else {
+            specifiers.add("createTemplateElement");
+          }
           internalSpecifiers.add("bindCompilerKeyedSingleNodeList");
         }
       }
 
       if (node.kind === "element") {
-        if (node.namespace === "svg") {
-          specifiers.add("createSvgTemplate");
+        if (node.namespace === "svg" && context === "render-value") {
+          internalSpecifiers.add("createSvgTemplate");
         }
         for (const attr of node.attributes) {
           if (attr.kind === "dynamic-attr") {
@@ -1489,9 +1493,9 @@ function visit(node: JsxNodeIr, fn: (node: JsxNodeIr) => void): void {
 function visitForClientImports(
   node: JsxNodeIr,
   context: "render-value" | "setup",
-  fn: (node: JsxNodeIr) => void,
+  fn: (node: JsxNodeIr, context: "render-value" | "setup") => void,
 ): void {
-  fn(node);
+  fn(node, context);
 
   if (node.kind === "conditional") {
     for (const child of [...node.whenTrue, ...node.whenFalse]) {

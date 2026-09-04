@@ -6,8 +6,6 @@ import {
   bindSpreadProps,
   bindText,
   createList,
-  createSvgTemplate,
-  createSvgTemplateElement,
   createTemplate,
   createTemplateElement,
   insertDynamic,
@@ -59,6 +57,8 @@ import {
   bindCompilerKeyedPropertyText,
   bindCompilerKeyedSingleNodeList,
   bindCompilerKeyedText,
+  createSvgTemplate,
+  createSvgTemplateElement,
   markCompilerKeyedEventSlot,
 } from "../../reactive-dom/src/internal.js";
 import { createMemo } from "../../reactive-dom/src/create-memo.js";
@@ -394,7 +394,7 @@ function extractClientRuntimeEntries(code: string): { localName: string; value: 
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>bindDomRef|bindEvent|bindList|bindProp|bindSpreadProps|bindText|createList|createMemo|createSvgTemplate|createSvgTemplateElement|createTemplate|createTemplateElement|effect|insertDynamic)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+      /^(?<importedName>bindDomRef|bindEvent|bindList|bindProp|bindSpreadProps|bindText|createList|createMemo|createTemplate|createTemplateElement|effect|insertDynamic)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
     );
 
     if (match?.groups === undefined) {
@@ -422,7 +422,7 @@ function extractClientInternalRuntimeEntries(
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>bindCompilerKeyedCellText|bindCompilerKeyedPropertyText|bindCompilerKeyedSingleNodeList|bindCompilerKeyedText|createMemo|insertMemo|insertMemoDynamic|markCompilerKeyedEventSlot)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+      /^(?<importedName>bindCompilerKeyedCellText|bindCompilerKeyedPropertyText|bindCompilerKeyedSingleNodeList|bindCompilerKeyedText|createMemo|createSvgTemplate|createSvgTemplateElement|insertMemo|insertMemoDynamic|markCompilerKeyedEventSlot)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
     );
 
     if (match?.groups === undefined) {
@@ -432,21 +432,25 @@ function extractClientInternalRuntimeEntries(
     return {
       localName: match.groups.localName ?? match.groups.importedName,
       value:
-        match.groups.importedName === "insertMemo"
-          ? insertMemo
-          : match.groups.importedName === "insertMemoDynamic"
-            ? insertMemoDynamic
-            : match.groups.importedName === "createMemo"
-              ? createMemo
-              : match.groups.importedName === "markCompilerKeyedEventSlot"
-                ? markCompilerKeyedEventSlot
-                : match.groups.importedName === "bindCompilerKeyedCellText"
-                  ? bindCompilerKeyedCellText
-                  : match.groups.importedName === "bindCompilerKeyedPropertyText"
-                    ? bindCompilerKeyedPropertyText
-                    : match.groups.importedName === "bindCompilerKeyedText"
-                      ? bindCompilerKeyedText
-                      : bindCompilerKeyedSingleNodeList,
+        match.groups.importedName === "createSvgTemplate"
+          ? createSvgTemplate
+          : match.groups.importedName === "createSvgTemplateElement"
+            ? createSvgTemplateElement
+            : match.groups.importedName === "insertMemo"
+              ? insertMemo
+              : match.groups.importedName === "insertMemoDynamic"
+                ? insertMemoDynamic
+                : match.groups.importedName === "createMemo"
+                  ? createMemo
+                  : match.groups.importedName === "markCompilerKeyedEventSlot"
+                    ? markCompilerKeyedEventSlot
+                    : match.groups.importedName === "bindCompilerKeyedCellText"
+                      ? bindCompilerKeyedCellText
+                      : match.groups.importedName === "bindCompilerKeyedPropertyText"
+                        ? bindCompilerKeyedPropertyText
+                        : match.groups.importedName === "bindCompilerKeyedText"
+                          ? bindCompilerKeyedText
+                          : bindCompilerKeyedSingleNodeList,
     };
   });
 }
