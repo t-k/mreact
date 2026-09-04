@@ -34,6 +34,19 @@ async function expectServerPairHtml(
 }
 
 describe("server emit shared behavior", () => {
+  test("string and stream keep lowercase SVG intrinsics when a helper has the same name", async () => {
+    await expectServerPairHtml(
+      `function path(vendor) {
+  return vendor === "anthropic" ? "M3 20" : "M1 1";
+}
+export function App(props) {
+  return <svg>{props.label ? <title>{props.label}</title> : null}<path d={path(props.vendor)} /></svg>;
+}`,
+      '<svg><title>Anthropic</title><path d="M3 20"></path></svg>',
+      { label: "Anthropic", vendor: "anthropic" },
+    );
+  });
+
   test("string and stream emitters normalize aliases and static style literals the same way", async () => {
     const source = `export function App() {
   return (

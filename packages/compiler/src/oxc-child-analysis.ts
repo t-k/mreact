@@ -175,7 +175,7 @@ export function analyzeOxcJsxNode(
 
   if (
     /^[A-Z][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/.test(tagName) ||
-    context.componentNames.has(tagName) ||
+    (/^[A-Z]/.test(tagName) && context.componentNames.has(tagName)) ||
     isOxcRuntimeComponentBinding(tagName, context)
   ) {
     const keyCode = findOxcJsxAttributeCode(code, attributes, "key");
