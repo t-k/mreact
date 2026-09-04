@@ -76,6 +76,7 @@ type RuntimeHelperName =
   | "createSvgTemplateElement"
   | "createTemplate"
   | "createTemplateElement"
+  | "cell"
   | "computed"
   | "insertDynamic"
   | "insertMemo"
@@ -118,6 +119,7 @@ function allocateRuntimeHelperNames(
     createSvgTemplateElement: "createSvgTemplateElement",
     createTemplate: "createTemplate",
     createTemplateElement: "createTemplateElement",
+    cell: "cell",
     computed: "computed",
     insertDynamic: "insertDynamic",
     insertMemo: "insertMemo",
@@ -232,6 +234,7 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
         if (node.parameterBinding !== undefined) {
           reactiveCoreSpecifiers.add("computed");
           if (node.keyCode !== undefined) {
+            reactiveCoreSpecifiers.add("cell");
             internalSpecifiers.add("trackCompilerKeyedItem");
           }
         }
@@ -1302,7 +1305,7 @@ function emitListRenderer(
 ${ownerDeclarations.join("\n")}${ownerDeclarations.length === 0 ? "" : "\n"}    const ${rowKeyName} = ${cacheName}.byIndex[${indexName}];
     const ${parameterBinding.cellName} = ${state.helperNames.computed}(() => {
       ${state.helperNames.trackCompilerKeyedItem}(${itemCellName});
-      return ${cacheName}.byKey.get(${rowKeyName});
+      return ${cacheName}.byKey.get(${rowKeyName}).get();
     });
     ${parameterBinding.cellName}.get();
     return ${valueExpression};
@@ -1415,6 +1418,7 @@ function emitListKeyOption(
   const indexName = parameterBinding.argumentNames[1] as string;
   const keyName = state.allocateName("_listKey");
   const bindingsName = state.allocateName("_listBindingValues");
+  const cachedBindingsName = state.allocateName("_cachedListBindings");
 
   return `key: (${parameters}) => {
     if (${indexName} in ${cacheName}.byIndex) return ${cacheName}.byIndex[${indexName}];
@@ -1422,7 +1426,12 @@ function emitListKeyOption(
       const ${keyName} = (${node.keyCode});
       const ${bindingsName} = [${boundValues}];
       ${cacheName}.byIndex[${indexName}] = ${keyName};
-      if (!${cacheName}.byKey.has(${keyName})) ${cacheName}.byKey.set(${keyName}, ${bindingsName});
+      if (!${cacheName}.active.has(${keyName})) {
+        ${cacheName}.active.add(${keyName});
+        const ${cachedBindingsName} = ${cacheName}.byKey.get(${keyName});
+        if (${cachedBindingsName} === undefined) ${cacheName}.byKey.set(${keyName}, ${state.helperNames.cell}(${bindingsName}));
+        else ${cachedBindingsName}.set(${bindingsName});
+      }
       return ${keyName};
     })(${parameters});
   }`;
@@ -1432,7 +1441,14 @@ function emitListItems(node: Extract<JsxNodeIr, { kind: "list" }>, state: EmitSe
   const cacheName = getListBindingCache(node, state);
   return cacheName === undefined
     ? `() => (${node.itemsCode})`
-    : `() => (${cacheName}.byIndex.length = 0, ${cacheName}.byKey.clear(), (${node.itemsCode}))`;
+    : `() => {
+    for (const key of ${cacheName}.byKey.keys()) {
+      if (!${cacheName}.active.has(key)) ${cacheName}.byKey.delete(key);
+    }
+    ${cacheName}.active.clear();
+    ${cacheName}.byIndex.length = 0;
+    return (${node.itemsCode});
+  }`;
 }
 
 function getListBindingCache(
@@ -1450,7 +1466,9 @@ function getListBindingCache(
 
   const cacheName = state.allocateName("_listBindingCache");
   state.listBindingCaches.set(node, cacheName);
-  state.ownerDeclarations.push(`const ${cacheName} = { byIndex: [], byKey: new Map() };`);
+  state.ownerDeclarations.push(
+    `const ${cacheName} = { active: new Set(), byIndex: [], byKey: new Map() };`,
+  );
   return cacheName;
 }
 

@@ -3,6 +3,26 @@ import { transform } from "../src/index.js";
 import { runServerStreamComponent } from "./helpers.js";
 
 describe("compiler server stream JSX transform", () => {
+  test("zero-parameter list callbacks preserve outer synthetic-name bindings", async () => {
+    const output = transform({
+      code: `export function App() {
+        const _item = "outer";
+        const rows = [1, 2];
+        return <main>{rows.map(() => <span>{_item}</span>)}</main>;
+      }`,
+      filename: "zero-parameter-list.tsx",
+      target: "server",
+      dev: false,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("const _item = _arr[_i]");
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      "<main><span>outer</span><span>outer</span></main>",
+    );
+  });
+
   test("omits domRef without evaluating its callback expression", async () => {
     const output = transform({
       code: `export function App() {

@@ -268,6 +268,128 @@ describe("compiler runtime smoke", () => {
     expect(row?.textContent).toBe("2:New");
   });
 
+  test("same-object destructured rows refresh reactive default bindings", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+        let getterRuns = 0;
+        const fallback = cell("Old");
+        const row = { key: "a", get value() { getterRuns += 1; return undefined; } };
+        const readFallback = () => getterRuns + ":" + fallback.get();
+        export function App() {
+          return <main>
+            <button onClick={() => fallback.set("New")}>Update</button>
+            <ul>{[row].map(({ key, value = readFallback() }) => <li key={key}>{value}</li>)}</ul>
+          </main>;
+        }`,
+      filename: "same-object-destructured-list-default.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const row = node.querySelector("li");
+    expect(row?.textContent).toBe("1:Old");
+
+    node.querySelector("button")?.click();
+    await flushEffects();
+    expect(node.querySelector("li")).toBe(row);
+    expect(row?.textContent).toBe("2:New");
+  });
+
+  test("whole-parameter defaults refresh without an item cell", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+        const fallback = cell({ key: "a", label: "Old" });
+        const rows = [undefined];
+        export function App() {
+          return <main>
+            <button onClick={() => fallback.set({ key: "a", label: "New" })}>Update</button>
+            <ul>{rows.map(({ key, label } = fallback.get()) => <li key={key}>{label}</li>)}</ul>
+          </main>;
+        }`,
+      filename: "whole-parameter-default-without-item-cell.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const row = node.querySelector("li");
+    expect(row?.textContent).toBe("Old");
+
+    node.querySelector("button")?.click();
+    await flushEffects();
+    expect(node.querySelector("li")).toBe(row);
+    expect(row?.textContent).toBe("New");
+  });
+
+  test("destructured duplicate keys keep first bindings through reorder", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+        const rows = cell([
+          { key: "a", label: "A1" },
+          { key: "a", label: "A2" },
+          { key: "b", label: "B1" },
+        ]);
+        export function App() {
+          return <main>
+            <button onClick={() => rows.set([
+              { key: "b", label: "B2" },
+              { key: "a", label: "A3" },
+              { key: "a", label: "A4" },
+            ])}>Update</button>
+            <ul>{rows.get().map(({ key, label }) => <li key={key}>{label}</li>)}</ul>
+          </main>;
+        }`,
+      filename: "destructured-duplicate-key-reorder.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const initialRows = Array.from(node.querySelectorAll("li"));
+    expect(initialRows.map((row) => row.textContent)).toEqual(["A1", "B1"]);
+
+    node.querySelector("button")?.click();
+    await flushEffects();
+    const updatedRows = Array.from(node.querySelectorAll("li"));
+    expect(updatedRows).toEqual([initialRows[1], initialRows[0]]);
+    expect(updatedRows.map((row) => row.textContent)).toEqual(["B2", "A3"]);
+  });
+
+  test("nested destructured lists isolate same-key binding caches per owner row", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+        const left = cell("L1");
+        const right = cell("R1");
+        const groups = [
+          { key: "left", rows: [{ key: "item", get label() { return left.get(); } }] },
+          { key: "right", rows: [{ key: "item", get label() { return right.get(); } }] },
+        ];
+        export function App() {
+          return <main>
+            <button onClick={() => left.set("L2")}>Update</button>
+            {groups.map(({ key, rows }) => <section key={key}>{rows.map(({ key, label }) => <span key={key}>{label}</span>)}</section>)}
+          </main>;
+        }`,
+      filename: "nested-destructured-list-ownership.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const rows = Array.from(node.querySelectorAll("span"));
+    expect(rows.map((row) => row.textContent)).toEqual(["L1", "R1"]);
+
+    node.querySelector("button")?.click();
+    await flushEffects();
+    expect(Array.from(node.querySelectorAll("span"))).toEqual(rows);
+    expect(rows.map((row) => row.textContent)).toEqual(["L2", "R1"]);
+  });
+
   test("array-destructured keyed rows rebuild when a same-key item becomes branded", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";

@@ -438,7 +438,9 @@ function collectHtmlStatements(
 
     // Sync list — inline for-loop appending to the caller's accumulator.
     // No inner IIFE wrapper and no intermediate string concat per iteration.
-    const itemBinding = `const ${node.parameterPatterns?.[0] ?? node.itemName} = _arr[_i];`;
+    const itemPattern =
+      node.parameterPatterns === undefined ? node.itemName : node.parameterPatterns[0];
+    const itemBinding = itemPattern === undefined ? undefined : `const ${itemPattern} = _arr[_i];`;
     const indexPattern = node.parameterPatterns?.[1] ?? node.indexName;
     const arrayPattern = node.parameterPatterns?.[2] ?? node.arrayName;
     const indexBinding = indexPattern === undefined ? undefined : `const ${indexPattern} = _i;`;
@@ -462,7 +464,7 @@ function collectHtmlStatements(
       `{`,
       `  const _arr = (${node.itemsCode});`,
       `  for (let _i = 0, _len = _arr.length; _i < _len; _i++) {`,
-      `    ${itemBinding}`,
+      ...(itemBinding === undefined ? [] : [`    ${itemBinding}`]),
       ...(indexBinding === undefined ? [] : [`    ${indexBinding}`]),
       ...(arrayBinding === undefined ? [] : [`    ${arrayBinding}`]),
       ...bodyStatements.map((statement) => `    ${statement}`),
@@ -1685,7 +1687,9 @@ function emitSyncListIife(
     contextConsumerHelperName,
     reactNodeRenderHelperName,
   );
-  const itemBinding = `const ${node.parameterPatterns?.[0] ?? node.itemName} = _arr[_i];`;
+  const itemPattern =
+    node.parameterPatterns === undefined ? node.itemName : node.parameterPatterns[0];
+  const itemBinding = itemPattern === undefined ? "" : `const ${itemPattern} = _arr[_i];`;
   const indexPattern = node.parameterPatterns?.[1] ?? node.indexName;
   const arrayPattern = node.parameterPatterns?.[2] ?? node.arrayName;
   const indexBinding = indexPattern === undefined ? "" : ` const ${indexPattern} = _i;`;

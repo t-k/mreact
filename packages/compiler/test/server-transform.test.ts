@@ -4,6 +4,25 @@ import { transform } from "../src/index.js";
 import { runAsyncServerComponent, runServerComponent } from "./helpers.js";
 
 describe("compiler server JSX transform", () => {
+  test("zero-parameter list callbacks preserve outer synthetic-name bindings", () => {
+    const output = transform({
+      code: `export function App() {
+        const _item = "outer";
+        const rows = [1, 2];
+        return <main>{rows.map(() => <span>{_item}</span>)}</main>;
+      }`,
+      filename: "zero-parameter-list.tsx",
+      target: "server",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("const _item = _arr[_i]");
+    expect(runServerComponent(output.code)).toBe(
+      "<main><span>outer</span><span>outer</span></main>",
+    );
+  });
+
   test("emits parseable render-prop arrows with concise and block JSX bodies", () => {
     const source = `function List(props) {
   return <ul><li>{props.renderItem()}</li><li>{props.renderFooter()}</li></ul>;
@@ -83,9 +102,7 @@ export function App() {
 
     expect(output.diagnostics).toEqual([]);
 
-    expect(runServerComponent(output.code)).toBe(
-      "<p>Hello <!-- -->&amp;&quot;&lt;Ada&gt;</p>",
-    );
+    expect(runServerComponent(output.code)).toBe("<p>Hello <!-- -->&amp;&quot;&lt;Ada&gt;</p>");
   });
 
   test("passes JSX children through server components without stringifying or escaping the rendered HTML", () => {

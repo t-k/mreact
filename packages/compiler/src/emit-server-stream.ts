@@ -899,7 +899,9 @@ function emitListPart(
   indent: string,
 ): string {
   const innerIndent = indent + "    ";
-  const itemBinding = `${innerIndent}const ${part.itemPattern ?? part.itemName} = _arr[_i];`;
+  const itemBinding = part.bindItem
+    ? `${innerIndent}const ${part.itemPattern ?? part.itemName} = _arr[_i];`
+    : undefined;
   const indexPattern = part.indexPattern ?? part.indexName;
   const arrayPattern = part.arrayPattern ?? part.arrayName;
   const indexBinding =
@@ -935,7 +937,7 @@ function emitListPart(
       `${indent}  const _arr = (${part.itemsCode});`,
       `${indent}  let ${accumulatorName} = "";`,
       `${indent}  for (let _i = 0, _len = _arr.length; _i < _len; _i++) {`,
-      itemBinding,
+      ...(itemBinding === undefined ? [] : [itemBinding]),
       ...(indexBinding === undefined ? [] : [indexBinding]),
       ...(arrayBinding === undefined ? [] : [arrayBinding]),
       ...bodyLines,
@@ -962,7 +964,7 @@ function emitListPart(
     `${indent}{`,
     `${indent}  const _arr = (${part.itemsCode});`,
     `${indent}  for (let _i = 0, _len = _arr.length; _i < _len; _i++) {`,
-    itemBinding,
+    ...(itemBinding === undefined ? [] : [itemBinding]),
     ...(indexBinding === undefined ? [] : [indexBinding]),
     ...(arrayBinding === undefined ? [] : [arrayBinding]),
     ...bodyLines,
@@ -1032,7 +1034,10 @@ function emitListPartAsStringExpression(
   }
 
   const concatLines = stringExpressions.map((expr) => `_listOut += ${expr};`);
-  return `(() => { const _arr = (${part.itemsCode}); let _listOut = ""; for (let _i = 0, _len = _arr.length; _i < _len; _i++) { const ${part.itemPattern ?? part.itemName} = _arr[_i];${(part.indexPattern ?? part.indexName) === undefined ? "" : ` const ${part.indexPattern ?? part.indexName} = _i;`}${(part.arrayPattern ?? part.arrayName) === undefined ? "" : ` const ${part.arrayPattern ?? part.arrayName} = _arr;`}${part.bodyStatements.length === 0 ? "" : ` ${part.bodyStatements.join(" ")}`} ${concatLines.join(" ")} } return _listOut; })()`;
+  const itemBinding = part.bindItem
+    ? ` const ${part.itemPattern ?? part.itemName} = _arr[_i];`
+    : "";
+  return `(() => { const _arr = (${part.itemsCode}); let _listOut = ""; for (let _i = 0, _len = _arr.length; _i < _len; _i++) {${itemBinding}${(part.indexPattern ?? part.indexName) === undefined ? "" : ` const ${part.indexPattern ?? part.indexName} = _i;`}${(part.arrayPattern ?? part.arrayName) === undefined ? "" : ` const ${part.arrayPattern ?? part.arrayName} = _arr;`}${part.bodyStatements.length === 0 ? "" : ` ${part.bodyStatements.join(" ")}`} ${concatLines.join(" ")} } return _listOut; })()`;
 }
 
 function emitNestedAppendStatements(
@@ -1196,6 +1201,7 @@ type HtmlPart =
       // emitter instead of falling back to a raw `.map().join("")`.
       kind: "list";
       itemsCode: string;
+      bindItem: boolean;
       itemName: string;
       itemPattern?: string;
       indexName?: string;
@@ -1361,6 +1367,7 @@ function collectHtmlParts(
       {
         kind: "list",
         itemsCode: node.itemsCode,
+        bindItem: node.parameterPatterns === undefined || node.parameterPatterns[0] !== undefined,
         itemName: node.itemName,
         ...(node.parameterPatterns?.[0] === undefined
           ? {}

@@ -199,6 +199,28 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.code).not.toContain("Missing compiler keyed row context");
   });
 
+  test.each([
+    ["insertDynamic", "visible ? rows.map(() => <article>Row</article>) : null"],
+    ["insertMemoDynamic", "visible ? <Card /> : rows.map(() => <article>Row</article>)"],
+  ])("preserves zero-parameter list renderer arity through %s", (insertionHelper, expression) => {
+    const output = transform({
+      code: `import { memo } from "@reckona/mreact";
+        const Card = memo(function Card() { return <section>Card</section>; });
+        export function App() {
+          const visible = true;
+          const rows = [1];
+          return <main>{${expression}}</main>;
+        }`,
+      filename: "zero-parameter-dynamic-list.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain(insertionHelper);
+    expect(output.code).toMatch(/createListWithRenderArity\([\s\S]*?, 0(?:,|\))/u);
+  });
+
   test("rejects callback-local keyed list bindings without emitting an invalid selector", () => {
     const output = transform({
       code: `export function App() {

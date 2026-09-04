@@ -796,9 +796,7 @@ function analyzeOxcListExpression(
     itemName,
     ...(typeof indexName === "string" ? { indexName } : {}),
     ...(typeof arrayName === "string" ? { arrayName } : {}),
-    ...(emittedParameterPatterns.length === 0
-      ? {}
-      : { parameterPatterns: emittedParameterPatterns }),
+    parameterPatterns: emittedParameterPatterns,
     ...(parameterBinding === undefined ? {} : { parameterBinding }),
     ...(keyCode === undefined ? {} : { keyCode }),
     ...(bodyStatements.length === 0 ? {} : { bodyStatements }),
