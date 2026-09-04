@@ -4,7 +4,7 @@ import {
   registerCleanup,
 } from "@reckona/mreact-reactive-core/internal";
 import { isMemoRenderValue } from "./create-memo.js";
-import { bindList } from "./bind-list.js";
+import { bindListWithRenderArity } from "./bind-list.js";
 import { isListRenderValue } from "./create-list.js";
 import {
   isDynamicHydrationEnabled,
@@ -187,7 +187,7 @@ export function insertMemoDynamic(
         currentList = {
           value: listValue,
           shape: nextListShape,
-          dispose: bindList(
+          dispose: bindListWithRenderArity(
             insertionParent,
             marker,
             () => listValue.get().items(),

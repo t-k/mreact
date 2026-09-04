@@ -33,8 +33,20 @@ export function bindList<T>(
   items: () => readonly T[],
   renderItem: (item: T, index: number, items: readonly T[]) => RenderValue,
   options: BindListOptions<T> = {},
-  renderArity = renderItem.length,
 ): Dispose {
+  return bindListWithRenderArity(parent, marker, items, renderItem, options, renderItem.length);
+}
+
+/** @internal Preserves the source renderer arity through dynamic list wrappers. */
+export function bindListWithRenderArity<T>(
+  parent: ParentNode,
+  marker: ChildNode,
+  items: () => readonly T[],
+  renderItem: (item: T, index: number, items: readonly T[]) => RenderValue,
+  options: BindListOptions<T> | undefined,
+  renderArity: number,
+): Dispose {
+  options ??= {};
   const markRecordsForHydration = isDynamicHydrationEnabled();
 
   if (markRecordsForHydration) {
