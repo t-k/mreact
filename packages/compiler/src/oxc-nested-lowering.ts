@@ -168,7 +168,10 @@ export function lowerOxcReactiveValueExpression(
     return [
       "(() => {",
       "  const _fragment = document.createDocumentFragment();",
-      ...children.map((child) => `  _fragment.append(${child});`),
+      ...children.map(
+        (child) =>
+          `  { const _child = (${child}); const _children = Array.isArray(_child) ? _child.flat(Infinity) : [_child]; _fragment.append(..._children.filter((_value) => _value != null && typeof _value !== "boolean")); }`,
+      ),
       "  return _fragment;",
       "})()",
     ].join("\n");
@@ -187,7 +190,7 @@ export function lowerOxcReactiveValueExpression(
     );
   }
 
-  if (!componentNames.has(tagName)) {
+  if (!/^[A-Z][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/.test(tagName) && !componentNames.has(tagName)) {
     return undefined;
   }
 

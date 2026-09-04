@@ -303,16 +303,25 @@ function lowerOxcDomChildren(
         return [`  _node.append(String(${readSource(code, expression)}));`];
       }
 
-      return [
-        `  { const _child = (${lowered}); const _children = Array.isArray(_child) ? _child.flat(Infinity) : [_child]; _node.append(..._children.filter((_value) => _value != null && typeof _value !== "boolean")); }`,
-      ];
+      return [lowerOxcNormalizedDomChildAppend("_node", lowered)];
     }
 
     if (object.type === "JSXElement") {
       const lowered = lowerOxcDomNodeExpression(code, object, lowerExpressionChild);
-      return lowered === undefined ? [] : [`  _node.append(${lowered});`];
+      if (lowered !== undefined) {
+        return [`  _node.append(${lowered});`];
+      }
+    }
+
+    if (object.type === "JSXElement" || object.type === "JSXFragment") {
+      const lowered = lowerExpressionChild?.(object);
+      return lowered === undefined ? [] : [lowerOxcNormalizedDomChildAppend("_node", lowered)];
     }
 
     return [];
   });
+}
+
+function lowerOxcNormalizedDomChildAppend(target: string, lowered: string): string {
+  return `  { const _child = (${lowered}); const _children = Array.isArray(_child) ? _child.flat(Infinity) : [_child]; ${target}.append(..._children.filter((_value) => _value != null && typeof _value !== "boolean")); }`;
 }

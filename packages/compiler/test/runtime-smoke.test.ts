@@ -6,6 +6,67 @@ import { transform } from "../src/index.js";
 import { compileClientComponent, runClientComponent } from "./helpers.js";
 
 describe("compiler runtime smoke", () => {
+  test("client transform preserves component and fragment children inside an IIFE after a reactive update", async () => {
+    const output = transform({
+      code: `import { cell, computed } from "@reckona/mreact-reactive-core";
+
+const selected = cell<number | null>(null);
+const vm = computed(() => selected.get() === null
+  ? { item: null, value: 0 }
+  : { item: { number: 7, title: "Seven", status: "ready" }, value: 750 });
+
+function PanelHeader(props) {
+  return <h2>{props.title}</h2>;
+}
+
+function StatusPill(props) {
+  return <strong>{props.status}</strong>;
+}
+
+function Check(props) {
+  return <i>{props.label}</i>;
+}
+
+function Empty() {
+  return null;
+}
+
+const Icons = { Check };
+
+export function App() {
+  return <main>
+    <button type="button" onClick={() => selected.set(7)}>Select</button>
+    {(() => {
+      const v = vm.get();
+      return v.item === null ? null : (
+        <section>
+          <PanelHeader title={\`#\${v.item.number} \${v.item.title}\`} />
+          <><StatusPill status={v.item.status} /><Icons.Check label={v.item.title} /><Empty /></>
+          <span>{v.value}</span>
+        </section>
+      );
+    })()}
+  </main>;
+}`,
+      filename: "iife-local-bindings.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+
+    expect(node.querySelector("section")).toBeNull();
+    node.querySelector("button")?.click();
+    await flushEffects();
+
+    expect(node.querySelector("h2")?.textContent).toBe("#7 Seven");
+    expect(node.querySelector("strong")?.textContent).toBe("ready");
+    expect(node.querySelector("i")?.textContent).toBe("Seven");
+    expect(node.querySelector("span")?.textContent).toBe("750");
+    expect(node.querySelector("section")?.textContent).not.toContain("null");
+  });
+
   test("conditional keyed single-node lists preserve row text context", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";
