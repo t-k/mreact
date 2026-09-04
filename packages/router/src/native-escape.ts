@@ -1,6 +1,5 @@
 import { createRequire } from "node:module";
 import { nativeModulePackageCandidates } from "./native-route-matcher.js";
-import { escapeHtmlAttribute as escapeHtml } from "@reckona/mreact-shared/html-escape";
 
 interface NativeEscapeModule {
   escapeHtmlBatch?: (values: string[]) => string[];
@@ -17,6 +16,21 @@ export function escapeHtmlBatch(values: readonly unknown[]): string[] {
   const native = loadNativeEscapeModule();
 
   return native?.escapeHtmlBatch?.(strings) ?? strings.map(escapeHtml);
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"]/g, (character) => {
+    switch (character) {
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      default:
+        return "&quot;";
+    }
+  });
 }
 
 function loadNativeEscapeModule(): NativeEscapeModule | undefined {
