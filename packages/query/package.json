@@ -1,6 +1,6 @@
 {
   "name": "@reckona/mreact-query",
-  "version": "0.0.207",
+  "version": "0.0.208",
   "description": "Server state and async cache primitives for mreact.",
   "keywords": [
     "cache",

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.208 - 2026-09-05
+
+### Fixed
+
+- Fixed JSX elements passed through named props such as `actions`, `filters`, and `sidebar` so they retain server-rendered markup through string rendering, streaming, hydration, reactive updates, and client-boundary serialization instead of being omitted or escaped as text.
+- Fixed inferred interactive components rendered inside shared wrapper components so eligible server fallback markup is preserved without relaxing safeguards for prop-derived callbacks or browser-only code.
+- Fixed JSX IIFEs that return component or fragment children so IIFE-local bindings remain available when reactive updates mount the branch after hydration.
+- Fixed lowercase SVG elements after conditional siblings so a same-named helper binding cannot cause intrinsic elements such as `<path>` to be omitted from string or stream SSR.
+
 ## 0.0.207 - 2026-09-04
 
 ### Fixed

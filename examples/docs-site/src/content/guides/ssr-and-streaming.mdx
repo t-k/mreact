@@ -11,6 +11,31 @@ For a page request, Mreact resolves middleware, the matched loader, metadata, la
 
 Use SSR for the primary document shape, critical data, metadata, and content that should be visible before hydration. Add streaming only when part of the page can arrive later without blocking the first shell.
 
+## Component slots during SSR
+
+JSX passed through a named prop is rendered on the server with the same markup semantics as `children`. This is useful for component APIs with distinct regions such as `actions`, `filters`, or `sidebar`; Mreact preserves those regions through string rendering, streaming, and hydration instead of converting their HTML to text.
+
+```tsx
+function Detail(props: { actions: MReactNode; children: MReactNode }) {
+  return (
+    <section>
+      <header>{props.actions}</header>
+      <div>{props.children}</div>
+    </section>
+  );
+}
+
+export default function Page() {
+  return (
+    <Detail actions={<WatchToggle />}>
+      <CommentThread />
+    </Detail>
+  );
+}
+```
+
+Keep values that cross a client boundary serializable. JSX regions can contain server-rendered markup, but ordinary data props still follow the boundary serialization contract.
+
 ## Streaming routes
 
 Routes that render `<Await>` can stream. The route shell can flush with a placeholder, then the resolved fragment is sent when the awaited value finishes. `export const stream = true` is still available for routes that need streaming behavior without an `<Await>` boundary.
