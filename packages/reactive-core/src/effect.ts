@@ -3,6 +3,7 @@ import {
   emitReactiveEffectRunDevtoolsEvent,
   prepareReactiveEffectRunDevtoolsEvent,
 } from "./devtools.js";
+import { registerReactiveDevtoolsResource } from "./devtools.js";
 import { registerCleanup } from "./cleanup-scope.js";
 import { runtimeState, type ReactiveComputation } from "./state.js";
 import { cleanupDeps, cleanupUntrackedDeps, nextTrackingVersionFor } from "./tracking.js";
@@ -17,6 +18,7 @@ type EffectFn = () => void | (() => void);
 interface EffectComputation extends ReactiveComputation {
   cleanup: (() => void) | undefined;
   fn: EffectFn;
+  resource: { dispose(): void };
 }
 
 const EFFECT_COMPUTATION_METHODS = {
@@ -36,6 +38,10 @@ export function effectWithDebugLabel(fn: EffectFn, debugLabel: string): () => vo
 }
 
 function createEffect(fn: EffectFn, debugLabel?: string): () => void {
+  const resource = registerReactiveDevtoolsResource("effect", {
+    label: debugLabel,
+    ownerId: debugLabel,
+  });
   const computation: EffectComputation = {
     cleanup: undefined,
     dispose: EFFECT_COMPUTATION_METHODS.dispose,
@@ -47,6 +53,7 @@ function createEffect(fn: EffectFn, debugLabel?: string): () => void {
     markDirty: EFFECT_COMPUTATION_METHODS.markDirty,
     queued: false,
     run: EFFECT_COMPUTATION_METHODS.run,
+    resource,
   };
 
   runtimeState.nextComputationId += 1;
@@ -57,6 +64,7 @@ function createEffect(fn: EffectFn, debugLabel?: string): () => void {
     computation.disposed = true;
     computation.queued = false;
     cleanupDeps(computation);
+    resource.dispose();
 
     if (computation.cleanup !== undefined) {
       const currentCleanup = computation.cleanup;
@@ -135,6 +143,7 @@ function effectDispose(this: ReactiveComputation): void {
   computation.disposed = true;
   computation.queued = false;
   cleanupDeps(computation);
+  computation.resource.dispose();
 
   if (computation.cleanup !== undefined) {
     const currentCleanup = computation.cleanup;

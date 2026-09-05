@@ -5544,6 +5544,7 @@ export function emitReactiveEffectRunDevtoolsEvent() {}
 export function hasReactiveDevtoolsEmitter() { return false; }
 export function currentDevtoolsEmitter() { return undefined; }
 export function currentReactiveDevtools() { return undefined; }
+export function registerReactiveDevtoolsResource() { return { dispose() {}, update() {} }; }
 export function invalidateReactiveDevtoolsCache() {}
 export function prepareReactiveEffectRunDevtoolsEvent() { return undefined; }`,
         loader: "ts",

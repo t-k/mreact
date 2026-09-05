@@ -1,4 +1,8 @@
-import { emitQueryDevtoolsEvent } from "./devtools.js";
+import {
+  emitQueryDevtoolsEvent,
+  registerQueryDevtoolsResource,
+  type QueryDevtoolsResourceHandle,
+} from "./devtools.js";
 import {
   hydrateQueryDataSymbol,
   type HydrateQueryDataOptions,
@@ -26,6 +30,7 @@ interface InternalQueryEntry<TData = unknown> extends QueryEntry<TData> {
   promise?: Promise<TData> | undefined;
   queryKeySegments: readonly string[];
   invalidationRevision: number;
+  resource: QueryDevtoolsResourceHandle;
   version: number;
 }
 
@@ -43,6 +48,7 @@ interface QuerySubscription<TData = unknown> {
   queryKey: QueryKey;
   queryKeySegments: readonly string[];
   listener: (entry: QueryEntry<TData>) => void;
+  resource: QueryDevtoolsResourceHandle;
 }
 
 export function createQueryLifecycle(
@@ -52,10 +58,7 @@ export function createQueryLifecycle(
   const exactSubscriptions = new Map<string, Set<QuerySubscription>>();
   const prefixSubscriptions = new Set<QuerySubscription>();
   const subscriberCounts = new Map<string, number>();
-  const subscriptionPolicies = new Map<
-    string,
-    Map<symbol, QuerySubscriptionOptions["gcTime"]>
-  >();
+  const subscriptionPolicies = new Map<string, Map<symbol, QuerySubscriptionOptions["gcTime"]>>();
   const gcTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const pendingInvalidationNotifications = new Set<InternalQueryEntry>();
   let invalidationNotifyScheduled = false;
@@ -80,6 +83,10 @@ export function createQueryLifecycle(
       queryHash,
       queryKey: stableQueryKey,
       queryKeySegments: hashQueryKeySegments(stableQueryKey),
+      resource: registerQueryDevtoolsResource("inactive-query", {
+        ownerId: queryHash,
+        ownership: "unknown",
+      }),
       stale: true,
       status: "pending",
       updatedAt: 0,
@@ -209,10 +216,7 @@ export function createQueryLifecycle(
     policies.set(policyId, gcTime);
   }
 
-  function releaseSubscription(
-    queryKey: QueryKey,
-    policyId: symbol,
-  ): void {
+  function releaseSubscription(queryKey: QueryKey, policyId: symbol): void {
     const queryHash = hashQueryKey(queryKey);
     const count = Math.max(0, (subscriberCounts.get(queryHash) ?? 0) - 1);
     const policies = subscriptionPolicies.get(queryHash);
@@ -238,17 +242,20 @@ export function createQueryLifecycle(
       return;
     }
 
-    const timer = setTimeout(() => {
-      gcTimers.delete(queryHash);
-      if ((subscriberCounts.get(queryHash) ?? 0) > 0) {
-        return;
-      }
+    const timer = setTimeout(
+      () => {
+        gcTimers.delete(queryHash);
+        if ((subscriberCounts.get(queryHash) ?? 0) > 0) {
+          return;
+        }
 
-      const entry = cache.get(queryHash);
-      if (entry !== undefined) {
-        removeEntry(entry);
-      }
-    }, Math.max(0, gcTime));
+        const entry = cache.get(queryHash);
+        if (entry !== undefined) {
+          removeEntry(entry);
+        }
+      },
+      Math.max(0, gcTime),
+    );
     gcTimers.set(queryHash, timer);
   }
 
@@ -308,6 +315,8 @@ export function createQueryLifecycle(
       entry.canceled = true;
       entry.abortController.abort(createQueryAbortReason(entry.queryKey));
     }
+
+    entry.resource.dispose();
 
     entry.version += 1;
     entry.abortController = undefined;
@@ -478,6 +487,10 @@ export function createQueryLifecycle(
         queryKey,
         queryHash,
         queryKeySegments: hashQueryKeySegments(queryKey),
+        resource: registerQueryDevtoolsResource("subscription", {
+          ownerId: queryHash,
+          ownership: "owned",
+        }),
       };
       retainSubscription(queryKey, subscription.policyId, subscription.gcTime);
       if (subscription.exact) {
@@ -502,6 +515,7 @@ export function createQueryLifecycle(
           prefixSubscriptions.delete(subscription as QuerySubscription);
         }
         releaseSubscription(queryKey, subscription.policyId);
+        subscription.resource.dispose();
       };
     },
     entries(): QueryEntry[] {

@@ -1,7 +1,29 @@
 type DevtoolsEmitter = (event: Record<string, unknown>) => void;
 
+declare const __MREACT_CLIENT_DEVTOOLS__: boolean | undefined;
+
+const clientDevtoolsDisabled =
+  typeof __MREACT_CLIENT_DEVTOOLS__ !== "undefined" && __MREACT_CLIENT_DEVTOOLS__ === false;
+
+export type ReactiveDevtoolsResourceKind =
+  | "computed"
+  | "effect"
+  | "scope"
+  | "other"
+  | (string & {});
+
+export interface ReactiveDevtoolsResourceHandle {
+  dispose(): void;
+  update(patch: Record<string, unknown>): void;
+}
+
+interface ReactiveDevtoolsResourceRegistry {
+  register(input: Record<string, unknown>): ReactiveDevtoolsResourceHandle;
+}
+
 interface ReactiveDevtools {
   emit?: DevtoolsEmitter | undefined;
+  resources?: (() => ReactiveDevtoolsResourceRegistry) | undefined;
 }
 
 export interface ReactiveEffectRunDevtoolsEvent {
@@ -27,6 +49,23 @@ export function emitReactiveDevtoolsEvent(event: Record<string, unknown>): void 
   });
 }
 
+/** Registers metadata only when a development resource inspector is attached. */
+export function registerReactiveDevtoolsResource(
+  kind: ReactiveDevtoolsResourceKind,
+  input: Record<string, unknown> = {},
+): ReactiveDevtoolsResourceHandle {
+  if (clientDevtoolsDisabled) {
+    return emptyResourceHandle();
+  }
+
+  const registry = currentDevtools()?.resources?.();
+  return registry?.register({ kind, ...input }) ?? emptyResourceHandle();
+}
+
+function emptyResourceHandle(): ReactiveDevtoolsResourceHandle {
+  return { dispose() {}, update() {} };
+}
+
 export function hasReactiveDevtoolsEmitter(): boolean {
   return typeof currentDevtools()?.emit === "function";
 }
@@ -38,9 +77,7 @@ export function currentDevtoolsEmitter(): DevtoolsEmitter | undefined {
   return typeof emit === "function" ? emit.bind(devtools) : undefined;
 }
 
-export function currentReactiveDevtools():
-  | ReactiveDevtools
-  | undefined {
+export function currentReactiveDevtools(): ReactiveDevtools | undefined {
   return currentDevtools();
 }
 
@@ -99,9 +136,7 @@ function resolveCachedReactiveDevtools(
   return resolved;
 }
 
-function currentDevtools():
-  | ReactiveDevtools
-  | undefined {
+function currentDevtools(): ReactiveDevtools | undefined {
   const devtools = (
     globalThis as typeof globalThis & {
       __mreactDevtools?: ReactiveDevtools | undefined;

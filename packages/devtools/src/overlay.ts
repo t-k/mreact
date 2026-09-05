@@ -39,6 +39,10 @@ const tabs: readonly TabDefinition[] = [
 
 const defaultMaxEvents = 200;
 const maxEventDetailsLength = 4_000;
+const overlayMessages = {
+  liveResources: "Live resources",
+  noResources: "No live resources",
+} as const;
 
 /** Mounts a browser devtools overlay that groups recent mreact events by category. */
 export function mountDevtoolsOverlay(options: DevtoolsOverlayOptions = {}): MountedDevtoolsOverlay {
@@ -110,6 +114,7 @@ export function mountDevtoolsOverlay(options: DevtoolsOverlayOptions = {}): Moun
     dispose() {
       disposed = true;
       unsubscribe();
+      devtools.resources().clearSnapshots();
       element.remove();
     },
     element,
@@ -121,7 +126,7 @@ export function mountDevtoolsOverlay(options: DevtoolsOverlayOptions = {}): Moun
     }
 
     tabList.replaceChildren(...tabs.map((tab) => renderTab(ownerDocument, tab)));
-    summaryList.replaceChildren(...renderSummary(ownerDocument, activeTab, events));
+    summaryList.replaceChildren(...renderSummary(ownerDocument, activeTab, events, devtools));
     const visibleEvents = [...events].filter((event) => eventTab(event) === activeTab).reverse();
 
     if (visibleEvents.length === 0) {
@@ -182,7 +187,12 @@ function renderSummary(
   doc: Document,
   activeTab: DevtoolsOverlayTab,
   events: readonly DevtoolsEvent[],
+  devtools: Devtools,
 ): Node[] {
+  if (activeTab === "reactive") {
+    return renderResourceSummary(doc, devtools);
+  }
+
   if (activeTab !== "query") {
     return [];
   }
@@ -221,6 +231,54 @@ function renderSummary(
   list.replaceChildren(...queries.map((query) => renderQuerySummary(doc, query)));
   section.append(heading, list);
 
+  return [section];
+}
+
+function renderResourceSummary(doc: Document, devtools: Devtools): Node[] {
+  const resources = devtools.resources().snapshot();
+  const section = doc.createElement("section");
+  const heading = doc.createElement("div");
+  const list = doc.createElement("ol");
+
+  heading.textContent = `${overlayMessages.liveResources} (${resources.length})`;
+  Object.assign(section.style, {
+    background: "#121a25",
+    border: "1px solid #303846",
+    borderRadius: "6px",
+    display: "grid",
+    gap: "4px",
+    padding: "8px",
+  });
+  Object.assign(heading.style, { color: "#ffffff", fontWeight: "700" });
+  Object.assign(list.style, {
+    display: "grid",
+    gap: "3px",
+    listStyle: "none",
+    margin: "0",
+    padding: "0",
+  });
+
+  if (resources.length === 0) {
+    const empty = doc.createElement("li");
+    empty.textContent = overlayMessages.noResources;
+    list.append(empty);
+  } else {
+    list.replaceChildren(
+      ...resources.map((resource) => {
+        const item = doc.createElement("li");
+        item.textContent = [
+          resource.kind,
+          resource.ownerId === undefined ? undefined : `owner:${resource.ownerId}`,
+          resource.location,
+        ]
+          .filter(Boolean)
+          .join(" | ");
+        return item;
+      }),
+    );
+  }
+
+  section.append(heading, list);
   return [section];
 }
 

@@ -1,3 +1,26 @@
+import {
+  createDevtoolsResourceInspector,
+  type DevtoolsResourceInspector,
+  type DevtoolsResourceRegistration,
+} from "./resources.js";
+
+export {
+  compareDevtoolsResourceSnapshots,
+  createDevtoolsResourceInspector,
+  defaultDevtoolsMaxResources,
+} from "./resources.js";
+export type {
+  DevtoolsResourceCensus,
+  DevtoolsResourceHandle,
+  DevtoolsResourceInspector,
+  DevtoolsResourceKind,
+  DevtoolsResourceOwnership,
+  DevtoolsResourceRecord,
+  DevtoolsResourceRegistration,
+  DevtoolsResourceSnapshotDiff,
+  DevtoolsResourceSnapshotOptions,
+} from "./resources.js";
+
 /** Describes one event emitted to the shared mreact devtools bus. */
 export interface DevtoolsEvent {
   package: string;
@@ -15,6 +38,7 @@ export const defaultDevtoolsMaxEvents = 1_000;
 /** Configures event retention for `createDevtools()`. */
 export interface CreateDevtoolsOptions {
   maxEvents?: number | undefined;
+  maxResources?: number | undefined;
 }
 
 /** Provides event emission, subscription, history reads, and disposal for mreact devtools. */
@@ -22,6 +46,7 @@ export interface Devtools {
   dispose(): void;
   emit(event: DevtoolsEvent): void;
   events(): DevtoolsEvent[];
+  resources(): DevtoolsResourceInspector;
   subscribe(listener: DevtoolsListener): () => void;
 }
 
@@ -38,6 +63,7 @@ declare global {
 /** Creates an in-memory devtools event bus. */
 export function createDevtools(options: CreateDevtoolsOptions = {}): Devtools {
   const maxEvents = normalizeMaxEvents(options.maxEvents);
+  const resources = createDevtoolsResourceInspector(options.maxResources);
   const recorded: DevtoolsEvent[] = [];
   const listeners = new Set<DevtoolsListener>();
 
@@ -45,6 +71,7 @@ export function createDevtools(options: CreateDevtoolsOptions = {}): Devtools {
     dispose() {
       listeners.clear();
       recorded.length = 0;
+      resources.dispose();
       if (globalThis.__mreactDevtools === this) {
         globalThis.__mreactDevtools = undefined;
       }
@@ -64,6 +91,9 @@ export function createDevtools(options: CreateDevtoolsOptions = {}): Devtools {
     events() {
       return [...recorded];
     },
+    resources() {
+      return resources;
+    },
     subscribe(listener) {
       listeners.add(listener);
 
@@ -72,6 +102,19 @@ export function createDevtools(options: CreateDevtoolsOptions = {}): Devtools {
       };
     },
   };
+}
+
+/** Registers bounded resource metadata with the installed devtools instance when present. */
+export function registerMreactDevtoolsResource(input: DevtoolsResourceRegistration): {
+  dispose(): void;
+  update(patch: Partial<DevtoolsResourceRegistration>): void;
+} {
+  const inspector = globalThis.__mreactDevtools?.resources?.();
+  if (inspector === undefined) {
+    return { dispose() {}, update() {} };
+  }
+
+  return inspector.register(input);
 }
 
 function normalizeMaxEvents(maxEvents: number | undefined): number {
@@ -97,9 +140,11 @@ export function installDevtools(
 }
 
 function currentNodeEnv(): string | undefined {
-  return (globalThis as {
-    process?: { env?: { NODE_ENV?: string | undefined } | undefined } | undefined;
-  }).process?.env?.NODE_ENV;
+  return (
+    globalThis as {
+      process?: { env?: { NODE_ENV?: string | undefined } | undefined } | undefined;
+    }
+  ).process?.env?.NODE_ENV;
 }
 
 /** Returns the devtools instance installed on `globalThis`, if one exists. */

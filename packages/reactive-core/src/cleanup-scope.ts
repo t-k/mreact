@@ -1,4 +1,5 @@
 import { runtimeState } from "./state.js";
+import { registerReactiveDevtoolsResource } from "./devtools.js";
 
 /** Owns cleanup callbacks for DOM-independent resources. */
 export interface CleanupScope {
@@ -9,6 +10,7 @@ export interface CleanupScope {
 
 /** Creates an idempotent LIFO cleanup owner. */
 export function createCleanupScope(): CleanupScope {
+  const resource = registerReactiveDevtoolsResource("scope");
   const cleanups: Array<() => void> = [];
   let disposed = false;
 
@@ -51,8 +53,11 @@ export function createCleanupScope(): CleanupScope {
     }
 
     if (firstError !== undefined) {
+      resource.dispose();
       throw firstError;
     }
+
+    resource.dispose();
   };
 
   return {
@@ -66,19 +71,13 @@ export function createCleanupScope(): CleanupScope {
 
 /** Runs a synchronous callback with a public cleanup scope as its dynamic owner. */
 export function runWithCleanupScope<T>(scope: CleanupScope, run: () => T): T {
-  return withCleanupScope(
-    (dispose) => {
-      scope.register(dispose);
-    },
-    run,
-  );
+  return withCleanupScope((dispose) => {
+    scope.register(dispose);
+  }, run);
 }
 
 /** Runs a callback with a cleanup owner that can collect disposers. */
-export function withCleanupScope<T>(
-  owner: (dispose: () => void) => void,
-  run: () => T,
-): T {
+export function withCleanupScope<T>(owner: (dispose: () => void) => void, run: () => T): T {
   const previousOwner = runtimeState.cleanupOwner;
   runtimeState.cleanupOwner = owner;
 

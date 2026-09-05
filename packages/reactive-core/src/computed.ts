@@ -1,11 +1,8 @@
 import type { ReactiveComputation, Source } from "./state.js";
 import { schedulePendingFlush } from "./scheduler.js";
-import {
-  createUntrackedDependency,
-  runtimeState,
-  untrackedDependencyIsCurrent,
-} from "./state.js";
+import { createUntrackedDependency, runtimeState, untrackedDependencyIsCurrent } from "./state.js";
 import { registerCleanup } from "./cleanup-scope.js";
+import { registerReactiveDevtoolsResource } from "./devtools.js";
 import {
   cleanupAddedDeps,
   cleanupDeps,
@@ -34,10 +31,9 @@ export function computed<T>(
   let hasValue = false;
   let value: T;
   let dirty = true;
-  let untrackedDependencies: Array<
-    NonNullable<ReturnType<typeof createUntrackedDependency>>
-  > = [];
+  let untrackedDependencies: Array<NonNullable<ReturnType<typeof createUntrackedDependency>>> = [];
   const equals = typeof options === "function" ? options : (options?.equals ?? Object.is);
+  const resource = registerReactiveDevtoolsResource("computed");
 
   const source: Source = {
     onNoSubscribers: suspendIfUnobserved,
@@ -87,6 +83,7 @@ export function computed<T>(
       value = undefined as T;
       dirty = true;
       untrackedDependencies = [];
+      resource.dispose();
     },
   };
 

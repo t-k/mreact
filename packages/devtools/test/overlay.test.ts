@@ -11,6 +11,7 @@ afterEach(() => {
 describe("mreact devtools overlay", () => {
   test("mounts an inspector UI with reactive, query, and router tabs", () => {
     const devtools = createDevtools();
+    devtools.resources().register({ kind: "effect", ownerId: "screen" });
     devtools.emit({
       id: "effect:1",
       package: "@reckona/mreact-reactive-core",
@@ -35,6 +36,7 @@ describe("mreact devtools overlay", () => {
     expect(document.querySelector("[data-mreact-devtools-overlay]")).toBe(mounted.element);
     expect(tabText()).toEqual(["Reactive 1", "Query 1", "Router 1"]);
     expect(mounted.element.textContent).toContain("effect:run");
+    expect(mounted.element.textContent).toContain("Live resources (1)");
     expect(mounted.element.textContent).not.toContain("query:settled");
 
     clickTab("Query");
