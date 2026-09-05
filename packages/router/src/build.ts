@@ -1009,12 +1009,12 @@ async function boundaryReportWithArtifactCosts(options: {
 
     const initial = clientArtifactStaticClosure(manifestRoute, chunks);
     const navigation = new Set(initial);
-    const reachableDynamicImports = new Set(manifestRoute.dynamicImports ?? []);
-    for (const dynamicImport of options.boundaryCost?.fetchedDynamicImports?.[route.path] ?? []) {
-      if (reachableDynamicImports.has(dynamicImport)) {
-        addClientArtifactStaticClosure(navigation, dynamicImport, chunks);
-      }
-    }
+    addFetchedDynamicImportClosures({
+      chunks,
+      fetchedDynamicImports: options.boundaryCost?.fetchedDynamicImports?.[route.path] ?? [],
+      navigation,
+      routeDynamicImports: manifestRoute.dynamicImports ?? [],
+    });
 
     return { initial, navigation, route };
   });
@@ -1104,6 +1104,76 @@ function clientArtifactStaticClosure(
     addClientArtifactStaticClosure(paths, route.script, chunks);
   }
   return paths;
+}
+
+function addFetchedDynamicImportClosures(options: {
+  chunks: ReadonlyMap<string, ClientArtifactChunkManifest>;
+  fetchedDynamicImports: readonly string[];
+  navigation: Set<string>;
+  routeDynamicImports: readonly string[];
+}): void {
+  const fetchedDynamicImports = new Set(options.fetchedDynamicImports);
+  const acceptedDynamicImports = new Set<string>();
+  const reachableDynamicImports = new Set(options.routeDynamicImports);
+
+  for (;;) {
+    for (const dynamicImport of dynamicImportsReachableFromStaticClosure(
+      options.navigation,
+      options.chunks,
+    )) {
+      reachableDynamicImports.add(dynamicImport);
+    }
+
+    let added = false;
+    for (const dynamicImport of fetchedDynamicImports) {
+      if (
+        acceptedDynamicImports.has(dynamicImport) ||
+        !reachableDynamicImports.has(dynamicImport) ||
+        !options.chunks.has(dynamicImport)
+      ) {
+        continue;
+      }
+
+      acceptedDynamicImports.add(dynamicImport);
+      addClientArtifactStaticClosure(options.navigation, dynamicImport, options.chunks);
+      added = true;
+    }
+
+    if (!added) {
+      return;
+    }
+  }
+}
+
+function dynamicImportsReachableFromStaticClosure(
+  paths: ReadonlySet<string>,
+  chunks: ReadonlyMap<string, ClientArtifactChunkManifest>,
+): Set<string> {
+  const pending = [...paths];
+  const visited = new Set<string>();
+  const dynamicImports = new Set<string>();
+
+  while (pending.length > 0) {
+    const path = pending.pop();
+    if (path === undefined || visited.has(path)) {
+      continue;
+    }
+
+    visited.add(path);
+    const chunk = chunks.get(path);
+    if (chunk === undefined) {
+      continue;
+    }
+
+    for (const imported of chunk.imports ?? []) {
+      pending.push(imported);
+    }
+    for (const dynamicImport of chunk.dynamicImports ?? []) {
+      dynamicImports.add(dynamicImport);
+    }
+  }
+
+  return dynamicImports;
 }
 
 function addClientArtifactStaticClosure(

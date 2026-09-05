@@ -170,6 +170,73 @@ export function Counter() {
     );
   });
 
+  test("counts fetched lazy chunks reached through a shared static chunk", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-boundary-shared-lazy-cost-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const reports: BoundaryReport[] = [];
+    await mkdir(join(appDir, "b"), { recursive: true });
+    await writeFile(
+      join(appDir, "Counter.tsx"),
+      `export default function Counter() {
+  return <button onClick={() => void import("./lazy")}>Lazy</button>;
+}`,
+    );
+    await writeFile(join(appDir, "lazy.ts"), `export const payload = "${"lazy".repeat(2_000)}";`);
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import Counter from "./Counter";
+export default function Page() {
+  return <main><Counter /></main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "b", "page.tsx"),
+      `import Counter from "../Counter";
+export default function Page() {
+  return <aside><Counter /></aside>;
+}`,
+    );
+
+    await buildApp({
+      appDir,
+      outDir,
+      targets: ["node"],
+      onBoundaryReport(report) {
+        reports.push(report);
+      },
+    });
+
+    const manifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as {
+      chunks: Array<{ dynamicImports?: string[]; file: string }>;
+    };
+    const sharedChunk = manifest.chunks.find((chunk) => chunk.file.includes("Counter"));
+    const lazy = sharedChunk?.dynamicImports?.[0];
+    const before = reports[0]?.routes.find((route) => route.path === "/")?.cost;
+
+    expect(lazy).toBeDefined();
+    expect(before?.navigation?.gzipEstimateBytes).toBeDefined();
+
+    await buildApp({
+      appDir,
+      boundaryCost: {
+        fetchedDynamicImports: { "/": [lazy as string] },
+      },
+      onBoundaryReport(report) {
+        reports.push(report);
+      },
+      outDir,
+      targets: ["node"],
+    });
+
+    const fetched = reports[1]?.routes.find((route) => route.path === "/")?.cost;
+    expect(fetched?.navigation?.gzipEstimateBytes).toBeGreaterThan(
+      before?.navigation?.gzipEstimateBytes ?? 0,
+    );
+  });
+
   test("reports CSS costs for a server-only route", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-boundary-css-cost-"));
     const appDir = join(rootDir, "app");
