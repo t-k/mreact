@@ -108,6 +108,20 @@ describe("createQueryClient", () => {
     expect(calls).toBe(0);
   });
 
+  it("keeps an explicitly undefined successful result distinct from pending state", async () => {
+    const client = createQueryClient();
+    const result = await client.fetchQuery({
+      queryKey: ["undefined-data"],
+      queryFn: (): undefined => undefined,
+    });
+
+    expect(result).toBeUndefined();
+    expect(client.getQueryEntry(["undefined-data"])).toMatchObject({
+      data: undefined,
+      status: "success",
+    });
+  });
+
   it("deduplicates concurrent fetches for the same query key", async () => {
     const client = createQueryClient();
     let calls = 0;
@@ -132,6 +146,98 @@ describe("createQueryClient", () => {
       { id: 1, name: "Ada" },
     ]);
     expect(calls).toBe(1);
+  });
+
+  it("commits an in-flight result to the key captured when the fetch started", async () => {
+    const client = createQueryClient();
+    const queryKey = ["user", 1] as unknown[];
+    const deferred = createDeferred<string>();
+    const pending = client.fetchQuery({
+      queryKey,
+      queryFn: () => deferred.promise,
+    });
+
+    queryKey[1] = 2;
+    deferred.resolve("Ada");
+
+    await expect(pending).resolves.toBe("Ada");
+    expect(client.getQueryData(["user", 1])).toBe("Ada");
+    expect(client.getQueryData(["user", 2])).toBeUndefined();
+  });
+
+  it("releases the subscription key captured before its caller mutates the key", async () => {
+    vi.useFakeTimers();
+    const client = createQueryClient({ inactiveGcTime: 10 });
+    const firstKey = ["item", "first"] as unknown[];
+    client.setQueryData(["item", "first"], "first");
+    client.setQueryData(["item", "second"], "second");
+    const releaseFirst = client.subscribe(firstKey, () => {}, { gcTime: 10 });
+    const releaseSecond = client.subscribe(["item", "second"], () => {}, { gcTime: 10 });
+
+    firstKey[1] = "second";
+    releaseFirst();
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(client.getQueryEntry(["item", "first"])).toBeUndefined();
+    expect(client.getQueryEntry(["item", "second"])).toBeDefined();
+    releaseSecond();
+  });
+
+  it("retains the shortest observer gcTime through fetch completion", async () => {
+    vi.useFakeTimers();
+    const client = createQueryClient({ inactiveGcTime: 1_000 });
+    const deferred = createDeferred<string>();
+    const release = client.subscribe(["short-lived"], () => {}, { gcTime: 10 });
+    const pending = client.fetchQuery({
+      queryKey: ["short-lived"],
+      queryFn: () => deferred.promise,
+    });
+
+    release();
+    deferred.resolve("done");
+    await pending;
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(client.getQueryEntry(["short-lived"])).toBeUndefined();
+  });
+
+  it("uses the shortest gcTime regardless of subscription release order", async () => {
+    vi.useFakeTimers();
+    const client = createQueryClient({ inactiveGcTime: 1_000 });
+    const releaseLong = client.subscribe(["gc-order"], () => {}, { gcTime: 100 });
+    const releaseShort = client.subscribe(["gc-order"], () => {}, { gcTime: 10 });
+    client.setQueryData(["gc-order"], "cached");
+
+    releaseShort();
+    releaseLong();
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(client.getQueryEntry(["gc-order"])).toBeUndefined();
+  });
+
+  it("enforces the inactive entry cap after the last subscription is released", () => {
+    const client = createQueryClient({ maxInactiveEntries: 0 });
+    const release = client.subscribe(["capped"], () => {});
+    client.setQueryData(["capped"], "cached");
+
+    release();
+
+    expect(client.getQueryEntry(["capped"])).toBeUndefined();
+  });
+
+  it("enforces the inactive entry cap after canceling an unused fetch", async () => {
+    const client = createQueryClient({ maxInactiveEntries: 0 });
+    const deferred = createDeferred<string>();
+    const pending = client.fetchQuery({
+      queryKey: ["cancel-capped"],
+      queryFn: () => deferred.promise,
+    });
+
+    client.cancelQueries({ queryKey: ["cancel-capped"] });
+    deferred.resolve("late");
+    await pending;
+
+    expect(client.getQueryEntry(["cancel-capped"])).toBeUndefined();
   });
 
   it("returns fresh cached data without calling the query function again", async () => {
@@ -554,9 +660,7 @@ describe("createQueryClient", () => {
 
     expect(client.getQueryData(["profile", { userId: 1 }])).toBe("user-1");
     expect(client.getQueryData(["profile", { userId: 2 }])).toBe("user-2");
-    expect(
-      client.entries().map((entry) => [entry.queryKey, entry.data]),
-    ).toEqual([
+    expect(client.entries().map((entry) => [entry.queryKey, entry.data])).toEqual([
       [["profile", { userId: 1 }], "user-1"],
       [["profile", { userId: 2 }], "user-2"],
     ]);
@@ -616,12 +720,8 @@ describe("createQueryClient", () => {
   });
 
   it("preserves plain query-key order and undefined-property behavior", () => {
-    expect(hashQueryKey(["plain", { a: 1, b: undefined }])).toBe(
-      hashQueryKey(["plain", { a: 1 }]),
-    );
-    expect(hashQueryKey(["plain", { a: 1, b: 2 }])).toBe(
-      hashQueryKey(["plain", { b: 2, a: 1 }]),
-    );
+    expect(hashQueryKey(["plain", { a: 1, b: undefined }])).toBe(hashQueryKey(["plain", { a: 1 }]));
+    expect(hashQueryKey(["plain", { a: 1, b: 2 }])).toBe(hashQueryKey(["plain", { b: 2, a: 1 }]));
   });
 
   it("rehashes mutable query-key input for repeated reads of the same key array", () => {

@@ -30,7 +30,8 @@ interface InternalQueryEntry<TData = unknown> extends QueryEntry<TData> {
   promise?: Promise<TData> | undefined;
   queryKeySegments: readonly string[];
   invalidationRevision: number;
-  resource: QueryDevtoolsResourceHandle;
+  resource?: QueryDevtoolsResourceHandle | undefined;
+  resourceOwnerId: string;
   version: number;
 }
 
@@ -39,6 +40,8 @@ interface SetSuccessOptions {
   stale?: boolean | undefined;
   updatedAt?: number | undefined;
 }
+
+let nextQueryResourceOwnerId = 0;
 
 interface QuerySubscription<TData = unknown> {
   exact: boolean;
@@ -59,6 +62,8 @@ export function createQueryLifecycle(
   const prefixSubscriptions = new Set<QuerySubscription>();
   const subscriberCounts = new Map<string, number>();
   const subscriptionPolicies = new Map<string, Map<symbol, QuerySubscriptionOptions["gcTime"]>>();
+  const releasedSubscriptionPolicies = new Map<string, Array<QuerySubscriptionOptions["gcTime"]>>();
+  const inactiveGcTimes = new Map<string, QuerySubscriptionOptions["gcTime"]>();
   const gcTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const pendingInvalidationNotifications = new Set<InternalQueryEntry>();
   let invalidationNotifyScheduled = false;
@@ -83,16 +88,14 @@ export function createQueryLifecycle(
       queryHash,
       queryKey: stableQueryKey,
       queryKeySegments: hashQueryKeySegments(stableQueryKey),
-      resource: registerQueryDevtoolsResource("inactive-query", {
-        ownerId: queryHash,
-        ownership: "unknown",
-      }),
+      resourceOwnerId: `query:${nextQueryResourceOwnerId++}`,
       stale: true,
       status: "pending",
       updatedAt: 0,
       version: 0,
     };
     cache.set(queryHash, entry as InternalQueryEntry);
+    syncEntryDevtoolsResource(entry);
 
     return entry;
   }
@@ -166,6 +169,14 @@ export function createQueryLifecycle(
     options: SetSuccessOptions = {},
   ): void {
     const entry = getOrCreateEntry<TData>(queryKey, options.queryHash);
+    setSuccessEntry(entry, data, options);
+  }
+
+  function setSuccessEntry<TData>(
+    entry: InternalQueryEntry<TData>,
+    data: TData,
+    options: SetSuccessOptions = {},
+  ): void {
     clearInactiveTimer(entry.queryHash);
     const sharedData = replaceEqualDeep(entry.data, data) as TData;
     if (entry.abortController !== undefined && !entry.abortController.signal.aborted) {
@@ -186,6 +197,7 @@ export function createQueryLifecycle(
     notify(entry);
     scheduleInactiveExpiry(entry.queryHash);
     enforceInactiveLimit();
+    syncEntryDevtoolsResource(entry);
   }
 
   function hydrateQueryData<TData>(
@@ -200,42 +212,59 @@ export function createQueryLifecycle(
   }
 
   function retainSubscription(
-    queryKey: QueryKey,
+    queryHash: string,
     policyId: symbol,
     gcTime: QuerySubscriptionOptions["gcTime"],
   ): void {
-    const queryHash = hashQueryKey(queryKey);
+    const previousCount = subscriberCounts.get(queryHash) ?? 0;
+    if (previousCount === 0) {
+      inactiveGcTimes.delete(queryHash);
+      releasedSubscriptionPolicies.set(queryHash, []);
+      subscriptionPolicies.set(queryHash, new Map());
+    }
     clearInactiveTimer(queryHash);
 
-    subscriberCounts.set(queryHash, (subscriberCounts.get(queryHash) ?? 0) + 1);
-    let policies = subscriptionPolicies.get(queryHash);
-    if (policies === undefined) {
-      policies = new Map();
-      subscriptionPolicies.set(queryHash, policies);
-    }
+    subscriberCounts.set(queryHash, previousCount + 1);
+    const policies = subscriptionPolicies.get(queryHash) ?? new Map();
+    subscriptionPolicies.set(queryHash, policies);
     policies.set(policyId, gcTime);
+    syncEntryDevtoolsResource(cache.get(queryHash));
   }
 
-  function releaseSubscription(queryKey: QueryKey, policyId: symbol): void {
-    const queryHash = hashQueryKey(queryKey);
-    const count = Math.max(0, (subscriberCounts.get(queryHash) ?? 0) - 1);
+  function releaseSubscription(queryHash: string, policyId: symbol): void {
     const policies = subscriptionPolicies.get(queryHash);
-    const gcTime = selectGcTime(policies?.values());
-    policies?.delete(policyId);
+    const gcTime = policies?.get(policyId);
+    if (policies === undefined || (gcTime === undefined && !policies.has(policyId))) {
+      return;
+    }
+
+    policies.delete(policyId);
+    const released = releasedSubscriptionPolicies.get(queryHash) ?? [];
+    released.push(gcTime);
+    releasedSubscriptionPolicies.set(queryHash, released);
+    const count = Math.max(0, (subscriberCounts.get(queryHash) ?? 0) - 1);
 
     if (count > 0) {
       subscriberCounts.set(queryHash, count);
+      syncEntryDevtoolsResource(cache.get(queryHash));
       return;
     }
 
     subscriberCounts.delete(queryHash);
     subscriptionPolicies.delete(queryHash);
-    scheduleInactiveExpiry(queryHash, gcTime);
+    released.push(...policies.values());
+    const selectedGcTime = selectGcTime(released);
+    releasedSubscriptionPolicies.delete(queryHash);
+    inactiveGcTimes.set(queryHash, selectedGcTime);
+    scheduleInactiveExpiry(queryHash, selectedGcTime);
+    enforceInactiveLimit();
+    syncEntryDevtoolsResource(cache.get(queryHash));
   }
 
   function scheduleInactiveExpiry(
     queryHash: string,
-    gcTime: QuerySubscriptionOptions["gcTime"] = clientOptions.inactiveGcTime,
+    gcTime: QuerySubscriptionOptions["gcTime"] = inactiveGcTimes.get(queryHash) ??
+      clientOptions.inactiveGcTime,
   ): void {
     clearInactiveTimer(queryHash);
     if (gcTime === false || gcTime === undefined || (subscriberCounts.get(queryHash) ?? 0) > 0) {
@@ -265,6 +294,32 @@ export function createQueryLifecycle(
       clearTimeout(timer);
       gcTimers.delete(queryHash);
     }
+  }
+
+  function syncEntryDevtoolsResource(entry: InternalQueryEntry | undefined): void {
+    if (entry === undefined) {
+      return;
+    }
+
+    if (cache.get(entry.queryHash) !== entry) {
+      entry.resource?.dispose();
+      entry.resource = undefined;
+      return;
+    }
+
+    const isInactive = (subscriberCounts.get(entry.queryHash) ?? 0) === 0 && !entry.isFetching;
+    if (isInactive) {
+      if (entry.resource === undefined) {
+        entry.resource = registerQueryDevtoolsResource("inactive-query", {
+          ownerId: entry.resourceOwnerId,
+          ownership: "unknown",
+        });
+      }
+      return;
+    }
+
+    entry.resource?.dispose();
+    entry.resource = undefined;
   }
 
   function enforceInactiveLimit(): void {
@@ -316,7 +371,11 @@ export function createQueryLifecycle(
       entry.abortController.abort(createQueryAbortReason(entry.queryKey));
     }
 
-    entry.resource.dispose();
+    entry.resource?.dispose();
+    entry.resource = undefined;
+    inactiveGcTimes.delete(entry.queryHash);
+    releasedSubscriptionPolicies.delete(entry.queryHash);
+    pendingInvalidationNotifications.delete(entry);
 
     entry.version += 1;
     entry.abortController = undefined;
@@ -331,6 +390,13 @@ export function createQueryLifecycle(
     notifyPublicEntry(entry.queryKeySegments, toPublicEntry(entry));
   }
 
+  function markEntryCanceled(entry: InternalQueryEntry): void {
+    markCanceled(entry, notify);
+    scheduleInactiveExpiry(entry.queryHash);
+    enforceInactiveLimit();
+    syncEntryDevtoolsResource(entry);
+  }
+
   return {
     cancelQueries(options: InvalidateQueriesOptions = {}): void {
       const prefixSegments =
@@ -343,7 +409,7 @@ export function createQueryLifecycle(
           entry.abortController !== undefined
         ) {
           entry.abortController.abort(createQueryAbortReason(entry.queryKey));
-          markCanceled(entry, notify);
+          markEntryCanceled(entry);
         }
       }
     },
@@ -352,7 +418,9 @@ export function createQueryLifecycle(
       definitionOptions?: QueryDefinitionFetchOptions<TData>,
     ): Promise<TData> {
       const options = normalizeFetchOptions(optionsOrDefinition, definitionOptions);
-      const entry = getOrCreateEntry<TData>(options.queryKey);
+      const capturedQueryKey = snapshotQueryKey(options.queryKey);
+      const capturedOptions = { ...options, queryKey: capturedQueryKey };
+      const entry = getOrCreateEntry<TData>(capturedQueryKey);
       clearInactiveTimer(entry.queryHash);
 
       if (entry.status === "success" && !entry.stale && isFresh(entry, options.staleTime)) {
@@ -371,12 +439,13 @@ export function createQueryLifecycle(
       const fetchVersion = entry.version;
       const fetchInvalidationRevision = entry.invalidationRevision;
       notify(entry);
+      syncEntryDevtoolsResource(entry);
       const removeExternalAbort = linkAbortSignals(options.signal, entry.abortController);
-      entry.promise = executeQueryWithRetry(options, entry.abortController.signal).then(
+      entry.promise = executeQueryWithRetry(capturedOptions, entry.abortController.signal).then(
         (data) => {
           removeExternalAbort();
           if (cache.get(entry.queryHash) === entry && entry.version === fetchVersion) {
-            setSuccessValue(options.queryKey, data, {
+            setSuccessEntry(entry, data, {
               stale: entry.invalidationRevision !== fetchInvalidationRevision,
             });
           }
@@ -388,11 +457,11 @@ export function createQueryLifecycle(
             throw error;
           }
           if (entry.canceled === true || entry.abortController?.signal.aborted === true) {
-            markCanceled(entry, notify);
+            markEntryCanceled(entry);
             throw error;
           }
           entry.error = error;
-          entry.errorReason = classifyQueryError(options, error);
+          entry.errorReason = classifyQueryError(capturedOptions, error);
           entry.isFetching = false;
           entry.abortController = undefined;
           entry.promise = undefined;
@@ -402,6 +471,7 @@ export function createQueryLifecycle(
           notify(entry);
           scheduleInactiveExpiry(entry.queryHash);
           enforceInactiveLimit();
+          syncEntryDevtoolsResource(entry);
           throw error;
         },
       );
@@ -478,21 +548,22 @@ export function createQueryLifecycle(
       listener: (entry: QueryEntry<TData>) => void,
       options: QuerySubscriptionOptions = {},
     ): () => void {
-      const queryHash = hashQueryKey(queryKey);
+      const stableQueryKey = snapshotQueryKey(queryKey);
+      const queryHash = hashQueryKey(stableQueryKey);
       const subscription: QuerySubscription<TData> = {
         exact: options.exact === true,
         gcTime: options.gcTime ?? clientOptions.inactiveGcTime,
         listener,
         policyId: Symbol("mreact.query.subscription"),
-        queryKey,
+        queryKey: stableQueryKey,
         queryHash,
-        queryKeySegments: hashQueryKeySegments(queryKey),
+        queryKeySegments: hashQueryKeySegments(stableQueryKey),
         resource: registerQueryDevtoolsResource("subscription", {
-          ownerId: queryHash,
+          ownerId: `subscription:${nextQueryResourceOwnerId++}`,
           ownership: "owned",
         }),
       };
-      retainSubscription(queryKey, subscription.policyId, subscription.gcTime);
+      retainSubscription(queryHash, subscription.policyId, subscription.gcTime);
       if (subscription.exact) {
         let subscriptions = exactSubscriptions.get(queryHash);
         if (subscriptions === undefined) {
@@ -504,7 +575,12 @@ export function createQueryLifecycle(
         prefixSubscriptions.add(subscription as QuerySubscription);
       }
 
+      let active = true;
       return () => {
+        if (!active) {
+          return;
+        }
+        active = false;
         if (subscription.exact) {
           const subscriptions = exactSubscriptions.get(queryHash);
           subscriptions?.delete(subscription as QuerySubscription);
@@ -514,7 +590,7 @@ export function createQueryLifecycle(
         } else {
           prefixSubscriptions.delete(subscription as QuerySubscription);
         }
-        releaseSubscription(queryKey, subscription.policyId);
+        releaseSubscription(queryHash, subscription.policyId);
         subscription.resource.dispose();
       };
     },

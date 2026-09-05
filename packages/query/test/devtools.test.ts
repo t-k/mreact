@@ -50,4 +50,17 @@ describe("query devtools instrumentation", () => {
 
     expect(dateNowCalls).toBe(1);
   });
+
+  test("uses opaque resource owners when query keys contain sensitive values", () => {
+    const devtools = installDevtools();
+    activeDevtools = devtools;
+    const client = createQueryClient();
+
+    client.setQueryData(["private", { token: "secret-token" }], "cached");
+
+    const records = devtools.resources().snapshot();
+    expect(records).toEqual([expect.objectContaining({ kind: "inactive-query", status: "live" })]);
+    expect(records[0]?.ownerId).toMatch(/^query:/);
+    expect(records[0]?.ownerId).not.toContain("secret-token");
+  });
 });
