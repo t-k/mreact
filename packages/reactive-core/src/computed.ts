@@ -285,6 +285,10 @@ export function computed<T>(
   };
 
   function restoreUntrackedDependencies(): void {
+    if (untrackedDependencies.length === 0) {
+      return;
+    }
+
     const dependencies = liveUntrackedDependencies();
     if (dependencies.some((dependency) => dependency === undefined)) {
       untrackedDependencies = [];

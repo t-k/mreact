@@ -373,6 +373,27 @@ describe("computed", () => {
     expect(addedDepsTrackingDuringStableRun).toEqual([undefined]);
   });
 
+  test("preserves ordered dependency metadata for cached observed reads", () => {
+    const first = cell(1);
+    const second = cell(2);
+    const third = cell(3);
+    let computation: ReactiveComputation | null = null;
+    const total = computed(() => {
+      computation = runtimeState.activeTracker as ReactiveComputation | null;
+      return first.get() + second.get() + third.get();
+    });
+    const dispose = effect(() => {
+      total.get();
+    });
+
+    expect(computation?.orderedDeps).toHaveLength(3);
+
+    total.get();
+
+    expect(computation?.orderedDeps).toHaveLength(3);
+    dispose();
+  });
+
   test("stable ordered computed fan-in reruns do not rewrite source tracking versions", () => {
     const first = cell(0);
     const second = cell(0);
