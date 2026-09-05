@@ -1,3 +1,5 @@
+import type { RouteLocation } from "./types.js";
+
 /**
  * Observes request inputs read by application code during a render.
  *
@@ -158,4 +160,63 @@ export function withTrackedRequest<T extends object>(
   });
 
   return context;
+}
+
+/**
+ * Adds the serializable location view used by shared page and layout props.
+ * The full Request remains available to loaders, handlers, and metadata code.
+ */
+export function withTrackedRouteLocation<T extends object>(
+  values: T,
+  request: Request,
+  tracked: TrackedHeaderRequest | undefined,
+  location?: RouteLocation,
+): T & { request: RouteLocation } {
+  const context = values as T & { request: RouteLocation };
+  let currentLocation = location ?? routeLocationFromRequest(request);
+
+  Object.defineProperty(context, "request", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      tracked?.markRequestAccess();
+      return currentLocation;
+    },
+    set(value: RouteLocation) {
+      tracked?.markRequestAccess();
+      currentLocation = value;
+    },
+  });
+
+  return context;
+}
+
+/** Returns the URL fields that are safe to serialize into route HTML. */
+export function routeLocationFromRequest(request: Request): RouteLocation {
+  return routeLocationFromUrl(new URL(request.url));
+}
+
+/** Returns a serializable route location from a URL without request metadata. */
+export function routeLocationFromUrl(url: URL): RouteLocation {
+  return {
+    hash: url.hash,
+    pathname: url.pathname,
+    search: url.search,
+    url: url.href,
+  };
+}
+
+/**
+ * Returns the route location placeholder embedded in cached HTML. The client
+ * hydration runtime replaces it with document.URL before invoking shared code.
+ * Query values stay out of reusable HTML because they can contain credentials
+ * or other request-specific data.
+ */
+export function routeLocationForHydration(url: URL): RouteLocation {
+  return {
+    hash: "",
+    pathname: url.pathname,
+    search: "",
+    url: url.pathname,
+  };
 }

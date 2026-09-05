@@ -91,6 +91,24 @@ export default function FilePage(props: FilePageProps) {
 
 Route params are decoded before they reach route modules. Re-encode each segment with `encodeURIComponent` before embedding a param into a new URL.
 
+## Page and layout location
+
+Page and layout props expose `request` as a serializable `RouteLocation` with `url`, `pathname`, `search`, and `hash`. These fields describe the current route in both server rendering and browser hydration. Cached HTML carries only a pathname placeholder; hydration and client navigation restore the complete browser URL before shared code runs.
+
+```tsx
+import type { PageProps, RouteLocation } from "@reckona/mreact-router";
+
+type Data = { readonly title: string };
+
+export default function Page(props: PageProps<Data>) {
+  const location: RouteLocation = props.request;
+
+  return <main>{location.pathname}{location.search}</main>;
+}
+```
+
+Use `LoaderContext`, `GenerateMetadataContext`, or a route handler when code needs the server-only `Request` object, including headers, cookies, body, credentials, or an abort signal.
+
 ## Route groups
 
 Parenthesized folders organize routes without changing the URL. `src/app/(marketing)/contact/page.tsx` renders `/contact/`, not `/(marketing)/contact/`. Use route groups when a subtree needs a shared layout, template, or file organization boundary that should not appear in public URLs.

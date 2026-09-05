@@ -1665,10 +1665,16 @@ function cloudflareHydrationMarkerParts(options: {
 
   const routeId = route.routeId ?? cloudflareRouteIdForPath(options.routePath);
   const escapedRouteId = escapeHtmlAttribute(routeId);
+  const requestUrl = new URL(options.request.url);
   const propsJson = escapeScriptJson(
     JSON.stringify({
       params: options.params,
-      request: { url: new URL(options.request.url).pathname },
+      request: {
+        hash: "",
+        pathname: requestUrl.pathname,
+        search: "",
+        url: requestUrl.pathname,
+      },
       data: options.data,
     }),
   );

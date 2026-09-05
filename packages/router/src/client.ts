@@ -3491,7 +3491,18 @@ ${routeOutOfOrderFragmentHydration}  const __mreactMarker = document.querySelect
   const __mreactProps = __mreactPropsText === undefined
     ? {}
     : JSON.parse(__mreactPropsText);
-${restoreRequestUrl ? "  if (__mreactProps.request) __mreactProps.request.url = document.URL;\n" : ""}
+${
+  restoreRequestUrl
+    ? `  if (__mreactProps.request) {
+    const __mreactRouteUrl = new URL(document.URL);
+    __mreactProps.request.url = __mreactRouteUrl.href;
+    __mreactProps.request.pathname = __mreactRouteUrl.pathname;
+    __mreactProps.request.search = __mreactRouteUrl.search;
+    __mreactProps.request.hash = __mreactRouteUrl.hash;
+  }
+`
+    : ""
+}
   const __mreactClientReferences = __mreactClientReferencesElement?.textContent === undefined
     ? []
     : JSON.parse(__mreactClientReferencesElement.textContent);

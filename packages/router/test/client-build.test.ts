@@ -434,7 +434,33 @@ export default function Page(props) {
       routePath: "/",
     });
 
-    expect(entry.code).toContain("__mreactProps.request.url = document.URL");
+    expect(entry.code).toContain("__mreactProps.request.url = __mreactRouteUrl.href");
+    expect(entry.code).toContain("__mreactProps.request.search = __mreactRouteUrl.search");
+  });
+
+  test("hydrates shared route props with the current pathname and query", async () => {
+    history.replaceState(null, "", "/target?tab=profile#bio");
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-hydration-location-runtime-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `export default function Page(props) {
+  return <main>{props.request.pathname}|{props.request.search}|{props.request.hash}</main>;
+}`;
+    await writeFile(file, code);
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><main>/target|?tab=profile|#bio</main></div>',
+      '<script type="application/json" id="mreact-props-index">{"request":{"hash":"","pathname":"/","search":"","url":"/"}}</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#hydration-location`
+    );
+
+    expect(document.querySelector("main")?.textContent).toBe("/target|?tab=profile|#bio");
   });
 
   test("keeps the hydration-time OOB fragment walk for routes that can stream fragments", async () => {

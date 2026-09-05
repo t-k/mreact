@@ -4895,9 +4895,15 @@ function cloudflareHydrationMarkerParts(props) {
   }
   const routeId = route.routeId ?? cloudflareRouteIdForPath(props.route.path);
   const escapedRouteId = escapeHtmlAttribute(routeId);
+  const requestUrl = new URL(props.request.url);
   const propsJson = escapeScriptJson(JSON.stringify({
     params: props.params,
-    request: { url: new URL(props.request.url).pathname },
+    request: {
+      hash: "",
+      pathname: requestUrl.pathname,
+      search: "",
+      url: requestUrl.pathname,
+    },
     data: props.data,
   }));
   const clientReferencesJson = route.clientReferenceManifest === undefined || route.clientReferenceManifest.length === 0

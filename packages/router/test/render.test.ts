@@ -2771,7 +2771,7 @@ export default function Page() { return <button onClick={() => undefined}>client
     expect(first.headers.get("x-mreact-cache")).toBe("MISS");
     expect(second.headers.get("x-mreact-cache")).toBe("HIT");
     for (const html of [firstHtml, secondHtml]) {
-      expect(html).toContain('"request":{"url":"/"}');
+      expect(html).toContain('"request":{"hash":"","pathname":"/","search":"","url":"/"}');
       expect(html).not.toContain("tenant-a.test");
       expect(html).not.toContain("tenant-b.test");
       expect(html).not.toContain("shared-secret");
@@ -3157,21 +3157,20 @@ export default function Page(props) {
     expect(await hit.text()).toContain("<main>shared</main>");
   });
 
-  test("does not cache Request reconstruction hidden in a layout helper", async () => {
+  test("does not cache route location access hidden in a layout helper", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-layout-request-"));
     await writeFile(
       join(appDir, "request-helper.ts"),
-      `export function readIp(value) {
-  const copied = new Request(value);
-  return copied.headers.get("cf-connecting-ip") ?? "none";
+      `export function readHost(value) {
+  return new URL(value.url).host;
 }`,
     );
     await writeFile(
       join(appDir, "layout.mreact.tsx"),
-      `import { readIp } from "./request-helper";
+      `import { readHost } from "./request-helper";
 
 export default function Layout(props) {
-  return <div data-ip={readIp(props.request)}>{props.children}</div>;
+  return <div data-host={readHost(props.request)}>{props.children}</div>;
 }`,
     );
     await writeFile(
@@ -3198,8 +3197,8 @@ export default function Page() {
 
     expect(first.headers.get("x-mreact-cache")).toBe("DYNAMIC");
     expect(second.headers.get("x-mreact-cache")).toBe("DYNAMIC");
-    expect(await first.text()).toContain('data-ip="203.0.113.7"');
-    expect(await second.text()).toContain('data-ip="198.51.100.42"');
+    expect(await first.text()).toContain('data-host="local.test"');
+    expect(await second.text()).toContain('data-host="local.test"');
   });
 
   test("does not share absolute request URL output across hosts", async () => {

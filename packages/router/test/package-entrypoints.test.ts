@@ -541,6 +541,7 @@ import type {
   LoaderContext,
   MReactNode,
   PageProps,
+  RouteLocation,
   RouteHandlerContext,
 } from "@reckona/mreact-router";
 
@@ -555,14 +556,27 @@ type Data = Awaited<ReturnType<typeof loader>>;
 const pageProps: PageProps<Data, { id: string }> = {
   data: { name: "Ada" },
   params: { id: "1" },
-  request: new Request("https://app.test/users/1"),
+  request: {
+    url: "https://app.test/users/1?tab=profile#bio",
+    pathname: "/users/1",
+    search: "?tab=profile",
+    hash: "#bio",
+  } satisfies RouteLocation,
 };
 pageProps.data.name.toUpperCase();
+pageProps.request.search;
+// @ts-expect-error Shared route props do not expose server-only Request headers.
+pageProps.request.headers;
 
 const layoutProps: LayoutProps<{ id: string }> = {
   children: "body" satisfies MReactNode,
   params: { id: "1" },
-  request: new Request("https://app.test/users/1"),
+  request: {
+    url: "https://app.test/users/1",
+    pathname: "/users/1",
+    search: "",
+    hash: "",
+  },
 };
 layoutProps.children;
 

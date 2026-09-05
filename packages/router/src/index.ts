@@ -195,6 +195,7 @@ export type {
   RobotsRule,
   RouteHeadDescriptor,
   RouteHandlerContext,
+  RouteLocation,
   RouteLoader,
   RouteMetadata,
   RouteParams,

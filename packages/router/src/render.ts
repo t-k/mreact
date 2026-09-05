@@ -64,7 +64,11 @@ import {
 } from "./cache.js";
 import {
   trackRequestHeaderReads,
+  routeLocationFromRequest,
+  routeLocationForHydration,
+  routeLocationFromUrl,
   type TrackedHeaderRequest,
+  withTrackedRouteLocation,
   withTrackedRequest,
 } from "./request-header-tracking.js";
 import { configuredHstsHeader, hasInvalidConfiguredHsts } from "./security-headers.js";
@@ -108,6 +112,7 @@ import { viteDefineCacheKey, vitePluginsCacheKey } from "./vite-plugin-cache-key
 import type {
   ManifestDescriptor,
   RobotsManifest,
+  RouteLocation,
   RouteParams,
   RouteMetadata,
   SitemapEntry,
@@ -543,7 +548,7 @@ interface ServerComponentProps {
   data: unknown;
   params: RouteParams;
   queryClient: QueryClient;
-  request: Request;
+  request: RouteLocation;
 }
 
 type ServerComponent = (props: ServerComponentProps) => string | PromiseLike<string>;
@@ -1185,7 +1190,7 @@ async function renderAppRequestInternal(
           clientRoute,
           props: {
             params: matched.params,
-            request: { url: url.pathname },
+            request: routeLocationForHydration(url),
           },
           routePath: matched.route.path,
           script: clientScript,
@@ -1252,7 +1257,7 @@ async function renderAppRequestInternal(
             const renderedPage = await runWithQueryClient(queryClient, () =>
               runServerModuleWithSlots(
                 stringOutput.code,
-                withTrackedRequest(
+                withTrackedRouteLocation(
                   {
                     data,
                     params: matched.params,
@@ -1260,6 +1265,7 @@ async function renderAppRequestInternal(
                   },
                   appRequest,
                   trackedRequest,
+                  routeLocationFromUrl(url),
                 ),
                 matched.route.file,
                 options.serverModules,
@@ -1281,7 +1287,7 @@ async function renderAppRequestInternal(
                   script: clientScript,
                   props: {
                     params: matched.params,
-                    request: { url: url.pathname },
+                    request: routeLocationForHydration(url),
                     data,
                   },
                 })
@@ -1296,7 +1302,7 @@ async function renderAppRequestInternal(
                 appDir: options.appDir,
                 pageFile: matched.route.file,
                 html: pageHtmlForLayout,
-                props: withTrackedRequest(
+                props: withTrackedRouteLocation(
                   {
                     data,
                     params: matched.params,
@@ -1304,6 +1310,7 @@ async function renderAppRequestInternal(
                   },
                   appRequest,
                   trackedRequest,
+                  routeLocationFromUrl(url),
                 ),
                 slots: renderedPage.slots,
                 serverModules: options.serverModules,
@@ -1437,7 +1444,7 @@ async function renderAppRequestInternal(
               params: matched.params,
               queryClient,
               request: appRequest,
-              requestUrl: url.pathname,
+              requestUrl: url.href,
               trackedRequest,
               routePath: matched.route.path,
               routeScripts: options.clientScripts,
@@ -1470,7 +1477,7 @@ async function renderAppRequestInternal(
           }
 
           const data = streamData;
-          const props = withTrackedRequest(
+          const props = withTrackedRouteLocation(
             {
               data,
               params: matched.params,
@@ -1478,6 +1485,7 @@ async function renderAppRequestInternal(
             },
             appRequest,
             trackedRequest,
+            routeLocationFromUrl(url),
           );
           phaseStartedAt = renderTimingPhaseStartedAt(timing);
           const stream = runServerStreamModule(output.code, {
@@ -1487,7 +1495,7 @@ async function renderAppRequestInternal(
             markerRequest: options.request,
             prerenderVariantCapture: options.prerenderVariantCapture,
             props,
-            requestUrl: url.pathname,
+            requestUrl: url.href,
             routePath: matched.route.path,
             routeScripts: options.clientScripts,
             serverModules: options.serverModules,
@@ -1557,7 +1565,7 @@ async function renderAppRequestInternal(
         const renderedPage = await runWithQueryClient(queryClient, () =>
           runServerModuleWithSlots(
             output.code,
-            withTrackedRequest(
+            withTrackedRouteLocation(
               {
                 data,
                 params: matched.params,
@@ -1565,6 +1573,7 @@ async function renderAppRequestInternal(
               },
               appRequest,
               trackedRequest,
+              routeLocationFromUrl(url),
             ),
             matched.route.file,
             options.serverModules,
@@ -1592,7 +1601,7 @@ async function renderAppRequestInternal(
               script: clientScript,
               props: {
                 params: matched.params,
-                request: { url: url.pathname },
+                request: routeLocationForHydration(url),
                 data,
               },
             })
@@ -1608,7 +1617,7 @@ async function renderAppRequestInternal(
             appDir: options.appDir,
             pageFile: matched.route.file,
             html: pageHtmlForLayout,
-            props: withTrackedRequest(
+            props: withTrackedRouteLocation(
               {
                 data,
                 params: matched.params,
@@ -1616,6 +1625,7 @@ async function renderAppRequestInternal(
               },
               appRequest,
               trackedRequest,
+              routeLocationFromUrl(url),
             ),
             slots: renderedPage.slots,
             serverModules: options.serverModules,
@@ -2300,7 +2310,7 @@ function errorBoundaryProps(error: unknown, request: Request, routePath: string 
     error: normalizeErrorForProps(error),
     params: {},
     queryClient: createQueryClient(),
-    request,
+    request: routeLocationFromRequest(request),
     requestId: requestIdForErrorContext(request),
     routeId: routeIdForPath(routePath ?? new URL(request.url).pathname),
     traceId: traceContextFromRequest(request)?.traceId,
@@ -3550,7 +3560,9 @@ function runServerStreamModule(
           script: options.script,
           props: {
             params: options.props.params,
-            request: { url: options.requestUrl },
+            request: routeLocationForHydration(
+              new URL(options.requestUrl, options.markerRequest.url),
+            ),
             data: options.props.data,
           },
         })
@@ -3797,7 +3809,7 @@ async function runServerStreamModuleWithLoading(
     importPolicy?: AppRouterImportPolicy | undefined;
   },
 ): Promise<ReadableStream<Uint8Array> | Response> {
-  const loadingProps = withTrackedRequest(
+  const loadingProps = withTrackedRouteLocation(
     {
       data: undefined,
       params: options.params,
@@ -3805,6 +3817,7 @@ async function runServerStreamModuleWithLoading(
     },
     options.request,
     options.trackedRequest,
+    routeLocationFromUrl(new URL(options.requestUrl)),
   );
   const layoutShells = await layoutShellsForPage(
     options.appDir,
@@ -3836,7 +3849,7 @@ async function runServerStreamModuleWithLoading(
         script: options.script,
         props: {
           params: options.params,
-          request: { url: options.requestUrl },
+          request: routeLocationForHydration(new URL(options.requestUrl)),
         },
       })
     : serverOnlyRouteMarkerParts(
@@ -3879,7 +3892,7 @@ async function runServerStreamModuleWithLoading(
         await appendServerStreamModule(
           code,
           boundarySink,
-          withTrackedRequest(
+          withTrackedRouteLocation(
             {
               data,
               params: options.params,
@@ -3887,6 +3900,7 @@ async function runServerStreamModuleWithLoading(
             },
             options.request,
             options.trackedRequest,
+            routeLocationFromUrl(new URL(options.requestUrl)),
           ),
           options.pageFile,
           options.serverModules,

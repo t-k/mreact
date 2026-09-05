@@ -63,12 +63,25 @@ export interface RouteHandlerContext<TParams extends RouteParams = RouteParams> 
 }
 
 /**
+ * Serializable location data passed to shared page and layout components.
+ *
+ * Server-only request data such as headers, body, credentials, and abort
+ * signals is available through loader and handler contexts instead.
+ */
+export interface RouteLocation {
+  readonly hash: string;
+  readonly pathname: string;
+  readonly search: string;
+  readonly url: string;
+}
+
+/**
  * Provides loader data, params, and request context to page components.
  */
 export interface PageProps<TData = unknown, TParams extends RouteParams = RouteParams> {
   data: TData;
   params: TParams;
-  request: Request;
+  request: RouteLocation;
 }
 
 /**
@@ -95,7 +108,7 @@ export function definePage<TLoader extends RouteLoader>(
 export interface LayoutProps<TParams extends RouteParams = RouteParams> {
   children: ReactCompatNode;
   params: TParams;
-  request: Request;
+  request: RouteLocation;
 }
 
 /**
