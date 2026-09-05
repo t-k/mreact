@@ -54,6 +54,7 @@ export function analyzeOxcAttribute(
   diagnostics: Pick<Diagnostic, "level" | "code" | "message" | "loc">[],
   options: {
     allowRef?: boolean;
+    isServerRenderValueExpression?: (expression: Record<string, unknown>) => boolean;
     resolveExpressionCode?: (expression: Record<string, unknown>) => string;
   } = {},
 ): AttributeIr[] {
@@ -139,6 +140,9 @@ export function analyzeOxcAttribute(
       kind: "dynamic-attr",
       name,
       code: expressionCode,
+      ...(target === "server" && options.isServerRenderValueExpression?.(expression) === true
+        ? { omitServerRenderValue: true }
+        : {}),
     };
     dynamicAttributeExpressions.set(attribute, expression);
 

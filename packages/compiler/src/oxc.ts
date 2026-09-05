@@ -6,7 +6,7 @@ import {
   createCompilerModuleContextWithOxc,
   type CompilerModuleContext,
 } from "./compiler-module-context.js";
-import type { ClientReferenceIr, ComponentIr, ModuleIr, PropAliasIr } from "./ir.js";
+import type { ClientReferenceIr, ComponentIr, JsxNodeIr, ModuleIr, PropAliasIr } from "./ir.js";
 import {
   stripTypeScriptExpressionWithOxc,
   transformJsxToCreateElementWithOxc,
@@ -28,6 +28,7 @@ import {
 import type { OxcBodyStatementJsxMode } from "./oxc-analysis-types.js";
 import {
   collectBindingNames,
+  collectBindingNamesFromPattern,
   collectImportBindingNames,
   formatStatement,
   readOxcParameterName,
@@ -69,7 +70,11 @@ import {
   markOxcCompatReactNodeReferences,
   markOxcCompatRuntimeReferences,
 } from "./oxc-component-references.js";
-import { normalizeOxcExpressionCode, stripOxcGeneratedImports } from "./oxc-code-utils.js";
+import {
+  allocateOxcServerRenderValuePlaceholder,
+  normalizeOxcExpressionCode,
+  stripOxcGeneratedImports,
+} from "./oxc-code-utils.js";
 import {
   analyzeOxcExpressionChild,
   analyzeOxcJsxNode,
@@ -161,21 +166,42 @@ const oxcBodyLowerers: OxcBodyLowerers = createOxcBodyLowerers();
 
 function createOxcBodyLowerers(
   compatRuntimeImports: ReadonlyMap<string, ClientReferenceIr> = new Map(),
+  serverOutput?: AnalyzeModuleOptions["serverOutput"],
 ): OxcBodyLowerers {
   return {
     lowerDomNodeExpression: (code, expression, componentNames) =>
       lowerOxcReactiveValueExpression(code, expression, componentNames) ??
       lowerOxcDomNodeExpression(code, expression),
     lowerCompatObjectExpression: lowerOxcCompatObjectExpression,
-    lowerServerStringExpression: (code, expression, componentNames, target, diagnostics) =>
-      lowerOxcServerStringExpression(
-        code,
-        expression,
-        componentNames,
-        target,
-        diagnostics,
-        compatRuntimeImports,
-      ),
+    lowerServerStringExpression: (
+      code,
+      expression,
+      componentNames,
+      target,
+      diagnostics,
+      serverRenderValueWrapper,
+      serverRenderValueCallNames,
+    ) =>
+      serverRenderValueWrapper === undefined
+        ? lowerOxcServerStringExpression(
+            code,
+            expression,
+            componentNames,
+            target,
+            diagnostics,
+            compatRuntimeImports,
+          )
+        : lowerOxcNestedJsxExpression(
+            code,
+            expression,
+            componentNames,
+            target,
+            diagnostics,
+            "server-string",
+            serverRenderValueWrapper,
+            serverRenderValueCallNames,
+            serverOutput,
+          ),
   };
 }
 
@@ -185,11 +211,16 @@ function createOxcChildAnalysisContext(
   diagnostics: Diagnostic[],
   bodyStatementJsx?: OxcBodyStatementJsxMode,
   componentBodyBindings?: ReadonlyMap<string, Record<string, unknown>>,
+  componentPropObjectNames?: ReadonlySet<string>,
+  componentPropValueNames?: ReadonlySet<string>,
   componentConstBindings?: ReadonlySet<string>,
+  moduleRenderValueBindingNames?: ReadonlySet<string>,
   reactiveAliasBindings?: ReadonlyMap<string, string>,
   serverOutput?: AnalyzeModuleOptions["serverOutput"],
   componentCallNames?: Set<string>,
   bodyLowerers: OxcBodyLowerers = oxcBodyLowerers,
+  serverRenderValueWrapper?: string,
+  serverRenderValueCallNames?: ReadonlySet<string>,
 ): OxcChildAnalysisContext {
   return {
     componentNames,
@@ -199,7 +230,12 @@ function createOxcChildAnalysisContext(
     diagnostics,
     ...(bodyStatementJsx === undefined ? {} : { bodyStatementJsx }),
     ...(componentBodyBindings === undefined ? {} : { componentBodyBindings }),
+    ...(componentPropObjectNames === undefined ? {} : { componentPropObjectNames }),
+    ...(componentPropValueNames === undefined ? {} : { componentPropValueNames }),
     ...(componentConstBindings === undefined ? {} : { componentConstBindings }),
+    ...(moduleRenderValueBindingNames === undefined ? {} : { moduleRenderValueBindingNames }),
+    ...(serverRenderValueWrapper === undefined ? {} : { serverRenderValueWrapper }),
+    ...(serverRenderValueCallNames === undefined ? {} : { serverRenderValueCallNames }),
     ...(reactiveAliasBindings === undefined ? {} : { reactiveAliasBindings }),
     bodyLowerers,
     lowerNestedJsxExpression: lowerOxcNestedJsxExpression,
@@ -347,8 +383,20 @@ function analyzeOxcToIr(
     options?.compatReactNodeReturnRenderMode === "react-node"
       ? collectOxcCompatReactNodeComponentReferences(program)
       : undefined;
-  const localJsxReturnFunctionNames =
+  const detectedLocalJsxReturnFunctionNames =
     target === "server" ? collectOxcLocalJsxReturnFunctionNames(program) : new Set<string>();
+  const detectedComponentCallNames = new Set([
+    ...detectedLocalJsxReturnFunctionNames,
+    ...collectOxcExportedComponents(program).filter((name) => name !== "default"),
+  ]);
+  const reassignedLocalJsxReturnFunctionNames = collectOxcReassignedNames(
+    program,
+    detectedComponentCallNames,
+  );
+  const localJsxReturnFunctionNames = collectOxcLocalJsxReturnFunctionNames(
+    program,
+    reassignedLocalJsxReturnFunctionNames,
+  );
   const compatCreateElementNames =
     target === "server" ? collectCompatCreateElementNames(program) : new Set<string>();
   const compatRenderToStringNames =
@@ -371,8 +419,18 @@ function analyzeOxcToIr(
     target === "server"
       ? collectLocalJsxHelperHtmlParameters(program, localJsxReturnFunctionNames)
       : new Map<string, Set<number>>();
-  const bodyLowerers = createOxcBodyLowerers(compatRuntimeImports);
-  const moduleRenderValueBindings = collectOxcBodyJsxBindingNames(body);
+  const bodyLowerers = createOxcBodyLowerers(
+    compatRuntimeImports,
+    options?.serverOutput,
+  );
+  const moduleRenderValueBindings = collectOxcBodyJsxBindingNames(
+    body,
+    localJsxReturnFunctionNames,
+  );
+  const moduleServerRenderValuePlaceholder =
+    target === "server" && options?.topLevelJsx === "server-string"
+      ? allocateOxcServerRenderValuePlaceholder(code, program)
+      : undefined;
   const moduleConstBindings = collectOxcConstBindingNames(body);
   const reactiveDerivedFunctionNames = collectOxcReactiveDerivedFunctionNames(body);
 
@@ -436,6 +494,9 @@ function analyzeOxcToIr(
         diagnostics,
         options,
         bodyLowerers,
+        moduleServerRenderValuePlaceholder,
+        moduleRenderValueBindings,
+        localJsxReturnFunctionNames,
       );
       const formattedStatement =
         loweredTopLevel ?? formatPreservedStatement(code, statement, options);
@@ -462,7 +523,13 @@ function analyzeOxcToIr(
 
   const componentNames = componentNamesFromProgram(program, moduleBindingNames);
   const componentCallNames =
-    options?.serverOutput === "stream" ? componentCallNamesFromProgram(program) : undefined;
+    target === "server"
+      ? componentCallNamesFromProgram(
+          program,
+          localJsxReturnFunctionNames,
+          reassignedLocalJsxReturnFunctionNames,
+        )
+      : undefined;
   const asyncComponentNames = collectOxcAsyncComponentNames(program);
   const components = body.flatMap((statement) =>
     analyzeOxcComponent(
@@ -488,6 +555,32 @@ function analyzeOxcToIr(
     ),
   );
 
+  if (options?.serverOutput === "stream") {
+    for (const component of components) {
+      markOxcClientReferences(component.root, clientBoundaryImports);
+      markOxcCompatRuntimeReferences(component.root, compatRuntimeImports);
+      if (compatReactNodeReferences !== undefined) {
+        markOxcCompatReactNodeReferences(component.root, compatReactNodeReferences);
+      }
+    }
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const component of components) {
+        markOxcAsyncComponentReferences(component.root, asyncComponentNames);
+      }
+      for (const component of components) {
+        if (
+          !asyncComponentNames.has(component.name) &&
+          requiresOxcAsyncStreamEmission(component.root)
+        ) {
+          asyncComponentNames.add(component.name);
+          changed = true;
+        }
+      }
+    }
+  }
+
   for (const component of components) {
     markOxcAsyncComponentReferences(component.root, asyncComponentNames);
     markOxcClientReferences(component.root, clientBoundaryImports);
@@ -504,6 +597,9 @@ function analyzeOxcToIr(
   const ir: ModuleIr = {
     userImports,
     moduleStatements,
+    ...(moduleServerRenderValuePlaceholder === undefined
+      ? {}
+      : { serverRenderValuePlaceholder: moduleServerRenderValuePlaceholder }),
     moduleBindingNames: Array.from(moduleBindingNames),
     components,
   };
@@ -534,11 +630,127 @@ function componentNamesFromProgram(
   ]);
 }
 
-function componentCallNamesFromProgram(program: unknown): Set<string> {
-  return new Set([
-    ...collectOxcExportedComponents(program).filter((name) => name !== "default"),
-    ...collectOxcPlainComponentNames(program),
-  ]);
+function componentCallNamesFromProgram(
+  program: unknown,
+  localJsxReturnFunctionNames: ReadonlySet<string>,
+  reassignedNames: ReadonlySet<string>,
+): Set<string> {
+  return new Set(
+    [
+      ...collectOxcExportedComponents(program).filter((name) => name !== "default"),
+      ...localJsxReturnFunctionNames,
+    ].filter((name) => !reassignedNames.has(name)),
+  );
+}
+
+function collectOxcUnshadowedNames(
+  functionLike: Record<string, unknown>,
+  names: ReadonlySet<string>,
+): Set<string> {
+  const shadowed = new Set<string>();
+  for (const parameter of readArray(functionLike.params)) {
+    for (const name of collectBindingNamesFromPattern(readObject(parameter))) {
+      if (names.has(name)) shadowed.add(name);
+    }
+  }
+  const body = readObject(functionLike.body);
+  const pending: unknown[] = [];
+  if (body.type === "BlockStatement") {
+    for (const statement of readArray(body.body)) {
+      const object = readObject(statement);
+      if (
+        object.type === "VariableDeclaration" ||
+        object.type === "FunctionDeclaration" ||
+        object.type === "ClassDeclaration"
+      ) {
+        for (const name of collectBindingNames(object)) {
+          if (names.has(name)) shadowed.add(name);
+        }
+      }
+      pending.push(statement);
+    }
+  }
+  const seen = new Set<object>();
+
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (typeof current !== "object" || current === null || seen.has(current)) continue;
+    seen.add(current);
+    if (Array.isArray(current)) {
+      for (const value of current) pending.push(value);
+      continue;
+    }
+
+    const object = readObject(current);
+    if (
+      object.type === "FunctionDeclaration" ||
+      object.type === "FunctionExpression" ||
+      object.type === "ArrowFunctionExpression"
+    ) {
+      continue;
+    }
+    if (object.type === "VariableDeclaration" && object.kind === "var") {
+      for (const name of collectBindingNames(object)) {
+        if (names.has(name)) shadowed.add(name);
+      }
+    }
+    for (const value of Object.values(object)) pending.push(value);
+  }
+
+  return new Set([...names].filter((name) => !shadowed.has(name)));
+}
+
+function containsOxcServerRenderValue(node: JsxNodeIr): boolean {
+  if (node.kind === "expr") return node.renderMode === "server-render-value";
+  if (node.kind === "conditional") {
+    return [...node.whenTrue, ...node.whenFalse].some(containsOxcServerRenderValue);
+  }
+  if (node.kind === "async-boundary") {
+    return [
+      ...node.children,
+      ...(node.placeholderChildren ?? []),
+      ...(node.catchChildren ?? []),
+    ].some(containsOxcServerRenderValue);
+  }
+  if (node.kind === "component") {
+    return (
+      node.children.some(containsOxcServerRenderValue) ||
+      node.props.some(
+        (prop) =>
+          prop.kind === "render-prop" && prop.children.some(containsOxcServerRenderValue),
+      )
+    );
+  }
+  if (node.kind === "list" || node.kind === "element" || node.kind === "fragment") {
+    return node.children.some(containsOxcServerRenderValue);
+  }
+  return false;
+}
+
+function requiresOxcAsyncStreamEmission(node: JsxNodeIr): boolean {
+  if (containsOxcServerRenderValue(node)) return true;
+  if (node.kind === "expr") {
+    return node.renderMode === "stream-node";
+  }
+  if (node.kind === "async-boundary") return true;
+  if (node.kind === "component") {
+    if (node.async === true) return true;
+    if (node.runtime !== "compat" && node.clientReference === undefined) return true;
+    return (
+      node.children.some(requiresOxcAsyncStreamEmission) ||
+      node.props.some(
+        (prop) =>
+          prop.kind === "render-prop" && prop.children.some(requiresOxcAsyncStreamEmission),
+      )
+    );
+  }
+  if (node.kind === "conditional") {
+    return [...node.whenTrue, ...node.whenFalse].some(requiresOxcAsyncStreamEmission);
+  }
+  if (node.kind === "list" || node.kind === "element" || node.kind === "fragment") {
+    return node.children.some(requiresOxcAsyncStreamEmission);
+  }
+  return false;
 }
 
 function collectLocalJsxHelperHtmlParameters(
@@ -551,77 +763,391 @@ function collectLocalJsxHelperHtmlParameters(
     return parameters;
   }
 
-  for (const statement of readArray(readObject(program).body)) {
-    const object = readObject(statement);
-    const declaration =
-      object.type === "ExportNamedDeclaration" || object.type === "ExportDefaultDeclaration"
-        ? readObject(object.declaration)
-        : object;
-    const body = readObject(declaration.body);
+  const pending: unknown[] = [program];
+  const seen = new Set<object>();
 
-    if (body.type !== "BlockStatement") {
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (typeof current !== "object" || current === null || seen.has(current)) continue;
+    seen.add(current);
+
+    if (Array.isArray(current)) {
+      for (const value of current) pending.push(value);
       continue;
     }
 
-    for (const returnExpression of collectOxcReturnExpressions(body)) {
-      const callExpression = unwrapOxcParentheses(returnExpression);
-      if (callExpression.type !== "CallExpression") {
-        continue;
-      }
-
-      const callee = unwrapOxcParentheses(readObject(callExpression.callee));
-      if (
-        callee.type !== "Identifier" ||
-        typeof callee.name !== "string" ||
-        !localJsxReturnFunctionNames.has(callee.name)
-      ) {
-        continue;
-      }
+    const object = readObject(current);
+    const callee =
+      object.type === "CallExpression"
+        ? unwrapOxcParentheses(readObject(object.callee))
+        : undefined;
+    if (
+      callee?.type === "Identifier" &&
+      typeof callee.name === "string" &&
+      localJsxReturnFunctionNames.has(callee.name)
+    ) {
       const calleeName = callee.name;
-
-      readArray(callExpression.arguments).forEach((argument, index) => {
-        if (!containsOxcJsxSyntax(readObject(argument))) {
+      readArray(object.arguments).forEach((argument, index) => {
+        const argumentObject = readObject(argument);
+        if (
+          !containsOxcJsxSyntax(argumentObject) &&
+          !containsOxcLocalJsxHelperCall(argumentObject, localJsxReturnFunctionNames)
+        ) {
           return;
         }
-
         const indexes = parameters.get(calleeName) ?? new Set<number>();
         indexes.add(index);
         parameters.set(calleeName, indexes);
       });
     }
+
+    for (const value of Object.values(object)) pending.push(value);
   }
 
   return parameters;
 }
 
-function collectOxcReturnExpressions(
-  statement: Record<string, unknown>,
-): Record<string, unknown>[] {
-  if (statement.type === "ReturnStatement") {
-    return [unwrapOxcParentheses(readObject(statement.argument))];
-  }
+function containsOxcLocalJsxHelperCall(
+  node: Record<string, unknown>,
+  localJsxReturnFunctionNames: ReadonlySet<string>,
+): boolean {
+  const unwrapped = unwrapOxcParentheses(node);
+  if (isOxcLocalJsxHelperCallExpression(unwrapped, localJsxReturnFunctionNames)) return true;
+  return Object.values(unwrapped).some((value) =>
+    Array.isArray(value)
+      ? value.some((item) =>
+          containsOxcLocalJsxHelperCall(readObject(item), localJsxReturnFunctionNames),
+        )
+      : typeof value === "object" &&
+          value !== null &&
+          containsOxcLocalJsxHelperCall(readObject(value), localJsxReturnFunctionNames),
+  );
+}
 
-  if (statement.type === "BlockStatement") {
-    return readArray(statement.body).flatMap((child) =>
-      collectOxcReturnExpressions(readObject(child)),
-    );
-  }
+function collectOxcReassignedNames(
+  node: unknown,
+  names: ReadonlySet<string>,
+): Set<string> {
+  const reassigned = new Set<string>();
+  const visit = (value: unknown, inheritedShadowedNames: ReadonlySet<string>): void => {
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, inheritedShadowedNames);
+      return;
+    }
+    if (typeof value !== "object" || value === null) return;
+    const object = readObject(value);
+    if (object.type === "Program") {
+      for (const statement of readArray(object.body)) visit(statement, inheritedShadowedNames);
+      return;
+    }
+    if (
+      object.type === "FunctionDeclaration" ||
+      object.type === "FunctionExpression" ||
+      object.type === "ArrowFunctionExpression"
+    ) {
+      const parameterShadowedNames = collectOxcFunctionParameterShadowedNames(
+        object,
+        inheritedShadowedNames,
+      );
+      for (const parameter of readArray(object.params)) {
+        for (const initializer of collectOxcParameterInitializerExpressions(
+          readObject(parameter),
+        )) {
+          visit(initializer, parameterShadowedNames);
+        }
+      }
+      visit(
+        object.body,
+        collectOxcFunctionLocalShadowedNames(object, inheritedShadowedNames),
+      );
+      return;
+    }
+    if (object.type === "ClassExpression") {
+      const shadowedNames = new Set(inheritedShadowedNames);
+      for (const name of collectBindingNamesFromPattern(readObject(object.id))) {
+        if (names.has(name)) shadowedNames.add(name);
+      }
+      for (const [key, child] of Object.entries(object)) {
+        if (key !== "id") visit(child, shadowedNames);
+      }
+      return;
+    }
+    if (object.type === "StaticBlock") {
+      const shadowedNames = collectOxcStaticBlockShadowedNames(
+        object,
+        inheritedShadowedNames,
+      );
+      for (const statement of readArray(object.body)) visit(statement, shadowedNames);
+      return;
+    }
+    if (object.type === "VariableDeclaration") {
+      for (const declaration of readArray(object.declarations)) {
+        const declarator = readObject(declaration);
+        if (object.kind === "var" && Object.keys(readObject(declarator.init)).length > 0) {
+          for (const name of collectBindingNamesFromPattern(readObject(declarator.id))) {
+            if (names.has(name) && !inheritedShadowedNames.has(name)) reassigned.add(name);
+          }
+        }
+        for (const initializer of collectOxcParameterInitializerExpressions(
+          readObject(declarator.id),
+        )) {
+          visit(initializer, inheritedShadowedNames);
+        }
+        visit(declarator.init, inheritedShadowedNames);
+      }
+      return;
+    }
+    if (object.type === "BlockStatement") {
+      const shadowedNames = new Set(inheritedShadowedNames);
+      for (const statement of readArray(object.body)) {
+        const statementObject = readObject(statement);
+        if (statementObject.type === "VariableDeclaration" && statementObject.kind !== "var") {
+          for (const declaration of readArray(statementObject.declarations)) {
+            for (const name of collectBindingNamesFromPattern(readObject(readObject(declaration).id))) {
+              if (names.has(name)) shadowedNames.add(name);
+            }
+          }
+        } else if (
+          statementObject.type === "FunctionDeclaration" ||
+          statementObject.type === "ClassDeclaration"
+        ) {
+          for (const name of collectBindingNamesFromPattern(readObject(statementObject.id))) {
+            if (names.has(name)) shadowedNames.add(name);
+          }
+        }
+      }
+      for (const statement of readArray(object.body)) visit(statement, shadowedNames);
+      return;
+    }
+    if (object.type === "CatchClause") {
+      const shadowedNames = new Set(inheritedShadowedNames);
+      for (const name of collectBindingNamesFromPattern(readObject(object.param))) {
+        if (names.has(name)) shadowedNames.add(name);
+      }
+      visit(object.body, shadowedNames);
+      return;
+    }
+    if (object.type === "SwitchStatement") {
+      visit(object.discriminant, inheritedShadowedNames);
+      const shadowedNames = new Set(inheritedShadowedNames);
+      for (const switchCase of readArray(object.cases)) {
+        for (const statement of readArray(readObject(switchCase).consequent)) {
+          const statementObject = readObject(statement);
+          if (statementObject.type === "VariableDeclaration" && statementObject.kind !== "var") {
+            for (const declaration of readArray(statementObject.declarations)) {
+              for (const name of collectBindingNamesFromPattern(readObject(readObject(declaration).id))) {
+                if (names.has(name)) shadowedNames.add(name);
+              }
+            }
+          } else if (
+            statementObject.type === "FunctionDeclaration" ||
+            statementObject.type === "ClassDeclaration"
+          ) {
+            for (const name of collectBindingNamesFromPattern(readObject(statementObject.id))) {
+              if (names.has(name)) shadowedNames.add(name);
+            }
+          }
+        }
+      }
+      for (const switchCase of readArray(object.cases)) {
+        visit(readObject(switchCase).test, shadowedNames);
+        for (const statement of readArray(readObject(switchCase).consequent)) {
+          visit(statement, shadowedNames);
+        }
+      }
+      return;
+    }
+    if (
+      object.type === "ForStatement" ||
+      object.type === "ForInStatement" ||
+      object.type === "ForOfStatement"
+    ) {
+      const declaration = readObject(object.type === "ForStatement" ? object.init : object.left);
+      const shadowedNames = new Set(inheritedShadowedNames);
+      if (declaration.type === "VariableDeclaration") {
+        for (const declarator of readArray(declaration.declarations)) {
+          const declaratorObject = readObject(declarator);
+          for (const name of collectBindingNamesFromPattern(readObject(declaratorObject.id))) {
+            if (!names.has(name)) continue;
+            if (declaration.kind === "var") {
+              if (
+                (object.type === "ForInStatement" ||
+                  object.type === "ForOfStatement" ||
+                  Object.keys(readObject(declaratorObject.init)).length > 0) &&
+                !inheritedShadowedNames.has(name)
+              ) {
+                reassigned.add(name);
+              }
+            } else {
+              shadowedNames.add(name);
+            }
+          }
+        }
+      } else if (object.type === "ForInStatement" || object.type === "ForOfStatement") {
+        for (const name of collectBindingNamesFromPattern(unwrapOxcParentheses(declaration))) {
+          if (names.has(name) && !inheritedShadowedNames.has(name)) reassigned.add(name);
+        }
+      }
+      if (object.type === "ForStatement") {
+        visit(object.init, shadowedNames);
+        visit(object.test, shadowedNames);
+        visit(object.update, shadowedNames);
+      } else {
+        visit(object.left, shadowedNames);
+        visit(object.right, inheritedShadowedNames);
+      }
+      visit(object.body, shadowedNames);
+      return;
+    }
+    const assignedPatterns: Record<string, unknown>[] = [];
+    if (object.type === "AssignmentExpression") {
+      assignedPatterns.push(unwrapOxcParentheses(readObject(object.left)));
+    } else if (object.type === "UpdateExpression") {
+      assignedPatterns.push(unwrapOxcParentheses(readObject(object.argument)));
+    } else if (object.type === "ForOfStatement" || object.type === "ForInStatement") {
+      const left = unwrapOxcParentheses(readObject(object.left));
+      if (left.type !== "VariableDeclaration") assignedPatterns.push(left);
+    }
+    for (const pattern of assignedPatterns) {
+      for (const name of collectBindingNamesFromPattern(pattern)) {
+        if (names.has(name) && !inheritedShadowedNames.has(name)) reassigned.add(name);
+      }
+    }
+    for (const child of Object.values(object)) visit(child, inheritedShadowedNames);
+  };
 
-  if (statement.type === "IfStatement") {
+  visit(node, new Set());
+
+  return reassigned;
+}
+
+function collectOxcFunctionLocalShadowedNames(
+  functionLike: Record<string, unknown>,
+  inheritedShadowedNames: ReadonlySet<string>,
+): Set<string> {
+  const shadowedNames = collectOxcFunctionParameterShadowedNames(
+    functionLike,
+    inheritedShadowedNames,
+  );
+  const body = readObject(functionLike.body);
+  if (body.type === "BlockStatement") {
+    for (const statement of readArray(body.body)) {
+      const object = readObject(statement);
+      if (
+        object.type === "VariableDeclaration" ||
+        object.type === "FunctionDeclaration" ||
+        object.type === "ClassDeclaration"
+      ) {
+        for (const name of collectBindingNames(object)) shadowedNames.add(name);
+      }
+    }
+  }
+  collectOxcScopedVarBindingNames(body, shadowedNames);
+  return shadowedNames;
+}
+
+function collectOxcFunctionParameterShadowedNames(
+  functionLike: Record<string, unknown>,
+  inheritedShadowedNames: ReadonlySet<string>,
+): Set<string> {
+  const shadowedNames = new Set(inheritedShadowedNames);
+  if (functionLike.type === "FunctionExpression") {
+    for (const name of collectBindingNamesFromPattern(readObject(functionLike.id))) {
+      shadowedNames.add(name);
+    }
+  }
+  for (const parameter of readArray(functionLike.params)) {
+    for (const name of collectBindingNamesFromPattern(readObject(parameter))) {
+      shadowedNames.add(name);
+    }
+  }
+  return shadowedNames;
+}
+
+function collectOxcScopedVarBindingNames(
+  root: Record<string, unknown>,
+  names: Set<string>,
+): void {
+  const pending: unknown[] = [root];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (Array.isArray(current)) {
+      for (const value of current) pending.push(value);
+      continue;
+    }
+    if (typeof current !== "object" || current === null) continue;
+    const object = readObject(current);
+    if (
+      object !== root &&
+      (object.type === "FunctionDeclaration" ||
+        object.type === "FunctionExpression" ||
+        object.type === "ArrowFunctionExpression" ||
+        object.type === "ClassDeclaration" ||
+        object.type === "ClassExpression" ||
+        object.type === "StaticBlock")
+    ) {
+      continue;
+    }
+    if (object.type === "VariableDeclaration" && object.kind === "var") {
+      for (const name of collectBindingNames(object)) names.add(name);
+    }
+    for (const value of Object.values(object)) pending.push(value);
+  }
+}
+
+function collectOxcStaticBlockShadowedNames(
+  staticBlock: Record<string, unknown>,
+  inheritedShadowedNames: ReadonlySet<string>,
+): Set<string> {
+  const shadowedNames = new Set(inheritedShadowedNames);
+  for (const statement of readArray(staticBlock.body)) {
+    const object = readObject(statement);
+    if (
+      object.type === "VariableDeclaration" ||
+      object.type === "FunctionDeclaration" ||
+      object.type === "ClassDeclaration"
+    ) {
+      for (const name of collectBindingNames(object)) shadowedNames.add(name);
+    }
+  }
+  collectOxcScopedVarBindingNames(staticBlock, shadowedNames);
+  return shadowedNames;
+}
+
+function collectOxcParameterInitializerExpressions(
+  pattern: Record<string, unknown>,
+): unknown[] {
+  if (pattern.type === "AssignmentPattern") {
     return [
-      ...collectOxcReturnExpressions(readObject(statement.consequent)),
-      ...collectOxcReturnExpressions(readObject(statement.alternate)),
+      pattern.right,
+      ...collectOxcParameterInitializerExpressions(readObject(pattern.left)),
     ];
   }
-
-  if (statement.type === "SwitchStatement") {
-    return readArray(statement.cases).flatMap((switchCase) =>
-      readArray(readObject(switchCase).consequent).flatMap((child) =>
-        collectOxcReturnExpressions(readObject(child)),
-      ),
+  if (pattern.type === "RestElement") {
+    return collectOxcParameterInitializerExpressions(readObject(pattern.argument));
+  }
+  if (pattern.type === "FormalParameter" || pattern.type === "TSParameterProperty") {
+    return collectOxcParameterInitializerExpressions(
+      readObject(pattern.pattern ?? pattern.parameter),
     );
   }
-
+  if (pattern.type === "ArrayPattern") {
+    return readArray(pattern.elements).flatMap((element) =>
+      collectOxcParameterInitializerExpressions(readObject(element)),
+    );
+  }
+  if (pattern.type === "ObjectPattern") {
+    return readArray(pattern.properties).flatMap((property) => {
+      const object = readObject(property);
+      if (object.type === "RestElement") {
+        return collectOxcParameterInitializerExpressions(readObject(object.argument));
+      }
+      return [
+        ...(object.computed === true ? [object.key] : []),
+        ...collectOxcParameterInitializerExpressions(readObject(object.value)),
+      ];
+    });
+  }
   return [];
 }
 
@@ -1071,7 +1597,7 @@ function analyzeOxcComponent(
 
   if (object.type !== "ExportNamedDeclaration") {
     const plainComponent =
-      readOxcPlainComponent(statement) ??
+      readOxcPlainComponent(statement, localJsxReturnFunctionNames) ??
       (compatReactNodeReturn ? readOxcListMapComponent(statement) : undefined) ??
       (serverOutput === "stream"
         ? undefined
@@ -1127,7 +1653,7 @@ function analyzeOxcComponent(
 
   if (declaration.type === "VariableDeclaration") {
     const variableComponent =
-      readOxcVariableComponentDeclaration(declaration) ??
+      readOxcVariableComponentDeclaration(declaration, localJsxReturnFunctionNames) ??
       readCompatCreateElementPlainComponent(
         code,
         declaration,
@@ -1224,6 +1750,9 @@ function lowerOxcLocalJsxHelperCallExpressionCode(
   target: CompileTarget,
   diagnostics: Diagnostic[],
   bodyLowerers: OxcBodyLowerers,
+  serverRenderValuePlaceholder: string | undefined,
+  localJsxReturnFunctionNames: ReadonlySet<string>,
+  serverOutput: AnalyzeModuleOptions["serverOutput"],
 ): string {
   if (expression.type !== "CallExpression") {
     return readSource(code, expression);
@@ -1231,18 +1760,24 @@ function lowerOxcLocalJsxHelperCallExpressionCode(
 
   const args = readArray(expression.arguments).map((argument) => {
     const object = unwrapOxcParentheses(readObject(argument));
-    return containsOxcJsxSyntax(object)
+    return containsOxcJsxSyntax(object) ||
+      containsOxcLocalJsxHelperCall(object, localJsxReturnFunctionNames)
       ? (bodyLowerers.lowerServerStringExpression(
           code,
           object,
           componentNames,
           target,
           diagnostics,
+          serverRenderValuePlaceholder,
+          localJsxReturnFunctionNames,
         ) ?? readSource(code, argument))
       : readSource(code, argument);
   });
 
-  return `${readSource(code, readObject(expression.callee))}(${args.join(", ")})`;
+  const callee = readSource(code, readObject(expression.callee));
+  if (serverOutput !== "stream") return `${callee}(${args.join(", ")})`;
+  const sinkName = `${allocateOxcServerRenderValuePlaceholder(code, expression)}$sink`;
+  return `(${sinkName}) => ${callee}(${[sinkName, ...args].join(", ")})`;
 }
 
 function attachOxcInlineMemo(
@@ -1324,6 +1859,14 @@ function analyzeOxcFunctionLikeComponent(
   const parameters = readArray(functionLike.params).map((param) =>
     readOxcParameterName(code, param),
   );
+  const unshadowedLocalJsxReturnFunctionNames = collectOxcUnshadowedNames(
+    functionLike,
+    localJsxReturnFunctionNames,
+  );
+  const unshadowedComponentCallNames =
+    componentCallNames === undefined
+      ? undefined
+      : collectOxcUnshadowedNames(functionLike, componentCallNames);
   const parameterPropAliases = readPlainObjectParameterPropAliases(functionLike.params);
   const htmlParameterNames = new Set(
     [...(localJsxHelperHtmlParameters.get(name) ?? [])]
@@ -1334,6 +1877,10 @@ function analyzeOxcFunctionLikeComponent(
     /^[a-z]/.test(name) && componentNames.has(name)
       ? new Set([...componentNames].filter((componentName) => componentName !== name))
       : componentNames;
+  const unshadowedBodyComponentNames = collectOxcUnshadowedNames(
+    functionLike,
+    bodyComponentNames,
+  );
   const reactiveAliasBindings = collectOxcReactiveReadAliases(
     code,
     body,
@@ -1343,6 +1890,20 @@ function analyzeOxcFunctionLikeComponent(
     earlyIfRootReturn === undefined
       ? collectOxcCompilerOwnedReactiveAliases(body, rootStatement, reactiveAliasBindings)
       : new Map<string, string>();
+  const componentRenderValueBindings = collectOxcBodyJsxBindingNames(
+    body.filter(
+      (bodyStatement) =>
+        bodyStatement !== rootStatement &&
+        earlyIfRootReturn?.branchStatements.includes(bodyStatement) !== true &&
+        earlyIfRootReturn?.fallthroughBodyStatements.includes(bodyStatement) !== true &&
+        bodyStatement !== earlyIfRootReturn?.fallthroughStatement,
+    ),
+    unshadowedLocalJsxReturnFunctionNames,
+  );
+  const serverRenderValuePlaceholder =
+    target === "server" && bodyStatementJsx === "server-string"
+      ? allocateOxcServerRenderValuePlaceholder(code, functionLike)
+      : undefined;
   const bodyStatements = body
     .filter(
       (bodyStatement) =>
@@ -1355,11 +1916,14 @@ function analyzeOxcFunctionLikeComponent(
       const loweredStatement = lowerOxcBodyStatementJsx(
         code,
         bodyStatement,
-        bodyComponentNames,
+        unshadowedBodyComponentNames,
         target,
         diagnostics,
         bodyStatementJsx,
         bodyLowerers,
+        serverRenderValuePlaceholder,
+        componentRenderValueBindings,
+        unshadowedLocalJsxReturnFunctionNames,
       );
 
       if (loweredStatement !== undefined) {
@@ -1375,6 +1939,11 @@ function analyzeOxcFunctionLikeComponent(
         : formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx);
     });
   const componentBodyBindings = collectOxcVariableInitializers(body);
+  const componentPropBindings = collectOxcComponentPropBindings(
+    functionLike.params,
+    body,
+    parameterPropAliases,
+  );
   const componentConstBindings = new Set([
     ...[...moduleConstBindings].filter(
       (binding) => !componentBodyBindings.has(binding) && !parameters.includes(binding),
@@ -1382,16 +1951,21 @@ function analyzeOxcFunctionLikeComponent(
     ...collectOxcConstBindingNames(body),
   ]);
   const childAnalysisContext = createOxcChildAnalysisContext(
-    bodyComponentNames,
+    unshadowedBodyComponentNames,
     target,
     diagnostics,
     bodyStatementJsx,
     componentBodyBindings,
+    componentPropBindings.objectNames,
+    componentPropBindings.valueNames,
     componentConstBindings,
+    moduleRenderValueBindings,
     reactiveAliasBindings,
     serverOutput,
-    componentCallNames,
+    unshadowedComponentCallNames,
     bodyLowerers,
+    serverRenderValuePlaceholder,
+    unshadowedLocalJsxReturnFunctionNames,
   );
   const root =
     analyzeOxcEarlyIfRootReturn(code, earlyIfRootReturn, childAnalysisContext, bodyStatementJsx) ??
@@ -1415,7 +1989,10 @@ function analyzeOxcFunctionLikeComponent(
       ? analyzeOxcJsxNode(code, returnExpression, childAnalysisContext)
       : isOxcComponentCallExpression(returnExpression)
         ? analyzeOxcComponentCallExpression(code, returnExpression)
-        : isOxcLocalJsxHelperCallExpression(returnExpression, localJsxReturnFunctionNames)
+        : isOxcLocalJsxHelperCallExpression(
+              returnExpression,
+              unshadowedLocalJsxReturnFunctionNames,
+            )
           ? {
               kind: "expr" as const,
               code: normalizeOxcExpressionCode(
@@ -1423,15 +2000,42 @@ function analyzeOxcFunctionLikeComponent(
                   ? lowerOxcLocalJsxHelperCallExpressionCode(
                       code,
                       returnExpression,
-                      bodyComponentNames,
+                      unshadowedBodyComponentNames,
                       target,
                       diagnostics,
                       bodyLowerers,
+                      serverRenderValuePlaceholder,
+                      unshadowedLocalJsxReturnFunctionNames,
+                      serverOutput,
                     )
                   : readSource(code, returnExpression),
               ),
-              renderMode: "html" as const,
+            renderMode:
+                serverOutput === "stream" ? ("stream-node" as const) : ("html" as const),
             }
+          : bodyStatementJsx === "server-string" &&
+              serverRenderValuePlaceholder !== undefined &&
+              containsOxcLocalJsxHelperCall(
+                returnExpression,
+                unshadowedLocalJsxReturnFunctionNames,
+              )
+            ? {
+                kind: "expr" as const,
+                code: normalizeOxcExpressionCode(
+                  lowerOxcNestedJsxExpression(
+                    code,
+                    returnExpression,
+                    unshadowedBodyComponentNames,
+                    target,
+                    diagnostics,
+                    "server-string",
+                    serverRenderValuePlaceholder,
+                    unshadowedLocalJsxReturnFunctionNames,
+                    serverOutput,
+                  ) ?? readSource(code, returnExpression),
+                ),
+                renderMode: "server-render-value" as const,
+              }
           : (analyzeOxcDynamicRootReturn(
               code,
               returnExpression,
@@ -1457,20 +2061,18 @@ function analyzeOxcFunctionLikeComponent(
             }));
   markOxcRenderValueExpressions(
     [root],
-    new Set([
-      ...moduleRenderValueBindings,
-      ...collectOxcBodyJsxBindingNames(
-        body.filter(
-          (bodyStatement) =>
-            bodyStatement !== rootStatement &&
-            earlyIfRootReturn?.branchStatements.includes(bodyStatement) !== true &&
-            earlyIfRootReturn?.fallthroughBodyStatements.includes(bodyStatement) !== true &&
-            bodyStatement !== earlyIfRootReturn?.fallthroughStatement,
-        ),
-      ),
-      ...htmlParameterNames,
-    ]),
-    bodyStatementJsx === "server-string" ? "html" : "dynamic",
+    htmlParameterNames,
+    bodyStatementJsx === "server-string" ? "server-render-value" : "dynamic",
+  );
+  markOxcRenderValueExpressions(
+    [root],
+    moduleRenderValueBindings,
+    bodyStatementJsx === "server-string" ? "server-render-value" : "dynamic",
+  );
+  markOxcRenderValueExpressions(
+    [root],
+    componentRenderValueBindings,
+    bodyStatementJsx === "server-string" ? "server-render-value" : "dynamic",
   );
 
   return {
@@ -1481,6 +2083,7 @@ function analyzeOxcFunctionLikeComponent(
     parameters,
     ...(parameterPropAliases === undefined ? {} : { parameterPropAliases }),
     bodyStatements,
+    ...(serverRenderValuePlaceholder === undefined ? {} : { serverRenderValuePlaceholder }),
     bindingNames: [
       ...parameters,
       ...(parameterPropAliases?.map((alias) => alias.localName) ?? []),
@@ -1488,6 +2091,89 @@ function analyzeOxcFunctionLikeComponent(
     ],
     root,
   };
+}
+
+function collectOxcComponentPropBindings(
+  params: unknown,
+  bodyStatements: readonly unknown[],
+  parameterPropAliases: readonly PropAliasIr[] | undefined,
+): { objectNames: Set<string>; valueNames: Set<string> } {
+  const objectNames = new Set<string>();
+  const valueNames = new Set(parameterPropAliases?.map((alias) => alias.localName) ?? []);
+  const firstParameter = readObject(readArray(params)[0]);
+
+  if (firstParameter.type === "Identifier" && typeof firstParameter.name === "string") {
+    objectNames.add(firstParameter.name);
+  } else if (firstParameter.type === "ObjectPattern") {
+    collectOxcPropPatternBindings(firstParameter, objectNames, valueNames);
+  }
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+
+    for (const statement of bodyStatements) {
+      const declaration = readObject(statement);
+      if (declaration.type !== "VariableDeclaration") continue;
+
+      for (const declarator of readArray(declaration.declarations)) {
+        const object = readObject(declarator);
+        const id = readObject(object.id);
+        const init = unwrapOxcParentheses(readObject(object.init));
+
+        if (
+          id.type === "Identifier" &&
+          typeof id.name === "string" &&
+          init.type === "Identifier" &&
+          typeof init.name === "string" &&
+          objectNames.has(init.name) &&
+          !objectNames.has(id.name)
+        ) {
+          objectNames.add(id.name);
+          changed = true;
+          continue;
+        }
+
+        if (
+          id.type !== "ObjectPattern" ||
+          init.type !== "Identifier" ||
+          typeof init.name !== "string" ||
+          !objectNames.has(init.name)
+        ) {
+          continue;
+        }
+
+        const objectCount = objectNames.size;
+        const valueCount = valueNames.size;
+        collectOxcPropPatternBindings(id, objectNames, valueNames);
+        changed = objectNames.size !== objectCount || valueNames.size !== valueCount || changed;
+      }
+    }
+  }
+
+  return { objectNames, valueNames };
+}
+
+function collectOxcPropPatternBindings(
+  pattern: Record<string, unknown>,
+  objectNames: Set<string>,
+  valueNames: Set<string>,
+): void {
+  for (const property of readArray(pattern.properties)) {
+    const object = readObject(property);
+
+    if (object.type === "RestElement") {
+      for (const name of collectBindingNamesFromPattern(readObject(object.argument))) {
+        objectNames.add(name);
+      }
+      continue;
+    }
+
+    if (object.type !== "Property") continue;
+    for (const name of collectBindingNamesFromPattern(readObject(object.value))) {
+      valueNames.add(name);
+    }
+  }
 }
 
 function collectOxcConstBindingNames(bodyStatements: readonly unknown[]): Set<string> {

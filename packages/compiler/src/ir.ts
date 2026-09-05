@@ -4,6 +4,7 @@ import type { SourceLocation } from "./types.js";
 export interface ModuleIr {
   userImports: string[];
   moduleStatements: string[];
+  serverRenderValuePlaceholder?: string;
   moduleBindingNames: string[];
   components: ComponentIr[];
 }
@@ -18,6 +19,7 @@ export interface ComponentIr {
   parameters: string[];
   parameterPropAliases?: PropAliasIr[];
   bodyStatements: string[];
+  serverRenderValuePlaceholder?: string;
   bindingNames: string[];
   root: JsxNodeIr;
 }
@@ -77,6 +79,7 @@ export interface ComponentNamedPropIr {
   kind: "prop";
   name: string;
   code: string;
+  serverRenderValuePlaceholder?: string;
 }
 
 /** Represents a render-prop child lowered into the component prop list. */
@@ -91,6 +94,7 @@ export interface ComponentRenderPropIr {
 export interface ComponentSpreadPropIr {
   kind: "spread-prop";
   code: string;
+  serverRenderValuePlaceholder?: string;
 }
 
 /** Represents a JSX fragment and its lowered children. */
@@ -105,6 +109,7 @@ export interface ConditionalIr {
   kind: "conditional";
   conditionCode: string;
   conditionValueName?: string;
+  conditionTestCode?: string;
   whenTrue: JsxNodeIr[];
   whenFalse: JsxNodeIr[];
 }
@@ -165,7 +170,9 @@ export interface ExprIr {
   compilerKeyedProperty?: string;
   renderMode?:
     | "dynamic"
+    | "render-value"
     | "html"
+    | "server-render-value"
     | "react-node"
     | "stream-node"
     | "compat-child"
@@ -208,6 +215,7 @@ export interface DynamicAttributeIr {
   kind: "dynamic-attr";
   name: string;
   code: string;
+  omitServerRenderValue?: true;
   // "compat" applies react-compat serialization semantics (px suffix for
   // numeric style values, interpreter-equivalent filtering).
   serialization?: "compat";

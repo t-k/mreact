@@ -1381,6 +1381,14 @@ function workspacePackageResolutionPlugin() {
       "@reckona/mreact-server",
       { entry: "index", monorepoDir: "server", packageName: "@reckona/mreact-server" },
     ],
+    [
+      "@reckona/mreact-shared/server-render-value-internal",
+      {
+        entry: "server-render-value-internal",
+        monorepoDir: "shared",
+        packageName: "@reckona/mreact-shared",
+      },
+    ],
   ]);
   const routerEntries = new Map([
     ["@reckona/mreact-router", join(packageRoot, sourceOrDist)],
@@ -1400,7 +1408,7 @@ function workspacePackageResolutionPlugin() {
       buildApi.onResolve(
         {
           filter:
-            /^(?:react(?:\/jsx-(?:dev-)?runtime)?|react-dom(?:\/(?:client|server))?|@reckona\/(?:mreact(?:\/(?:jsx-dev-runtime|jsx-runtime))?|mreact-(?:auth|query|reactive-core|server|router|compat)(?:\/(?:event-priority|flight|internal|jsx-dev-runtime|jsx-runtime|scheduler|app-router-globals|link|native-escape|navigation-state|session|stream-list|internal\/native-escape|internal\/session))?))$/,
+            /^(?:react(?:\/jsx-(?:dev-)?runtime)?|react-dom(?:\/(?:client|server))?|@reckona\/(?:mreact(?:\/(?:jsx-dev-runtime|jsx-runtime))?|mreact-shared\/server-render-value-internal|mreact-(?:auth|query|reactive-core|server|router|compat)(?:\/(?:event-priority|flight|internal|jsx-dev-runtime|jsx-runtime|scheduler|app-router-globals|link|native-escape|navigation-state|session|stream-list|internal\/native-escape|internal\/session))?))$/,
         },
         (args) => {
           const routerPath = routerEntries.get(args.path);

@@ -34,42 +34,339 @@ export function collectOxcPlainComponentNames(program: unknown): string[] {
   });
 }
 
-export function collectOxcLocalJsxReturnFunctionNames(program: unknown): Set<string> {
+export function collectOxcLocalJsxReturnFunctionNames(
+  program: unknown,
+  excludedNames: ReadonlySet<string> = new Set(),
+): Set<string> {
   const names = new Set<string>();
+  const functionLikes = new Map<string, Record<string, unknown>>();
 
   for (const statement of readArray(readObject(program).body)) {
     const object = readObject(statement);
+    const declaration =
+      object.type === "ExportDefaultDeclaration" || object.type === "ExportNamedDeclaration"
+        ? readObject(object.declaration)
+        : object;
 
-    if (object.type === "FunctionDeclaration" && hasOxcFunctionLikeJsxReturn(object)) {
-      const id = readObject(object.id);
-      if (typeof id.name === "string") {
-        names.add(id.name);
+    if (declaration.type === "FunctionDeclaration") {
+      const id = readObject(declaration.id);
+      if (typeof id.name === "string" && !excludedNames.has(id.name)) {
+        functionLikes.set(id.name, declaration);
+        if (hasOxcFunctionLikeJsxReturn(declaration)) {
+          names.add(id.name);
+        }
       }
       continue;
     }
 
-    if (object.type !== "VariableDeclaration") {
+    if (declaration.type !== "VariableDeclaration") {
       continue;
     }
 
-    for (const declarator of readArray(object.declarations)) {
+    for (const declarator of readArray(declaration.declarations)) {
       const declaratorObject = readObject(declarator);
       const id = readObject(declaratorObject.id);
       const initializer = unwrapOxcComponentFunctionLikeInitializer(
         readObject(declaratorObject.init),
       );
 
-      if (
-        typeof id.name === "string" &&
-        initializer !== undefined &&
-        hasOxcFunctionLikeJsxReturn(initializer)
-      ) {
-        names.add(id.name);
+      if (typeof id.name === "string" && initializer !== undefined && !excludedNames.has(id.name)) {
+        functionLikes.set(id.name, initializer);
+        if (hasOxcFunctionLikeJsxReturn(initializer)) {
+          names.add(id.name);
+        }
+      }
+    }
+  }
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [name, functionLike] of functionLikes) {
+      if (names.has(name)) continue;
+      if (hasOxcFunctionLikeLocalJsxHelperReturn(functionLike, names)) {
+        names.add(name);
+        changed = true;
       }
     }
   }
 
   return names;
+}
+
+function collectOxcPatternNames(pattern: Record<string, unknown>, names: Set<string>): void {
+  if (typeof pattern.name === "string") {
+    names.add(pattern.name);
+    return;
+  }
+  if (pattern.type === "AssignmentPattern") {
+    collectOxcPatternNames(readObject(pattern.left), names);
+    return;
+  }
+  if (pattern.type === "RestElement") {
+    collectOxcPatternNames(readObject(pattern.argument), names);
+    return;
+  }
+  if (pattern.type === "ObjectPattern") {
+    for (const property of readArray(pattern.properties)) {
+      const object = readObject(property);
+      collectOxcPatternNames(
+        readObject(object.type === "RestElement" ? object.argument : object.value),
+        names,
+      );
+    }
+    return;
+  }
+  if (pattern.type === "ArrayPattern") {
+    for (const element of readArray(pattern.elements)) collectOxcPatternNames(readObject(element), names);
+  }
+}
+
+function hasOxcFunctionLikeLocalJsxHelperReturn(
+  functionLike: Record<string, unknown>,
+  localJsxReturnFunctionNames: ReadonlySet<string>,
+): boolean {
+  if (localJsxReturnFunctionNames.size === 0) return false;
+  const body = unwrapOxcParentheses(readObject(functionLike.body));
+  const functionShadowedNames = new Set<string>();
+  for (const parameter of readArray(functionLike.params)) {
+    collectOxcPatternNames(readObject(parameter), functionShadowedNames);
+  }
+  collectOxcFunctionScopedVarNames(body, functionShadowedNames);
+  if (body.type !== "BlockStatement") {
+    const availableNames = withoutOxcShadowedNames(
+      localJsxReturnFunctionNames,
+      functionShadowedNames,
+    );
+    return isOxcSafeLocalJsxHelperReturnExpression(body, availableNames).trusted;
+  }
+  const results: Array<{ safe: boolean; trusted: boolean }> = [];
+  collectOxcScopedLocalJsxHelperReturns(
+    body,
+    localJsxReturnFunctionNames,
+    functionShadowedNames,
+    results,
+  );
+  if (results.length === 0) return false;
+  return results.every((result) => result.safe) && results.some((result) => result.trusted);
+}
+
+function collectOxcFunctionScopedVarNames(
+  node: Record<string, unknown>,
+  names: Set<string>,
+): void {
+  const pending: unknown[] = [node];
+  const seen = new Set<object>();
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (typeof current !== "object" || current === null || seen.has(current)) continue;
+    seen.add(current);
+    if (Array.isArray(current)) {
+      for (const value of current) pending.push(value);
+      continue;
+    }
+    const object = readObject(current);
+    if (
+      object !== node &&
+      (object.type === "FunctionDeclaration" ||
+        object.type === "FunctionExpression" ||
+        object.type === "ArrowFunctionExpression" ||
+        object.type === "ClassDeclaration" ||
+        object.type === "ClassExpression" ||
+        object.type === "StaticBlock")
+    ) {
+      continue;
+    }
+    if (object.type === "VariableDeclaration" && object.kind === "var") {
+      for (const declaration of readArray(object.declarations)) {
+        collectOxcPatternNames(readObject(readObject(declaration).id), names);
+      }
+    }
+    for (const value of Object.values(object)) pending.push(value);
+  }
+}
+
+function collectOxcScopedLocalJsxHelperReturns(
+  node: Record<string, unknown>,
+  localJsxReturnFunctionNames: ReadonlySet<string>,
+  inheritedShadowedNames: ReadonlySet<string>,
+  results: Array<{ safe: boolean; trusted: boolean }>,
+): void {
+  if (
+    node.type === "FunctionDeclaration" ||
+    node.type === "FunctionExpression" ||
+    node.type === "ArrowFunctionExpression"
+  ) {
+    return;
+  }
+
+  if (node.type === "ReturnStatement") {
+    results.push(
+      isOxcSafeLocalJsxHelperReturnExpression(
+        unwrapOxcParentheses(readObject(node.argument)),
+        withoutOxcShadowedNames(localJsxReturnFunctionNames, inheritedShadowedNames),
+      ),
+    );
+    return;
+  }
+
+  if (node.type === "BlockStatement") {
+    const shadowedNames = new Set(inheritedShadowedNames);
+    for (const statement of readArray(node.body)) {
+      collectOxcDirectLexicalBindingNames(readObject(statement), shadowedNames);
+    }
+    for (const statement of readArray(node.body)) {
+      collectOxcScopedLocalJsxHelperReturns(
+        readObject(statement),
+        localJsxReturnFunctionNames,
+        shadowedNames,
+        results,
+      );
+    }
+    return;
+  }
+
+  if (node.type === "CatchClause") {
+    const shadowedNames = new Set(inheritedShadowedNames);
+    collectOxcPatternNames(readObject(node.param), shadowedNames);
+    collectOxcScopedLocalJsxHelperReturns(
+      readObject(node.body),
+      localJsxReturnFunctionNames,
+      shadowedNames,
+      results,
+    );
+    return;
+  }
+
+  if (node.type === "SwitchStatement") {
+    const shadowedNames = new Set(inheritedShadowedNames);
+    for (const switchCase of readArray(node.cases)) {
+      for (const statement of readArray(readObject(switchCase).consequent)) {
+        collectOxcDirectLexicalBindingNames(readObject(statement), shadowedNames);
+      }
+    }
+    for (const switchCase of readArray(node.cases)) {
+      for (const statement of readArray(readObject(switchCase).consequent)) {
+        collectOxcScopedLocalJsxHelperReturns(
+          readObject(statement),
+          localJsxReturnFunctionNames,
+          shadowedNames,
+          results,
+        );
+      }
+    }
+    return;
+  }
+
+  if (
+    node.type === "ForStatement" ||
+    node.type === "ForInStatement" ||
+    node.type === "ForOfStatement"
+  ) {
+    const shadowedNames = new Set(inheritedShadowedNames);
+    const declaration = readObject(node.type === "ForStatement" ? node.init : node.left);
+    collectOxcDirectLexicalBindingNames(declaration, shadowedNames);
+    collectOxcScopedLocalJsxHelperReturns(
+      readObject(node.body),
+      localJsxReturnFunctionNames,
+      shadowedNames,
+      results,
+    );
+    return;
+  }
+
+  for (const value of Object.values(node)) {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const object = readObject(item);
+        if (Object.keys(object).length > 0) {
+          collectOxcScopedLocalJsxHelperReturns(
+            object,
+            localJsxReturnFunctionNames,
+            inheritedShadowedNames,
+            results,
+          );
+        }
+      }
+    } else if (typeof value === "object" && value !== null) {
+      collectOxcScopedLocalJsxHelperReturns(
+        readObject(value),
+        localJsxReturnFunctionNames,
+        inheritedShadowedNames,
+        results,
+      );
+    }
+  }
+}
+
+function collectOxcDirectLexicalBindingNames(
+  statement: Record<string, unknown>,
+  names: Set<string>,
+): void {
+  if (statement.type === "VariableDeclaration" && statement.kind !== "var") {
+    for (const declaration of readArray(statement.declarations)) {
+      collectOxcPatternNames(readObject(readObject(declaration).id), names);
+    }
+    return;
+  }
+  if (statement.type === "FunctionDeclaration" || statement.type === "ClassDeclaration") {
+    collectOxcPatternNames(readObject(statement.id), names);
+  }
+}
+
+function withoutOxcShadowedNames(
+  names: ReadonlySet<string>,
+  shadowedNames: ReadonlySet<string>,
+): Set<string> {
+  return new Set([...names].filter((name) => !shadowedNames.has(name)));
+}
+
+function isOxcSafeLocalJsxHelperReturnExpression(
+  expression: Record<string, unknown>,
+  localJsxReturnFunctionNames: ReadonlySet<string>,
+): { safe: boolean; trusted: boolean } {
+  const unwrapped = unwrapOxcParentheses(expression);
+  if (isOxcJsxReturnExpression(unwrapped)) return { safe: true, trusted: true };
+  if (isOxcLocalJsxHelperCallExpression(unwrapped, localJsxReturnFunctionNames)) {
+    return { safe: true, trusted: true };
+  }
+  if (
+    unwrapped.type === "NullLiteral" ||
+    (unwrapped.type === "Literal" &&
+      (unwrapped.value === null || unwrapped.value === false || unwrapped.value === true)) ||
+    (unwrapped.type === "Identifier" && unwrapped.name === "undefined")
+  ) {
+    return { safe: true, trusted: false };
+  }
+  if (unwrapped.type === "ConditionalExpression") {
+    const consequent = isOxcSafeLocalJsxHelperReturnExpression(
+      readObject(unwrapped.consequent),
+      localJsxReturnFunctionNames,
+    );
+    const alternate = isOxcSafeLocalJsxHelperReturnExpression(
+      readObject(unwrapped.alternate),
+      localJsxReturnFunctionNames,
+    );
+    return {
+      safe: consequent.safe && alternate.safe,
+      trusted: consequent.trusted || alternate.trusted,
+    };
+  }
+  if (unwrapped.type === "ArrayExpression") {
+    const entries = readArray(unwrapped.elements).map((element) => {
+      const object = readObject(element);
+      if (Object.keys(object).length === 0) return { safe: true, trusted: false };
+      return isOxcSafeLocalJsxHelperReturnExpression(
+        readObject(object.expression ?? element),
+        localJsxReturnFunctionNames,
+      );
+    });
+    return {
+      safe: entries.every((entry) => entry.safe),
+      trusted: entries.some((entry) => entry.trusted),
+    };
+  }
+  return { safe: false, trusted: false };
 }
 
 export function collectOxcExportedComponents(program: unknown): string[] {
@@ -178,7 +475,7 @@ export function isOxcJsxComponentStatement(
   return (
     isOxcExportedJsxComponent(statement) ||
     isOxcExportedFunctionReturningLocalJsxHelper(statement, localJsxReturnFunctionNames) ||
-    readOxcPlainComponent(statement) !== undefined
+    readOxcPlainComponent(statement, localJsxReturnFunctionNames) !== undefined
   );
 }
 
@@ -249,6 +546,7 @@ function isOxcExportedFunctionReturningLocalJsxHelper(
 
 export function readOxcVariableComponentDeclaration(
   declaration: Record<string, unknown>,
+  localJsxReturnFunctionNames: ReadonlySet<string> = new Set(),
 ): OxcVariableComponentDeclaration | undefined {
   if (declaration.type !== "VariableDeclaration") {
     return undefined;
@@ -258,14 +556,20 @@ export function readOxcVariableComponentDeclaration(
     const object = readObject(declarator);
     const id = readObject(object.id);
 
-    if (typeof id.name !== "string" || !/^[A-Z]/.test(id.name)) {
+    if (
+      typeof id.name !== "string" ||
+      (!/^[A-Z]/.test(id.name) && !localJsxReturnFunctionNames.has(id.name))
+    ) {
       continue;
     }
 
     const initializerExpression = readObject(object.init);
     const initializer = unwrapOxcComponentFunctionLikeInitializer(initializerExpression);
 
-    if (initializer !== undefined && hasOxcFunctionLikeComponentReturn(initializer)) {
+    if (
+      initializer !== undefined &&
+      (hasOxcFunctionLikeComponentReturn(initializer) || localJsxReturnFunctionNames.has(id.name))
+    ) {
       const inlineMemo = readOxcInlineMemo(initializerExpression, declaration.kind);
       return {
         name: id.name,
@@ -280,15 +584,19 @@ export function readOxcVariableComponentDeclaration(
 
 export function readOxcPlainComponent(
   statement: unknown,
+  localJsxReturnFunctionNames: ReadonlySet<string> = new Set(),
 ): OxcVariableComponentDeclaration | undefined {
   const object = readObject(statement);
 
-  if (object.type === "FunctionDeclaration" && hasComponentReturn(object.body)) {
+  if (object.type === "FunctionDeclaration") {
     const id = readObject(object.id);
-    return typeof id.name === "string" ? { name: id.name, initializer: object } : undefined;
+    return typeof id.name === "string" &&
+      (hasComponentReturn(object.body) || localJsxReturnFunctionNames.has(id.name))
+      ? { name: id.name, initializer: object }
+      : undefined;
   }
 
-  return readOxcVariableComponentDeclaration(object);
+  return readOxcVariableComponentDeclaration(object, localJsxReturnFunctionNames);
 }
 
 export interface OxcVariableComponentDeclaration {

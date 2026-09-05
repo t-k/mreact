@@ -131,6 +131,11 @@ export function insertDynamic(parent: ParentNode, marker: ChildNode, value: () =
 }): Dispose;
 
 // @public
+export function insertRenderValue(parent: ParentNode, marker: Text, value: () => RenderValue, options?: {
+    debugLabel?: string;
+}): Dispose;
+
+// @public
 export const LIST_RENDER_VALUE: unique symbol;
 
 // @public

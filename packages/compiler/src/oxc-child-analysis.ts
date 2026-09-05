@@ -37,7 +37,11 @@ import {
   lowerOxcBodyStatementJsx,
   type OxcBodyLowerers,
 } from "./oxc-body-lowering.js";
-import { normalizeOxcExpressionCode, stripOxcGeneratedImports } from "./oxc-code-utils.js";
+import {
+  allocateOxcServerRenderValuePlaceholder,
+  normalizeOxcExpressionCode,
+  stripOxcGeneratedImports,
+} from "./oxc-code-utils.js";
 import {
   findOxcKeyCodeInChildren,
   readOxcReturnExpressionFromStatement,
@@ -75,6 +79,11 @@ export interface OxcChildAnalysisContext {
   diagnostics: Diagnostic[];
   bodyStatementJsx?: OxcBodyStatementJsxMode;
   componentBodyBindings?: ReadonlyMap<string, Record<string, unknown>>;
+  componentPropObjectNames?: ReadonlySet<string>;
+  componentPropValueNames?: ReadonlySet<string>;
+  moduleRenderValueBindingNames?: ReadonlySet<string>;
+  serverRenderValueWrapper?: string;
+  serverRenderValueCallNames?: ReadonlySet<string>;
   componentConstBindings?: ReadonlySet<string>;
   compilerKeyedEventParent?: boolean;
   jsxNamespace?: "html" | "svg";
@@ -87,6 +96,7 @@ export interface OxcChildAnalysisContext {
     target: CompileTarget,
     diagnostics: Diagnostic[],
     bodyStatementJsx: OxcBodyStatementJsxMode,
+    serverRenderValueWrapper?: string,
   ) => string | undefined;
 }
 
@@ -188,7 +198,7 @@ export function analyzeOxcJsxNode(
       analyzeOxcJsxNode(
         code,
         child,
-        shadowOxcReactiveAliases({ ...context, compilerKeyedEventParent: false }, shadowNames),
+        shadowOxcContextBindings({ ...context, compilerKeyedEventParent: false }, shadowNames),
         childBodyStatementJsx,
       );
     const consumerRenderProp = tagName.endsWith(".Consumer")
@@ -205,6 +215,50 @@ export function analyzeOxcJsxNode(
         .flatMap((attr) =>
           analyzeOxcComponentProp(code, attr, analyzeJsxNode, context.diagnostics, {
             allowRef,
+            analyzeExpression: (expression) =>
+              analyzeOxcExpressionChild(code, expression, context, bodyStatementJsx),
+            analyzeRenderValueExpression: (expression) =>
+              analyzeOxcComponentPropRenderValueExpression(
+                code,
+                expression,
+                context,
+                bodyStatementJsx,
+              ),
+            resolveServerRenderValueExpressionCode: (expression) => {
+              if (
+                context.target !== "server" ||
+                bodyStatementJsx !== "server-string"
+              ) {
+                return undefined;
+              }
+
+              const unwrapped = unwrapOxcParentheses(expression);
+              if (
+                unwrapped.type === "ArrowFunctionExpression" ||
+                unwrapped.type === "FunctionExpression"
+              ) {
+                return undefined;
+              }
+
+              const placeholder = allocateOxcServerRenderValuePlaceholder(code, expression);
+
+              if (!containsOxcJsxSyntax(expression)) {
+                return undefined;
+              }
+
+              const lowered = context.lowerNestedJsxExpression(
+                code,
+                expression,
+                context.componentNames,
+                context.target,
+                context.diagnostics,
+                bodyStatementJsx,
+                placeholder,
+              );
+              return lowered === undefined
+                ? undefined
+                : { code: normalizeOxcExpressionCode(lowered), placeholder };
+            },
             resolveExpressionCode: (expression) => {
               if (containsOxcJsxSyntax(expression)) {
                 const lowered = context.lowerNestedJsxExpression(
@@ -267,6 +321,8 @@ export function analyzeOxcJsxNode(
       .flatMap((attr) =>
         analyzeOxcAttribute(code, attr, context.target, context.diagnostics, {
           allowRef,
+          isServerRenderValueExpression: (expression) =>
+            isOxcPotentialComponentPropRenderValueExpression(expression, context),
           resolveExpressionCode: (expression) =>
             readOxcReactiveExpressionCode(code, expression, context),
         }),
@@ -354,8 +410,13 @@ function analyzeOxcAsyncBoundary(
   const renderer = analyzeOxcSingleArrowJsxChild(
     code,
     readArray(node.children),
-    (child, childBodyStatementJsx = bodyStatementJsx) =>
-      analyzeOxcJsxNode(code, child, context, childBodyStatementJsx),
+    (child, childBodyStatementJsx = bodyStatementJsx, shadowNames = []) =>
+      analyzeOxcJsxNode(
+        code,
+        child,
+        shadowOxcContextBindings(context, shadowNames),
+        childBodyStatementJsx,
+      ),
     bodyStatementJsx,
   );
   const catchRenderer =
@@ -363,8 +424,13 @@ function analyzeOxcAsyncBoundary(
       ? analyzeOxcArrowJsxRenderer(
           code,
           readObject(catchExpression),
-          (child, childBodyStatementJsx = bodyStatementJsx) =>
-            analyzeOxcJsxNode(code, child, context, childBodyStatementJsx),
+          (child, childBodyStatementJsx = bodyStatementJsx, shadowNames = []) =>
+            analyzeOxcJsxNode(
+              code,
+              child,
+              shadowOxcContextBindings(context, shadowNames),
+              childBodyStatementJsx,
+            ),
           bodyStatementJsx,
         )
       : undefined;
@@ -491,6 +557,13 @@ export function analyzeOxcExpressionChild(
 
     const leftExpression = readObject(unwrappedExpression.left);
     const conditionValueName = logicalConditionValueName(leftExpression);
+    const leftBranch = analyzeOxcLogicalLeftBranch(
+      code,
+      leftExpression,
+      conditionValueName,
+      context,
+      bodyStatementJsx,
+    );
 
     if (unwrappedExpression.operator === "&&") {
       return [
@@ -515,12 +588,20 @@ export function analyzeOxcExpressionChild(
           kind: "conditional",
           conditionCode: readOxcReactiveExpressionCode(code, leftExpression, context),
           conditionValueName,
-          whenTrue: [
-            {
-              kind: "expr",
-              code: conditionValueName,
-            },
-          ],
+          whenTrue: leftBranch,
+          whenFalse: rightBranch,
+        },
+      ];
+    }
+
+    if (unwrappedExpression.operator === "??") {
+      return [
+        {
+          kind: "conditional",
+          conditionCode: readOxcReactiveExpressionCode(code, leftExpression, context),
+          conditionValueName,
+          conditionTestCode: `${conditionValueName} != null`,
+          whenTrue: leftBranch,
           whenFalse: rightBranch,
         },
       ];
@@ -545,13 +626,11 @@ export function analyzeOxcExpressionChild(
           context.componentCallNames ?? context.componentNames,
         )
       : undefined;
-  const componentCallNamesForRenderMode =
-    context.target === "server" && context.serverOutput === "stream"
-      ? (context.componentCallNames ?? context.componentNames)
-      : context.componentNames;
+  const declaredComponentCallNames = context.componentCallNames ?? context.componentNames;
   const sameModuleComponentCall =
     sameModuleComponentStreamCall !== undefined ||
-    isOxcSameModuleComponentCallExpression(expression, componentCallNamesForRenderMode);
+    isOxcSameModuleComponentCallExpression(expression, declaredComponentCallNames);
+  const legacyRenderValue = isOxcRenderValueExpression(expression) || sameModuleComponentCall;
   const containsNestedJsx = containsOxcJsxSyntax(unwrappedExpression);
   const loweredNestedJsx = containsNestedJsx
     ? context.lowerNestedJsxExpression(
@@ -563,19 +642,32 @@ export function analyzeOxcExpressionChild(
         bodyStatementJsx,
       )
     : undefined;
-  const isKnownRenderValue = isOxcRenderValueExpression(expression) || sameModuleComponentCall;
+  const isKnownRenderValue = legacyRenderValue || sameModuleComponentCall;
+  const isPotentialComponentPropRenderValue =
+    (bodyStatementJsx === "server-string" || bodyStatementJsx === "dom-node") &&
+    !sameModuleComponentCall &&
+    !isOxcRenderValueExpression(expression) &&
+    isOxcPotentialComponentPropRenderValueExpression(expression, context);
   const renderMode =
     sameModuleComponentStreamCall !== undefined
       ? ("stream-node" as const)
-      : isKnownRenderValue
+      : sameModuleComponentCall
         ? bodyStatementJsx === "server-string"
           ? ("html" as const)
           : ("dynamic" as const)
-        : loweredNestedJsx !== undefined && bodyStatementJsx === "server-string"
-          ? ("html" as const)
-          : loweredNestedJsx !== undefined && bodyStatementJsx === "dom-node"
-            ? ("dynamic" as const)
-            : undefined;
+        : isPotentialComponentPropRenderValue
+          ? bodyStatementJsx === "server-string"
+            ? ("server-render-value" as const)
+            : ("render-value" as const)
+          : isKnownRenderValue
+            ? bodyStatementJsx === "server-string"
+              ? ("html" as const)
+              : ("dynamic" as const)
+            : loweredNestedJsx !== undefined && bodyStatementJsx === "server-string"
+              ? ("html" as const)
+              : loweredNestedJsx !== undefined && bodyStatementJsx === "dom-node"
+                ? ("dynamic" as const)
+                : undefined;
 
   return [
     {
@@ -590,6 +682,199 @@ export function analyzeOxcExpressionChild(
                   : readOxcReactiveExpressionCode(code, expression, context)),
             )
           : readOxcReactiveExpressionCode(code, expression, context)),
+      ...(renderMode === undefined ? {} : { renderMode }),
+    },
+  ];
+}
+
+function isOxcPotentialComponentPropRenderValueExpression(
+  expression: Record<string, unknown>,
+  context: Pick<
+    OxcChildAnalysisContext,
+    "componentBodyBindings" | "componentPropObjectNames" | "componentPropValueNames"
+  >,
+  visited = new Set<string>(),
+  visitedNodes = new Set<Record<string, unknown>>(),
+): boolean {
+  const unwrapped = unwrapOxcParentheses(expression);
+
+  if (visitedNodes.has(unwrapped)) {
+    return false;
+  }
+  visitedNodes.add(unwrapped);
+
+  if (unwrapped.type === "MemberExpression") {
+    const object = unwrapOxcParentheses(readObject(unwrapped.object));
+    if (
+      (typeof object.name === "string" &&
+        context.componentPropObjectNames?.has(object.name) === true) ||
+      isOxcPotentialComponentPropRenderValueExpression(
+        object,
+        context,
+        visited,
+        visitedNodes,
+      )
+    ) {
+      return true;
+    }
+  }
+
+  if (unwrapped.type === "ChainExpression") {
+    return isOxcPotentialComponentPropRenderValueExpression(
+      readObject(unwrapped.expression),
+      context,
+      visited,
+      visitedNodes,
+    );
+  }
+
+  if (unwrapped.type === "LogicalExpression") {
+    return (
+      isOxcPotentialComponentPropRenderValueExpression(
+        readObject(unwrapped.left),
+        context,
+        visited,
+        visitedNodes,
+      ) ||
+      isOxcPotentialComponentPropRenderValueExpression(
+        readObject(unwrapped.right),
+        context,
+        visited,
+        visitedNodes,
+      )
+    );
+  }
+
+  if (unwrapped.type === "ConditionalExpression") {
+    return (
+      isOxcPotentialComponentPropRenderValueExpression(
+        readObject(unwrapped.consequent),
+        context,
+        visited,
+        visitedNodes,
+      ) ||
+      isOxcPotentialComponentPropRenderValueExpression(
+        readObject(unwrapped.alternate),
+        context,
+        visited,
+        visitedNodes,
+      )
+    );
+  }
+
+  if (unwrapped.type === "Identifier" && typeof unwrapped.name === "string") {
+    if (visited.has(unwrapped.name)) {
+      return false;
+    }
+
+    if (context.componentPropValueNames?.has(unwrapped.name) === true) {
+      return true;
+    }
+
+    const initializer = context.componentBodyBindings?.get(unwrapped.name);
+    if (initializer !== undefined) {
+      visited.add(unwrapped.name);
+      if (
+        isOxcPotentialComponentPropRenderValueExpression(
+          initializer,
+          context,
+          visited,
+          visitedNodes,
+        )
+      ) {
+        return true;
+      }
+    }
+  }
+
+  for (const value of Object.values(unwrapped)) {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (
+          item !== null &&
+          typeof item === "object" &&
+          isOxcPotentialComponentPropRenderValueExpression(
+            item as Record<string, unknown>,
+            context,
+            visited,
+            visitedNodes,
+          )
+        ) {
+          return true;
+        }
+      }
+      continue;
+    }
+
+    if (
+      value !== null &&
+      typeof value === "object" &&
+      isOxcPotentialComponentPropRenderValueExpression(
+        value as Record<string, unknown>,
+        context,
+        visited,
+        visitedNodes,
+      )
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function analyzeOxcComponentPropRenderValueExpression(
+  code: string,
+  expression: Record<string, unknown>,
+  context: OxcChildAnalysisContext,
+  bodyStatementJsx: OxcBodyStatementJsxMode,
+): JsxNodeIr[] | undefined {
+  const unwrapped = unwrapOxcParentheses(expression);
+
+  if (unwrapped.type === "JSXElement" || unwrapped.type === "JSXFragment") {
+    return analyzeOxcExpressionChild(code, unwrapped, context, bodyStatementJsx);
+  }
+
+  if (
+    context.target === "server" &&
+    unwrapped.type === "Identifier" &&
+    typeof unwrapped.name === "string" &&
+    context.moduleRenderValueBindingNames?.has(unwrapped.name) === true
+  ) {
+    return [{ kind: "expr", code: unwrapped.name, renderMode: "server-render-value" }];
+  }
+
+  if (
+    isOxcSameModuleComponentCallExpression(
+      expression,
+      context.componentCallNames ?? context.componentNames,
+    )
+  ) {
+    return analyzeOxcExpressionChild(code, expression, context, bodyStatementJsx);
+  }
+
+  return undefined;
+}
+
+function analyzeOxcLogicalLeftBranch(
+  code: string,
+  expression: Record<string, unknown>,
+  valueName: string,
+  context: OxcChildAnalysisContext,
+  bodyStatementJsx: OxcBodyStatementJsxMode,
+): JsxNodeIr[] {
+  const renderMode = isOxcPotentialComponentPropRenderValueExpression(expression, context)
+    ? bodyStatementJsx === "server-string"
+      ? ("server-render-value" as const)
+      : bodyStatementJsx === "dom-node"
+        ? ("render-value" as const)
+        : undefined
+    : undefined;
+
+  return [
+    {
+      kind: "expr",
+      code: valueName,
       ...(renderMode === undefined ? {} : { renderMode }),
     },
   ];
@@ -707,9 +992,9 @@ function analyzeOxcListExpression(
   const parameterBindingNames = parameters.flatMap((parameter) =>
     collectBindingNamesFromPattern(readObject(parameter)),
   );
-  const sourceRendererContext = shadowOxcReactiveAliases(context, [
+  const sourceRendererContext = shadowOxcContextBindings(context, [
     ...parameterBindingNames,
-    ...collectBindingNames(renderer.body),
+    ...collectOxcRendererScopeBindingNames(renderer),
   ]);
   const sourceRendererBody = analyzeOxcListRenderer(
     code,
@@ -1333,7 +1618,13 @@ function analyzeOxcListRenderer(
 
   const statements = readArray(body.body);
   const ifStatementIndex = statements.findIndex(
-    (statement) => readObject(statement).type === "IfStatement",
+    (statement) => {
+      const object = readObject(statement);
+      return (
+        object.type === "IfStatement" &&
+        readOxcReturnExpressionFromStatement(object.consequent) !== undefined
+      );
+    },
   );
 
   if (ifStatementIndex >= 0) {
@@ -1355,6 +1646,10 @@ function analyzeOxcListRenderer(
   }
 
   const bodyPrefixStatements = statements.slice(0, returnStatementIndex);
+  const serverRenderValueBindingNames = collectOxcBodyJsxBindingNames(
+    bodyPrefixStatements,
+    context.serverRenderValueCallNames,
+  );
   const result = analyzeOxcListReturnExpression(
     code,
     returnArgument,
@@ -1368,6 +1663,9 @@ function analyzeOxcListRenderer(
           context.diagnostics,
           bodyStatementJsx,
           context.bodyLowerers,
+          context.serverRenderValueWrapper,
+          serverRenderValueBindingNames,
+          context.serverRenderValueCallNames,
         ) ?? formatOxcBodyStatement(code, statement, bodyStatementJsx),
     ),
     context,
@@ -1380,7 +1678,8 @@ function analyzeOxcListRenderer(
 
   markOxcRenderValueExpressions(
     result.children,
-    collectOxcBodyJsxBindingNames(bodyPrefixStatements),
+    serverRenderValueBindingNames,
+    bodyStatementJsx === "server-string" ? "server-render-value" : "dynamic",
   );
   return result;
 }
@@ -1446,6 +1745,10 @@ function analyzeOxcListIfRenderer(
   }
 
   const bodyPrefixStatements = statements.slice(0, ifStatementIndex);
+  const serverRenderValueBindingNames = collectOxcBodyJsxBindingNames(
+    bodyPrefixStatements,
+    context.serverRenderValueCallNames,
+  );
   const children: JsxNodeIr[] = [
     {
       kind: "conditional",
@@ -1455,7 +1758,11 @@ function analyzeOxcListIfRenderer(
     },
   ];
 
-  markOxcRenderValueExpressions(children, collectOxcBodyJsxBindingNames(bodyPrefixStatements));
+  markOxcRenderValueExpressions(
+    children,
+    serverRenderValueBindingNames,
+    bodyStatementJsx === "server-string" ? "server-render-value" : "dynamic",
+  );
 
   return {
     bodyStatements: bodyPrefixStatements.map(
@@ -1468,6 +1775,9 @@ function analyzeOxcListIfRenderer(
           context.diagnostics,
           bodyStatementJsx,
           context.bodyLowerers,
+          context.serverRenderValueWrapper,
+          serverRenderValueBindingNames,
+          context.serverRenderValueCallNames,
         ) ?? formatOxcBodyStatement(code, statement, bodyStatementJsx),
     ),
     children,
@@ -1478,6 +1788,51 @@ function resolveOxcBodyStatementJsx(context: OxcChildAnalysisContext): OxcBodySt
   return context.bodyStatementJsx ?? (context.target === "server" ? "server-string" : "dom-node");
 }
 
+function collectOxcRendererScopeBindingNames(
+  renderer: Record<string, unknown>,
+): Set<string> {
+  const names = new Set<string>();
+  const body = readObject(renderer.body);
+  if (body.type === "BlockStatement") {
+    for (const statement of readArray(body.body)) {
+      const object = readObject(statement);
+      if (
+        object.type === "VariableDeclaration" ||
+        object.type === "FunctionDeclaration" ||
+        object.type === "ClassDeclaration"
+      ) {
+        for (const name of collectBindingNames(object)) names.add(name);
+      }
+    }
+  }
+  const pending: unknown[] = [body];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (Array.isArray(current)) {
+      for (const value of current) pending.push(value);
+      continue;
+    }
+    if (typeof current !== "object" || current === null) continue;
+    const object = readObject(current);
+    if (
+      object !== body &&
+      (object.type === "FunctionDeclaration" ||
+        object.type === "FunctionExpression" ||
+        object.type === "ArrowFunctionExpression" ||
+        object.type === "ClassDeclaration" ||
+        object.type === "ClassExpression" ||
+        object.type === "StaticBlock")
+    ) {
+      continue;
+    }
+    if (object.type === "VariableDeclaration" && object.kind === "var") {
+      for (const name of collectBindingNames(object)) names.add(name);
+    }
+    for (const value of Object.values(object)) pending.push(value);
+  }
+  return names;
+}
+
 function logicalConditionValueName(expression: Record<string, unknown>): string {
   return `__mreactLogical_${typeof expression.start === "number" ? expression.start : "value"}`;
 }
@@ -1486,18 +1841,16 @@ function renderableFalsyConditionValueCode(name: string): string {
   return `((typeof ${name} === "number" || typeof ${name} === "bigint") ? ${name} : null)`;
 }
 
-function shadowOxcReactiveAliases(
+function shadowOxcContextBindings(
   context: OxcChildAnalysisContext,
   names: readonly string[],
 ): OxcChildAnalysisContext {
-  if (context.reactiveAliasBindings === undefined || names.length === 0) {
-    return context;
-  }
+  if (names.length === 0) return context;
 
   let aliases: Map<string, string> | undefined;
 
   for (const name of names) {
-    if (!context.reactiveAliasBindings.has(name)) {
+    if (context.reactiveAliasBindings?.has(name) !== true) {
       continue;
     }
 
@@ -1505,7 +1858,27 @@ function shadowOxcReactiveAliases(
     aliases.delete(name);
   }
 
-  return aliases === undefined ? context : { ...context, reactiveAliasBindings: aliases };
+  const shadowed = new Set(names);
+  const componentNames = new Set(
+    [...context.componentNames].filter((name) => !shadowed.has(name)),
+  );
+  const componentCallNames =
+    context.componentCallNames === undefined
+      ? undefined
+      : new Set([...context.componentCallNames].filter((name) => !shadowed.has(name)));
+  const serverRenderValueCallNames =
+    context.serverRenderValueCallNames === undefined
+      ? undefined
+      : new Set(
+          [...context.serverRenderValueCallNames].filter((name) => !shadowed.has(name)),
+        );
+  return {
+    ...context,
+    componentNames,
+    ...(componentCallNames === undefined ? {} : { componentCallNames }),
+    ...(serverRenderValueCallNames === undefined ? {} : { serverRenderValueCallNames }),
+    ...(aliases === undefined ? {} : { reactiveAliasBindings: aliases }),
+  };
 }
 
 function isOxcJsxCommentExpression(code: string, expression: Record<string, unknown>): boolean {

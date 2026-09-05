@@ -4,7 +4,7 @@ import { describe, expect, test } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { withCleanupScope } from "@reckona/mreact-reactive-core/internal";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
-import { bindDomRef, createList, insertDynamic } from "../src/index.js";
+import { bindDomRef, createList, insertDynamic, insertRenderValue } from "../src/index.js";
 import { createMemo } from "../src/create-memo.js";
 import { createListWithRenderArity } from "../src/create-list.js";
 import { insertMemo } from "../src/insert-memo.js";
@@ -212,6 +212,36 @@ describe("insertDynamic", () => {
     await flushEffects();
 
     expect(parent.textContent).toBe("before::after");
+  });
+
+  test("reuses a text marker for primitive render values and clears it on disposal", async () => {
+    const value = cell<RenderValue>("first");
+    const parent = document.createElement("div");
+    const marker = document.createTextNode("template placeholder");
+    parent.append(marker);
+
+    const dispose = insertRenderValue(parent, marker, () => value.get());
+
+    expect(parent.innerHTML).toBe("first");
+    expect(parent.firstChild).toBe(marker);
+
+    const strong = document.createElement("strong");
+    strong.textContent = "node";
+    value.set(strong);
+    await flushEffects();
+
+    expect(parent.innerHTML).toBe("<strong>node</strong>");
+    expect(parent.lastChild).toBe(marker);
+
+    value.set(2);
+    await flushEffects();
+
+    expect(parent.innerHTML).toBe("2");
+    expect(parent.firstChild).toBe(marker);
+
+    dispose();
+
+    expect(parent.innerHTML).toBe("");
   });
 
   test("does not remove and reinsert the same node instance", async () => {

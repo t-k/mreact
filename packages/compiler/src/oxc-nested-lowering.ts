@@ -1,5 +1,6 @@
 import type { OxcBodyStatementJsxMode } from "./oxc-analysis-types.js";
 import { type OxcBodyLowerers } from "./oxc-body-lowering.js";
+import { allocateOxcServerRenderValuePlaceholder } from "./oxc-code-utils.js";
 import { analyzeOxcExpressionChild, type OxcChildAnalysisContext } from "./oxc-child-analysis.js";
 import { markOxcCompatRuntimeReferences } from "./oxc-component-references.js";
 import {
@@ -19,7 +20,8 @@ const oxcNestedBodyLowerers: OxcBodyLowerers = {
     lowerOxcReactiveValueExpression(code, expression, componentNames) ??
     lowerOxcDomNodeExpression(code, expression),
   lowerCompatObjectExpression: lowerOxcCompatObjectExpression,
-  lowerServerStringExpression: lowerOxcServerStringExpression,
+  lowerServerStringExpression: (code, expression, componentNames, target, diagnostics) =>
+    lowerOxcServerStringExpression(code, expression, componentNames, target, diagnostics),
 };
 
 export function lowerOxcCompatObjectExpression(
@@ -83,12 +85,15 @@ export function lowerOxcNestedJsxExpression(
   target: CompileTarget,
   diagnostics: Diagnostic[],
   bodyStatementJsx: OxcBodyStatementJsxMode,
+  serverRenderValueWrapper?: string,
+  localJsxReturnFunctionNames: ReadonlySet<string> = new Set(),
+  serverOutput?: "stream" | "string",
 ): string | undefined {
   const source = readSource(code, expression);
   const expressionStart = typeof expression.start === "number" ? expression.start : 0;
   const replacements: Array<{ start: number; end: number; value: string }> = [];
 
-  visitOxcExpressionJsxRoots(expression, (node) => {
+  visitOxcExpressionJsxRoots(expression, localJsxReturnFunctionNames, (node, kind) => {
     const start = typeof node.start === "number" ? node.start : undefined;
     const end = typeof node.end === "number" ? node.end : undefined;
 
@@ -97,14 +102,35 @@ export function lowerOxcNestedJsxExpression(
     }
 
     const lowered =
-      bodyStatementJsx === "compat-object"
+      kind === "jsx" && bodyStatementJsx === "compat-object"
         ? lowerOxcCompatReactNodeExpression(code, node, componentNames, target, diagnostics)
-        : bodyStatementJsx === "server-string"
+        : kind === "jsx" && bodyStatementJsx === "server-string"
           ? lowerOxcServerStringExpression(code, node, componentNames, target, diagnostics)
-          : lowerOxcReactiveValueExpression(code, node, componentNames);
+          : kind === "jsx"
+            ? lowerOxcReactiveValueExpression(code, node, componentNames)
+            : emitOxcServerRenderValueCall(
+                code,
+                node,
+                expression,
+                serverRenderValueWrapper,
+                componentNames,
+                target,
+                diagnostics,
+                localJsxReturnFunctionNames,
+                serverOutput,
+              );
 
     if (lowered !== undefined) {
-      replacements.push({ start, end, value: lowered });
+      replacements.push({
+        start,
+        end,
+        value:
+          kind === "jsx" &&
+          bodyStatementJsx === "server-string" &&
+          serverRenderValueWrapper !== undefined
+            ? `${serverRenderValueWrapper}(${lowered})`
+            : lowered,
+      });
     }
   });
 
@@ -125,12 +151,18 @@ export function lowerOxcNestedJsxExpression(
 
 function visitOxcExpressionJsxRoots(
   node: Record<string, unknown>,
-  visit: (node: Record<string, unknown>) => void,
+  localJsxReturnFunctionNames: ReadonlySet<string>,
+  visit: (node: Record<string, unknown>, kind: "call" | "jsx") => void,
 ): void {
   const unwrapped = unwrapOxcParentheses(node);
 
   if (unwrapped.type === "JSXElement" || unwrapped.type === "JSXFragment") {
-    visit(unwrapped);
+    visit(unwrapped, "jsx");
+    return;
+  }
+
+  if (isOxcLocalJsxHelperCall(unwrapped, localJsxReturnFunctionNames)) {
+    visit(unwrapped, "call");
     return;
   }
 
@@ -139,7 +171,7 @@ function visitOxcExpressionJsxRoots(
       for (const item of value) {
         const object = readObject(item);
         if (Object.keys(object).length > 0) {
-          visitOxcExpressionJsxRoots(object, visit);
+          visitOxcExpressionJsxRoots(object, localJsxReturnFunctionNames, visit);
         }
       }
       continue;
@@ -148,10 +180,62 @@ function visitOxcExpressionJsxRoots(
     if (typeof value === "object" && value !== null) {
       const object = readObject(value);
       if (Object.keys(object).length > 0) {
-        visitOxcExpressionJsxRoots(object, visit);
+        visitOxcExpressionJsxRoots(object, localJsxReturnFunctionNames, visit);
       }
     }
   }
+}
+
+function isOxcLocalJsxHelperCall(
+  expression: Record<string, unknown>,
+  localJsxReturnFunctionNames: ReadonlySet<string>,
+): boolean {
+  if (expression.type !== "CallExpression") return false;
+
+  const callee = unwrapOxcParentheses(readObject(expression.callee));
+  return (
+    callee.type === "Identifier" &&
+    typeof callee.name === "string" &&
+    localJsxReturnFunctionNames.has(callee.name)
+  );
+}
+
+function emitOxcServerRenderValueCall(
+  code: string,
+  expression: Record<string, unknown>,
+  allocationRoot: Record<string, unknown>,
+  serverRenderValueWrapper: string | undefined,
+  componentNames: Set<string>,
+  target: CompileTarget,
+  diagnostics: Diagnostic[],
+  localJsxReturnFunctionNames: ReadonlySet<string>,
+  serverOutput: "stream" | "string" | undefined,
+): string | undefined {
+  if (serverRenderValueWrapper === undefined) return undefined;
+  const args = readArray(expression.arguments).map((argument) => {
+    const argumentObject = unwrapOxcParentheses(readObject(argument));
+    return (
+      lowerOxcNestedJsxExpression(
+        code,
+        argumentObject,
+        componentNames,
+        target,
+        diagnostics,
+        "server-string",
+        serverRenderValueWrapper,
+        localJsxReturnFunctionNames,
+        serverOutput,
+      ) ?? readSource(code, argument)
+    );
+  });
+  const callee = readSource(code, readObject(expression.callee));
+  if (serverOutput !== "stream") {
+    return `${serverRenderValueWrapper}(${callee}(${args.join(", ")}))`;
+  }
+
+  const sinkName = `${allocateOxcServerRenderValuePlaceholder(code, allocationRoot)}$sink`;
+  const callArgs = [sinkName, ...args].join(", ");
+  return `${serverRenderValueWrapper}((${sinkName}) => ${callee}(${callArgs}))`;
 }
 
 export function lowerOxcReactiveValueExpression(

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { transform } from "../src/index.js";
+import { compileServerModule } from "./helpers.js";
 
 function compileServer(code: string): string {
   return transform({
@@ -11,8 +12,7 @@ function compileServer(code: string): string {
 }
 
 async function evaluateCompiled(code: string): Promise<Record<string, unknown>> {
-  const dataUrl = `data:text/javascript;base64,${Buffer.from(code).toString("base64")}`;
-  return (await import(dataUrl)) as Record<string, unknown>;
+  return compileServerModule(code);
 }
 
 describe("compiler render-value reassignment safety (Issue 074)", () => {

@@ -51,6 +51,70 @@ describe("DOM prop application policy", () => {
     expect(meta.hasAttribute("httpEquiv")).toBe(false);
   });
 
+  test("omits DOM render values from attributes without recursing forever on cyclic arrays", () => {
+    const div = document.createElement("div");
+    const cyclic: unknown[] = [];
+    cyclic.push(cyclic);
+
+    expect(() => applyDomProp(div, "data-cycle", cyclic, false)).not.toThrow();
+    expect(div.getAttribute("data-cycle")).toBe("");
+
+    applyDomProp(div, "data-node", document.createElement("b"), false);
+    applyDomProp(div, "data-node-list", [document.createElement("i")], false);
+
+    expect(div.hasAttribute("data-node")).toBe(false);
+    expect(div.hasAttribute("data-node-list")).toBe(false);
+  });
+
+  test("omits object-valued attributes containing nested DOM render values", () => {
+    const div = document.createElement("div");
+    const style = { color: document.createElement("b") };
+
+    applyDomProp(div, "style", style, false);
+
+    expect(div.hasAttribute("style")).toBe(false);
+    expect(div.style.cssText).toBe("");
+  });
+
+  test("keeps ordinary accessor-backed style values", () => {
+    const div = document.createElement("div");
+    const style = {};
+    Object.defineProperty(style, "color", { enumerable: true, get: () => "red" });
+
+    applyDomProp(div, "style", style, false);
+
+    expect(div.style.color).toBe("red");
+  });
+
+  test("omits DOM render values from wide arrays without overflowing argument limits", () => {
+    const div = document.createElement("div");
+    const values = new Array<unknown>(200_000).fill(null);
+    values[values.length - 1] = document.createElement("b");
+
+    expect(() => applyDomProp(div, "data-wide", values, false)).not.toThrow();
+    expect(div.hasAttribute("data-wide")).toBe(false);
+  });
+
+  test("fails closed when proxies block render-value inspection", () => {
+    const div = document.createElement("div");
+    const arrayProxy = new Proxy([], {
+      get(target, property, receiver) {
+        if (property === "length") throw new Error("blocked length");
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const objectProxy = new Proxy({}, {
+      ownKeys() {
+        throw new Error("blocked keys");
+      },
+    });
+
+    for (const value of [arrayProxy, objectProxy]) {
+      expect(() => applyDomProp(div, "data-proxy", value, false)).not.toThrow();
+      expect(div.hasAttribute("data-proxy")).toBe(false);
+    }
+  });
+
   test("normalizes camel-cased JSX aliases on SVG elements", () => {
     const image = document.createElementNS("http://www.w3.org/2000/svg", "image");
 

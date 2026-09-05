@@ -25,6 +25,8 @@ export interface OxcBodyLowerers {
     componentNames: Set<string>,
     target: CompileTarget,
     diagnostics: Diagnostic[],
+    serverRenderValueWrapper?: string,
+    serverRenderValueCallNames?: ReadonlySet<string>,
   ): string | undefined;
 }
 
@@ -36,10 +38,17 @@ export function lowerOxcTopLevelStatement(
   diagnostics: Diagnostic[],
   options: AnalyzeModuleOptions | undefined,
   lowerers: OxcBodyLowerers,
+  serverRenderValueWrapper?: string,
+  serverRenderValueBindingNames?: ReadonlySet<string>,
+  serverRenderValueCallNames?: ReadonlySet<string>,
 ): string | undefined {
   const object = readObject(statement);
 
-  if (object.type !== "VariableDeclaration" || !containsOxcJsxSyntax(object)) {
+  if (
+    object.type !== "VariableDeclaration" ||
+    (!containsOxcJsxSyntax(object) &&
+      !hasOxcServerRenderValueDeclaration(object, serverRenderValueBindingNames))
+  ) {
     return undefined;
   }
 
@@ -58,6 +67,9 @@ export function lowerOxcTopLevelStatement(
     diagnostics,
     mode,
     lowerers,
+    serverRenderValueWrapper,
+    serverRenderValueBindingNames,
+    serverRenderValueCallNames,
   );
 }
 
@@ -93,6 +105,9 @@ export function lowerOxcBodyStatementJsx(
   diagnostics: Diagnostic[],
   mode: OxcBodyStatementJsxMode,
   lowerers: OxcBodyLowerers,
+  serverRenderValueWrapper?: string,
+  serverRenderValueBindingNames?: ReadonlySet<string>,
+  serverRenderValueCallNames?: ReadonlySet<string>,
 ): string | undefined {
   const object = readObject(statement);
 
@@ -105,6 +120,9 @@ export function lowerOxcBodyStatementJsx(
       diagnostics,
       mode,
       lowerers,
+      serverRenderValueWrapper,
+      serverRenderValueBindingNames,
+      serverRenderValueCallNames,
     );
   }
 
@@ -121,6 +139,9 @@ export function lowerOxcBodyStatementJsx(
       diagnostics,
       mode,
       lowerers,
+      serverRenderValueWrapper,
+      serverRenderValueBindingNames,
+      serverRenderValueCallNames,
     );
   }
 
@@ -141,34 +162,58 @@ export function lowerOxcBodyStatementJsx(
   }
 
   const declarations = readArray(object.declarations);
-
-  if (declarations.length !== 1) {
-    return undefined;
-  }
-
-  const declaration = readObject(declarations[0]);
-  const id = readObject(declaration.id);
-  const initializer = unwrapOxcParentheses(readObject(declaration.init));
-
-  if (typeof id.name !== "string" || !containsOxcJsxSyntax(initializer)) {
-    return undefined;
-  }
-
-  const lowered =
-    mode === "dom-node"
-      ? lowerers.lowerDomNodeExpression(code, initializer, componentNames)
-      : mode === "compat-object"
-        ? lowerers.lowerCompatObjectExpression(code, initializer, componentNames, target, diagnostics)
-        : mode === "server-string"
-          ? lowerers.lowerServerStringExpression(code, initializer, componentNames, target, diagnostics)
-          : undefined;
-
-  if (lowered === undefined) {
-    return undefined;
-  }
-
   const kind = typeof object.kind === "string" ? object.kind : "const";
-  return `${kind} ${id.name} = ${lowered};`;
+  let didLower = false;
+  const loweredDeclarations = declarations.map((declarationValue) => {
+    const declaration = readObject(declarationValue);
+    const id = readObject(declaration.id);
+    const initializer = unwrapOxcParentheses(readObject(declaration.init));
+    if (
+      typeof id.name !== "string" ||
+      (!containsOxcJsxSyntax(initializer) &&
+        serverRenderValueBindingNames?.has(id.name) !== true)
+    ) {
+      return readSource(code, declaration);
+    }
+
+    const renderValueWrapper =
+      kind === "const" || serverRenderValueBindingNames?.has(id.name) === true
+        ? serverRenderValueWrapper
+        : undefined;
+    const lowered =
+      mode === "dom-node"
+        ? lowerers.lowerDomNodeExpression(code, initializer, componentNames)
+        : mode === "compat-object"
+          ? lowerers.lowerCompatObjectExpression(code, initializer, componentNames, target, diagnostics)
+          : mode === "server-string"
+            ? lowerers.lowerServerStringExpression(
+                code,
+                initializer,
+                componentNames,
+                target,
+                diagnostics,
+                renderValueWrapper,
+                serverRenderValueCallNames,
+              )
+            : undefined;
+    if (lowered === undefined) return readSource(code, declaration);
+    didLower = true;
+    return `${id.name} = ${lowered}`;
+  });
+
+  return didLower ? `${kind} ${loweredDeclarations.join(", ")};` : undefined;
+}
+
+function hasOxcServerRenderValueDeclaration(
+  declaration: Record<string, unknown>,
+  serverRenderValueBindingNames: ReadonlySet<string> | undefined,
+): boolean {
+  if (serverRenderValueBindingNames === undefined) return false;
+
+  return readArray(declaration.declarations).some((value) => {
+    const id = readObject(readObject(value).id);
+    return typeof id.name === "string" && serverRenderValueBindingNames.has(id.name);
+  });
 }
 
 function lowerOxcIfStatementJsx(
@@ -179,6 +224,9 @@ function lowerOxcIfStatementJsx(
   diagnostics: Diagnostic[],
   mode: OxcBodyStatementJsxMode,
   lowerers: OxcBodyLowerers,
+  serverRenderValueWrapper?: string,
+  serverRenderValueBindingNames?: ReadonlySet<string>,
+  serverRenderValueCallNames?: ReadonlySet<string>,
 ): string | undefined {
   const consequent = lowerOxcStatementBlockJsx(
     code,
@@ -188,6 +236,9 @@ function lowerOxcIfStatementJsx(
     diagnostics,
     mode,
     lowerers,
+    serverRenderValueWrapper,
+    serverRenderValueBindingNames,
+    serverRenderValueCallNames,
   );
   const alternate =
     statement.alternate === undefined || statement.alternate === null
@@ -200,6 +251,9 @@ function lowerOxcIfStatementJsx(
           diagnostics,
           mode,
           lowerers,
+          serverRenderValueWrapper,
+          serverRenderValueBindingNames,
+          serverRenderValueCallNames,
         );
 
   if (consequent === undefined && alternate === undefined) {
@@ -226,6 +280,9 @@ function lowerOxcStatementBlockJsx(
   diagnostics: Diagnostic[],
   mode: OxcBodyStatementJsxMode,
   lowerers: OxcBodyLowerers,
+  serverRenderValueWrapper?: string,
+  serverRenderValueBindingNames?: ReadonlySet<string>,
+  serverRenderValueCallNames?: ReadonlySet<string>,
 ): string | undefined {
   const object = readObject(statement);
 
@@ -238,6 +295,9 @@ function lowerOxcStatementBlockJsx(
       diagnostics,
       mode,
       lowerers,
+      serverRenderValueWrapper,
+      serverRenderValueBindingNames,
+      serverRenderValueCallNames,
     );
 
     return lowered === undefined ? undefined : lowered;
@@ -253,6 +313,9 @@ function lowerOxcStatementBlockJsx(
       diagnostics,
       mode,
       lowerers,
+      serverRenderValueWrapper,
+      serverRenderValueBindingNames,
+      serverRenderValueCallNames,
     );
 
     if (lowered !== undefined) {
@@ -306,7 +369,13 @@ function lowerOxcReturnStatementJsx(
       : mode === "compat-object"
         ? lowerers.lowerCompatObjectExpression(code, argument, componentNames, target, diagnostics)
         : mode === "server-string"
-          ? lowerers.lowerServerStringExpression(code, argument, componentNames, target, diagnostics)
+          ? lowerers.lowerServerStringExpression(
+              code,
+              argument,
+              componentNames,
+              target,
+              diagnostics,
+            )
           : undefined;
 
   return lowered === undefined ? undefined : `return ${lowered};`;
@@ -327,6 +396,9 @@ function lowerOxcForOfStatementJsx(
   diagnostics: Diagnostic[],
   mode: OxcBodyStatementJsxMode,
   lowerers: OxcBodyLowerers,
+  serverRenderValueWrapper?: string,
+  serverRenderValueBindingNames?: ReadonlySet<string>,
+  serverRenderValueCallNames?: ReadonlySet<string>,
 ): string | undefined {
   const body = readObject(statement.body);
 
@@ -337,8 +409,29 @@ function lowerOxcForOfStatementJsx(
   let didLower = false;
   const loweredStatements = readArray(body.body).map((bodyStatement) => {
     const lowered =
-      lowerOxcPushJsxStatement(code, bodyStatement, componentNames, target, diagnostics, mode, lowerers) ??
-      lowerOxcBodyStatementJsx(code, bodyStatement, componentNames, target, diagnostics, mode, lowerers);
+      lowerOxcPushJsxStatement(
+        code,
+        bodyStatement,
+        componentNames,
+        target,
+        diagnostics,
+        mode,
+        lowerers,
+        serverRenderValueWrapper,
+        serverRenderValueBindingNames,
+      ) ??
+      lowerOxcBodyStatementJsx(
+        code,
+        bodyStatement,
+        componentNames,
+        target,
+        diagnostics,
+        mode,
+        lowerers,
+        serverRenderValueWrapper,
+        serverRenderValueBindingNames,
+        serverRenderValueCallNames,
+      );
 
     if (lowered !== undefined) {
       didLower = true;
@@ -393,6 +486,8 @@ function lowerOxcPushJsxStatement(
   diagnostics: Diagnostic[],
   mode: OxcBodyStatementJsxMode,
   lowerers: OxcBodyLowerers,
+  serverRenderValueWrapper?: string,
+  serverRenderValueBindingNames?: ReadonlySet<string>,
 ): string | undefined {
   const object = readObject(statement);
 
@@ -407,6 +502,7 @@ function lowerOxcPushJsxStatement(
   }
 
   const callee = readObject(expression.callee);
+  const pushTarget = readObject(callee.object);
   const argument = unwrapOxcParentheses(readObject(readArray(expression.arguments)[0]));
 
   if (
@@ -423,7 +519,17 @@ function lowerOxcPushJsxStatement(
       : mode === "compat-object"
         ? lowerers.lowerCompatObjectExpression(code, argument, componentNames, target, diagnostics)
         : mode === "server-string"
-          ? lowerers.lowerServerStringExpression(code, argument, componentNames, target, diagnostics)
+          ? lowerers.lowerServerStringExpression(
+              code,
+              argument,
+              componentNames,
+              target,
+              diagnostics,
+              typeof pushTarget.name === "string" &&
+                serverRenderValueBindingNames?.has(pushTarget.name) === true
+                ? serverRenderValueWrapper
+                : undefined,
+            )
           : undefined;
 
   if (lowered === undefined) {

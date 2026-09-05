@@ -5477,6 +5477,10 @@ function workspaceRuntimePlugin(options: {
       "@reckona/mreact-compat/server",
       packageFile("react-compat", "@reckona/mreact-compat", "server"),
     ],
+    [
+      "@reckona/mreact-shared/server-render-value-internal",
+      packageFile("shared", "@reckona/mreact-shared", "server-render-value-internal"),
+    ],
     ["@reckona/mreact-reactive-dom", reactiveDomPath],
   ]);
 
@@ -5505,7 +5509,7 @@ function workspaceRuntimePlugin(options: {
       buildApi.onResolve(
         {
           filter:
-            /^(?:react(?:\/jsx-(?:dev-)?runtime)?|react-dom(?:\/(?:client|server))?|@reckona\/mreact-(?:compat|reactive-core|reactive-dom)(?:\/(?:event-priority|flight|internal|jsx-dev-runtime|jsx-runtime|scheduler))?)$/,
+            /^(?:react(?:\/jsx-(?:dev-)?runtime)?|react-dom(?:\/(?:client|server))?|@reckona\/mreact-(?:compat|reactive-core|reactive-dom)(?:\/(?:event-priority|flight|internal|jsx-dev-runtime|jsx-runtime|scheduler))?|@reckona\/mreact-shared\/server-render-value-internal)$/,
         },
         (args) => {
           const path = runtimePaths.get(args.path);

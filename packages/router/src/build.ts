@@ -6155,6 +6155,10 @@ function cloudflareWorkspaceRuntimePlugin(): RouterCompatPlugin {
       "@reckona/mreact-shared/html-escape",
       packageFile("shared", "@reckona/mreact-shared", "html-escape"),
     ],
+    [
+      "@reckona/mreact-shared/server-render-value-internal",
+      packageFile("shared", "@reckona/mreact-shared", "server-render-value-internal"),
+    ],
   ]);
 
   return {

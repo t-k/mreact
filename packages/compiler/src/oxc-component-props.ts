@@ -30,13 +30,33 @@ export function analyzeOxcComponentProp(
   diagnostics: Pick<Diagnostic, "level" | "code" | "message" | "loc">[] = [],
   options: {
     allowRef?: boolean;
+    analyzeExpression?: (expression: Record<string, unknown>) => JsxNodeIr[];
+    analyzeRenderValueExpression?: (
+      expression: Record<string, unknown>,
+    ) => JsxNodeIr[] | undefined;
     resolveExpressionCode?: (expression: Record<string, unknown>) => string;
+    resolveServerRenderValueExpressionCode?: (
+      expression: Record<string, unknown>,
+    ) => { code: string; placeholder: string } | undefined;
   } = {},
 ): ComponentPropIr[] {
   const object = readObject(attr);
 
   if (object.type === "JSXSpreadAttribute") {
-    return [{ kind: "spread-prop", code: readSource(code, readObject(object.argument)) }];
+    const expression = unwrapOxcParentheses(readObject(object.argument));
+    const serverRenderValue = options.resolveServerRenderValueExpressionCode?.(expression);
+    return [
+      {
+        kind: "spread-prop",
+        code:
+          serverRenderValue?.code ??
+          options.resolveExpressionCode?.(expression) ??
+          readSource(code, expression),
+        ...(serverRenderValue === undefined
+          ? {}
+          : { serverRenderValuePlaceholder: serverRenderValue.placeholder }),
+      },
+    ];
   }
 
   if (object.type !== "JSXAttribute") {
@@ -61,6 +81,11 @@ export function analyzeOxcComponentProp(
 
   if (value.type === "JSXExpressionContainer") {
     const expression = unwrapOxcParentheses(readObject(value.expression));
+    const analyzedRenderValue = options.analyzeRenderValueExpression?.(expression);
+
+    if (analyzedRenderValue !== undefined) {
+      return [{ kind: "render-prop", name, children: analyzedRenderValue }];
+    }
 
     if (expression.type === "JSXElement" || expression.type === "JSXFragment") {
       return [
@@ -68,6 +93,18 @@ export function analyzeOxcComponentProp(
           kind: "render-prop",
           name,
           children: [analyzeJsxNode(expression)],
+        },
+      ];
+    }
+
+    const serverRenderValue = options.resolveServerRenderValueExpressionCode?.(expression);
+    if (serverRenderValue !== undefined) {
+      return [
+        {
+          kind: "prop",
+          name,
+          code: serverRenderValue.code,
+          serverRenderValuePlaceholder: serverRenderValue.placeholder,
         },
       ];
     }

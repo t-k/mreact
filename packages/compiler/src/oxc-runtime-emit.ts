@@ -39,7 +39,7 @@ function emitOxcServerStringNode(node: JsxNodeIr): string {
 
     return node.conditionValueName === undefined
       ? `((${node.conditionCode}) ? ${whenTrue} : ${whenFalse})`
-      : `(() => { const ${node.conditionValueName} = (${node.conditionCode}); return ${node.conditionValueName} ? ${whenTrue} : ${whenFalse}; })()`;
+      : `(() => { const ${node.conditionValueName} = (${node.conditionCode}); return ${node.conditionTestCode ?? node.conditionValueName} ? ${whenTrue} : ${whenFalse}; })()`;
   }
 
   if (node.kind === "list") {
@@ -172,7 +172,7 @@ function emitOxcCompatObjectNode(node: JsxNodeIr): string {
 
     return node.conditionValueName === undefined
       ? `(${node.conditionCode}) ? ${whenTrue} : ${whenFalse}`
-      : `(() => { const ${node.conditionValueName} = (${node.conditionCode}); return ${node.conditionValueName} ? ${whenTrue} : ${whenFalse}; })()`;
+      : `(() => { const ${node.conditionValueName} = (${node.conditionCode}); return ${node.conditionTestCode ?? node.conditionValueName} ? ${whenTrue} : ${whenFalse}; })()`;
   }
 
   if (node.kind === "list") {

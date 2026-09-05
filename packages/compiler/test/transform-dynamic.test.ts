@@ -39,6 +39,26 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.code).not.toContain("bindText");
   });
 
+  test("uses dynamic insertion for direct and aliased component props", () => {
+    const output = transform({
+      code: `export function Detail(props) {
+  const comments = props.comments;
+  return <section><header>{props.actions}</header><div>{comments}</div><aside>{props.untrusted}</aside></section>;
+}`,
+      filename: "Detail.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.imports).toContainEqual({
+      source: "@reckona/mreact-reactive-dom",
+      specifiers: ["createTemplate", "insertRenderValue"],
+    });
+    expect(output.code.match(/\binsertRenderValue\(/g)).toHaveLength(3);
+    expect(output.code).not.toContain("bindText(");
+  });
+
   // Issue 057 Phase A regression gate: the client emit must import only the
   // binding helpers actually used by the component. Helpers like `bindList`
   // (only needed for `{items.map(...)}`) or `bindSpreadProps` (only needed

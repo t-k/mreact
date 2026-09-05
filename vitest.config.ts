@@ -100,6 +100,13 @@ export default defineConfig({
         replacement: new URL("./packages/shared/src/html-escape.ts", import.meta.url).pathname,
       },
       {
+        find: "@reckona/mreact-shared/server-render-value-internal",
+        replacement: new URL(
+          "./packages/shared/src/server-render-value-internal.ts",
+          import.meta.url,
+        ).pathname,
+      },
+      {
         find: "@reckona/mreact-shared/url-safety",
         replacement: new URL("./packages/shared/src/url-safety.ts", import.meta.url).pathname,
       },

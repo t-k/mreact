@@ -79,6 +79,7 @@ type RuntimeHelperName =
   | "computed"
   | "createCompilerListBindingCache"
   | "insertDynamic"
+  | "insertRenderValue"
   | "insertMemo"
   | "insertMemoDynamic"
   | "bindCompilerKeyedCellText"
@@ -122,6 +123,7 @@ function allocateRuntimeHelperNames(
     computed: "computed",
     createCompilerListBindingCache: "createCompilerListBindingCache",
     insertDynamic: "insertDynamic",
+    insertRenderValue: "insertRenderValue",
     insertMemo: "insertMemo",
     insertMemoDynamic: "insertMemoDynamic",
     bindCompilerKeyedCellText: "bindCompilerKeyedCellText",
@@ -211,8 +213,8 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
 
     visitForClientImports(component.root, "setup", (node, context) => {
       if (node.kind === "expr") {
-        if (node.renderMode === "dynamic") {
-          specifiers.add("insertDynamic");
+        if (isClientDynamicExpression(node)) {
+          specifiers.add(node.renderMode === "render-value" ? "insertRenderValue" : "insertDynamic");
         } else if (node.renderMode === "compiler-keyed-cell-text") {
           internalSpecifiers.add("bindCompilerKeyedCellText");
         } else if (node.renderMode === "compiler-keyed-text") {
@@ -587,7 +589,7 @@ function renderStaticChildren(children: readonly JsxNodeIr[]): string {
 
 function canReuseTemplateTextNode(children: readonly JsxNodeIr[], index: number): boolean {
   const child = children[index];
-  if (child?.kind !== "expr" || child.renderMode === "dynamic") {
+  if (child?.kind !== "expr" || isClientDynamicExpression(child)) {
     return false;
   }
 
@@ -597,7 +599,15 @@ function canReuseTemplateTextNode(children: readonly JsxNodeIr[], index: number)
 }
 
 function isMergeableTemplateText(node: JsxNodeIr | undefined): boolean {
-  return node?.kind === "text" || (node?.kind === "expr" && node.renderMode !== "dynamic");
+  return node?.kind === "text" || (node?.kind === "expr" && !isClientDynamicExpression(node));
+}
+
+function isClientDynamicExpression(node: Extract<JsxNodeIr, { kind: "expr" }>): boolean {
+  return (
+    node.renderMode === "dynamic" ||
+    node.renderMode === "render-value" ||
+    node.renderMode === "server-render-value"
+  );
 }
 
 interface EmitSetupState {
@@ -741,9 +751,17 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
       : `${stableChildrenName}[${childIndex}]`;
 
     if (child.kind === "expr") {
-      if (child.renderMode === "dynamic") {
+      if (isClientDynamicExpression(child)) {
+        const markerPath =
+          child.renderMode === "render-value"
+            ? state.allocateName(`_renderValueMarker_${state.textIndex++}`)
+            : childPath;
+        if (child.renderMode === "render-value") {
+          lines.push(`  const ${markerPath} = document.createTextNode("");`);
+          lines.push(`  ${childPath}.replaceWith(${markerPath});`);
+        }
         lines.push(
-          `  ${state.helperNames.insertDynamic}(${currentPath}, ${childPath}, () => (${child.code})${emitDynamicOptions(state.debugLabel)});`,
+          `  ${child.renderMode === "render-value" ? state.helperNames.insertRenderValue : state.helperNames.insertDynamic}(${currentPath}, ${markerPath}, () => (${child.code})${emitDynamicOptions(state.debugLabel)});`,
         );
         childIndex += 1;
         continue;
@@ -917,7 +935,7 @@ function shouldCacheCompilerKeyedElementPath(
   }
 
   for (const child of node.children) {
-    if (child.kind === "expr" && child.renderMode !== "dynamic") {
+    if (child.kind === "expr" && !isClientDynamicExpression(child)) {
       pathUses += 1;
     }
   }
@@ -962,7 +980,7 @@ function compilerKeyedNodeHasSetup(node: JsxNodeIr): boolean {
 function usesLiveInsertionAnchor(child: JsxNodeIr): boolean {
   return (
     child.kind === "component" ||
-    (child.kind === "expr" && child.renderMode === "dynamic") ||
+    (child.kind === "expr" && isClientDynamicExpression(child)) ||
     child.kind === "conditional" ||
     child.kind === "list" ||
     child.kind === "async-boundary"
@@ -1272,7 +1290,7 @@ function emitConditionalRenderValueExpression(
     return `((${node.conditionCode}) ? ${whenTrue} : ${whenFalse})`;
   }
 
-  return `(() => { const ${node.conditionValueName} = (${node.conditionCode}); return ${node.conditionValueName} ? ${whenTrue} : ${whenFalse}; })()`;
+  return `(() => { const ${node.conditionValueName} = (${node.conditionCode}); return ${node.conditionTestCode ?? node.conditionValueName} ? ${whenTrue} : ${whenFalse}; })()`;
 }
 
 function emitListRenderer(

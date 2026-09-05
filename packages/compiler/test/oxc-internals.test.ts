@@ -789,7 +789,7 @@ export default function Page() {
     expect(findOxcJsxAttributeCode(code, attributes, "count")).toBe("items.length");
   });
 
-  test("collects JSX-producing body bindings without reassigned let bindings", () => {
+  test("collects JSX-producing body bindings including safely reassigned let bindings", () => {
     expect([
       ...collectOxcBodyJsxBindingNames([
         {
@@ -863,10 +863,10 @@ export default function Page() {
           },
         },
       ]),
-    ]).toEqual(["stable", "items", "moreItems"]);
+    ]).toEqual(["stable", "mutable", "items", "moreItems"]);
   });
 
-  test("ignores nested function assignments when they target shadowed JSX bindings", () => {
+  test("keeps JSX capabilities for shadowed and captured nested assignments", () => {
     expect([
       ...collectOxcBodyJsxBindingNames([
         {
@@ -930,7 +930,7 @@ export default function Page() {
           },
         },
       ]),
-    ]).toEqual(["shadowed"]);
+    ]).toEqual(["shadowed", "captured"]);
   });
 
   test("marks render value expressions recursively", () => {

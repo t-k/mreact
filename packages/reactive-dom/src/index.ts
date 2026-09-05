@@ -30,5 +30,6 @@ export { createTemplate, createTemplateElement } from "./template.js";
 export { bindDomRef, getDomRefBindings } from "./dom-ref.js";
 export type { DomRefBinding, DomRefCallback } from "./dom-ref.js";
 export { insertDynamic } from "./insert-dynamic.js";
+export { insertRenderValue } from "./insert-render-value.js";
 export { LIST_RENDER_VALUE, type ListRenderValue } from "./types.js";
 export type { CustomRenderValue, Dispose, RenderValue } from "./types.js";

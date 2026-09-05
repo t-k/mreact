@@ -7,7 +7,7 @@
     "imports": [
       {
         "source": "@reckona/mreact-reactive-dom",
-        "specifiers": ["bindText", "createTemplate"]
+        "specifiers": ["createTemplate", "insertRenderValue"]
       }
     ],
     "codeContains": ["function App(props)"]

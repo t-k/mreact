@@ -15,7 +15,10 @@ interface ReactiveAliasExpressionState {
 
 export const OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER = "__mreactUntrackReactiveAlias";
 
-export function collectOxcBodyJsxBindingNames(statements: readonly unknown[]): Set<string> {
+export function collectOxcBodyJsxBindingNames(
+  statements: readonly unknown[],
+  jsxReturnFunctionNames: ReadonlySet<string> = new Set(),
+): Set<string> {
   const names = new Set<string>();
 
   for (const statement of statements) {
@@ -30,20 +33,13 @@ export function collectOxcBodyJsxBindingNames(statements: readonly unknown[]): S
       continue;
     }
 
-    const declarationKind = typeof object.kind === "string" ? object.kind : "let";
-    const isImmutableBinding = declarationKind === "const";
-
     for (const declarationValue of readArray(object.declarations)) {
       const declaration = readObject(declarationValue);
       const id = readObject(declaration.id);
       const initializer = unwrapOxcParentheses(readObject(declaration.init));
 
       if (typeof id.name !== "string") continue;
-      if (!containsOxcJsxSyntax(initializer)) continue;
-      if (!isJsxLikeInitializer(initializer)) continue;
-      if (!isImmutableBinding && isBindingReassigned(statements, id.name)) {
-        continue;
-      }
+      if (!isJsxLikeInitializer(initializer, jsxReturnFunctionNames)) continue;
       names.add(id.name);
     }
   }
@@ -633,7 +629,7 @@ function readNumber(value: unknown): number | undefined {
 export function markOxcRenderValueExpressions(
   nodes: readonly JsxNodeIr[],
   names: Set<string>,
-  renderMode: "dynamic" | "html" = "dynamic",
+  renderMode: "dynamic" | "html" | "server-render-value" = "dynamic",
 ): void {
   if (names.size === 0) {
     return;
@@ -723,36 +719,51 @@ export function containsOxcJsxSyntax(node: Record<string, unknown>): boolean {
   );
 }
 
-function isJsxLikeInitializer(node: Record<string, unknown>): boolean {
+function isJsxLikeInitializer(
+  node: Record<string, unknown>,
+  jsxReturnFunctionNames: ReadonlySet<string>,
+): boolean {
   if (node.type === "JSXElement" || node.type === "JSXFragment") return true;
+  if (node.type === "CallExpression") {
+    const callee = unwrapOxcParentheses(readObject(node.callee));
+    return (
+      callee.type === "Identifier" &&
+      typeof callee.name === "string" &&
+      jsxReturnFunctionNames.has(callee.name)
+    );
+  }
   if (node.type === "ConditionalExpression") {
     return (
-      isJsxLikeInitializer(readObject(node.consequent)) ||
-      isJsxLikeInitializer(readObject(node.alternate))
+      isJsxLikeInitializer(readObject(node.consequent), jsxReturnFunctionNames) ||
+      isJsxLikeInitializer(readObject(node.alternate), jsxReturnFunctionNames)
     );
   }
   if (node.type === "LogicalExpression") {
     return (
-      isJsxLikeInitializer(readObject(node.left)) || isJsxLikeInitializer(readObject(node.right))
+      isJsxLikeInitializer(readObject(node.left), jsxReturnFunctionNames) ||
+      isJsxLikeInitializer(readObject(node.right), jsxReturnFunctionNames)
     );
   }
   if (node.type === "ArrayExpression") {
     return readArray(node.elements).some((element) => {
       const object = readObject(element);
-      return Object.keys(object).length > 0 && isJsxLikeInitializer(object);
+      return (
+        Object.keys(object).length > 0 &&
+        isJsxLikeInitializer(object, jsxReturnFunctionNames)
+      );
     });
   }
   if (node.type === "ObjectExpression") {
-    return false;
+    return readArray(node.properties).some((property) => {
+      const object = readObject(property);
+      const value =
+        object.type === "SpreadElement" ? readObject(object.argument) : readObject(object.value);
+      return (
+        Object.keys(value).length > 0 && isJsxLikeInitializer(value, jsxReturnFunctionNames)
+      );
+    });
   }
   return containsOxcJsxSyntax(node);
-}
-
-function isBindingReassigned(statements: readonly unknown[], name: string): boolean {
-  for (const statement of statements) {
-    if (containsAssignmentTo(readObject(statement), name)) return true;
-  }
-  return false;
 }
 
 function isOxcReactiveReadExpression(expression: Record<string, unknown>): boolean {
@@ -1014,42 +1025,6 @@ function analyzeOxcReactiveAliasExpression(
   return { reactive: false, safe: false };
 }
 
-function containsAssignmentTo(node: Record<string, unknown>, name: string): boolean {
-  if (isOxcFunctionNode(node) && oxcFunctionShadowsName(node, name)) {
-    return false;
-  }
-
-  if (node.type === "AssignmentExpression") {
-    const left = readObject(node.left);
-    if (left.type === "Identifier" && left.name === name) return true;
-  }
-  if (node.type === "UpdateExpression") {
-    const argument = readObject(node.argument);
-    if (argument.type === "Identifier" && argument.name === name) return true;
-  }
-  for (const value of Object.values(node)) {
-    if (Array.isArray(value)) {
-      for (const item of value) {
-        if (
-          typeof item === "object" &&
-          item !== null &&
-          containsAssignmentTo(readObject(item), name)
-        ) {
-          return true;
-        }
-      }
-    } else if (typeof value === "object" && value !== null) {
-      if (containsAssignmentTo(readObject(value), name)) return true;
-    }
-  }
-  return false;
-}
-
-function oxcFunctionShadowsName(functionNode: Record<string, unknown>, name: string): boolean {
-  const localBindings = new Set<string>();
-  collectOxcFunctionLocalBindings(functionNode, localBindings);
-  return localBindings.has(name);
-}
 
 function collectOxcPushJsxBindingNames(statements: readonly unknown[], names: Set<string>): void {
   for (const statement of statements) {

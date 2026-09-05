@@ -9,6 +9,7 @@ import {
   createTemplate,
   createTemplateElement,
   insertDynamic,
+  insertRenderValue,
 } from "@reckona/mreact-reactive-dom";
 import {
   createContext,
@@ -43,6 +44,11 @@ import { jsxDEV } from "@reckona/mreact-compat/jsx-dev-runtime";
 import { bindSelectedKeyedSingleNodeList } from "@reckona/mreact-compat/internal";
 import { cell, computed, effect, untrack } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
+import {
+  isServerRenderValue,
+  readServerRenderValue,
+  registerServerRenderValue,
+} from "../../shared/src/server-render-value-internal.js";
 import {
   createStringSink,
   renderAsyncBoundary,
@@ -120,16 +126,10 @@ export function runServerComponent(
   exportName = "App",
   props?: Record<string, unknown>,
 ): string {
-  const exports = extractFunctionExports(code);
-  const runnableCode = stripFunctionExports(stripImports(code));
-  const returnEntries = exports
-    .map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`)
-    .join(", ");
-  const module = new Function(`${runnableCode}\nreturn { ${returnEntries} };`)() as Record<
-    string,
-    (props?: Record<string, unknown>) => string
-  >;
-  const component = module[exportName];
+  const module = compileServerModule(code);
+  const component = module[exportName] as
+    | ((props?: Record<string, unknown>) => string)
+    | undefined;
 
   if (component === undefined) {
     throw new Error(`Server export '${exportName}' was not found.`);
@@ -138,11 +138,30 @@ export function runServerComponent(
   return component(props);
 }
 
+export function compileServerModule(code: string): Record<string, unknown> {
+  const exports = extractFunctionExports(code);
+  const runnableCode = stripFunctionExports(stripImports(code));
+  const returnEntries = exports
+    .map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`)
+    .join(", ");
+  const runtimeEntries = extractServerRenderValueRuntimeEntries(code);
+  const module = new Function(
+    ...runtimeEntries.map((entry) => entry.localName),
+    `${runnableCode}\nreturn { ${returnEntries} };`,
+  )(...runtimeEntries.map((entry) => entry.value)) as Record<string, unknown>;
+
+  return module;
+}
+
 export async function runAsyncServerComponent(code: string): Promise<string> {
   const runnableCode = stripImports(code)
     .replace(/export async function /g, "async function ")
     .replace(/export function /g, "function ");
-  const App = new Function(`${runnableCode}\nreturn App;`)() as () => string | Promise<string>;
+  const runtimeEntries = extractServerRenderValueRuntimeEntries(code);
+  const App = new Function(
+    ...runtimeEntries.map((entry) => entry.localName),
+    `${runnableCode}\nreturn App;`,
+  )(...runtimeEntries.map((entry) => entry.value)) as () => string | Promise<string>;
   return await App();
 }
 
@@ -272,7 +291,10 @@ function extractCompatInternalRuntimeEntries(
 function compileCompatServerModule(code: string): CompatComponentExports {
   const exports = extractFunctionExports(code);
   const runnableCode = stripFunctionExports(stripImports(code));
-  const runtimeEntries = extractReactCompatRuntimeEntries(code);
+  const runtimeEntries = [
+    ...extractReactCompatRuntimeEntries(code),
+    ...extractServerRenderValueRuntimeEntries(code),
+  ];
   const returnEntries = exports
     .map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`)
     .join(", ");
@@ -294,6 +316,7 @@ function compileServerStreamModule(code: string): StreamComponentExports {
     ...extractServerRuntimeEntries(code),
     ...extractReactCompatRuntimeEntries(code),
     ...extractNativeEscapeRuntimeEntries(code),
+    ...extractServerRenderValueRuntimeEntries(code),
   ];
   const returnEntries = exports
     .map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`)
@@ -303,6 +326,39 @@ function compileServerStreamModule(code: string): StreamComponentExports {
     ...runtimeEntries.map((entry) => entry.localName),
     `${runnableCode}\nreturn { ${returnEntries} };`,
   )(...runtimeEntries.map((entry) => entry.value)) as StreamComponentExports;
+}
+
+function extractServerRenderValueRuntimeEntries(
+  code: string,
+): { localName: string; value: unknown }[] {
+  const importMatch = code.match(
+    /^import \{ (?<specifiers>[^}]+) \} from "@reckona\/mreact-shared\/server-render-value-internal";/m,
+  );
+  const specifiers = importMatch?.groups?.specifiers;
+
+  if (specifiers === undefined) {
+    return [];
+  }
+
+  return specifiers.split(", ").map((specifier) => {
+    const match = specifier.match(
+      /^(?<importedName>isServerRenderValue|readServerRenderValue|registerServerRenderValue) as (?<localName>[A-Za-z_$][\w$]*)$/,
+    );
+
+    if (match?.groups === undefined) {
+      throw new Error(`Unsupported server render-value runtime import: ${specifier}`);
+    }
+
+    return {
+      localName: match.groups.localName,
+      value:
+        match.groups.importedName === "isServerRenderValue"
+          ? isServerRenderValue
+          : match.groups.importedName === "readServerRenderValue"
+            ? readServerRenderValue
+            : registerServerRenderValue,
+    };
+  });
 }
 
 function extractNativeEscapeRuntimeEntries(code: string): { localName: string; value: unknown }[] {
@@ -398,7 +454,7 @@ function extractClientRuntimeEntries(code: string): { localName: string; value: 
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>bindDomRef|bindEvent|bindList|bindProp|bindSpreadProps|bindText|createList|createMemo|createTemplate|createTemplateElement|effect|insertDynamic)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+      /^(?<importedName>bindDomRef|bindEvent|bindList|bindProp|bindSpreadProps|bindText|createList|createMemo|createTemplate|createTemplateElement|effect|insertDynamic|insertRenderValue)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
     );
 
     if (match?.groups === undefined) {
@@ -567,6 +623,10 @@ function getClientRuntimeValue(importedName: string): unknown {
 
   if (importedName === "insertDynamic") {
     return insertDynamic;
+  }
+
+  if (importedName === "insertRenderValue") {
+    return insertRenderValue;
   }
 
   if (importedName === "effect") {

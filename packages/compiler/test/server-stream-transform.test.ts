@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { readServerRenderValue } from "../../shared/src/server-render-value-internal.js";
 import { transform } from "../src/index.js";
 import { runServerStreamComponent } from "./helpers.js";
 
@@ -1416,6 +1417,218 @@ export function App() {
     );
   });
 
+  test("named element props retain inferred client boundary fallbacks in stream output", async () => {
+    const output = transform({
+      code: `import { WatchToggle } from "./WatchToggle";
+import { CommentThread } from "./CommentThread";
+
+function Detail(props) {
+  return <section><header>{props.actions}</header><div>{props.children}</div></section>;
+}
+
+export function App() {
+  return <Detail actions={<WatchToggle number="7" />}><CommentThread number="7" /></Detail>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+      clientBoundaryImports: ["./WatchToggle", "./CommentThread"],
+      clientBoundaryFallbackImports: ["./WatchToggle", "./CommentThread"],
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const globals = globalThis as typeof globalThis & {
+      WatchToggle?: (sink: TestStreamSink, props: { number: string }) => void;
+      CommentThread?: (sink: TestStreamSink, props: { number: string }) => void;
+    };
+    const previousWatchToggle = globals.WatchToggle;
+    const previousCommentThread = globals.CommentThread;
+    globals.WatchToggle = (sink, props) => {
+      sink.append(`<button>Watch ${props.number}</button>`);
+    };
+    globals.CommentThread = (sink, props) => {
+      sink.append(`<p>Comment ${props.number}</p>`);
+    };
+    let html: string;
+
+    try {
+      html = await runServerStreamComponent(output.code);
+    } finally {
+      if (previousWatchToggle === undefined) delete globals.WatchToggle;
+      else globals.WatchToggle = previousWatchToggle;
+      if (previousCommentThread === undefined) delete globals.CommentThread;
+      else globals.CommentThread = previousCommentThread;
+    }
+
+    expect(html).toContain(
+      '<header><template data-mreact-client-boundary="WatchToggle" data-mreact-client-boundary-fallback="component"></template><button>Watch 7</button>',
+    );
+    expect(html).toContain(
+      '<div><template data-mreact-client-boundary="CommentThread" data-mreact-client-boundary-fallback="component"></template><p>Comment 7</p>',
+    );
+  });
+
+  test("element-valued stream boundary props are marked nonserializable", async () => {
+    const output = transform({
+      code: `import { Detail } from "./Detail";
+
+export function App() {
+  return <Detail actions={<b>Watch</b>} />;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+      clientBoundaryImports: ["./Detail"],
+      clientBoundaryFallbackImports: ["./Detail"],
+    });
+    const globals = globalThis as typeof globalThis & {
+      Detail?: (
+        sink: TestStreamSink,
+        props: { actions: object },
+      ) => Promise<void>;
+    };
+    const previousDetail = globals.Detail;
+    globals.Detail = async (sink, props) => {
+      sink.append("<article>");
+      const actions = readServerRenderValue(props.actions);
+      if (typeof actions === "function") await actions(sink);
+      sink.append("</article>");
+    };
+    let html: string;
+
+    try {
+      html = await runServerStreamComponent(output.code);
+    } finally {
+      if (previousDetail === undefined) delete globals.Detail;
+      else globals.Detail = previousDetail;
+    }
+
+    expect(html).toContain(
+      'data-mreact-client-boundary="Detail" data-mreact-client-boundary-nonserializable="true"',
+    );
+    expect(html).toContain("<article><b>Watch</b></article>");
+  });
+
+  test("unicode-escaped identifiers cannot collide with stream render-value placeholders", async () => {
+    const output = transform({
+      code: String.raw`function Detail(props) { return <div>{props.action}</div>; }
+function __mreactServerRenderValue\u0024compiler(value, fallback) { return fallback; }
+export function App(props) { return <Detail action={__mreactServerRenderValue\u0024compiler(props.untrusted, <b>safe</b>)} />; }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const html = await runServerStreamComponent(output.code, "App", {
+      untrusted: '<img src=x onerror="globalThis.pwned=1">',
+    });
+
+    expect(html).toBe("<div><b>safe</b></div>");
+    expect(html).not.toContain("onerror");
+  });
+
+  test("bigint and cyclic stream boundary props fail closed", async () => {
+    const output = transform({
+      code: `import { Detail } from "./Detail";
+
+export function App(props) {
+  return <Detail value={props.value} />;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+      clientBoundaryImports: ["./Detail"],
+    });
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+
+    for (const value of [1n, cyclic]) {
+      const html = await runServerStreamComponent(output.code, "App", { value });
+
+      expect(html).toContain('data-mreact-client-boundary-nonserializable="true"');
+      expect(html).toContain(
+        '<script type="application/json" data-mreact-client-boundary-props="Detail">{}</script>',
+      );
+    }
+  });
+
+  test("shared stream boundary prop references remain serializable", async () => {
+    const output = transform({
+      code: `import { Detail } from "./Detail";
+
+export function App(props) {
+  return <Detail a={props.shared} b={props.shared} />;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+      clientBoundaryImports: ["./Detail"],
+    });
+    const shared = { label: "kept" };
+    const html = await runServerStreamComponent(output.code, "App", { shared });
+
+    expect(html).not.toContain("data-mreact-client-boundary-nonserializable");
+    expect(html).toContain(
+      '<script type="application/json" data-mreact-client-boundary-props="Detail">{"a":{"label":"kept"},"b":{"label":"kept"}}</script>',
+    );
+  });
+
+  test("stream boundary prop inspection does not invoke accessors and fails closed on array proxies", async () => {
+    const output = transform({
+      code: `import { Detail } from "./Detail";
+
+export function App(props) {
+  return <Detail value={props.value} />;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+      clientBoundaryImports: ["./Detail"],
+    });
+    let accessorReads = 0;
+    const accessorValue = {};
+    Object.defineProperty(accessorValue, "unsafe", {
+      enumerable: true,
+      get() {
+        accessorReads += 1;
+        return 1n;
+      },
+    });
+    const arrayProxy = new Proxy([], {
+      get(target, property, receiver) {
+        if (property === "length") throw new Error("blocked length");
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const objectProxy = new Proxy({}, {
+      ownKeys() {
+        throw new Error("blocked keys");
+      },
+    });
+    const throwingToJson = Object.create({
+      toJSON() {
+        throw new Error("blocked serialization");
+      },
+    });
+
+    for (const value of [accessorValue, arrayProxy, objectProxy, throwingToJson]) {
+      const html = await runServerStreamComponent(output.code, "App", { value });
+
+      expect(html).toContain('data-mreact-client-boundary-nonserializable="true"');
+      expect(html).toContain(
+        '<script type="application/json" data-mreact-client-boundary-props="Detail">{}</script>',
+      );
+    }
+    expect(accessorReads).toBe(0);
+  });
+
   test("client boundary fallback sink does not shadow nested list bindings", async () => {
     const cases = [
       {
@@ -1474,7 +1687,38 @@ export function App() {
         globalWithCounter.Counter = previousCounter;
       }
     }
+  });
 
+  test("client boundary helper family avoids user binding collisions", async () => {
+    const output = transform({
+      code: `import { Counter } from "./Counter";
+
+const _renderClientBoundary$hasNonSerializableProps = "user props helper";
+const _renderClientBoundary$markChildren = "user children helper";
+const _renderClientBoundary$renderHtml = "user render helper";
+
+export function App() {
+  return <Counter initial={2} />;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+      clientBoundaryImports: ["./Counter"],
+      clientBoundaryFallbackImports: ["./Counter"],
+    });
+    const globals = globalThis as typeof globalThis & {
+      Counter?: (sink: TestStreamSink, props: { initial: number }) => void;
+    };
+    const previousCounter = globals.Counter;
+    globals.Counter = (sink, props) => sink.append(`<b>${props.initial}</b>`);
+
+    try {
+      await expect(runServerStreamComponent(output.code)).resolves.toContain("<b>2</b>");
+    } finally {
+      if (previousCounter === undefined) delete globals.Counter;
+      else globals.Counter = previousCounter;
+    }
   });
 
   test("emitted client boundary protocol renders async original children instead of function source", async () => {
@@ -1897,6 +2141,416 @@ export function App() {
     await expect(runServerStreamComponent(output.code)).resolves.toBe(
       "<section><ul><li>A</li><li>B</li></ul></section>",
     );
+  });
+
+  test("retains stream JSX helper results stored in named component props", async () => {
+    const output = transform({
+      code: `function inner() { return <i>X</i>; }
+function frame(content) { return <b>{content}</b>; }
+function Detail(props) { return <div>{props.value}</div>; }
+const moduleValue = frame(inner());
+
+export function App() {
+  [1].map((frame) => frame);
+  const localValue = true ? frame(<i>L</i>) : null, ordinary = "ignored";
+  return <Detail value={[moduleValue, localValue]} />;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      "<div><b><i>X</i></b><b><i>L</i></b></div>",
+    );
+  });
+
+  test("retains transitive stream JSX helper results stored in named component props", async () => {
+    const output = transform({
+      code: `function make() { return <b>A</b>; }
+function wrap(enabled) { return enabled ? make() : null; }
+function Detail(props) { return <div>{props.value}</div>; }
+
+export function App() { return <Detail value={wrap(true)} />; }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(output.code)).resolves.toBe("<div><b>A</b></div>");
+  });
+
+  test("retains transitive stream JSX helper arrays stored in named component props", async () => {
+    const output = transform({
+      code: `function make() { return <b>A</b>; }
+function wrap() { return [make(), , null]; }
+function Detail(props) { return <div>{props.value}</div>; }
+export function App() { return <Detail value={wrap()} />; }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(output.code)).resolves.toBe("<div><b>A</b></div>");
+  });
+
+  test("retains transitive stream JSX helpers across disjoint lexical blocks", async () => {
+    const output = transform({
+      code: `function make() { return <b>A</b>; }
+function wrap() {
+  if (false) { const make = () => "unused"; void make; }
+  return make();
+}
+function Detail(props) { return <div>{props.value}</div>; }
+export function App() { return <Detail value={wrap()} />; }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(output.code)).resolves.toBe("<div><b>A</b></div>");
+  });
+
+  test("does not trust switch-scoped stream helper bindings in transitive helpers", async () => {
+    const output = transform({
+      code: `function make() { return <b>safe</b>; }
+function wrap(props) {
+  switch (1) {
+    case 1: let make = props.make; return make();
+    default: return null;
+  }
+}
+function Detail(props) { return <div>{props.value}</div>; }
+export function App(props) { return <Detail value={wrap(props)} />; }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(
+      runServerStreamComponent(output.code, "App", {
+        make: () => "<script>globalThis.pwned=true</script>",
+      }),
+    ).resolves.toBe("<div>&lt;script&gt;globalThis.pwned=true&lt;/script&gt;</div>");
+  });
+
+  test("keeps stream JSX helper trust scoped to each lexical callback and block", async () => {
+    const validOutput = transform({
+      code: `function make() { return <b>A</b>; }
+function Detail(props) { return <div>{props.value}</div>; }
+export function App() {
+  if (false) { const make = () => "unused"; void make; }
+  const value = make();
+  return <Detail value={value} />;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+    expect(validOutput.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(validOutput.code)).resolves.toBe("<div><b>A</b></div>");
+
+    const hostileOutput = transform({
+      code: `function make() { return <b>trusted</b>; }
+function Detail(props) { return <div>{props.value}</div>; }
+export function App(props) {
+  return <main>{[props.make].map((make) => {
+    const value = make();
+    return <Detail value={value} />;
+  })}</main>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+    expect(hostileOutput.diagnostics).toEqual([]);
+    await expect(
+      runServerStreamComponent(hostileOutput.code, "App", {
+        make: () => "<script>globalThis.pwned=true</script>",
+      }),
+    ).resolves.toBe(
+      "<main><div>&lt;script&gt;globalThis.pwned=true&lt;/script&gt;</div></main>",
+    );
+  });
+
+  test("awaits stream components with named JSX props inside list renderers", async () => {
+    const output = transform({
+      code: `function Detail(props) { return <div>{props.value}</div>; }
+export function App() {
+  return <main>{[1].map(() => <Detail value={<b>A</b>} />)}</main>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      "<main><div><b>A</b></div></main>",
+    );
+  });
+
+  test("awaits transitively async stream components inside list renderers", async () => {
+    const output = transform({
+      code: `function Detail(props) { return <div>{props.value}</div>; }
+function Wrapper(props) { return <section><Detail value={props.value} /></section>; }
+export function App() {
+  return <main>{[1].map(() => <Wrapper value={<b>A</b>} />)}</main>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      "<main><section><div><b>A</b></div></section></main>",
+    );
+  });
+
+  test("retains stream JSX values nested in mutable and helper-produced prop objects", async () => {
+    const output = transform({
+      code: `function make() { return <b>A</b>; }
+function Detail(props) { return <div>{props.value}</div>; }
+export function App() {
+  let directProps = { value: <i>L</i> };
+  const helperProps = { value: make() };
+  return <section><Detail {...directProps} /><Detail {...helperProps} /></section>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      "<section><div><i>L</i></div><div><b>A</b></div></section>",
+    );
+  });
+
+  test("retains stream helper-produced prop objects inside list callbacks", async () => {
+    const output = transform({
+      code: `function make() { return <b>A</b>; }
+function Detail(props) { return <div>{props.value}</div>; }
+export function App() {
+  return <ul>{[1].map(() => {
+    const direct = make();
+    const value = { node: make() };
+    return <li><Detail value={direct} /><Detail value={value.node} /></li>;
+  })}</ul>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      "<ul><li><div><b>A</b></div><div><b>A</b></div></li></ul>",
+    );
+  });
+
+  test("retains reassigned stream JSX initializers without trusting replacement values", async () => {
+    const output = transform({
+      code: `function Detail(props) { return <div>{props.value}</div>; }
+export function App(props) {
+  let value = <b>A</b>;
+  if (props.replace) value = props.value;
+  return <Detail value={value} />;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(
+      runServerStreamComponent(output.code, "App", { replace: false }),
+    ).resolves.toBe("<div><b>A</b></div>");
+    await expect(
+      runServerStreamComponent(output.code, "App", {
+        replace: true,
+        value: "<script>globalThis.pwned=true</script>",
+      }),
+    ).resolves.toBe("<div>&lt;script&gt;globalThis.pwned=true&lt;/script&gt;</div>");
+  });
+
+  test("ignores assignments to shadowed stream callback helper parameters", async () => {
+    const output = transform({
+      code: `function make() { return <b>A</b>; }
+const unused = function make() { make = () => "unused"; };
+const Unused = class make { field = (make = null); };
+function Detail(props) { return <div>{props.value}</div>; }
+export function App() {
+  void unused;
+  void Unused;
+  [1].forEach((make) => { make = () => "unused"; });
+  for (let make of [() => "unused"]) { make = () => "still unused"; }
+  const value = make();
+  return <Detail value={value} />;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(output.code)).resolves.toBe("<div><b>A</b></div>");
+  });
+
+  test("ignores assignments to class static-block stream helper bindings", async () => {
+    const output = transform({
+      code: `function make() { return <b>A</b>; }
+class Unused { static { var make; make = null; } }
+function Detail(props) { return <div>{props.value}</div>; }
+export function App() { void Unused; return <Detail value={make()} />; }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(output.code)).resolves.toBe("<div><b>A</b></div>");
+  });
+
+  test("does not trust stream helpers reassigned in parameter default initializers", async () => {
+    const output = transform({
+      code: `function make() { return <b>safe</b>; }
+function mutate(_ = (make = () => "<script>globalThis.pwned=true</script>")) { var make; }
+function Detail(props) { return <div>{props.value}</div>; }
+export function App() { mutate(); return <Detail value={make()} />; }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      "<div>&lt;script&gt;globalThis.pwned=true&lt;/script&gt;</div>",
+    );
+  });
+
+  test("does not trust stream helpers reassigned by module var loop bindings", async () => {
+    const output = transform({
+      code: `var make = () => <b>safe</b>;
+for (var make of [() => "<script>globalThis.pwned=true</script>"]) {}
+function Detail(props) { return <div>{props.value}</div>; }
+export function App() { return <Detail value={make()} />; }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      "<div>&lt;script&gt;globalThis.pwned=true&lt;/script&gt;</div>",
+    );
+  });
+
+  test("does not trust stream helpers reassigned by nested module var initializers", async () => {
+    const output = transform({
+      code: `var make = () => <b>safe</b>;
+{ var make = () => "<script>globalThis.pwned=true</script>"; }
+function Detail(props) { return <div>{props.value}</div>; }
+export function App() { return <Detail value={make()} />; }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      "<div>&lt;script&gt;globalThis.pwned=true&lt;/script&gt;</div>",
+    );
+  });
+
+  test("keeps stream list helper trust across disjoint callback blocks", async () => {
+    const output = transform({
+      code: `function make() { return <b>A</b>; }
+function Detail(props) { return <div>{props.value}</div>; }
+export function App() {
+  return <main>{[1].map(() => {
+    if (false) { const make = () => "unused"; void make; }
+    return <Detail value={make()} />;
+  })}</main>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      "<main><div><b>A</b></div></main>",
+    );
+  });
+
+  test("does not trust shadowed stream JSX helper bindings", async () => {
+    const cases = [
+      `function make() { return <b>safe</b>; }
+function Detail(props) { return <div>{props.value}</div>; }
+
+export function App(props) {
+  const make = props.make;
+  const value = make();
+  return <Detail value={value} />;
+}`,
+      `function make() { return <b>safe</b>; }
+function Detail(props) { return <div>{props.value}</div>; }
+export function App({ make }) { return <Detail value={make()} />; }`,
+      `function make() { return <b>safe</b>; }
+function Detail(props) { return <div>{props.value}</div>; }
+export function App(props) { make = props.make; return <Detail value={make()} />; }`,
+      `function make() { return <b>safe</b>; }
+function Detail(props) { return <div>{props.value}</div>; }
+export function App(props) { ({ make } = props); return <Detail value={make()} />; }`,
+      `function make() { return <b>safe</b>; }
+function Detail(props) { return <div>{props.value}</div>; }
+export function App(props) { for (make of [props.make]) {} return <Detail value={make()} />; }`,
+      `export function make() { return <b>safe</b>; }
+function Detail(props) { return <div>{props.value}</div>; }
+export function App(props) { make = props.make; return <Detail value={make()} />; }`,
+    ];
+
+    for (const [index, code] of cases.entries()) {
+      const output = transform({
+        code,
+        filename: "App.tsx",
+        target: "server",
+        dev: true,
+        serverOutput: "stream",
+      });
+      expect(output.diagnostics).toEqual([]);
+      await expect(
+        runServerStreamComponent(output.code, "App", {
+          make: () => "<script>globalThis.pwned=1</script>",
+        }),
+        `case ${index}`,
+      ).resolves.toBe("<div>&lt;script&gt;globalThis.pwned=1&lt;/script&gt;</div>");
+    }
   });
 
   test("emitted server stream component emits trusted dangerouslySetInnerHTML content", async () => {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { parseSync } from "oxc-parser";
+import { readServerRenderValue } from "../../shared/src/server-render-value-internal.js";
 import { transform } from "../src/index.js";
 import { runAsyncServerComponent, runServerComponent } from "./helpers.js";
 
@@ -1047,6 +1048,349 @@ export function App() {
     );
   });
 
+  test("retains JSX helper results stored in named component props", () => {
+    const output = transform({
+      code: `function inner() { return <i>X</i>; }
+function frame(content) { return <b>{content}</b>; }
+function Detail(props) { return <div>{props.value}</div>; }
+const moduleValue = frame(inner());
+
+export function App() {
+  [1].map((frame) => frame);
+  const localValue = true ? frame(<i>L</i>) : null, ordinary = "ignored";
+  return <Detail value={[moduleValue, localValue]} />;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe("<div><b><i>X</i></b><b><i>L</i></b></div>");
+  });
+
+  test("retains transitive JSX helper results stored in named component props", () => {
+    const output = transform({
+      code: `function make() { return <b>A</b>; }
+function wrap(enabled) { return enabled ? make() : null; }
+function Detail(props) { return <div>{props.value}</div>; }
+
+export function App() { return <Detail value={wrap(true)} />; }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe("<div><b>A</b></div>");
+  });
+
+  test("retains transitive JSX helper arrays stored in named component props", () => {
+    const output = transform({
+      code: `function make() { return <b>A</b>; }
+function wrap() { return [make(), , null]; }
+function Detail(props) { return <div>{props.value}</div>; }
+export function App() { return <Detail value={wrap()} />; }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe("<div><b>A</b></div>");
+  });
+
+  test("retains transitive JSX helpers across disjoint lexical blocks", () => {
+    const output = transform({
+      code: `function make() { return <b>A</b>; }
+function wrap() {
+  if (false) { const make = () => "unused"; void make; }
+  return make();
+}
+function Detail(props) { return <div>{props.value}</div>; }
+export function App() { return <Detail value={wrap()} />; }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe("<div><b>A</b></div>");
+  });
+
+  test("does not trust switch-scoped helper bindings in transitive helpers", () => {
+    const output = transform({
+      code: `function make() { return <b>safe</b>; }
+function wrap(props) {
+  switch (1) {
+    case 1: let make = props.make; return make();
+    default: return null;
+  }
+}
+function Detail(props) { return <div>{props.value}</div>; }
+export function App(props) { return <Detail value={wrap(props)} />; }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(
+      runServerComponent(output.code, "App", {
+        make: () => "<script>globalThis.pwned=true</script>",
+      }),
+    ).toBe("<div>&lt;script&gt;globalThis.pwned=true&lt;/script&gt;</div>");
+  });
+
+  test("keeps JSX helper trust scoped to each lexical callback and block", () => {
+    const validOutput = transform({
+      code: `function make() { return <b>A</b>; }
+function Detail(props) { return <div>{props.value}</div>; }
+export function App() {
+  if (false) { const make = () => "unused"; void make; }
+  const value = make();
+  return <Detail value={value} />;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+    expect(validOutput.diagnostics).toEqual([]);
+    expect(runServerComponent(validOutput.code)).toBe("<div><b>A</b></div>");
+
+    const hostileOutput = transform({
+      code: `function make() { return <b>trusted</b>; }
+function Detail(props) { return <div>{props.value}</div>; }
+export function App(props) {
+  return <main>{[props.make].map((make) => {
+    const value = make();
+    return <Detail value={value} />;
+  })}</main>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+    expect(hostileOutput.diagnostics).toEqual([]);
+    expect(
+      runServerComponent(hostileOutput.code, "App", {
+        make: () => "<script>globalThis.pwned=true</script>",
+      }),
+    ).toBe("<main><div>&lt;script&gt;globalThis.pwned=true&lt;/script&gt;</div></main>");
+  });
+
+  test("retains JSX values nested in mutable and helper-produced prop objects", () => {
+    const output = transform({
+      code: `function make() { return <b>A</b>; }
+function Detail(props) { return <div>{props.value}</div>; }
+export function App() {
+  let directProps = { value: <i>L</i> };
+  const helperProps = { value: make() };
+  return <section><Detail {...directProps} /><Detail {...helperProps} /></section>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe(
+      "<section><div><i>L</i></div><div><b>A</b></div></section>",
+    );
+  });
+
+  test("retains helper-produced prop objects inside list callbacks", () => {
+    const output = transform({
+      code: `function make() { return <b>A</b>; }
+function Detail(props) { return <div>{props.value}</div>; }
+export function App() {
+  return <ul>{[1].map(() => {
+    const direct = make();
+    const value = { node: make() };
+    return <li><Detail value={direct} /><Detail value={value.node} /></li>;
+  })}</ul>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe(
+      "<ul><li><div><b>A</b></div><div><b>A</b></div></li></ul>",
+    );
+  });
+
+  test("retains reassigned JSX initializers without trusting replacement values", () => {
+    const output = transform({
+      code: `function Detail(props) { return <div>{props.value}</div>; }
+export function App(props) {
+  let value = <b>A</b>;
+  if (props.replace) value = props.value;
+  return <Detail value={value} />;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code, "App", { replace: false })).toBe("<div><b>A</b></div>");
+    expect(
+      runServerComponent(output.code, "App", {
+        replace: true,
+        value: "<script>globalThis.pwned=true</script>",
+      }),
+    ).toBe("<div>&lt;script&gt;globalThis.pwned=true&lt;/script&gt;</div>");
+  });
+
+  test("ignores assignments to shadowed callback helper parameters", () => {
+    const output = transform({
+      code: `function make() { return <b>A</b>; }
+const unused = function make() { make = () => "unused"; };
+const Unused = class make { field = (make = null); };
+function Detail(props) { return <div>{props.value}</div>; }
+export function App() {
+  void unused;
+  void Unused;
+  [1].forEach((make) => { make = () => "unused"; });
+  for (let make of [() => "unused"]) { make = () => "still unused"; }
+  const value = make();
+  return <Detail value={value} />;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe("<div><b>A</b></div>");
+  });
+
+  test("ignores assignments to class static-block helper bindings", () => {
+    const output = transform({
+      code: `function make() { return <b>A</b>; }
+class Unused { static { var make; make = null; } }
+function Detail(props) { return <div>{props.value}</div>; }
+export function App() { void Unused; return <Detail value={make()} />; }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe("<div><b>A</b></div>");
+  });
+
+  test("does not trust helpers reassigned in parameter default initializers", () => {
+    const output = transform({
+      code: `function make() { return <b>safe</b>; }
+function mutate(_ = (make = () => "<script>globalThis.pwned=true</script>")) { var make; }
+function Detail(props) { return <div>{props.value}</div>; }
+export function App() { mutate(); return <Detail value={make()} />; }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe(
+      "<div>&lt;script&gt;globalThis.pwned=true&lt;/script&gt;</div>",
+    );
+  });
+
+  test("does not trust helpers reassigned by module var loop bindings", () => {
+    const output = transform({
+      code: `var make = () => <b>safe</b>;
+for (var make of [() => "<script>globalThis.pwned=true</script>"]) {}
+function Detail(props) { return <div>{props.value}</div>; }
+export function App() { return <Detail value={make()} />; }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe(
+      "<div>&lt;script&gt;globalThis.pwned=true&lt;/script&gt;</div>",
+    );
+  });
+
+  test("does not trust helpers reassigned by nested module var initializers", () => {
+    const output = transform({
+      code: `var make = () => <b>safe</b>;
+{ var make = () => "<script>globalThis.pwned=true</script>"; }
+function Detail(props) { return <div>{props.value}</div>; }
+export function App() { return <Detail value={make()} />; }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe(
+      "<div>&lt;script&gt;globalThis.pwned=true&lt;/script&gt;</div>",
+    );
+  });
+
+  test("keeps list helper trust across disjoint callback blocks", () => {
+    const output = transform({
+      code: `function make() { return <b>A</b>; }
+function Detail(props) { return <div>{props.value}</div>; }
+export function App() {
+  return <main>{[1].map(() => {
+    if (false) { const make = () => "unused"; void make; }
+    return <Detail value={make()} />;
+  })}</main>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe("<main><div><b>A</b></div></main>");
+  });
+
+  test("does not trust shadowed JSX helper bindings", () => {
+    const cases = [
+      `function make() { return <b>safe</b>; }
+function Detail(props) { return <div>{props.value}</div>; }
+
+export function App(props) {
+  const make = props.make;
+  const value = make();
+  return <Detail value={value} />;
+}`,
+      `function make() { return <b>safe</b>; }
+function Detail(props) { return <div>{props.value}</div>; }
+export function App({ make }) { return <Detail value={make()} />; }`,
+      `function make() { return <b>safe</b>; }
+function Detail(props) { return <div>{props.value}</div>; }
+export function App(props) { make = props.make; return <Detail value={make()} />; }`,
+      `function make() { return <b>safe</b>; }
+function Detail(props) { return <div>{props.value}</div>; }
+export function App(props) { ({ make } = props); return <Detail value={make()} />; }`,
+      `function make() { return <b>safe</b>; }
+function Detail(props) { return <div>{props.value}</div>; }
+export function App(props) { for (make of [props.make]) {} return <Detail value={make()} />; }`,
+      `export function make() { return <b>safe</b>; }
+function Detail(props) { return <div>{props.value}</div>; }
+export function App(props) { make = props.make; return <Detail value={make()} />; }`,
+    ];
+
+    for (const [index, code] of cases.entries()) {
+      const output = transform({ code, filename: "App.tsx", target: "server", dev: true });
+      expect(output.diagnostics).toEqual([]);
+      expect(
+        runServerComponent(output.code, "App", {
+          make: () => "<script>globalThis.pwned=1</script>",
+        }),
+        `case ${index}`,
+      ).toBe("<div>&lt;script&gt;globalThis.pwned=1&lt;/script&gt;</div>");
+    }
+  });
+
   test("emits trusted server inner HTML from dangerouslySetInnerHTML", () => {
     const output = transform({
       code: `const SERVICE_WORKER_BOOTSTRAP = "(function(){navigator.serviceWorker.register('/sw.js')})();";
@@ -1737,6 +2081,153 @@ export function App(props: { readonly data: { readonly kind: string; readonly po
     expect(JSON.parse(propsJson ?? "{}")).toMatchObject({
       marker: expect.stringContaining("</script><script>"),
     });
+  });
+
+  test("element-valued client boundary props are marked nonserializable", () => {
+    const output = transform({
+      code: `import { Detail } from "./Detail";
+
+export function App() {
+  return <Detail actions={<b>Watch</b>} />;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      clientBoundaryImports: ["./Detail"],
+      clientBoundaryFallbackImports: ["./Detail"],
+    });
+    const globals = globalThis as typeof globalThis & {
+      Detail?: (props: { actions: unknown }) => string;
+    };
+    const previousDetail = globals.Detail;
+    globals.Detail = (props) =>
+      `<article>${String(readServerRenderValue(props.actions as object))}</article>`;
+
+    try {
+      const html = runServerComponent(output.code);
+
+      expect(html).toContain(
+        'data-mreact-client-boundary="Detail" data-mreact-client-boundary-nonserializable="true"',
+      );
+      expect(html).toContain("<article><b>Watch</b></article>");
+    } finally {
+      if (previousDetail === undefined) delete globals.Detail;
+      else globals.Detail = previousDetail;
+    }
+  });
+
+  test("unicode-escaped identifiers cannot collide with server render-value placeholders", () => {
+    const output = transform({
+      code: String.raw`function Detail(props) { return <div>{props.action}</div>; }
+function __mreactServerRenderValue\u0024compiler(value, fallback) { return fallback; }
+export function App(props) { return <Detail action={__mreactServerRenderValue\u0024compiler(props.untrusted, <b>safe</b>)} />; }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const html = runServerComponent(output.code, "App", {
+      untrusted: '<img src=x onerror="globalThis.pwned=1">',
+    });
+
+    expect(html).toBe("<div><b>safe</b></div>");
+    expect(html).not.toContain("onerror");
+  });
+
+  test("bigint and cyclic client boundary props fail closed", () => {
+    const output = transform({
+      code: `import { Detail } from "./Detail";
+
+export function App(props) {
+  return <Detail value={props.value} />;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      clientBoundaryImports: ["./Detail"],
+    });
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+
+    for (const value of [1n, cyclic]) {
+      const html = runServerComponent(output.code, "App", { value });
+
+      expect(html).toContain('data-mreact-client-boundary-nonserializable="true"');
+      expect(html).toContain(
+        '<script type="application/json" data-mreact-client-boundary-props="Detail">{}</script>',
+      );
+    }
+  });
+
+  test("shared client boundary prop references remain serializable", () => {
+    const output = transform({
+      code: `import { Detail } from "./Detail";
+
+export function App(props) {
+  return <Detail a={props.shared} b={props.shared} />;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      clientBoundaryImports: ["./Detail"],
+    });
+    const shared = { label: "kept" };
+    const html = runServerComponent(output.code, "App", { shared });
+
+    expect(html).not.toContain("data-mreact-client-boundary-nonserializable");
+    expect(html).toContain(
+      '<script type="application/json" data-mreact-client-boundary-props="Detail">{"a":{"label":"kept"},"b":{"label":"kept"}}</script>',
+    );
+  });
+
+  test("client boundary prop inspection does not invoke accessors and fails closed on array proxies", () => {
+    const output = transform({
+      code: `import { Detail } from "./Detail";
+
+export function App(props) {
+  return <Detail value={props.value} />;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      clientBoundaryImports: ["./Detail"],
+    });
+    let accessorReads = 0;
+    const accessorValue = {};
+    Object.defineProperty(accessorValue, "unsafe", {
+      enumerable: true,
+      get() {
+        accessorReads += 1;
+        return 1n;
+      },
+    });
+    const arrayProxy = new Proxy([], {
+      get(target, property, receiver) {
+        if (property === "length") throw new Error("blocked length");
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const objectProxy = new Proxy({}, {
+      ownKeys() {
+        throw new Error("blocked keys");
+      },
+    });
+    const throwingToJson = Object.create({
+      toJSON() {
+        throw new Error("blocked serialization");
+      },
+    });
+
+    for (const value of [accessorValue, arrayProxy, objectProxy, throwingToJson]) {
+      const html = runServerComponent(output.code, "App", { value });
+
+      expect(html).toContain('data-mreact-client-boundary-nonserializable="true"');
+      expect(html).toContain(
+        '<script type="application/json" data-mreact-client-boundary-props="Detail">{}</script>',
+      );
+    }
+    expect(accessorReads).toBe(0);
   });
 
   test("server transform reports inferred client boundary aliases as client references", () => {

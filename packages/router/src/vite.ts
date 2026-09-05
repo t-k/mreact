@@ -237,6 +237,10 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
       "@reckona/mreact-shared/url-safety",
       packageFile("shared", "@reckona/mreact-shared", "url-safety"),
     ],
+    [
+      "@reckona/mreact-shared/server-render-value-internal",
+      packageFile("shared", "@reckona/mreact-shared", "server-render-value-internal"),
+    ],
   ]);
 
   // User-declared plugins captured from the resolving config. Unlike the fully

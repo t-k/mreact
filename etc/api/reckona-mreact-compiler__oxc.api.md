@@ -165,6 +165,8 @@ export interface ComponentIr {
     parameters: string[];
     // (undocumented)
     root: JsxNodeIr;
+    // (undocumented)
+    serverRenderValuePlaceholder?: string;
 }
 
 // @public
@@ -175,6 +177,8 @@ export interface ComponentNamedPropIr {
     kind: "prop";
     // (undocumented)
     name: string;
+    // (undocumented)
+    serverRenderValuePlaceholder?: string;
 }
 
 // @public
@@ -220,12 +224,16 @@ export interface ComponentSpreadPropIr {
     code: string;
     // (undocumented)
     kind: "spread-prop";
+    // (undocumented)
+    serverRenderValuePlaceholder?: string;
 }
 
 // @public
 export interface ConditionalIr {
     // (undocumented)
     conditionCode: string;
+    // (undocumented)
+    conditionTestCode?: string;
     // (undocumented)
     conditionValueName?: string;
     // (undocumented)
@@ -260,6 +268,8 @@ export interface DynamicAttributeIr {
     // (undocumented)
     name: string;
     // (undocumented)
+    omitServerRenderValue?: true;
+    // (undocumented)
     serialization?: "compat";
 }
 
@@ -286,7 +296,7 @@ export interface ExprIr {
     // (undocumented)
     kind: "expr";
     // (undocumented)
-    renderMode?: "dynamic" | "html" | "react-node" | "stream-node" | "compat-child" | "compiler-keyed-initial-text" | "compiler-keyed-cell-text" | "compiler-keyed-text";
+    renderMode?: "dynamic" | "render-value" | "html" | "server-render-value" | "react-node" | "stream-node" | "compat-child" | "compiler-keyed-initial-text" | "compiler-keyed-cell-text" | "compiler-keyed-text";
 }
 
 // @public
@@ -364,6 +374,8 @@ export interface ModuleIr {
     moduleBindingNames: string[];
     // (undocumented)
     moduleStatements: string[];
+    // (undocumented)
+    serverRenderValuePlaceholder?: string;
     // (undocumented)
     userImports: string[];
 }

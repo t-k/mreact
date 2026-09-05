@@ -62,6 +62,11 @@ let currentReactSuspenseOutOfOrderBoundaryHelperName: string =
 let currentCompatRenderToStringHelperName: string = "_renderCompatToString";
 let currentCompatChildHelperName: string | undefined;
 let currentPropChildrenCollectState: CollectHtmlState | undefined;
+let currentMarkServerRenderValueHelperName: string = "_registerServerRenderValue";
+let currentRenderServerValueHelperName: string = "_renderServerValue";
+let currentContainsServerRenderValueHelperName: string = "_containsServerRenderValue";
+let currentServerRenderValueSinkName: string = "$sink";
+let currentServerRenderAttributeValueName: string = "_serverRenderAttributeValue";
 
 export function emitServerStream(
   ir: ModuleIr,
@@ -85,13 +90,33 @@ export function emitServerStream(
     : undefined;
   const streamNodeHelperName = allocateHelperName(ir, "_renderStreamNode");
   const clientBoundaryHelperName = usesClientBoundary(ir, options.serverHydration === true)
-    ? allocateHelperName(ir, "_renderClientBoundary")
+    ? allocateHelperFamilyName(ir, "_renderClientBoundary", [
+        "$hasNonSerializableProps",
+        "$markChildren",
+        "$renderHtml",
+      ])
     : undefined;
   const clientBoundaryFallbackSinkName = allocateNestedBindingSafeName(
     ir,
     "_clientBoundaryFallbackSink",
   );
   const spreadAttributesHelperName = allocateHelperName(ir, "_renderSpreadAttributes");
+  const markServerRenderValueHelperName = allocateNestedBindingSafeName(
+    ir,
+    "_registerServerRenderValue",
+  );
+  const renderServerValueHelperName = allocateNestedBindingSafeName(ir, "_renderServerValue");
+  const isServerRenderValueHelperName = allocateNestedBindingSafeName(ir, "_isServerRenderValue");
+  const readServerRenderValueHelperName = allocateNestedBindingSafeName(ir, "_readServerRenderValue");
+  const containsServerRenderValueHelperName = allocateNestedBindingSafeName(
+    ir,
+    "_containsServerRenderValue",
+  );
+  const serverRenderValueSinkName = allocateNestedBindingSafeName(ir, "$sink");
+  const serverRenderAttributeValueName = allocateNestedBindingSafeName(
+    ir,
+    "_serverRenderAttributeValue",
+  );
   const urlSafeHelperName = allocateHelperName(ir, "_urlAttrSafe");
   currentUrlSafeHelperName = urlSafeHelperName;
   setOxcServerStringUrlSafeHelperName(urlSafeHelperName);
@@ -105,6 +130,11 @@ export function emitServerStream(
   currentReactSuspenseOutOfOrderBoundaryHelperName = reactSuspenseOutOfOrderBoundaryHelperName;
   currentCompatRenderToStringHelperName = compatRenderToStringHelperName;
   currentCompatChildHelperName = compatChildHelperName;
+  currentMarkServerRenderValueHelperName = markServerRenderValueHelperName;
+  currentRenderServerValueHelperName = renderServerValueHelperName;
+  currentContainsServerRenderValueHelperName = containsServerRenderValueHelperName;
+  currentServerRenderValueSinkName = serverRenderValueSinkName;
+  currentServerRenderAttributeValueName = serverRenderAttributeValueName;
   const helper = emitEscapeHtmlHelper(escapeHelperName);
   const urlSafeHelper = [
     `function ${urlSafeHelperName}(name, value) {`,
@@ -130,8 +160,8 @@ export function emitServerStream(
     `}`,
   ].join("\n");
   const components = ir.components
-    .map((component) =>
-      emitComponent(
+    .map((component) => {
+      const emitted = emitComponent(
         component,
         escapeHelperName,
         asyncBoundaryHelperName,
@@ -160,9 +190,24 @@ export function emitServerStream(
           dynamicAttributes: options.dynamicAttributes ?? "emit",
           ...(escapeBatchHelperName === undefined ? {} : { escapeBatchHelperName }),
         },
-      ),
-    )
+      );
+      return component.serverRenderValuePlaceholder === undefined
+        ? emitted
+        : emitted.replaceAll(
+            component.serverRenderValuePlaceholder,
+            markServerRenderValueHelperName,
+          );
+    })
     .join("\n\n");
+  const rawModuleStatements = emitModuleStatements(ir);
+  const moduleStatements =
+    ir.serverRenderValuePlaceholder === undefined
+      ? rawModuleStatements
+      : rawModuleStatements.replaceAll(
+          ir.serverRenderValuePlaceholder,
+          markServerRenderValueHelperName,
+        );
+  const emittedServerCode = `${moduleStatements}\n${components}`;
   // Emit batch escape import only when the helper is actually referenced
   // (issue 048: dead-import elimination).
   const escapeImport =
@@ -190,35 +235,75 @@ export function emitServerStream(
     )
     .join("\n");
   const userImports = emitUserImports(ir);
-  const moduleStatements = emitModuleStatements(ir);
   const importsBlock = [importLine, escapeImport, userImports, moduleStatements]
     .filter(Boolean)
     .join("\n");
   const needsSpreadAttributesHelper = components.includes(spreadAttributesHelperName);
   const urlSafeBlock =
     components.includes(urlSafeHelperName) || needsSpreadAttributesHelper ? urlSafeHelper : "";
+  const needsServerRenderValue =
+    emittedServerCode.includes(markServerRenderValueHelperName) ||
+    emittedServerCode.includes(renderServerValueHelperName) ||
+    emittedServerCode.includes(isServerRenderValueHelperName) ||
+    emittedServerCode.includes(containsServerRenderValueHelperName);
   const clientBoundaryBlock =
     clientBoundaryHelperName === undefined || !components.includes(clientBoundaryHelperName)
       ? ""
-      : emitClientBoundaryHelper(clientBoundaryHelperName);
+      : emitClientBoundaryHelper(
+          clientBoundaryHelperName,
+          needsServerRenderValue ? isServerRenderValueHelperName : undefined,
+        );
   const spreadAttributesBlock = needsSpreadAttributesHelper
-    ? emitSpreadAttributesHelper(spreadAttributesHelperName, escapeHelperName, urlSafeHelperName)
+    ? emitSpreadAttributesHelper(
+        spreadAttributesHelperName,
+        escapeHelperName,
+        urlSafeHelperName,
+        needsServerRenderValue ? containsServerRenderValueHelperName : undefined,
+      )
     : "";
   const streamNodeBlock = components.includes(streamNodeHelperName)
     ? emitStreamNodeHelper(streamNodeHelperName)
     : "";
+  const serverRenderValueBlock = needsServerRenderValue
+    ? emitServerRenderValueHelpers(
+        isServerRenderValueHelperName,
+        readServerRenderValueHelperName,
+        containsServerRenderValueHelperName,
+        renderServerValueHelperName,
+      )
+    : "";
+  const serverRenderValueImport =
+    serverRenderValueBlock === ""
+      ? ""
+      : `import { isServerRenderValue as ${isServerRenderValueHelperName}, readServerRenderValue as ${readServerRenderValueHelperName}, registerServerRenderValue as ${markServerRenderValueHelperName} } from "@reckona/mreact-shared/server-render-value-internal";`;
   const code = createCodeBuilder();
+  code.section(serverRenderValueImport);
   code.section(importsBlock);
   code.section(helper);
   code.section(urlSafeBlock);
   code.section(clientBoundaryBlock);
   code.section(spreadAttributesBlock);
+  code.section(serverRenderValueBlock);
   code.section(streamNodeBlock);
   code.section(components);
 
   return {
     code: code.toString(),
-    imports,
+    imports: [
+      ...imports,
+      ...(serverRenderValueBlock === ""
+        ? []
+        : [
+            {
+              source: "@reckona/mreact-shared/server-render-value-internal",
+              specifiers: [
+                "isServerRenderValue",
+                "readServerRenderValue",
+                "registerServerRenderValue",
+              ],
+            },
+          ]),
+    ],
   };
 }
 
@@ -354,18 +439,37 @@ function usesClientBoundary(ir: ModuleIr, serverHydration: boolean): boolean {
   return ir.components.some((component) => containsClientBoundary(component.root, serverHydration));
 }
 
-function emitClientBoundaryHelper(name: string): string {
+function emitClientBoundaryHelper(name: string, isServerRenderValueHelperName?: string): string {
   const propsHelperName = `${name}$hasNonSerializableProps`;
   const markChildrenHelperName = `${name}$markChildren`;
   const renderHelperName = `${name}$renderHtml`;
 
   return [
     `function ${propsHelperName}(value) {`,
-    `  if (typeof value === "function" || typeof value === "symbol") return true;`,
-    `  if (value === null || typeof value !== "object") return false;`,
-    `  if (Array.isArray(value)) return value.some(${propsHelperName});`,
-    `  for (const key of Object.keys(value)) {`,
-    `    if (${propsHelperName}(value[key])) return true;`,
+    `  const pending = [value];`,
+    `  const seen = new Set();`,
+    `  while (pending.length > 0) {`,
+    `    const current = pending.pop();`,
+    ...(isServerRenderValueHelperName === undefined
+      ? []
+      : [`    if (${isServerRenderValueHelperName}(current)) return true;`]),
+    `    if (typeof current === "function" || typeof current === "symbol" || typeof current === "bigint") return true;`,
+    `    if (current === null || typeof current !== "object") continue;`,
+    `    if (seen.has(current)) continue;`,
+    `    seen.add(current);`,
+    `    if (Array.isArray(current)) {`,
+    `      try {`,
+    `        for (let index = 0; index < current.length; index += 1) pending.push(current[index]);`,
+    `      } catch { return true; }`,
+    `      continue;`,
+    `    }`,
+    `    let descriptors;`,
+    `    try { descriptors = Object.getOwnPropertyDescriptors(current); } catch { return true; }`,
+    `    for (const descriptor of Object.values(descriptors)) {`,
+    `      if (descriptor.enumerable !== true) continue;`,
+    `      if (!("value" in descriptor)) return true;`,
+    `      pending.push(descriptor.value);`,
+    `    }`,
     `  }`,
     `  return false;`,
     `}`,
@@ -397,9 +501,11 @@ function emitClientBoundaryHelper(name: string): string {
     `  const _name = String(name);`,
     `  const _escapedName = _name.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");`,
     `  const _props = props ?? {};`,
-    `  const _nonSerializable = ${propsHelperName}(_props);`,
+    `  let _nonSerializable = ${propsHelperName}(_props);`,
+    `  let _jsonValue = "{}";`,
+    `  if (!_nonSerializable) { try { _jsonValue = JSON.stringify(_props) ?? "{}"; } catch { _nonSerializable = true; _jsonValue = "{}"; } }`,
     `  const _nonSerializableAttr = _nonSerializable ? ' data-mreact-client-boundary-nonserializable="true"' : "";`,
-    `  const _json = (JSON.stringify(_props) ?? "{}")`,
+    `  const _json = _jsonValue`,
     `    .replaceAll("&", "\\\\u0026")`,
     `    .replaceAll("<", "\\\\u003c")`,
     `    .replaceAll(">", "\\\\u003e")`,
@@ -425,6 +531,7 @@ function emitSpreadAttributesHelper(
   name: string,
   escapeHelperName: string,
   urlSafeHelperName: string,
+  isServerRenderValueHelperName?: string,
 ): string {
   const aliases = JSON.stringify({
     acceptCharset: "accept-charset",
@@ -508,6 +615,9 @@ function emitSpreadAttributesHelper(
     `    if (/^on/i.test(_rawName)) continue;`,
     `    let _value = props[_rawName];`,
     `    if (_value == null) continue;`,
+    ...(isServerRenderValueHelperName === undefined
+      ? []
+      : [`    if (${isServerRenderValueHelperName}(_value)) continue;`]),
     `    let _name = tagName === "input" && _rawName === "defaultValue" ? "value" : tagName === "input" && _rawName === "defaultChecked" ? "checked" : (Object.hasOwn(${name}$aliases, _rawName) ? ${name}$aliases[_rawName] : _rawName);`,
     `    if (!/^[A-Za-z_:][A-Za-z0-9:_.-]*$/.test(_name)) continue;`,
     `    const _lowerName = _name.toLowerCase();`,
@@ -611,7 +721,11 @@ function emitComponent(
         ? ""
         : "export ";
   const asyncPrefix =
-    component.async === true || containsAnyAsyncBoundary(component.root) ? "async " : "";
+    component.async === true ||
+    containsAnyAsyncBoundary(component.root) ||
+    containsServerRenderValue(component.root)
+      ? "async "
+      : "";
   const functionKeyword = `${exportPrefix}${asyncPrefix}function`;
 
   return [
@@ -678,7 +792,10 @@ function emitAppendStatements(
       return [];
     }
 
-    const conditionCode = node.conditionValueName ?? node.conditionCode;
+    const conditionCode =
+      node.conditionValueName === undefined
+        ? node.conditionCode
+        : (node.conditionTestCode ?? node.conditionValueName);
     let statements: string[];
 
     if (whenFalse.length === 0) {
@@ -1272,6 +1389,16 @@ function collectHtmlParts(
       return [{ kind: "react-node", code: node.code }];
     }
 
+    if (node.renderMode === "server-render-value") {
+      return [
+        {
+          kind: "stream-node",
+          code: `async (${currentServerRenderValueSinkName}) => { await ${currentRenderServerValueHelperName}(${currentServerRenderValueSinkName}, ${node.code}, ${escapeHelperName}); }`,
+          escapeHelperName,
+        },
+      ];
+    }
+
     if (node.renderMode === "stream-node") {
       return [{ kind: "stream-node", code: node.code, escapeHelperName }];
     }
@@ -1317,7 +1444,10 @@ function collectHtmlParts(
     const whenFalse = emitStringExpression(falseParts);
 
     if (whenTrue === undefined || whenFalse === undefined) {
-      const condition = node.conditionValueName ?? node.conditionCode;
+      const condition =
+        node.conditionValueName === undefined
+          ? node.conditionCode
+          : (node.conditionTestCode ?? node.conditionValueName);
       const conditionStatement =
         node.conditionValueName === undefined
           ? ""
@@ -1348,7 +1478,7 @@ function collectHtmlParts(
         code:
           node.conditionValueName === undefined
             ? `((${node.conditionCode}) ? ${whenTrue} : ${whenFalse})`
-            : `(() => { const ${node.conditionValueName} = (${node.conditionCode}); return ${node.conditionValueName} ? ${whenTrue} : ${whenFalse}; })()`,
+            : `(() => { const ${node.conditionValueName} = (${node.conditionCode}); return ${node.conditionTestCode ?? node.conditionValueName} ? ${whenTrue} : ${whenFalse}; })()`,
       },
     ];
   }
@@ -1973,17 +2103,34 @@ function collectHtmlAttributeParts(
   }
 
   if (attr.name === "style") {
+    if (attr.serialization !== "compat" && attr.omitServerRenderValue === true) {
+      return [
+        {
+          kind: "raw-dynamic",
+          code: emitDynamicStyleAttributeExpression(
+            attr.code,
+            escapeHelperName,
+            escapeBatchHelperName,
+            currentContainsServerRenderValueHelperName,
+          ),
+        },
+      ];
+    }
     return [
       {
         kind: "raw-dynamic",
-        code:
+        code: emitDynamicAttributeWithServerRenderValueOmission(attr, (code) =>
           attr.serialization === "compat"
-            ? emitCompatDynamicStyleAttributeExpression(attr.code, escapeHelperName)
+            ? emitCompatDynamicStyleAttributeExpression(code, escapeHelperName)
             : emitDynamicStyleAttributeExpression(
-                attr.code,
+                code,
                 escapeHelperName,
                 escapeBatchHelperName,
+                attr.omitServerRenderValue === true
+                  ? currentContainsServerRenderValueHelperName
+                  : undefined,
               ),
+        ),
       },
     ];
   }
@@ -1993,7 +2140,11 @@ function collectHtmlAttributeParts(
     return [
       {
         kind: "raw-dynamic",
-        code: `(() => { const _value = (${attr.code}); if (typeof _value !== "object" || _value === null) return ""; try { const _descriptor = Object.getOwnPropertyDescriptor(_value, "__html"); if (_descriptor !== undefined && "value" in _descriptor && typeof _descriptor.value === "string") return ${stringLiteral(` ${dynamicHtmlName}="`)} + ${escapeHelperName}(_descriptor.value) + ${stringLiteral('"')}; return ""; } catch { return ""; } })()`,
+        code: emitDynamicAttributeWithServerRenderValueOmission(
+          attr,
+          (code) =>
+            `(() => { const _value = (${code}); if (typeof _value !== "object" || _value === null) return ""; try { const _descriptor = Object.getOwnPropertyDescriptor(_value, "__html"); if (_descriptor !== undefined && "value" in _descriptor && typeof _descriptor.value === "string") return ${stringLiteral(` ${dynamicHtmlName}="`)} + ${escapeHelperName}(_descriptor.value) + ${stringLiteral('"')}; return ""; } catch { return ""; } })()`,
+        ),
       },
     ];
   }
@@ -2001,12 +2152,29 @@ function collectHtmlAttributeParts(
   return [
     {
       kind: "raw-dynamic",
-      code:
+      code: emitDynamicAttributeWithServerRenderValueOmission(attr, (code) =>
         attr.serialization === "compat" && !isUrlAttribute(dynamicHtmlName)
-          ? emitCompatDynamicAttributeExpression(dynamicHtmlName, attr.code, escapeHelperName)
-          : emitDynamicAttributeExpression(dynamicHtmlName, attr.code, escapeHelperName),
+          ? emitCompatDynamicAttributeExpression(dynamicHtmlName, code, escapeHelperName)
+          : emitDynamicAttributeExpression(dynamicHtmlName, code, escapeHelperName),
+      ),
     },
   ];
+}
+
+function emitDynamicAttributeWithServerRenderValueOmission(
+  attr: Extract<AttributeIr, { kind: "dynamic-attr" }>,
+  emit: (code: string) => string,
+): string {
+  if (attr.omitServerRenderValue !== true) {
+    return emit(attr.code);
+  }
+
+  if (simpleSideEffectFreeExpression(attr.code)) {
+    return `${currentContainsServerRenderValueHelperName}(${attr.code}) ? "" : (${emit(attr.code)})`;
+  }
+
+  const valueName = currentServerRenderAttributeValueName;
+  return `(() => { const ${valueName} = (${attr.code}); return ${currentContainsServerRenderValueHelperName}(${valueName}) ? "" : (${emit(valueName)}); })()`;
 }
 
 function collectElementAttributeParts(
@@ -2091,7 +2259,12 @@ function emitMergedSpreadPropsAssignments(
 
     if (attr.name === "dangerouslySetInnerHTML" && !includeDangerouslySetInnerHtml) return [];
 
-    const valueCode = attr.kind === "static-attr" ? stringLiteral(attr.value) : `(${attr.code})`;
+    const valueCode =
+      attr.kind === "static-attr"
+        ? stringLiteral(attr.value)
+        : attr.kind === "dynamic-attr" && attr.omitServerRenderValue === true
+          ? `(() => { const _value = (${attr.code}); return ${currentContainsServerRenderValueHelperName}(_value) ? undefined : _value; })()`
+          : `(${attr.code})`;
     return [`${propsName}[${stringLiteral(attr.name)}] = ${valueCode};`];
   });
 }
@@ -2203,8 +2376,13 @@ function emitDynamicStyleAttributeExpression(
   code: string,
   escapeHelperName: string,
   escapeBatchHelperName: string | undefined,
+  containsServerRenderValueHelperName?: string,
 ): string {
-  const staticStyleExpression = emitStaticStyleObjectAttributeExpression(code, escapeHelperName);
+  const staticStyleExpression = emitStaticStyleObjectAttributeExpression(
+    code,
+    escapeHelperName,
+    containsServerRenderValueHelperName,
+  );
 
   if (staticStyleExpression !== undefined) {
     return staticStyleExpression;
@@ -2215,12 +2393,18 @@ function emitDynamicStyleAttributeExpression(
       ? `${escapeHelperName}(_cssName) + ":" + ${escapeHelperName}(_styleValue === true ? "" : _styleValue)`
       : `(() => { const _escaped = ${escapeBatchHelperName}([_cssName, _styleValue === true ? "" : _styleValue]); return _escaped[0] + ":" + _escaped[1]; })()`;
 
-  return `(() => { const _value = (${code}); if (_value == null || _value === false) return ""; if (typeof _value === "string") { const _style = ${escapeHelperName}(_value); return _style === "" ? "" : ${stringLiteral(' style="')} + _style + ${stringLiteral('"')}; } const _style = Object.entries(_value).filter(([, _styleValue]) => _styleValue != null && _styleValue !== false).map(([_styleName, _styleValue]) => { const _cssName = String(_styleName).startsWith("--") ? String(_styleName) : String(_styleName).replace(/[A-Z]/g, (_char) => "-" + _char.toLowerCase()); return ${escapedPair}; }).join(";"); return _style === "" ? "" : ${stringLiteral(' style="')} + _style + ${stringLiteral('"')}; })()`;
+  const renderValueGuard =
+    containsServerRenderValueHelperName === undefined
+      ? ""
+      : ` if (_entries.some(([, _styleValue]) => ${containsServerRenderValueHelperName}(_styleValue))) return "";`;
+
+  return `(() => { const _value = (${code}); if (_value == null || _value === false) return ""; if (typeof _value === "string") { const _style = ${escapeHelperName}(_value); return _style === "" ? "" : ${stringLiteral(' style="')} + _style + ${stringLiteral('"')}; } const _entries = Object.entries(_value);${renderValueGuard} const _style = _entries.filter(([, _styleValue]) => _styleValue != null && _styleValue !== false).map(([_styleName, _styleValue]) => { const _cssName = String(_styleName).startsWith("--") ? String(_styleName) : String(_styleName).replace(/[A-Z]/g, (_char) => "-" + _char.toLowerCase()); return ${escapedPair}; }).join(";"); return _style === "" ? "" : ${stringLiteral(' style="')} + _style + ${stringLiteral('"')}; })()`;
 }
 
 function emitStaticStyleObjectAttributeExpression(
   code: string,
   escapeHelperName: string,
+  containsServerRenderValueHelperName?: string,
 ): string | undefined {
   const entries = parseStaticStyleObjectLiteral(code);
 
@@ -2251,7 +2435,7 @@ function emitStaticStyleObjectAttributeExpression(
 
   const statements = entries.map(
     (entry) =>
-      `{ const _v = (${entry.valueCode}); if (_v != null && _v !== false) _style += (_style === "" ? "" : ";") + ${stringLiteral(`${entry.cssName}:`)} + ${escapeHelperName}(_v === true ? "" : _v); }`,
+      `{ const _v = (${entry.valueCode});${containsServerRenderValueHelperName === undefined ? "" : ` if (${containsServerRenderValueHelperName}(_v)) return "";`} if (_v != null && _v !== false) _style += (_style === "" ? "" : ";") + ${stringLiteral(`${entry.cssName}:`)} + ${escapeHelperName}(_v === true ? "" : _v); }`,
   );
 
   return `(() => { let _style = ""; ${statements.join(" ")} return _style === "" ? "" : ${stringLiteral(' style="')} + _style + ${stringLiteral('"')}; })()`;
@@ -2525,6 +2709,27 @@ function collectTextSeparatedSimpleChildrenParts(
     return undefined;
   }
 
+  if (dynamicChildren.some((child) => child.renderMode === "server-render-value")) {
+    const sinkName = currentServerRenderValueSinkName;
+    const appendStatements = children.map((child) => {
+      if (child.kind === "text") {
+        return `const _text = ${stringLiteral(escapeHtml(child.value))}; if (_text !== "") { if (_hasText) ${sinkName}.append("<!-- -->"); ${sinkName}.append(_text); _hasText = true; }`;
+      }
+      const expressionChild = child as Extract<JsxNodeIr, { kind: "expr" }>;
+      if (expressionChild.renderMode !== "server-render-value") {
+        return `const _text = ${escapeHelperName}(${expressionChild.code}); if (_text !== "") { if (_hasText) ${sinkName}.append("<!-- -->"); ${sinkName}.append(_text); _hasText = true; }`;
+      }
+      return `let _text = ""; const _tasks = []; const _capture = { __mreactForceInOrder: true, append(chunk) { _text += chunk; }, defer(task) { _tasks.push(Promise.resolve(task)); } }; await ${currentRenderServerValueHelperName}(_capture, ${expressionChild.code}, ${escapeHelperName}); while (_tasks.length > 0) await Promise.all(_tasks.splice(0)); if (_text !== "") { if (_hasText) ${sinkName}.append("<!-- -->"); ${sinkName}.append(_text); _hasText = true; }`;
+    });
+    return [
+      {
+        kind: "stream-node",
+        code: `async (${sinkName}) => { let _hasText = false; ${appendStatements.map((statement) => `{ ${statement} }`).join(" ")} }`,
+        escapeHelperName,
+      },
+    ];
+  }
+
   const useBatch = escapeBatchHelperName !== undefined && dynamicChildren.length >= 2;
   const values = dynamicChildren.map((child) => child.code);
   let dynamicIndex = 0;
@@ -2635,7 +2840,7 @@ function emitStreamRendererFromChildren(
     return undefined;
   }
 
-  return `async ($sink) => {\n${emitNestedStreamAppendStatements(parts, "$sink", currentCompatRenderToStringHelperName)}\n}`;
+  return `async (${currentServerRenderValueSinkName}) => {\n${emitNestedStreamAppendStatements(parts, currentServerRenderValueSinkName, currentCompatRenderToStringHelperName)}\n}`;
 }
 
 function containsAsyncBoundary(node: JsxNodeIr, outOfOrder: boolean): boolean {
@@ -2984,6 +3189,39 @@ function containsRawJsxDynamicRender(node: JsxNodeIr): boolean {
   return false;
 }
 
+function containsServerRenderValue(node: JsxNodeIr): boolean {
+  if (node.kind === "expr") {
+    return node.renderMode === "server-render-value";
+  }
+
+  if (node.kind === "conditional") {
+    return [...node.whenTrue, ...node.whenFalse].some(containsServerRenderValue);
+  }
+
+  if (node.kind === "async-boundary") {
+    return [
+      ...node.children,
+      ...(node.placeholderChildren ?? []),
+      ...(node.catchChildren ?? []),
+    ].some(containsServerRenderValue);
+  }
+
+  if (node.kind === "component") {
+    return (
+      node.children.some(containsServerRenderValue) ||
+      node.props.some(
+        (prop) => prop.kind === "render-prop" && prop.children.some(containsServerRenderValue),
+      )
+    );
+  }
+
+  if (node.kind === "list" || node.kind === "element" || node.kind === "fragment") {
+    return node.children.some(containsServerRenderValue);
+  }
+
+  return false;
+}
+
 function emitPropsObject(
   props: ComponentPropIr[],
   children: JsxNodeIr[] = [],
@@ -2993,14 +3231,31 @@ function emitPropsObject(
 ): string {
   const entries = props.map((prop) => {
     if (prop.kind === "spread-prop") {
-      return `...(${prop.code})`;
+      const code =
+        prop.serverRenderValuePlaceholder === undefined
+          ? prop.code
+          : prop.code.replaceAll(
+              prop.serverRenderValuePlaceholder,
+              currentMarkServerRenderValueHelperName,
+            );
+      return `...(${code})`;
     }
 
     if (prop.kind === "render-prop") {
-      return `${emitPropName(prop.name)}: ${emitHtmlExpressionFromChildren(prop.children, escapeHelperName)}`;
+      const renderValue =
+        emitStreamRendererFromChildren(prop.children, escapeHelperName, true) ??
+        emitHtmlExpressionFromChildren(prop.children, escapeHelperName);
+      return `${emitPropName(prop.name)}: ${currentMarkServerRenderValueHelperName}(${renderValue})`;
     }
 
-    return `${emitPropName(prop.name)}: (${prop.code})`;
+    const code =
+      prop.serverRenderValuePlaceholder !== undefined
+        ? prop.code.replaceAll(
+            prop.serverRenderValuePlaceholder,
+            currentMarkServerRenderValueHelperName,
+          )
+        : prop.code;
+    return `${emitPropName(prop.name)}: (${code})`;
   });
 
   if (children.length > 0) {
@@ -3098,7 +3353,6 @@ function allocateHelperName(ir: ModuleIr, baseName: string): string {
     for (const bindingName of component.bindingNames) {
       reservedNames.add(bindingName);
     }
-
   }
 
   let name = baseName;
@@ -3127,6 +3381,83 @@ function allocateNestedBindingSafeName(ir: ModuleIr, baseName: string): string {
   }
 
   return name;
+}
+
+function allocateHelperFamilyName(
+  ir: ModuleIr,
+  baseName: string,
+  suffixes: readonly string[],
+): string {
+  const serializedIr = JSON.stringify(ir);
+  let index = 0;
+
+  while (true) {
+    const candidate = index === 0 ? baseName : `${baseName}$${index}`;
+    const names = [candidate, ...suffixes.map((suffix) => `${candidate}${suffix}`)];
+
+    if (
+      names.every(
+        (name) =>
+          !new RegExp(
+            `(?<![A-Za-z0-9_$])${name.replaceAll("$", "\\$")}(?![A-Za-z0-9_$])`,
+          ).test(serializedIr),
+      )
+    ) {
+      return candidate;
+    }
+
+    index += 1;
+  }
+}
+
+function emitServerRenderValueHelpers(
+  isHelperName: string,
+  readHelperName: string,
+  containsHelperName: string,
+  renderHelperName: string,
+): string {
+  return [
+    `function ${containsHelperName}(value) {`,
+    `  const pending = [value];`,
+    `  const seen = new Set();`,
+    `  while (pending.length > 0) {`,
+    `    const current = pending.pop();`,
+    `    if (${isHelperName}(current)) return true;`,
+    `    if ((typeof current !== "object" && typeof current !== "function") || current === null) continue;`,
+    `    if (seen.has(current)) continue;`,
+    `    seen.add(current);`,
+    `    if (Array.isArray(current)) {`,
+    `      try {`,
+    `        for (let index = 0; index < current.length; index += 1) pending.push(current[index]);`,
+    `      } catch { return true; }`,
+    `      continue;`,
+    `    }`,
+    `    let descriptors;`,
+    `    try { descriptors = Object.getOwnPropertyDescriptors(current); } catch { return true; }`,
+    `    for (const descriptor of Object.values(descriptors)) {`,
+    `      if ("value" in descriptor) pending.push(descriptor.value);`,
+    `    }`,
+    `  }`,
+    `  return false;`,
+    `}`,
+    `async function ${renderHelperName}($sink, value, escapeHtml, depth = 0) {`,
+    `  if (depth > 256) throw new Error("mreact render value is too deep: exceeded 256 levels");`,
+    `  if (value == null || typeof value === "boolean") return;`,
+    `  if (Array.isArray(value)) {`,
+    `    for (let index = 0; index < value.length; index += 1) {`,
+    `      await ${renderHelperName}($sink, value[index], escapeHtml, depth + 1);`,
+    `    }`,
+    `    return;`,
+    `  }`,
+    `  if (${isHelperName}(value)) {`,
+    `    const rendered = ${readHelperName}(value);`,
+    `    if (typeof rendered === "function") await rendered($sink);`,
+    `    else $sink.append(String(rendered));`,
+    `    return;`,
+    `  }`,
+    `  $sink.append(escapeHtml(value));`,
+    `}`,
+  ].join("\n");
 }
 
 function stringLiteral(value: string): string {

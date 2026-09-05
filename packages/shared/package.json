@@ -46,6 +46,10 @@
       "types": "./dist/compiler-contract.d.ts",
       "default": "./dist/compiler-contract.js"
     },
+    "./server-render-value-internal": {
+      "types": "./dist/server-render-value-internal.d.ts",
+      "default": "./dist/server-render-value-internal.js"
+    },
     "./dom-prop-names": {
       "types": "./dist/dom-prop-names.d.ts",
       "default": "./dist/dom-prop-names.js"

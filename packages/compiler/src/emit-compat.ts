@@ -1078,7 +1078,7 @@ function emitJsxNode(
 
     return node.conditionValueName === undefined
       ? `(${node.conditionCode}) ? ${whenTrue} : ${whenFalse}`
-      : `(() => { const ${node.conditionValueName} = (${node.conditionCode}); return ${node.conditionValueName} ? ${whenTrue} : ${whenFalse}; })()`;
+      : `(() => { const ${node.conditionValueName} = (${node.conditionCode}); return ${node.conditionTestCode ?? node.conditionValueName} ? ${whenTrue} : ${whenFalse}; })()`;
   }
 
   if (node.kind === "list") {
@@ -3213,7 +3213,7 @@ function emitPropBlockConditionalRenderValueExpression(
     return `((${rewriteCode(node.conditionCode)}) ? ${whenTrue} : ${whenFalse})`;
   }
 
-  return `(() => { const ${node.conditionValueName} = (${rewriteCode(node.conditionCode)}); return ${node.conditionValueName} ? ${whenTrue} : ${whenFalse}; })()`;
+  return `(() => { const ${node.conditionValueName} = (${rewriteCode(node.conditionCode)}); return ${rewriteCode(node.conditionTestCode ?? node.conditionValueName)} ? ${whenTrue} : ${whenFalse}; })()`;
 }
 
 function emitPropBlockListRenderer(

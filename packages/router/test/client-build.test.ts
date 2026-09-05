@@ -2025,6 +2025,95 @@ export default function Page() {
     expect(html).not.toContain("onclick=");
   });
 
+  test("preserves named element props through SSR and client hydration", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-named-element-props-"));
+    const file = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      join(appDir, "Detail.tsx"),
+      `export function Detail({ actions, comments, untrusted }) {
+  return <section><header data-testid="actions" data-actions={actions}>{actions}</header><div data-testid="comments">{comments}</div><aside data-testid="untrusted">{untrusted}</aside></section>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "WatchToggle.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+const watching = cell(false);
+
+export function WatchToggle() {
+  return <button type="button" data-testid="watch-toggle" onClick={() => watching.set(value => !value)}>{watching.get() ? "Watching" : "Watch"}</button>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "CommentThread.tsx"),
+      `export function CommentThread() {
+  return <article data-testid="comment-thread">First comment</article>;
+}`,
+    );
+    const code = `"use client";
+import { Detail } from "./Detail";
+import { WatchToggle } from "./WatchToggle";
+import { CommentThread } from "./CommentThread";
+
+export default function Page() {
+  return <main><Detail actions={true ? <WatchToggle /> : null} comments={[<CommentThread />]} untrusted={"<script>globalThis.__namedPropInjected = true</script>"} /></main>;
+}`;
+    await writeFile(file, code);
+    let renderError: unknown;
+
+    const response = await renderAppRequest({
+      appDir,
+      onRenderError: (error) => {
+        renderError = error;
+      },
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(renderError).toBeUndefined();
+    expect(html).toContain('<button type="button" data-testid="watch-toggle">Watch</button>');
+    expect(html).toContain('<article data-testid="comment-thread">First comment</article>');
+    expect(html).not.toContain("&lt;button");
+    expect(html).toContain(
+      '<aside data-testid="untrusted">&lt;script&gt;globalThis.__namedPropInjected = true&lt;/script&gt;</aside>',
+    );
+
+    setDocumentBodyFromHtml(html);
+
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#named-element-props`
+    );
+
+    const watchToggle = document.querySelector("[data-testid='watch-toggle']");
+    const comments = document.querySelector("[data-testid='comments']");
+    const untrusted = document.querySelector("[data-testid='untrusted']");
+
+    expect(watchToggle?.textContent).toBe("Watch");
+    expect(document.querySelector("[data-testid='actions']")?.hasAttribute("data-actions")).toBe(
+      false,
+    );
+    expect(comments?.textContent).toBe("First comment");
+    expect(untrusted?.textContent).toBe("<script>globalThis.__namedPropInjected = true</script>");
+    expect(untrusted?.querySelector("script")).toBeNull();
+
+    watchToggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(document.querySelector("[data-testid='watch-toggle']")?.textContent).toBe("Watching");
+  });
+
   test("hydrates an AppShell client boundary that initially returns null inside a list", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-shell-null-boundary-"));
     const file = join(appDir, "page.mreact.tsx");

@@ -85,7 +85,12 @@ export function applyDomProp(
   const attrName = toDomAttributeName(name);
   const booleanishString = typeof value === "boolean" && isBooleanishStringAttribute(attrName);
 
-  if (value === null || value === undefined || (value === false && !booleanishString)) {
+  if (
+    value === null ||
+    value === undefined ||
+    (value === false && !booleanishString) ||
+    isDomRenderValue(value)
+  ) {
     removeDomProp(element, name);
     return;
   }
@@ -104,7 +109,12 @@ export function applyDomProp(
   }
 
   if (name === "style" && typeof value === "object" && value !== null) {
-    applyStyleObject(element as HTMLElement, value as Record<string, unknown>);
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (entries.some(([, entryValue]) => isDomRenderValue(entryValue))) {
+      removeDomProp(element, name);
+      return;
+    }
+    applyStyleObject(element as HTMLElement, entries);
     return;
   }
 
@@ -137,6 +147,54 @@ export function applyDomProp(
   }
 
   setDomAttribute(element, attrName, stringAttributeValue ?? String(value));
+}
+
+function isDomRenderValue(value: unknown): boolean {
+  const pending = [value];
+  const seen = new Set<unknown>();
+
+  while (pending.length > 0) {
+    const current = pending.pop();
+
+    if (current instanceof Node) {
+      return true;
+    }
+
+    if ((typeof current !== "object" && typeof current !== "function") || current === null) {
+      continue;
+    }
+
+    if (seen.has(current)) {
+      continue;
+    }
+    seen.add(current);
+
+    if (Array.isArray(current)) {
+      try {
+        for (let index = 0; index < current.length; index += 1) {
+          pending.push(current[index]);
+        }
+      } catch {
+        return true;
+      }
+      continue;
+    }
+
+    let descriptors: Record<string, PropertyDescriptor>;
+    try {
+      descriptors = Object.getOwnPropertyDescriptors(current);
+    } catch {
+      return true;
+    }
+
+    for (const descriptor of Object.values(descriptors)) {
+      if ("value" in descriptor) {
+        pending.push(descriptor.value);
+      }
+    }
+  }
+
+  return false;
 }
 
 export function removeDomProp(element: Element, name: string): void {
@@ -187,8 +245,8 @@ export function setDomAttribute(element: Element, name: string, value: string): 
   element.setAttributeNS(`http://www.w3.org/${namespace}`, name, value);
 }
 
-function applyStyleObject(element: HTMLElement, value: Record<string, unknown>): void {
-  const nextNames = new Set(Object.keys(value).map(styleObjectKeyToCssName));
+function applyStyleObject(element: HTMLElement, entries: [string, unknown][]): void {
+  const nextNames = new Set(entries.map(([name]) => styleObjectKeyToCssName(name)));
 
   for (const cssName of Array.from(element.style)) {
     if (!nextNames.has(cssName)) {
@@ -196,7 +254,7 @@ function applyStyleObject(element: HTMLElement, value: Record<string, unknown>):
     }
   }
 
-  for (const [name, nextValue] of Object.entries(value)) {
+  for (const [name, nextValue] of entries) {
     const cssName = styleObjectKeyToCssName(name);
 
     if (nextValue === null || nextValue === undefined || nextValue === false) {

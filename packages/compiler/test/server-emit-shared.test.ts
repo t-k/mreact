@@ -47,6 +47,375 @@ export function App(props) {
     );
   });
 
+  test("string and stream preserve arbitrary element-valued props without trusting ordinary strings", async () => {
+    await expectServerPairHtml(
+      `const _registerServerRenderValue = "user register";
+const _isServerRenderValue = "user check";
+const _renderServerValue = "user render";
+function Detail(props) {
+  const $sink = props.filters;
+  return <section><header>{props.actions}</header><div>{$sink}</div><aside>{props.untrusted}</aside></section>;
+}
+function WatchToggle() {
+  return <button type="button">Watch</button>;
+}
+export function App(props) {
+  return <main><Detail actions={<WatchToggle />} filters={<strong>Open</strong>} untrusted={props.untrusted} /></main>;
+}`,
+      '<main><section><header><button type="button">Watch</button></header><div><strong>Open</strong></div><aside>&lt;script&gt;alert(1)&lt;/script&gt;</aside></section></main>',
+      { untrusted: "<script>alert(1)</script>" },
+    );
+  });
+
+  test("element-valued props are omitted when reused as direct or spread attributes", async () => {
+    const compiled = compileServerPair(`function Detail(props) {
+  return <header data-actions={props.actions} {...{ "data-spread-actions": props.actions }}>{props.actions}</header>;
+}
+function WatchToggle() {
+  return <button type="button">Watch</button>;
+}
+export function App() {
+  return <Detail actions={<WatchToggle />} />;
+}`);
+    const stringHtml = runServerComponent(compiled.string);
+    const streamHtml = await runServerStreamComponent(compiled.stream);
+
+    expect(stringHtml).not.toContain("data-actions=");
+    expect(streamHtml).not.toContain("data-actions=");
+    expect(stringHtml).not.toContain("data-spread-actions=");
+    expect(streamHtml).not.toContain("data-spread-actions=");
+    expect(stringHtml).toContain('<button type="button">Watch</button>');
+    expect(streamHtml).toContain('<button type="button">Watch</button>');
+  });
+
+  test("arrays containing element-valued props are omitted from direct and spread attributes", async () => {
+    const compiled = compileServerPair(`function Detail(props) {
+  return <header data-actions={props.actions} {...{ "data-spread-actions": props.actions }}>{props.actions}</header>;
+}
+export function App() {
+  return <Detail actions={[1].map(() => <b>Watch</b>)} />;
+}`);
+    const stringHtml = runServerComponent(compiled.string);
+    const streamHtml = await runServerStreamComponent(compiled.stream);
+
+    expect(stringHtml).toBe("<header><b>Watch</b></header>");
+    expect(streamHtml).toBe("<header><b>Watch</b></header>");
+  });
+
+  test("component spreads lower direct JSX values", async () => {
+    await expectServerPairHtml(
+      `function Detail(props) {
+  return <section>{props.value}</section>;
+}
+export function App() {
+  return <Detail {...{ value: <b>ok</b> }} />;
+}`,
+      "<section><b>ok</b></section>",
+    );
+  });
+
+  test("string and stream preserve destructured, conditional, array, and fallback element props", async () => {
+    const source = `function Detail({ actions, collection, maybe }) {
+  return <section><header>{actions}</header><div>{collection}</div><aside>{maybe ?? <em>Fallback</em>}</aside></section>;
+}
+function BodyAlias(props) {
+  const { actions } = props;
+  return <nav>{actions}</nav>;
+}
+export function App(props) {
+  return <main><Detail actions={props.show ? <b>Watch</b> : null} collection={[<span>A</span>, <i>B</i>]} maybe={props.maybe} /><BodyAlias actions={<u>Alias</u>} /></main>;
+}`;
+
+    await expectServerPairHtml(
+      source,
+      "<main><section><header><b>Watch</b></header><div><span>A</span><i>B</i></div><aside><em>Fallback</em></aside></section><nav><u>Alias</u></nav></main>",
+      { show: true },
+    );
+    await expectServerPairHtml(
+      source,
+      "<main><section><header></header><div><span>A</span><i>B</i></div><aside>&lt;script&gt;alert(1)&lt;/script&gt;</aside></section><nav><u>Alias</u></nav></main>",
+      { maybe: "<script>alert(1)</script>", show: false },
+    );
+  });
+
+  test("forged server render-value brands remain escaped", async () => {
+    const marker = Symbol.for("@reckona/mreact.server-render-value");
+    const payload = "<script>globalThis.__injected = true</script>";
+    const forgedFunction = (sink?: { append(value: string): void }) => sink?.append(payload);
+    forgedFunction.toString = () => payload;
+    Object.defineProperty(forgedFunction, marker, { value: true });
+    const inheritedBrand = Object.create({ [marker]: true }) as { toString(): string };
+    inheritedBrand.toString = () => payload;
+    const forgedValues = [
+      { [marker]: true, toString: () => payload },
+      inheritedBrand,
+      forgedFunction,
+    ];
+
+    for (const value of forgedValues) {
+      await expectServerPairHtml(
+        `export function App(props) {
+  return <div>{props.value}</div>;
+}`,
+        "<div>&lt;script&gt;globalThis.__injected = true&lt;/script&gt;</div>",
+        { value },
+      );
+    }
+  });
+
+  test("hostile array methods cannot bypass server render-value escaping", async () => {
+    const value: unknown[] = [];
+    Object.defineProperty(value, "map", {
+      value: () => ({ join: () => '<img src=x onerror="globalThis.pwned=true">' }),
+    });
+
+    await expectServerPairHtml(
+      `export function App(props) {
+  return <div>{props.value}</div>;
+}`,
+      "<div></div>",
+      { value },
+    );
+  });
+
+  test("component prop children omit booleans while retaining zero", async () => {
+    const source = `function Detail(props) {
+  return <section>{props.fallback ? (props.value ?? <b>Fallback</b>) : props.value}</section>;
+}
+export function App(props) {
+  return <Detail fallback={props.fallback} value={props.value} />;
+}`;
+
+    await expectServerPairHtml(source, "<section></section>", { value: false });
+    await expectServerPairHtml(source, "<section></section>", { value: true });
+    await expectServerPairHtml(source, "<section>0</section>", { value: 0 });
+    await expectServerPairHtml(source, "<section></section>", { fallback: true, value: false });
+    await expectServerPairHtml(source, "<section>0</section>", { fallback: true, value: 0 });
+    await expectServerPairHtml(source, "<section><b>Fallback</b></section>", { fallback: true });
+  });
+
+  test("component prop arrays preserve JSX scalar child semantics", async () => {
+    await expectServerPairHtml(
+      `function Detail(props) {
+  return <section>{props.value}</section>;
+}
+export function App() {
+  return <Detail value={[false, true, null, undefined, 0, "x", <b>ok</b>]} />;
+}`,
+      "<section>0x<b>ok</b></section>",
+    );
+    await expectServerPairHtml(
+      `function Detail(props) {
+  return <section>{props.value}</section>;
+}
+export function App() {
+  return <Detail value={true || <b>fallback</b>} />;
+}`,
+      "<section></section>",
+    );
+  });
+
+  test("server render values preserve prop container and leaf shapes", async () => {
+    await expectServerPairHtml(
+      `function Detail(props) {
+  return <section>{Array.isArray(props.items) ? "array" : typeof props.items}:{typeof props.item}</section>;
+}
+export function App() {
+  return <Detail items={[<b>A</b>, <i>B</i>]} item={<u>C</u>} />;
+}`,
+      "<section>array:object</section>",
+    );
+  });
+
+  test("server render values preserve const binding control-flow and array shapes", async () => {
+    const source = `function Detail(props) {
+  return <section>{props.value == null ? "missing" : Array.isArray(props.value) ? "array" : props.value === false ? "false" : typeof props.value}</section>;
+}
+export function App(props) {
+  const value = props.mode === "array" ? [<b>A</b>] : props.mode === "false" ? false && <b>B</b> : props.mode === "missing" ? null : <i>C</i>;
+  return <Detail value={value} />;
+}`;
+
+    await expectServerPairHtml(source, "<section>array</section>", { mode: "array" });
+    await expectServerPairHtml(source, "<section>false</section>", { mode: "false" });
+    await expectServerPairHtml(source, "<section>missing</section>", { mode: "missing" });
+    await expectServerPairHtml(source, "<section>object</section>", { mode: "element" });
+  });
+
+  test("cyclic component prop children reject consistently", async () => {
+    const compiled = compileServerPair(`export function App(props) {
+  return <section>{props.value}</section>;
+}`);
+    const cyclic: unknown[] = ["<x>", false, 0];
+    cyclic.push(cyclic);
+
+    expect(() => runServerComponent(compiled.string, "App", { value: cyclic })).toThrow(
+      "mreact render value is too deep: exceeded 256 levels",
+    );
+    await expect(
+      runServerStreamComponent(compiled.stream, "App", { value: cyclic }),
+    ).rejects.toThrow("mreact render value is too deep: exceeded 256 levels");
+  });
+
+  test("server render-value capability follows JSX leaves through expressions and bindings", async () => {
+    const source = `function Detail({ first, second, third }) {
+  return <section><div>{first}</div><aside>{second}</aside><footer>{third}</footer></section>;
+}
+export function App(props) {
+  const third = <u>Bound</u>;
+  return <Detail first={(() => props.safe ? <b>Safe</b> : props.untrusted)()} second={(0, <i>Sequence</i>)} third={third} />;
+}`;
+
+    await expectServerPairHtml(
+      source,
+      "<section><div><b>Safe</b></div><aside><i>Sequence</i></aside><footer><u>Bound</u></footer></section>",
+      { safe: true, untrusted: "<script>alert(1)</script>" },
+    );
+    await expectServerPairHtml(
+      source,
+      "<section><div>&lt;script&gt;alert(1)&lt;/script&gt;</div><aside><i>Sequence</i></aside><footer><u>Bound</u></footer></section>",
+      { safe: false, untrusted: "<script>alert(1)</script>" },
+    );
+  });
+
+  test("compiler render-value placeholders cannot collide with user code", async () => {
+    await expectServerPairHtml(
+      `function Detail(props) {
+  return <div data-label={props.label}>{props.action}</div>;
+}
+function __mreactServerRenderValue$compiler(value, fallback) {
+  return fallback;
+}
+export function App(props) {
+  const record = { __mreactServerRenderValue$compiler: "property" };
+  return <Detail label={record.__mreactServerRenderValue$compiler + ":__mreactServerRenderValue$compiler"} action={__mreactServerRenderValue$compiler(props.untrusted, <b>safe</b>)} />;
+}`,
+      '<div data-label="property:__mreactServerRenderValue$compiler"><b>safe</b></div>',
+      { untrusted: '<img src=x onerror="globalThis.pwned=true">' },
+    );
+  });
+
+  test("prop-derived calls and deep members retain registered render values", async () => {
+    await expectServerPairHtml(
+      `function identity(value) {
+  return value;
+}
+function Detail(props) {
+  return <section><div>{identity(props.value)}</div><aside>{(() => props.slots.value)()}</aside></section>;
+}
+export function App() {
+  return <Detail value={<b>A</b>} slots={{ value: <i>B</i> }} />;
+}`,
+      "<section><div><b>A</b></div><aside><i>B</i></aside></section>",
+    );
+  });
+
+  test("local JSX helper results remain render values when passed as named props", async () => {
+    await expectServerPairHtml(
+      `function make() {
+  return <b>A</b>;
+}
+function Detail(props) {
+  return <div>{props.value}</div>;
+}
+export function App() {
+  return <Detail value={make()} />;
+}`,
+      "<div><b>A</b></div>",
+    );
+  });
+
+  test("explicit string coercion of JSX values preserves ordinary JavaScript semantics", async () => {
+    await expectServerPairHtml(
+      `function Detail(props) {
+  return <p>{props.value}</p>;
+}
+export function App() {
+  const direct = String(<b>A</b>);
+  const interpolated = "" + (<i>B</i>);
+  return <Detail value={direct + interpolated} />;
+}`,
+      "<p>&lt;b&gt;A&lt;/b&gt;&lt;i&gt;B&lt;/i&gt;</p>",
+    );
+  });
+
+  test("module-scope JSX bindings remain render values when passed as named props", async () => {
+    await expectServerPairHtml(
+      `const icon = <b>A</b>;
+function Detail(props) {
+  return <div>{props.value}</div>;
+}
+export function App() {
+  return <Detail value={icon} />;
+}`,
+      "<div><b>A</b></div>",
+    );
+  });
+
+  test("module-scope composite JSX bindings preserve arrays and component spreads", async () => {
+    await expectServerPairHtml(
+      `const icons = [<b>A</b>, <i>B</i>];
+const detailProps = { value: <u>C</u> };
+function Detail(props) {
+  return <div>{props.value}</div>;
+}
+export function App() {
+  return <main><Detail value={icons} /><Detail {...detailProps} /></main>;
+}`,
+      "<main><div><b>A</b><i>B</i></div><div><u>C</u></div></main>",
+    );
+  });
+
+  test("nested render values omit object-valued DOM attributes", async () => {
+    await expectServerPairHtml(
+      `function Detail(props) {
+  return <div style={props.style}>x</div>;
+}
+export function App() {
+  return <Detail style={{ color: <b>A</b> }} />;
+}`,
+      "<div>x</div>",
+    );
+  });
+
+  test("inline object attributes containing forwarded render values are omitted", async () => {
+    await expectServerPairHtml(
+      `function Detail(props) {
+  return <div style={{ color: props.value }} data-value={{ nested: props.value }}>x</div>;
+}
+export function App() {
+  return <Detail value={<b>A</b>} />;
+}`,
+      "<div>x</div>",
+    );
+  });
+
+  test("ordinary accessor-backed style values remain serializable", async () => {
+    await expectServerPairHtml(
+      `function Detail(props) {
+  return <div style={props.style}>x</div>;
+}
+export function App() {
+  const style = {};
+  Object.defineProperty(style, "color", { enumerable: true, get: () => "red" });
+  return <Detail style={style} />;
+}`,
+      '<div style="color:red">x</div>',
+    );
+  });
+
+  test("adjacent element-valued and ordinary props preserve text separation", async () => {
+    await expectServerPairHtml(
+      `function Detail(props) {
+  return <section>{props.value}{props.label}</section>;
+}
+export function App() {
+  return <Detail value={<b>ok</b>} label="end" />;
+}`,
+      "<section><b>ok</b><!-- -->end</section>",
+    );
+  });
+
   test("string and stream emitters normalize aliases and static style literals the same way", async () => {
     const source = `export function App() {
   return (
