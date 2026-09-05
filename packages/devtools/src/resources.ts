@@ -156,7 +156,6 @@ export function createDevtoolsResourceInspector(
           records.delete(id);
         }
       }
-      omittedLiveCount = 0;
     },
     dispose() {
       disposed = true;

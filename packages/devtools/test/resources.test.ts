@@ -45,7 +45,7 @@ describe("devtools resource inspector", () => {
     inspector.clearSnapshots();
 
     expect(inspector.snapshot({ includeDisposed: true })).toEqual([]);
-    expect(inspector.census()).toMatchObject({ live: 1, missingMetadata: 0, retainedMetadata: 0 });
+    expect(inspector.census()).toMatchObject({ live: 1, missingMetadata: 1, retainedMetadata: 0 });
     second.dispose();
     inspector.dispose();
     expect(inspector.census()).toEqual({
@@ -79,5 +79,18 @@ describe("devtools resource inspector", () => {
     });
     inspector.clearSnapshots();
     expect(inspector.census().retainedMetadata).toBe(0);
+  });
+
+  test("keeps omitted live counts across snapshot cleanup", () => {
+    const inspector = createDevtoolsResourceInspector(1);
+    const retained = inspector.register({ kind: "scope" });
+    const omitted = inspector.register({ kind: "scope" });
+
+    inspector.clearSnapshots();
+
+    expect(inspector.census()).toMatchObject({ missingMetadata: 1, retainedMetadata: 1 });
+    omitted.dispose();
+    retained.dispose();
+    expect(inspector.census()).toMatchObject({ missingMetadata: 0, live: 0 });
   });
 });
