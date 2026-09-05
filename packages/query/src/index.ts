@@ -27,15 +27,38 @@ export type MutationStatus = "idle" | "pending" | "success" | "error";
 /** Classifies why a query fetch failed. */
 export type QueryErrorReason = "aborted" | "retry-exhausted" | "network" | "unknown";
 
-/** Describes the reactive result exposed by a query observer. */
-export interface QueryResult<TData> {
-  data: TData | undefined;
-  error: unknown;
+interface QueryResultBase {
   errorReason: QueryErrorReason | undefined;
   isFetching: boolean;
-  status: QueryStatus;
   updatedAt: number;
 }
+
+/** Describes the pending result exposed by a query observer. */
+export interface PendingQueryResult extends QueryResultBase {
+  data: undefined;
+  error: undefined;
+  status: "pending";
+}
+
+/** Describes a successful result exposed by a query observer. */
+export interface SuccessQueryResult<TData> extends QueryResultBase {
+  data: TData;
+  error: undefined;
+  status: "success";
+}
+
+/** Describes an error result exposed by a query observer. */
+export interface ErrorQueryResult<TData> extends QueryResultBase {
+  data: TData | undefined;
+  error: unknown;
+  status: "error";
+}
+
+/** Describes the discriminated reactive result exposed by a query observer. */
+export type QueryResult<TData> =
+  | PendingQueryResult
+  | SuccessQueryResult<TData>
+  | ErrorQueryResult<TData>;
 
 /** Describes the reactive result exposed by a mutation observer. */
 export interface MutationResult<TData> {
@@ -46,10 +69,16 @@ export interface MutationResult<TData> {
 }
 
 /** Stores the cache metadata and result state for one query key. */
-export interface QueryEntry<TData = unknown> extends QueryResult<TData> {
+export interface QueryEntry<TData = unknown> {
+  data: TData | undefined;
+  error: unknown;
+  errorReason: QueryErrorReason | undefined;
+  isFetching: boolean;
   queryHash: string;
   queryKey: QueryKey;
   stale: boolean;
+  status: QueryStatus;
+  updatedAt: number;
 }
 
 /** Provides query key and cancellation signal data to a query function. */

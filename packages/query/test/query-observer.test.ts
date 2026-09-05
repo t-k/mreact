@@ -4,6 +4,33 @@ import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { createQuery, createQueryClient } from "../src/index.js";
 
 describe("createQuery", () => {
+  it("preserves previous data when an explicit refetch fails", async () => {
+    const client = createQueryClient();
+    const error = new Error("refetch failed");
+    let calls = 0;
+    client.setQueryData(["refetch-error"], "cached");
+    const query = createQuery(client, {
+      autoFetch: false,
+      queryKey: ["refetch-error"],
+      queryFn: async () => {
+        calls += 1;
+        if (calls === 1) {
+          return "fresh";
+        }
+        throw error;
+      },
+    });
+
+    await query.refetch();
+    await expect(query.refetch()).rejects.toBe(error);
+
+    expect(query.result.get()).toMatchObject({
+      data: "fresh",
+      error,
+      status: "error",
+    });
+  });
+
   it("exposes a reactive query result and refetches data", async () => {
     const client = createQueryClient();
     let calls = 0;

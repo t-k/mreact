@@ -523,13 +523,35 @@ export function hashQueryKey(queryKey: QueryKey): string {
 export function resultFromQueryEntry<TData>(
   entry: QueryEntry<TData> | undefined,
 ): QueryResult<TData> {
-  return {
-    data: entry?.data,
-    error: entry?.error,
+  const common = {
     errorReason: entry?.errorReason,
     isFetching: entry?.isFetching ?? false,
-    status: entry?.status ?? "pending",
     updatedAt: entry?.updatedAt ?? 0,
+  };
+
+  if (entry?.status === "success") {
+    return {
+      ...common,
+      data: entry.data as TData,
+      error: undefined,
+      status: "success",
+    };
+  }
+
+  if (entry?.status === "error") {
+    return {
+      ...common,
+      data: entry.data as TData | undefined,
+      error: entry.error,
+      status: "error",
+    };
+  }
+
+  return {
+    ...common,
+    data: undefined,
+    error: undefined,
+    status: "pending",
   };
 }
 
