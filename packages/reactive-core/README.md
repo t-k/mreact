@@ -47,6 +47,7 @@ handler.update((previous) => () => previous());
 - `batch()` groups updates into one flush.
 - `batchAsync()` groups updates across `await` points into one flush. Use it only around intentionally scoped async work because reactive flushes are deferred until the callback settles.
 - `untrack()` reads values without subscribing.
+- `createCleanupScope()` creates a DOM-independent LIFO owner for effects, observers, timers, and other disposers. `runWithCleanupScope(scope, callback)` binds automatic reactive registrations only for the synchronous callback; register resources explicitly with `scope.register()` when ownership crosses an `await`.
 
 ## Update Scheduling
 

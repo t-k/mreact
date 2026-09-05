@@ -118,6 +118,23 @@ export default function DebugCounter() {
 
 Prefer using JSX for UI updates. Reach for `effect()` when you need to connect reactive values to logging, imperative integrations, subscriptions, or low-level runtime code. If you create an effect manually outside a component or cleanup owner, keep the dispose function and call it when that owner is torn down.
 
+For DOM-independent code, use `createCleanupScope()` when one owner creates several resources. Cleanup is idempotent and runs in last-in-first-out order. `runWithCleanupScope()` binds the existing automatic cleanup registration for the synchronous callback; an `await` ends that dynamic binding, so resources created afterward should use the explicit scope handle.
+
+```ts
+import { createCleanupScope, effect, runWithCleanupScope } from "@reckona/mreact-reactive-core";
+
+const scope = createCleanupScope();
+runWithCleanupScope(scope, () => {
+  effect(() => console.log(count.get()));
+});
+
+const response = await fetch("/api/profile");
+scope.register(() => response.body?.cancel());
+scope.dispose();
+```
+
+Disposing an observer removes that observer's subscriptions and browser listeners. `cancelQueries()` aborts matching in-flight requests, `removeQueries()` evicts matching cache entries, and client `inactiveGcTime` performs eventual cleanup for settled entries without active observers. These operations remain separate so disposing one observer does not cancel a request shared by another observer.
+
 ## DOM bindings
 
 Application code usually uses JSX. The compiler and low-level DOM integrations use `@reckona/mreact-reactive-dom` bindings such as `createRoot()`, `bindText()`, `bindProp()`, and `bindEvent()` to connect cells to DOM nodes without rerendering an entire component tree.
