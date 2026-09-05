@@ -196,6 +196,17 @@ describe("createStore", () => {
     expect(() => classStore.snapshot()).toThrow(/arbitrary class instances/);
   });
 
+  it("clones URL values without losing their URL methods", () => {
+    const store = createStore({ url: new URL("https://example.test/items?view=full") });
+
+    const snapshot = store.snapshot();
+    snapshot.url.pathname = "/users";
+
+    expect(snapshot.url).toBeInstanceOf(URL);
+    expect(snapshot.url.toString()).toBe("https://example.test/users?view=full");
+    expect(store.get().url.pathname).toBe("/items");
+  });
+
   it("notifies subscribers with next and previous state", () => {
     const store = createStore({ count: 0 });
     const calls: Array<[{ count: number }, { count: number }]> = [];
@@ -318,6 +329,26 @@ describe("createStore", () => {
     expect(store.get()).toEqual({ count: 0 });
     store.set({ count: 3 });
     expect(store.get()).toEqual({ count: 3 });
+  });
+
+  it("keeps an async continuation outside the synchronous transaction boundary", async () => {
+    const store = createStore({ count: 0 });
+    let continuation: Promise<void> | undefined;
+
+    expect(() => {
+      store.transaction((() => {
+        continuation = (async () => {
+          store.set({ count: 1 });
+          await Promise.resolve();
+          store.set({ count: 2 });
+        })();
+        return continuation;
+      }) as unknown as () => void);
+    }).toThrow(/synchronous/i);
+
+    expect(store.get()).toEqual({ count: 0 });
+    await continuation;
+    expect(store.get()).toEqual({ count: 2 });
   });
 
   it("skips no-op shallow patches", () => {
@@ -548,7 +579,7 @@ describe("createStore", () => {
       { count: 0 },
       {
         persist: {
-          load: () => ({ count: "not-a-number" } as never),
+          load: () => ({ count: "not-a-number" }) as never,
           validate: (state) =>
             typeof state === "object" &&
             state !== null &&

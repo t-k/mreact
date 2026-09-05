@@ -78,7 +78,10 @@ export interface StorePersistence<T extends object> {
 }
 
 /** Creates an unambiguous versioned persistence record for Store.load(). */
-export function persistedStoreState<T extends object>(state: T, version: number): StorePersistedState<T> {
+export function persistedStoreState<T extends object>(
+  state: T,
+  version: number,
+): StorePersistedState<T> {
   return { __mreactStorePersistedState: true, state, version };
 }
 
@@ -99,8 +102,10 @@ export interface StorePersistBaseOptions<T extends object, TPersisted extends ob
 }
 
 /** Configures raw or tagged persistence records without legacy envelope inference. */
-export interface StoreCurrentPersistOptions<T extends object, TPersisted extends object = T>
-  extends StorePersistBaseOptions<T, TPersisted> {
+export interface StoreCurrentPersistOptions<
+  T extends object,
+  TPersisted extends object = T,
+> extends StorePersistBaseOptions<T, TPersisted> {
   acceptLegacyPersistedState?: false | undefined;
   load?:
     | (() =>
@@ -112,8 +117,10 @@ export interface StoreCurrentPersistOptions<T extends object, TPersisted extends
 }
 
 /** Configures persistence with explicit support for deprecated untagged envelopes. */
-export interface StoreLegacyPersistOptions<T extends object, TPersisted extends object = T>
-  extends StorePersistBaseOptions<T, TPersisted> {
+export interface StoreLegacyPersistOptions<
+  T extends object,
+  TPersisted extends object = T,
+> extends StorePersistBaseOptions<T, TPersisted> {
   acceptLegacyPersistedState: true;
   load?:
     | (() =>
@@ -121,7 +128,12 @@ export interface StoreLegacyPersistOptions<T extends object, TPersisted extends 
         | StorePersistedState<TPersisted>
         | TPersisted
         | undefined
-        | Promise<LegacyStorePersistedState<TPersisted> | StorePersistedState<TPersisted> | TPersisted | undefined>)
+        | Promise<
+            | LegacyStorePersistedState<TPersisted>
+            | StorePersistedState<TPersisted>
+            | TPersisted
+            | undefined
+          >)
     | undefined;
 }
 
@@ -310,7 +322,10 @@ export function createStore<T extends object, TPersisted extends object = T>(
         if (!isObject(persisted.state)) {
           throw new TypeError("Store persistence loaded state must be an object.");
         }
-        if (persist.validate !== undefined && !persist.validate(persisted.state, persisted.version)) {
+        if (
+          persist.validate !== undefined &&
+          !persist.validate(persisted.state, persisted.version)
+        ) {
           throw new TypeError("Store persistence validation rejected the loaded state.");
         }
 
@@ -694,9 +709,7 @@ function isPersistedStateDescriptor<T extends object>(
   );
 }
 
-function isLegacyPersistedStateDescriptor<T extends object>(
-  value: unknown,
-): boolean {
+function isLegacyPersistedStateDescriptor<T extends object>(value: unknown): boolean {
   if (
     typeof value !== "object" ||
     value === null ||
@@ -771,6 +784,9 @@ function cloneSnapshotValue(value: unknown, seen: WeakMap<object, unknown>): unk
   }
   if (value instanceof RegExp) {
     return new RegExp(value.source, value.flags);
+  }
+  if (value instanceof URL) {
+    return new URL(value.href);
   }
   if (value instanceof WeakMap || value instanceof WeakSet || value instanceof Promise) {
     throw new TypeError("Store snapshots do not support weak collections or Promise values.");
