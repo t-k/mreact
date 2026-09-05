@@ -324,11 +324,22 @@ export function flushPendingComputed(): void {
           : orderedComputations(runtimeState.pendingComputed);
       runtimeState.pendingComputed.clear();
 
-      for (const computation of computations) {
+      for (let index = 0; index < computations.length; index += 1) {
+        const computation = computations[index];
         computation.queued = false;
 
-        if (!computation.disposed) {
-          computation.run();
+        try {
+          if (!computation.disposed) {
+            computation.run();
+          }
+        } catch (error) {
+          // The snapshot is detached from pendingComputed while it runs. Clear
+          // queued flags for work that was in the same snapshot so recovery can
+          // schedule it again after the caller handles the failure.
+          for (let remaining = index + 1; remaining < computations.length; remaining += 1) {
+            computations[remaining].queued = false;
+          }
+          throw error;
         }
       }
     }

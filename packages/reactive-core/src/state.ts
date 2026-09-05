@@ -12,6 +12,8 @@ export interface Source {
   // write sites can gate on a null check instead of a Set.size accessor.
   subscribers: ReactiveComputation | Set<ReactiveComputation> | null;
   onNoSubscribers?: (() => void) | undefined;
+  /** Returns false when a dormant source has stale dormant dependencies. */
+  isCurrent?: (() => boolean) | undefined;
   trackedBy?: ReactiveComputation | undefined;
   trackedVersion?: number | undefined;
   debugWriters?: Map<number, string> | undefined;
@@ -78,5 +80,9 @@ export function createUntrackedDependency(source: Source): UntrackedDependency |
 
 export function untrackedDependencyIsCurrent(dependency: UntrackedDependency): boolean {
   const source = dependency.ref.deref();
-  return source !== undefined && sourceVersion(source) === dependency.version;
+  return (
+    source !== undefined &&
+    sourceVersion(source) === dependency.version &&
+    source.isCurrent?.() !== false
+  );
 }

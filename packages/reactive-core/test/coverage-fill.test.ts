@@ -232,6 +232,47 @@ describe("reactive-core: coverage fill for the remaining branches", () => {
     }
   });
 
+  test("computed flush clears queued flags for snapshot entries after a run throws", () => {
+    let laterRuns = 0;
+    const first: ReactiveComputation = {
+      deps: new Set(),
+      dispose() {},
+      disposed: false,
+      id: 1_000_001,
+      markDirty() {},
+      queued: true,
+      run() {
+        throw new Error("first computed failed");
+      },
+    };
+    const later: ReactiveComputation = {
+      deps: new Set(),
+      dispose() {},
+      disposed: false,
+      id: 1_000_002,
+      markDirty() {},
+      queued: true,
+      run() {
+        laterRuns += 1;
+      },
+    };
+    runtimeState.pendingComputed.add(first);
+    runtimeState.pendingComputed.add(later);
+
+    try {
+      expect(() => flushPendingComputed()).toThrow("first computed failed");
+      expect(first.queued).toBe(false);
+      expect(later.queued).toBe(false);
+      expect(laterRuns).toBe(0);
+      expect(runtimeState.pendingComputed.size).toBe(0);
+    } finally {
+      runtimeState.pendingComputed.delete(first);
+      runtimeState.pendingComputed.delete(later);
+      first.queued = false;
+      later.queued = false;
+    }
+  });
+
   test("effect dispose clears a queued effect flag before the scheduler flushes", () => {
     const restoreScheduler = setScheduler({
       schedule() {},

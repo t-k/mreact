@@ -20,6 +20,50 @@ describe("computed", () => {
     expect(doubled.get()).toBe(4);
   });
 
+  test("refreshes a nested computed after both computations become dormant", async () => {
+    const source = cell(1);
+    const inner = computed(() => source.get() * 2);
+    const outer = computed(() => inner.get() + 1);
+    const observed: number[] = [];
+
+    const firstDispose = effect(() => {
+      observed.push(outer.get());
+    });
+    firstDispose();
+
+    source.set(2);
+
+    const secondDispose = effect(() => {
+      observed.push(outer.get());
+    });
+    expect(observed).toEqual([3, 5]);
+
+    source.set(3);
+    await flushEffects();
+
+    expect(observed).toEqual([3, 5, 7]);
+    secondDispose();
+  });
+
+  test("releases restored upstream dependencies when a dormant computed throws", () => {
+    const shouldThrow = cell(false);
+    const source = cell(1);
+    const derived = computed(() => {
+      if (shouldThrow.get()) {
+        throw new Error("derived failed");
+      }
+
+      return source.get();
+    });
+
+    expect(derived.get()).toBe(1);
+    shouldThrow.set(true);
+
+    expect(() => derived.get()).toThrow("derived failed");
+    expect(getCellSource(shouldThrow)?.subscribers).toBeNull();
+    expect(getCellSource(source)?.subscribers).toBeNull();
+  });
+
   test("releases upstream dependencies when its cleanup owner is disposed", () => {
     const source = cell(1);
     const disposers: Array<() => void> = [];

@@ -36,6 +36,8 @@ export function computed<T>(
   const resource = registerReactiveDevtoolsResource("computed");
 
   const source: Source = {
+    isCurrent: () =>
+      untrackedDependencies.every((dependency) => untrackedDependencyIsCurrent(dependency)),
     onNoSubscribers: suspendIfUnobserved,
     subscribers: null,
   };
@@ -185,6 +187,10 @@ export function computed<T>(
     } catch (error) {
       cleanupAddedDeps(computation);
       dirty = true;
+
+      if (source.subscribers === null) {
+        suspendIfUnobserved();
+      }
 
       throw error;
     } finally {
