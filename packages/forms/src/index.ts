@@ -8,6 +8,11 @@ export type FormValues = object;
 /** Extracts string field names from a form value object. */
 export type FieldName<TValues extends FormValues> = Extract<keyof TValues, string>;
 
+/** Extracts field names whose current value is an initialized or optional readonly array. */
+export type ArrayFieldName<TValues extends FormValues> = {
+  [Name in FieldName<TValues>]: NonNullable<TValues[Name]> extends readonly unknown[] ? Name : never;
+}[FieldName<TValues>];
+
 /** Maps field names and the root form key to validation error messages. */
 export type FormErrors<TValues extends FormValues> = Partial<
   Record<FieldName<TValues> | "root", string[]>
@@ -55,23 +60,27 @@ export interface FieldState<TValue> {
   value: TValue;
 }
 
-/** Provides DOM event handlers and current value for binding a field to an input. */
-export interface FieldBinding<TValue> {
+/** Provides DOM event handlers and the value formatted for a bound input. */
+export interface FieldBinding<TBoundValue> {
   onBlur(event: Event): Promise<void>;
   onChange(event: Event): Promise<void>;
   onInput(event: Event): Promise<void>;
-  value: TValue;
+  value: TBoundValue;
 }
 
-/** Configures which DOM event updates a field binding. */
-export interface FieldBindingOptions {
+/** Configures DOM parsing, formatting, and the event that updates a field binding. */
+export interface FieldBindingOptions<TValue, TBoundValue = TValue> {
   event?: "change" | "input" | undefined;
+  format?: ((value: TValue) => TBoundValue) | undefined;
+  parse?: ((value: unknown, event: Event) => TValue) | undefined;
 }
 
 /** Exposes state, binding, blur, and value update controls for one field. */
 export interface FieldApi<TValues extends FormValues, Name extends FieldName<TValues>> {
   readonly state: ReadonlyCell<FieldState<TValues[Name]>>;
-  bind(options?: FieldBindingOptions): FieldBinding<TValues[Name]>;
+  bind<TBoundValue = TValues[Name]>(
+    options?: FieldBindingOptions<TValues[Name], TBoundValue>,
+  ): FieldBinding<TBoundValue>;
   blur(): Promise<void>;
   setValue(value: TValues[Name]): Promise<void>;
 }
@@ -90,7 +99,7 @@ export interface FieldArrayRow<TValue> {
 }
 
 /** Exposes stable keyed row state and mutation helpers for an array field. */
-export interface FieldArrayApi<TValues extends FormValues, Name extends FieldName<TValues>> {
+export interface FieldArrayApi<TValues extends FormValues, Name extends ArrayFieldName<TValues>> {
   readonly fields: ReadonlyCell<Array<FieldArrayRow<ArrayFieldValue<TValues, Name>>>>;
   append(value: ArrayFieldValue<TValues, Name>): Promise<void>;
   insert(index: number, value: ArrayFieldValue<TValues, Name>): Promise<void>;
@@ -172,7 +181,7 @@ export interface ServerActionErrors<TValues extends FormValues> {
 /** Provides reactive form state, field access, validation, submit, reset, and error controls. */
 export interface FormApi<TValues extends FormValues, TSubmitValues> {
   readonly state: ReadonlyCell<FormState<TValues>>;
-  fieldArray<Name extends FieldName<TValues>>(name: Name): FieldArrayApi<TValues, Name>;
+  fieldArray<Name extends ArrayFieldName<TValues>>(name: Name): FieldArrayApi<TValues, Name>;
   field<Name extends FieldName<TValues>>(name: Name): FieldApi<TValues, Name>;
   getValues(): TValues;
   reset(values?: TValues): void;
@@ -213,14 +222,14 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
   const validationGenerations = new Map<FieldName<TValues>, number>();
   const dirtyFields = new Set<FieldName<TValues>>();
   const dependentFields = buildDependentFields(options.validate);
-  const fieldArrayKeys = new Map<FieldName<TValues>, string[]>();
+  const fieldArrayKeys = new Map<ArrayFieldName<TValues>, string[]>();
   const fieldStateCells = new Map<
     FieldName<TValues>,
     ReadonlyCell<FieldState<TValues[FieldName<TValues>]>>
   >();
   const fieldArrayCells = new Map<
-    FieldName<TValues>,
-    ReadonlyCell<Array<FieldArrayRow<ArrayFieldValue<TValues, FieldName<TValues>>>>>
+    ArrayFieldName<TValues>,
+    ReadonlyCell<Array<FieldArrayRow<ArrayFieldValue<TValues, ArrayFieldName<TValues>>>>>
   >();
   let nextFieldArrayKey = 0;
   let activeSubmit: object | undefined;
@@ -424,20 +433,24 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     return dependentFields.get(name) ?? [];
   }
 
-  function arrayValues<Name extends FieldName<TValues>>(
+  function arrayValues<Name extends ArrayFieldName<TValues>>(
     name: Name,
   ): Array<ArrayFieldValue<TValues, Name>> {
     const value = state.get().values[name];
-    return Array.isArray(value) ? ([...value] as Array<ArrayFieldValue<TValues, Name>>) : [];
+    if (!Array.isArray(value)) {
+      throw new TypeError(`Form field "${String(name)}" must contain an array for fieldArray().`);
+    }
+
+    return [...value] as Array<ArrayFieldValue<TValues, Name>>;
   }
 
-  function createFieldArrayKey(name: FieldName<TValues>): string {
+  function createFieldArrayKey(name: ArrayFieldName<TValues>): string {
     const key = `${name}:${nextFieldArrayKey}`;
     nextFieldArrayKey += 1;
     return key;
   }
 
-  function ensureFieldArrayKeys(name: FieldName<TValues>, length: number): string[] {
+  function ensureFieldArrayKeys(name: ArrayFieldName<TValues>, length: number): string[] {
     const keys = fieldArrayKeys.get(name) ?? [];
     if (keys.length > length) {
       keys.length = length;
@@ -451,7 +464,7 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     return keys;
   }
 
-  function fieldArrayRows<Name extends FieldName<TValues>>(
+  function fieldArrayRows<Name extends ArrayFieldName<TValues>>(
     name: Name,
   ): Array<FieldArrayRow<ArrayFieldValue<TValues, Name>>> {
     const values = arrayValues(name);
@@ -463,7 +476,7 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     }));
   }
 
-  function fieldArrayCell<Name extends FieldName<TValues>>(
+  function fieldArrayCell<Name extends ArrayFieldName<TValues>>(
     name: Name,
   ): ReadonlyCell<Array<FieldArrayRow<ArrayFieldValue<TValues, Name>>>> {
     const existing = fieldArrayCells.get(name);
@@ -474,7 +487,7 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     const next = computed(() => fieldArrayRows(name), { equals: fieldArrayRowsEqual });
     fieldArrayCells.set(
       name,
-      next as ReadonlyCell<Array<FieldArrayRow<ArrayFieldValue<TValues, FieldName<TValues>>>>>,
+      next as ReadonlyCell<Array<FieldArrayRow<ArrayFieldValue<TValues, ArrayFieldName<TValues>>>>>,
     );
     return next;
   }
@@ -494,7 +507,7 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     return next;
   }
 
-  async function setArrayValue<Name extends FieldName<TValues>>(
+  async function setArrayValue<Name extends ArrayFieldName<TValues>>(
     name: Name,
     values: Array<ArrayFieldValue<TValues, Name>>,
     keys: string[],
@@ -503,7 +516,7 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     await setValue(name, values as TValues[Name]);
   }
 
-  async function validateArrayField<Name extends FieldName<TValues>>(name: Name): Promise<void> {
+  async function validateArrayField<Name extends ArrayFieldName<TValues>>(name: Name): Promise<void> {
     if (validateOn.has("change")) {
       await validateFields([name, ...dependentFieldsFor(name)]);
     }
@@ -511,7 +524,8 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
 
   return {
     state,
-    fieldArray<Name extends FieldName<TValues>>(name: Name): FieldArrayApi<TValues, Name> {
+    fieldArray<Name extends ArrayFieldName<TValues>>(name: Name): FieldArrayApi<TValues, Name> {
+      arrayValues(name);
       return {
         fields: fieldArrayCell(name),
         async append(value) {
@@ -575,10 +589,15 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     field<Name extends FieldName<TValues>>(name: Name): FieldApi<TValues, Name> {
       return {
         state: fieldStateCell(name),
-        bind(bindingOptions = {}) {
+        bind<TBoundValue = TValues[Name]>(
+          bindingOptions: FieldBindingOptions<TValues[Name], TBoundValue> = {},
+        ): FieldBinding<TBoundValue> {
           const bindingEvent = bindingOptions.event ?? "input";
           const updateValue = async (inputEvent: Event) => {
-            await setValue(name, eventValue(inputEvent, state.get().values[name]) as TValues[Name]);
+            const currentValue = state.get().values[name];
+            const rawValue = eventValue(inputEvent, currentValue);
+            const parsedValue = bindingOptions.parse?.(rawValue, inputEvent) ?? rawValue;
+            await setValue(name, validateBoundValue(parsedValue, currentValue));
           };
 
           return {
@@ -596,7 +615,8 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
               }
             },
             get value() {
-              return state.get().values[name];
+              const currentValue = state.get().values[name];
+              return (bindingOptions.format?.(currentValue) ?? currentValue) as TBoundValue;
             },
           };
         },
@@ -828,6 +848,38 @@ function eventValue(event: Event, currentValue: unknown): unknown {
   }
 
   return currentValue;
+}
+
+function validateBoundValue<TValue>(value: unknown, currentValue: TValue): TValue {
+  if (typeof value === "number" && Number.isNaN(value)) {
+    throw new TypeError("Form binding received an invalid number (NaN).");
+  }
+
+  if (currentValue === null || currentValue === undefined) {
+    return value as TValue;
+  }
+
+  if (Array.isArray(currentValue)) {
+    if (!Array.isArray(value)) {
+      throw new TypeError("Form binding value must be an array.");
+    }
+    return value as TValue;
+  }
+
+  if (currentValue instanceof Date) {
+    if (!(value instanceof Date) && value !== null) {
+      throw new TypeError("Form binding value must be a Date or null.");
+    }
+    return value as TValue;
+  }
+
+  if (typeof value !== typeof currentValue) {
+    throw new TypeError(
+      `Form binding value must have type ${typeof currentValue}; received ${typeof value}.`,
+    );
+  }
+
+  return value as TValue;
 }
 
 const dateInputTypes = new Set(["date", "month", "time", "week"]);

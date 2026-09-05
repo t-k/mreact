@@ -18,6 +18,32 @@ const schemaForm = createForm<{ count: string }, { count: number }>({
 
 schemaForm.submit((values) => values.count.toFixed());
 
+const arrayForm = createForm({
+  initialValues: {
+    items: [{ id: "a" }],
+    optionalItems: [] as { id: string }[] | undefined,
+    readonlyItems: ["a"] as readonly string[],
+    title: "Mreact",
+  },
+});
+
+arrayForm.fieldArray("items").append({ id: "b" });
+arrayForm.fieldArray("optionalItems").append({ id: "b" });
+arrayForm.fieldArray("readonlyItems").append("b");
+
+// @ts-expect-error Scalar fields cannot be used with fieldArray.
+arrayForm.fieldArray("title");
+
+const numberBinding = arrayForm.field("title").bind({
+  format: (value) => value.length,
+  parse: (value) => String(value),
+});
+const formattedLength: number = numberBinding.value;
+void formattedLength;
+
+// @ts-expect-error A parser must return the field's model type.
+arrayForm.field("title").bind({ parse: () => 123 });
+
 function standardSchema<Input, Output>(): StandardSchemaV1<Input, Output> {
   return {
     "~standard": {

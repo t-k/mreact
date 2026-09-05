@@ -249,6 +249,43 @@ describe("createForm", () => {
     expect(binding.value).toBe("ada@example.test");
   });
 
+  it("supports typed parse and format functions at the DOM boundary", async () => {
+    const form = createForm({
+      initialValues: { amount: 0 },
+    });
+    const binding = form.field("amount").bind({
+      format: (value) => String(value),
+      parse: (value) => Number(value),
+    });
+
+    expect(binding.value).toBe("0");
+    await binding.onInput({ currentTarget: { value: "42", type: "text" } } as unknown as Event);
+
+    expect(form.getValues()).toEqual({ amount: 42 });
+    expect(binding.value).toBe("42");
+  });
+
+  it("rejects incompatible inferred DOM values and invalid numbers before commit", async () => {
+    const form = createForm({
+      initialValues: { amount: 1, title: "initial" },
+    });
+
+    await expect(
+      form
+        .field("title")
+        .bind()
+        .onInput({ currentTarget: { type: "number", valueAsNumber: 2 } } as unknown as Event),
+    ).rejects.toThrow(/type/i);
+    await expect(
+      form
+        .field("amount")
+        .bind()
+        .onInput({ currentTarget: { type: "number", valueAsNumber: Number.NaN } } as unknown as Event),
+    ).rejects.toThrow(/number/i);
+
+    expect(form.getValues()).toEqual({ amount: 1, title: "initial" });
+  });
+
   it("validates fields on change and clears stale field errors", async () => {
     const form = createForm({
       initialValues: { email: "" },
@@ -332,6 +369,24 @@ describe("createForm", () => {
     expect(moved[1]?.key).toBe(initial[0]?.key);
     expect(removed.map((row) => row.value)).toEqual(["C", "B"]);
     expect(removed.map((row) => row.key)).toEqual([appended[2]?.key, initial[1]?.key]);
+  });
+
+  it("rejects scalar fieldArray values without mutating the scalar field", () => {
+    const form = createForm({
+      initialValues: { count: 1, items: ["A"] },
+    });
+
+    expect(() => form.fieldArray("count" as never)).toThrow(/array/i);
+    expect(form.getValues()).toEqual({ count: 1, items: ["A"] });
+  });
+
+  it("rejects an optional array field when its current value is undefined", () => {
+    const form = createForm({
+      initialValues: { items: undefined as string[] | undefined },
+    });
+
+    expect(() => form.fieldArray("items")).toThrow(/array/i);
+    expect(form.getValues()).toEqual({ items: undefined });
   });
 
   it("validates array fields after fieldArray updates", async () => {
