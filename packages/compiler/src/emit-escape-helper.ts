@@ -21,7 +21,7 @@ export function emitEscapeHtmlHelper(name: string): string {
   return [
     `function ${name}(value) {`,
     `  const _str = "" + (value ?? "");`,
-    `  const _match = /["&<>]/.exec(_str);`,
+    `  const _match = /[\\x22&<>]/.exec(_str);`,
     `  if (_match === null) return _str;`,
     `  let _html = "";`,
     `  let _last = 0;`,

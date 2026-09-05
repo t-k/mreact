@@ -1126,13 +1126,6 @@ function replaceImportedIdentifiers(code: string, bindings: ReadonlyMap<string, 
       continue;
     }
 
-    if (char === "/" && isRegularExpressionStart(code, index)) {
-      const end = regularExpressionEnd(code, index);
-      rewritten += code.slice(index, end);
-      index = end;
-      continue;
-    }
-
     if (isIdentifierStart(char)) {
       const end = identifierEnd(code, index);
       const identifier = code.slice(index, end);
@@ -1231,54 +1224,6 @@ function blockCommentEnd(code: string, start: number): number {
   const end = code.indexOf("*/", start + 2);
 
   return end === -1 ? code.length : end + 2;
-}
-
-function isRegularExpressionStart(code: string, start: number): boolean {
-  const previous = previousNonWhitespace(code, start);
-
-  if (previous === undefined || /[({[,:;=!?&|+\-*%^~<>]/u.test(previous)) {
-    return true;
-  }
-
-  const prefix = code.slice(0, start);
-  const keyword = prefix.match(/([A-Za-z_$][\w$]*)\s*$/u)?.[1];
-  return (
-    keyword !== undefined &&
-    /^(?:await|case|delete|in|instanceof|new|of|return|throw|typeof|void|yield)$/u.test(keyword)
-  );
-}
-
-function regularExpressionEnd(code: string, start: number): number {
-  let inCharacterClass = false;
-
-  for (let index = start + 1; index < code.length; index += 1) {
-    const char = code[index];
-
-    if (char === "\\") {
-      index += 1;
-      continue;
-    }
-
-    if (char === "[") {
-      inCharacterClass = true;
-      continue;
-    }
-
-    if (char === "]") {
-      inCharacterClass = false;
-      continue;
-    }
-
-    if (char === "/" && !inCharacterClass) {
-      let end = index + 1;
-      while (end < code.length && /[A-Za-z]/u.test(code[end] ?? "")) {
-        end += 1;
-      }
-      return end;
-    }
-  }
-
-  return code.length;
 }
 
 function identifierEnd(code: string, start: number): number {
