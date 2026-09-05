@@ -24,6 +24,23 @@ type RejectThenable<T> = [T] extends [never]
 /** Compares selected store values to decide whether subscribers should update. */
 export type StoreEquality<T> = (left: T, right: T) => boolean;
 
+/** Recursively readonly view used by Store.view without cloning ordinary reads. */
+export type ReadonlyStoreValue<T> = T extends (...args: never[]) => unknown
+  ? T
+  : T extends Date
+    ? Readonly<T>
+    : T extends RegExp
+      ? Readonly<T>
+      : T extends Map<infer TKey, infer TValue>
+        ? ReadonlyMap<ReadonlyStoreValue<TKey>, ReadonlyStoreValue<TValue>>
+        : T extends Set<infer TValue>
+          ? ReadonlySet<ReadonlyStoreValue<TValue>>
+          : T extends readonly unknown[]
+            ? { readonly [TKey in keyof T]: ReadonlyStoreValue<T[TKey]> }
+            : T extends object
+              ? { readonly [TKey in keyof T]: ReadonlyStoreValue<T[TKey]> }
+              : T;
+
 /** Describes one store instrumentation event emitted after a state change. */
 export interface StoreInstrumentationEvent<T extends object> {
   previous: T;
@@ -140,11 +157,27 @@ export interface SelectedCell<T> extends ReadonlyCell<T> {
   dispose(): void;
 }
 
+/** Provides readonly, reference-stable reads and explicit snapshots for a Store. */
+export interface ReadonlyStore<T extends object> {
+  readonly state: ReadonlyCell<ReadonlyStoreValue<T>>;
+  get(): ReadonlyStoreValue<T>;
+  snapshot(): T;
+  select<U>(
+    selector: (state: ReadonlyStoreValue<T>) => U,
+    equality?: StoreEquality<U>,
+  ): SelectedCell<U>;
+  subscribe(
+    listener: (state: ReadonlyStoreValue<T>, previous: ReadonlyStoreValue<T>) => void,
+  ): () => void;
+}
+
 /** Provides reactive state access, updates, transactions, selectors, and subscriptions. */
 export interface Store<T extends object> {
   readonly persistence: StorePersistence<T>;
   readonly state: ReadonlyCell<T>;
+  readonly view: ReadonlyStore<T>;
   get(): T;
+  snapshot(): T;
   set(next: StoreSetter<T>): void;
   replace(next: StoreReplacer<T>): void;
   transaction<TResult>(fn: () => TResult, ...error: RejectThenable<TResult>): void;
@@ -445,10 +478,31 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
     }
   }
 
+  const view: ReadonlyStore<T> = {
+    state: state as unknown as ReadonlyCell<ReadonlyStoreValue<T>>,
+    get: () => readUntracked() as ReadonlyStoreValue<T>,
+    snapshot: () => snapshotStoreValue(readUntracked()),
+    select<U>(selector: (value: ReadonlyStoreValue<T>) => U, equality = Object.is) {
+      return createSelectedCell(
+        readUntracked(),
+        subscribeListener,
+        selector as (value: T) => U,
+        equality,
+      );
+    },
+    subscribe(listener) {
+      return subscribeListener((next, previous) => {
+        listener(next as ReadonlyStoreValue<T>, previous as ReadonlyStoreValue<T>);
+      });
+    },
+  };
+
   return {
     persistence: { error: persistenceError, ready: persistenceReady, status: persistenceStatus },
     state,
+    view,
     get: () => state.get(),
+    snapshot: () => snapshotStoreValue(readUntracked()),
     set,
     replace,
     transaction,
@@ -492,6 +546,11 @@ export function shallowEqual<T>(left: T, right: T): boolean {
   }
 
   return compareOwnEnumerableValues(left, right);
+}
+
+/** Creates an independent supported-value snapshot without cloning ordinary Store reads. */
+export function snapshotStoreValue<T>(value: T): T {
+  return cloneSnapshotValue(value, new WeakMap<object, unknown>()) as T;
 }
 
 function compareOwnEnumerableValues(left: object, right: object): boolean {
@@ -666,4 +725,65 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   const prototype = Object.getPrototypeOf(value);
 
   return prototype === Object.prototype || prototype === null;
+}
+
+function cloneSnapshotValue(value: unknown, seen: WeakMap<object, unknown>): unknown {
+  if (value === null || typeof value !== "object") {
+    return value;
+  }
+
+  const existing = seen.get(value);
+  if (existing !== undefined) {
+    return existing;
+  }
+
+  if (value instanceof Date) {
+    return new Date(value.getTime());
+  }
+  if (value instanceof RegExp) {
+    return new RegExp(value.source, value.flags);
+  }
+  if (value instanceof WeakMap || value instanceof WeakSet || value instanceof Promise) {
+    throw new TypeError("Store snapshots do not support weak collections or Promise values.");
+  }
+  if (value instanceof Map) {
+    const copy = new Map<unknown, unknown>();
+    seen.set(value, copy);
+    for (const [key, entry] of value) {
+      copy.set(cloneSnapshotValue(key, seen), cloneSnapshotValue(entry, seen));
+    }
+    return copy;
+  }
+  if (value instanceof Set) {
+    const copy = new Set<unknown>();
+    seen.set(value, copy);
+    for (const entry of value) {
+      copy.add(cloneSnapshotValue(entry, seen));
+    }
+    return copy;
+  }
+  if (Array.isArray(value)) {
+    const copy: unknown[] = [];
+    seen.set(value, copy);
+    for (const entry of value) {
+      copy.push(cloneSnapshotValue(entry, seen));
+    }
+    return copy;
+  }
+
+  const copy = Object.create(Object.getPrototypeOf(value)) as Record<PropertyKey, unknown>;
+  seen.set(value, copy);
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor?.enumerable !== true || !("value" in descriptor)) {
+      continue;
+    }
+    Object.defineProperty(copy, key, {
+      configurable: descriptor.configurable === true,
+      enumerable: true,
+      value: cloneSnapshotValue(descriptor.value, seen),
+      writable: descriptor.writable === true,
+    });
+  }
+  return copy;
 }

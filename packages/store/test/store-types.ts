@@ -2,6 +2,16 @@ import { createStore } from "../src/index.js";
 
 const store = createStore({ count: 0 });
 
+const readonlyStore = createStore({ profile: { name: "Ada" }, tags: ["reactive"] });
+const readonlyState = readonlyStore.view.get();
+// @ts-expect-error Readonly store views reject nested writes.
+readonlyState.profile.name = "Grace";
+// @ts-expect-error Readonly store views reject array mutation.
+readonlyState.tags.push("query");
+
+const snapshot = readonlyStore.snapshot();
+snapshot.profile.name = "Grace";
+
 store.transaction(() => {
   store.set({ count: 1 });
 });

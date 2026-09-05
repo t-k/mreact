@@ -17,11 +17,21 @@ const snapshot = counter.select((state) => ({ label: state.label }), shallowEqua
 counter.set((state) => ({ count: state.count + 1 }));
 ```
 
+Use `store.view` for reference-stable deep readonly reads and `store.snapshot()` when an independent mutable copy is required. Readonly views do not freeze the live object, so updates still go through `set()`, `replace()`, or `update()`.
+
+```ts
+const readonlyState = counter.view.get();
+const independent = counter.snapshot();
+independent.count = 10;
+```
+
 ## Core APIs
 
 - `createStore()` creates a store with state and actions.
 - `store.select()` subscribes to a reactive slice of store state and returns a selected cell with `dispose()` for code that creates selectors outside the framework cleanup lifecycle.
 - `store.subscribe()` observes changes from outside the framework runtime.
+- `store.view` exposes readonly state, selectors, and subscriptions without cloning each read.
+- `store.snapshot()` clones arrays, plain objects, dates, regular expressions, maps, sets, and custom object instances. Functions remain shared references; weak collections and promises are rejected.
 - `store.transaction()` batches multiple updates into one notification.
 - `createRequestStoreFactory()` creates request-isolated store instances.
 - The `persist` option connects store state to a storage adapter. Pass a callback for write-only persistence, or use `{ load, save, version, migrate }` when the store should hydrate and migrate saved state. Persisted envelopes are version-tagged so ordinary application values shaped like `{ state, version }` remain ordinary state. To read a legacy untagged `{ state, version }` record during migration, set the literal `acceptLegacyPersistedState: true`; this opt-in prevents domain state from being guessed as an envelope. When the choice comes from a runtime boolean, branch into separate current and legacy option objects so TypeScript can preserve the corresponding load contract.

@@ -34,6 +34,27 @@ describe("createStore", () => {
     expect(store.get()).toEqual({ count: 1, name: "Ada" });
   });
 
+  it("exposes a reference-stable readonly view and an explicit independent snapshot", () => {
+    const handler = () => "handled";
+    const store = createStore({
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      handler,
+      profile: { name: "Ada" },
+      tags: new Set(["reactive"]),
+    });
+
+    expect(store.view.get()).toBe(store.get());
+    const snapshot = store.snapshot();
+    snapshot.profile.name = "Grace";
+    snapshot.tags.add("query");
+    snapshot.createdAt.setUTCFullYear(2030);
+
+    expect(store.get().profile.name).toBe("Ada");
+    expect(store.get().tags).toEqual(new Set(["reactive"]));
+    expect(store.get().createdAt.getUTCFullYear()).toBe(2026);
+    expect(snapshot.handler).toBe(handler);
+  });
+
   it("replaces the full state when replace is used", () => {
     const store = createStore<{ count: number; name?: string }>({
       count: 0,

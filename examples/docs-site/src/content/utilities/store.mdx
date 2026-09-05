@@ -32,6 +32,14 @@ const labelSnapshot = counter.select((state) => ({ label: state.label }), shallo
 counter.set((state) => ({ count: state.count + 1 }));
 ```
 
+Use `store.view` for ordinary read paths that should reject nested writes in TypeScript without allocating a clone. Use `store.snapshot()` when code needs an independent mutable value, such as a draft or an outbound payload. Snapshotting clones supported object values, dates, regular expressions, maps, sets, arrays, and custom instances; functions remain shared references and weak collections or promises throw a clear error.
+
+```ts
+const readonlyState = counter.view.get();
+const draft = counter.snapshot();
+draft.count = 10;
+```
+
 `store.select()` returns a selected cell. Use `dispose()` for selectors created outside a framework cleanup lifecycle.
 
 ## Actions and transactions
