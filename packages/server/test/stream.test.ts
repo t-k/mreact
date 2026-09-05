@@ -33,9 +33,9 @@ describe("server streaming runtime", () => {
     for (const strategy of ["concat", "array-join", "auto"] as const) {
       const sink = createStringSink({ strategy, arrayJoinThreshold: 2 });
 
-      sink.append("<div title=\"");
+      sink.append('<div title="');
       sink.append("Cell &lt;important&gt;");
-      sink.append("\">ok</div>");
+      sink.append('">ok</div>');
 
       expect(sink.toString()).toBe(expected);
       expect(sink.bufferStrategy()).toBe(strategy === "auto" ? "array-join" : strategy);
@@ -154,21 +154,40 @@ describe("server streaming runtime", () => {
     await expect(readStream(stream)).resolves.toBe("12345678abcdefgh");
   });
 
+  test("renderToReadableStream enforces a separate queued chunk limit", async () => {
+    const stream = renderToReadableStream(
+      (sink) => {
+        sink.append("SHELL");
+        sink.defer?.(
+          Promise.resolve().then(() => {
+            sink.append("BODY");
+          }),
+        );
+      },
+      { maxQueuedBytes: 1024, maxQueuedChunks: 1 },
+    );
+
+    const reader = stream.getReader();
+    await expect(reader.read()).resolves.toMatchObject({ done: false });
+    await expect(reader.read()).rejects.toThrow(/chunk limit of 1/i);
+  });
+
+  test("renderToReadableStream validates the queued chunk limit", () => {
+    expect(() => renderToReadableStream(() => {}, { maxQueuedChunks: 0 })).toThrow(
+      /maxQueuedChunks must be a positive safe integer/i,
+    );
+  });
+
   test("renderOutOfOrderBoundary inherits the parent abort signal while rendering a fragment", async () => {
     let childSignal: AbortSignal | undefined;
     let parentSignal: AbortSignal | undefined;
     const stream = renderToReadableStream((sink) => {
       parentSignal = sink.signal;
       sink.append("SHELL");
-      renderOutOfOrderBoundary(
-        sink,
-        "abortable",
-        Promise.resolve("BODY"),
-        async (boundarySink) => {
-          childSignal = boundarySink.signal;
-          await new Promise(() => undefined);
-        },
-      );
+      renderOutOfOrderBoundary(sink, "abortable", Promise.resolve("BODY"), async (boundarySink) => {
+        childSignal = boundarySink.signal;
+        await new Promise(() => undefined);
+      });
     });
     const reader = stream.getReader();
 
@@ -389,21 +408,21 @@ describe("server streaming runtime", () => {
 
   test("renderOutOfOrderBoundary rejects async placeholder callbacks in development", async () => {
     const stream = renderToReadableStream((sink) => {
-        renderOutOfOrderBoundary(
-          sink,
-          "frag",
-          Promise.resolve("BODY"),
-          (boundarySink, value) => {
-            boundarySink.append(value);
-          },
-          {
-            placeholder: (async (placeholderSink) => {
-              await Promise.resolve();
-              placeholderSink.append("WAIT");
-            }) as never,
-          },
-        );
-      });
+      renderOutOfOrderBoundary(
+        sink,
+        "frag",
+        Promise.resolve("BODY"),
+        (boundarySink, value) => {
+          boundarySink.append(value);
+        },
+        {
+          placeholder: (async (placeholderSink) => {
+            await Promise.resolve();
+            placeholderSink.append("WAIT");
+          }) as never,
+        },
+      );
+    });
 
     await expect(stream.getReader().read()).rejects.toThrow(
       "renderOutOfOrderBoundary placeholder must be synchronous",
@@ -456,7 +475,7 @@ describe("server streaming runtime", () => {
     const html = sink.toString();
     expect(html).toContain("<span>Ada</span>");
     expect(html).toContain('data-mreact-await="await0"');
-    expect(html).toContain('__mreactAwaitData');
+    expect(html).toContain("__mreactAwaitData");
     expect(html).toContain('"await0"');
     expect(html).toContain('{"name":"Ada","id":1}');
   });
@@ -479,12 +498,9 @@ describe("server streaming runtime", () => {
   test("async boundary hydration data attribute escapes quoted await ids", async () => {
     const sink = createStringSink();
 
-    await renderAsyncBoundary(
-      sink,
-      Promise.resolve("ok"),
-      () => {},
-      { hydrationAwaitId: `await"bad>` },
-    );
+    await renderAsyncBoundary(sink, Promise.resolve("ok"), () => {}, {
+      hydrationAwaitId: `await"bad>`,
+    });
 
     const html = sink.toString();
     expect(html).toContain('data-mreact-await="await&quot;bad&gt;"');
@@ -837,7 +853,7 @@ describe("server streaming runtime", () => {
       );
     });
 
-    expect(html).not.toContain("</script>\"");
+    expect(html).not.toContain('</script>"');
     expect(html).toContain('$RC("B:\\u2028\\u003c/script>","S:\\u2029\\u003cscript>")');
   });
 
@@ -913,12 +929,9 @@ describe("server streaming runtime", () => {
 
     try {
       const sink = createStringSink();
-      await renderAsyncBoundary(
-        sink,
-        Promise.resolve(new Date("2026-01-01T00:00:00Z")),
-        () => {},
-        { hydrationAwaitId: "await-date" },
-      );
+      await renderAsyncBoundary(sink, Promise.resolve(new Date("2026-01-01T00:00:00Z")), () => {}, {
+        hydrationAwaitId: "await-date",
+      });
     } finally {
       console.warn = originalWarn;
       if (originalEnv === undefined) {
@@ -972,12 +985,9 @@ describe("server streaming runtime", () => {
         text: "x".repeat(80),
       }));
 
-      await renderAsyncBoundary(
-        sink,
-        Promise.resolve(huge),
-        () => {},
-        { hydrationAwaitId: "await-large" },
-      );
+      await renderAsyncBoundary(sink, Promise.resolve(huge), () => {}, {
+        hydrationAwaitId: "await-large",
+      });
     } finally {
       console.warn = originalWarn;
     }
@@ -1000,12 +1010,9 @@ describe("server streaming runtime", () => {
         text: "x".repeat(80),
       }));
 
-      await renderAsyncBoundary(
-        sink,
-        Promise.resolve(huge),
-        () => {},
-        { hydrationAwaitId: "await-huge" },
-      );
+      await renderAsyncBoundary(sink, Promise.resolve(huge), () => {}, {
+        hydrationAwaitId: "await-huge",
+      });
     } finally {
       console.error = originalError;
       console.warn = originalWarn;
