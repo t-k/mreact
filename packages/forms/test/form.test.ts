@@ -265,6 +265,22 @@ describe("createForm", () => {
     expect(binding.value).toBe("42");
   });
 
+  it("preserves explicit null results from parse and format callbacks", async () => {
+    const form = createForm({
+      initialValues: { value: null as string | null },
+    });
+    const binding = form.field("value").bind({
+      format: () => null,
+      parse: () => null,
+    });
+
+    expect(binding.value).toBeNull();
+    await binding.onInput({ currentTarget: { value: "ignored", type: "text" } } as unknown as Event);
+
+    expect(form.getValues()).toEqual({ value: null });
+    expect(binding.value).toBeNull();
+  });
+
   it("rejects incompatible inferred DOM values and invalid numbers before commit", async () => {
     const form = createForm({
       initialValues: { amount: 1, title: "initial" },

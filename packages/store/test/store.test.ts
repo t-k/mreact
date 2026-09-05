@@ -158,6 +158,44 @@ describe("createStore", () => {
     expect(seen).toEqual([0, 1]);
   });
 
+  it("lets effects track reads through the readonly view", async () => {
+    const store = createStore({ count: 0 });
+    const seen: number[] = [];
+
+    effect(() => {
+      seen.push(store.view.get().count);
+    });
+    store.set({ count: 1 });
+    await flushEffects();
+
+    expect(seen).toEqual([0, 1]);
+  });
+
+  it("clones typed arrays and rejects arbitrary class instances in snapshots", () => {
+    class PrivateValue {
+      #value: number;
+
+      constructor(value: number) {
+        this.#value = value;
+      }
+
+      read(): number {
+        return this.#value;
+      }
+    }
+
+    const bytesStore = createStore({ bytes: new Uint8Array([1, 2, 3]) });
+    const bytesSnapshot = bytesStore.snapshot();
+    bytesSnapshot.bytes[0] = 9;
+
+    expect(bytesSnapshot.bytes).toBeInstanceOf(Uint8Array);
+    expect([...bytesSnapshot.bytes]).toEqual([9, 2, 3]);
+    expect([...bytesStore.get().bytes]).toEqual([1, 2, 3]);
+
+    const classStore = createStore({ value: new PrivateValue(1) });
+    expect(() => classStore.snapshot()).toThrow(/arbitrary class instances/);
+  });
+
   it("notifies subscribers with next and previous state", () => {
     const store = createStore({ count: 0 });
     const calls: Array<[{ count: number }, { count: number }]> = [];

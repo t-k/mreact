@@ -39,3 +39,8 @@ store.transaction(() => Promise.resolve());
 const structuralThenable = { then: () => undefined };
 // @ts-expect-error Structural thenables are also rejected by the synchronous callback type.
 store.transaction(() => structuralThenable);
+
+const syncOrAsyncCallback: () => void | Promise<void> = () =>
+  Math.random() > -1 ? undefined : Promise.resolve();
+// @ts-expect-error A callback whose return may be a thenable is not synchronous.
+store.transaction(syncOrAsyncCallback);

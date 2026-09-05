@@ -1806,7 +1806,12 @@ export function middleware(request: Request) {
         env: {},
         params: { id: "ada" },
         queryClient: createQueryClient(),
-        request: new Request("https://app.example/users/ada"),
+        request: {
+          hash: "",
+          pathname: "/users/ada",
+          search: "",
+          url: "https://app.example/users/ada",
+        },
         route: {
           file: "users/$id/page.tsx",
           kind: "page",

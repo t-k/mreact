@@ -17,9 +17,9 @@ export type StoreReplacer<T extends object> = T | ((previous: T) => T);
 export type ThenableLike = { then: (...args: never[]) => unknown };
 export type RejectThenable<T> = [T] extends [never]
   ? []
-  : [T] extends [ThenableLike]
-    ? [error: never]
-    : [];
+  : [Extract<T, ThenableLike>] extends [never]
+    ? []
+    : [error: never];
 
 /** Compares selected store values to decide whether subscribers should update. */
 export type StoreEquality<T> = (left: T, right: T) => boolean;
@@ -509,7 +509,7 @@ export function createStore<T extends object, TPersisted extends object = T>(
 
   const view: ReadonlyStore<T> = {
     state: state as unknown as ReadonlyCell<ReadonlyStoreValue<T>>,
-    get: () => readUntracked() as ReadonlyStoreValue<T>,
+    get: () => state.get() as ReadonlyStoreValue<T>,
     snapshot: () => snapshotStoreValue(readUntracked()),
     select<U>(selector: (value: ReadonlyStoreValue<T>) => U, equality = Object.is) {
       return createSelectedCell(
@@ -798,6 +798,29 @@ function cloneSnapshotValue(value: unknown, seen: WeakMap<object, unknown>): unk
       copy.push(cloneSnapshotValue(entry, seen));
     }
     return copy;
+  }
+
+  if (value instanceof ArrayBuffer) {
+    return value.slice(0);
+  }
+
+  if (ArrayBuffer.isView(value)) {
+    if (value instanceof DataView) {
+      const buffer = value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength);
+      return new DataView(buffer);
+    }
+
+    const constructor = value.constructor as {
+      from?: (source: ArrayLike<number>) => unknown;
+    };
+    if (typeof constructor.from !== "function") {
+      throw new TypeError("Store snapshots do not support this typed array value.");
+    }
+    return constructor.from(value as unknown as ArrayLike<number>);
+  }
+
+  if (!isPlainObject(value)) {
+    throw new TypeError("Store snapshots do not support arbitrary class instances.");
   }
 
   const copy = Object.create(Object.getPrototypeOf(value)) as Record<PropertyKey, unknown>;

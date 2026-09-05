@@ -55,4 +55,29 @@ describe("devtools resource inspector", () => {
       retainedMetadata: 0,
     });
   });
+
+  test("does not retain unbounded identifiers for omitted live metadata", () => {
+    const inspector = createDevtoolsResourceInspector(1);
+    const retained = inspector.register({ kind: "scope" });
+    const omitted = Array.from({ length: 10_000 }, () => inspector.register({ kind: "scope" }));
+
+    expect(inspector.census()).toMatchObject({
+      live: 10_001,
+      missingMetadata: 10_000,
+      retainedMetadata: 1,
+    });
+
+    for (const resource of omitted) {
+      resource.dispose();
+    }
+    retained.dispose();
+
+    expect(inspector.census()).toMatchObject({
+      live: 0,
+      missingMetadata: 0,
+      retainedMetadata: 1,
+    });
+    inspector.clearSnapshots();
+    expect(inspector.census().retainedMetadata).toBe(0);
+  });
 });

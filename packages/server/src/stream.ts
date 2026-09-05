@@ -124,7 +124,7 @@ export function renderToReadableStream(
         if (abortController.signal.aborted) {
           return;
         }
-        terminate(error, error);
+        terminateWithError(error);
         return;
       }
 
@@ -157,7 +157,7 @@ export function renderToReadableStream(
           if (abortController.signal.aborted) {
             return;
           }
-          terminate(error, error);
+          terminateWithError(error);
         }
       }
     },
@@ -255,10 +255,10 @@ export function renderToReadableStream(
     const error = new RangeError(
       `renderToReadableStream exceeded its maximum queued byte limit of ${maxQueuedBytes} bytes (attempted ${attemptedBytes} bytes).`,
     );
-    terminate(error, error);
+    terminateWithError(error);
   }
 
-  function terminate(reason: unknown, error?: unknown): void {
+  function terminate(reason: unknown): void {
     if (terminated) {
       return;
     }
@@ -271,10 +271,15 @@ export function renderToReadableStream(
     queuedBytes = 0;
     abortController.abort(reason);
     resolveBackpressureIfReady();
+  }
 
-    if (error !== undefined) {
-      controllerRef?.error(error);
+  function terminateWithError(error: unknown): void {
+    if (terminated) {
+      return;
     }
+
+    terminate(error);
+    controllerRef?.error(error);
   }
 }
 

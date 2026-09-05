@@ -63,6 +63,23 @@ describe("server streaming runtime", () => {
     await expect(readStream(stream)).resolves.toBe("<p>Stream</p>");
   });
 
+  test("rejects the reader when synchronous render throws undefined", async () => {
+    const stream = renderToReadableStream(() => {
+      throw undefined;
+    });
+
+    await expect(stream.getReader().read()).rejects.toBeUndefined();
+  });
+
+  test("rejects the reader when asynchronous render rejects with undefined", async () => {
+    const stream = renderToReadableStream(async () => {
+      await Promise.resolve();
+      throw undefined;
+    });
+
+    await expect(stream.getReader().read()).rejects.toBeUndefined();
+  });
+
   test("renderToReadableStream exposes an abort signal and aborts it on cancel", async () => {
     let signal: AbortSignal | undefined;
     let aborted = false;

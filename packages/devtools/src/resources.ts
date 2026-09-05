@@ -63,9 +63,9 @@ export function createDevtoolsResourceInspector(
 ): DevtoolsResourceInspector {
   const records = new Map<string, DevtoolsResourceRecord>();
   const counters = new Map<string, { created: number; disposed: number; live: number }>();
-  const omittedIds = new Set<string>();
   const limit = Math.max(0, Math.floor(maxResources));
   let nextId = 0;
+  let omittedLiveCount = 0;
   let disposed = false;
 
   const register = (input: DevtoolsResourceRegistration): DevtoolsResourceHandle => {
@@ -85,13 +85,14 @@ export function createDevtoolsResourceInspector(
           status: "live",
         });
       } else {
-        omittedIds.add(id);
+        omittedLiveCount += 1;
       }
     } else {
-      omittedIds.add(id);
+      omittedLiveCount += 1;
     }
 
     let active = true;
+    let metadataOmitted = records.has(id) === false;
     return {
       get id() {
         return id;
@@ -103,6 +104,10 @@ export function createDevtoolsResourceInspector(
         active = false;
         counter.disposed += 1;
         counter.live = Math.max(0, counter.live - 1);
+        if (metadataOmitted) {
+          metadataOmitted = false;
+          omittedLiveCount = Math.max(0, omittedLiveCount - 1);
+        }
         const record = records.get(id);
         if (record !== undefined) {
           records.set(id, { ...record, status: "disposed" });
@@ -141,7 +146,7 @@ export function createDevtoolsResourceInspector(
       return {
         byKind,
         live: Object.values(byKind).reduce((total, item) => total + item.live, 0),
-        missingMetadata: omittedIds.size,
+        missingMetadata: omittedLiveCount,
         retainedMetadata: records.size,
       };
     },
@@ -151,12 +156,12 @@ export function createDevtoolsResourceInspector(
           records.delete(id);
         }
       }
-      omittedIds.clear();
+      omittedLiveCount = 0;
     },
     dispose() {
       disposed = true;
       records.clear();
-      omittedIds.clear();
+      omittedLiveCount = 0;
       counters.clear();
     },
     register,

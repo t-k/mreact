@@ -596,7 +596,10 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
           const updateValue = async (inputEvent: Event) => {
             const currentValue = state.get().values[name];
             const rawValue = eventValue(inputEvent, currentValue);
-            const parsedValue = bindingOptions.parse?.(rawValue, inputEvent) ?? rawValue;
+            const parsedValue =
+              bindingOptions.parse === undefined
+                ? rawValue
+                : bindingOptions.parse(rawValue, inputEvent);
             await setValue(name, validateBoundValue(parsedValue, currentValue));
           };
 
@@ -616,7 +619,9 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
             },
             get value() {
               const currentValue = state.get().values[name];
-              return (bindingOptions.format?.(currentValue) ?? currentValue) as TBoundValue;
+              return (bindingOptions.format === undefined
+                ? currentValue
+                : bindingOptions.format(currentValue)) as TBoundValue;
             },
           };
         },
