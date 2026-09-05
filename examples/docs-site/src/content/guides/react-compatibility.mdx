@@ -3,9 +3,9 @@ export const description = "How Mreact's React-compatible runtime fits into app 
 
 # React Compatibility
 
-Mreact's primary app path is the compiled App Router model, but the workspace also includes `@reckona/mreact-compat` for React compatibility. Use it when you need React-like runtime behavior, when you are evaluating third-party React libraries, or when an integration needs React-style JSX runtimes, hooks, roots, scheduling, hydration, Suspense, or server rendering APIs.
+Mreact's primary path for new applications is the compiled App Router model with native `cell()`, `computed()`, and `effect()` primitives. The workspace also includes `@reckona/mreact-compat` for React-style authoring and runtime behavior. Use the compatibility path when migrating an existing React codebase, evaluating a third-party React library, or integrating code that depends on React-style JSX runtimes, hooks, roots, scheduling, hydration, Suspense, or server rendering APIs.
 
-Most applications should import from `@reckona/mreact`:
+React-style application code should import compatibility exports from `@reckona/mreact`:
 
 ```ts
 import { createElement, useState } from "@reckona/mreact";
@@ -17,6 +17,38 @@ Importing `@reckona/mreact-compat` directly is mainly for tests, framework integ
 import ReactCompat, { createElement, useState } from "@reckona/mreact-compat";
 import { jsx } from "@reckona/mreact-compat/jsx-runtime";
 ```
+
+Package location and execution mode are separate decisions. A component imported from `@reckona/mreact` can still become a client boundary when its route path needs browser behavior, and a compatibility component can remain server-renderable when its compiled shape is safe. Use the [Basics guide](/guides/basics/) for the native starting path and the [Server and Client Model](/guides/server-and-client-model/) for boundary ownership.
+
+| Situation | Authoring choice | Boundary guidance |
+| --- | --- | --- |
+| New application code | Native App Router with `cell`, `computed`, and `effect` | Let inference keep the route server-rendered around the interactive path. |
+| React migration or ecosystem package | `@reckona/mreact` or `@reckona/mreact-compat` | Keep the compatibility surface focused and verify the library behavior you use. |
+| Imperative DOM integration | `@reckona/mreact-reactive-dom` | Make the root or cleanup scope the owner of every binding and listener. |
+
+For example, a native counter uses `count.get()` as its tracked read:
+
+```tsx
+import { cell } from "@reckona/mreact-reactive-core";
+
+export function NativeCounter() {
+  const count = cell(0);
+  return <button onClick={() => count.set((value) => value + 1)}>{count.get()}</button>;
+}
+```
+
+The compatibility equivalent uses the React-style hook contract:
+
+```tsx
+import { useState } from "@reckona/mreact";
+
+export function CompatCounter() {
+  const [count, setCount] = useState(0);
+  return <button onClick={() => setCount((value) => value + 1)}>{count}</button>;
+}
+```
+
+Optimization or compatibility fallback can change how much code runs and ships, but it should not change the observable counter behavior. Keep low-level DOM work under an explicit `createRoot()` or `createCleanupScope()` owner so listeners, effects, subscriptions, and pending work are disposed with the integration.
 
 ## Vite configuration
 

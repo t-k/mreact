@@ -11,6 +11,38 @@ A Mreact app is a route tree. Route files render on the server by default, layou
 
 Client JavaScript is inferred from the code that needs it. Event handlers, reactive state, and direct browser APIs usually make only the component path that uses them client-interactive, while the surrounding route can stay server-rendered. Use `.client.tsx` or route-level `"use client"` when you want to make that boundary explicit or when the whole screen should run in the browser.
 
+For a new Mreact application, begin with the compiled App Router model and native primitives: use `cell()` for writable state, `computed()` for derived values, and `effect()` for imperative side effects. The package names describe authoring APIs, while the compiler decides which parts execute on the server and which parts hydrate in the browser.
+
+| Need | Starting point | Execution and ownership |
+| --- | --- | --- |
+| New Mreact UI | App Router with `cell`, `computed`, and `effect` | Native compiled boundaries; keep state inside the component or cleanup owner that owns it. |
+| React-style code or an ecosystem library | `@reckona/mreact-compat` or `@reckona/mreact` compatibility exports | Compatibility execution is appropriate for migration and verified library scope; test the behavior you depend on. |
+| Direct DOM or imperative integration | `@reckona/mreact-reactive-dom` with `createRoot()` and explicit disposal | The root or `createCleanupScope()` owns bindings, listeners, subscriptions, and other resources. |
+
+The native and compatibility paths can implement the same counter behavior. Native authoring uses tracked cell reads:
+
+```tsx
+import { cell } from "@reckona/mreact-reactive-core";
+
+export function NativeCounter() {
+  const count = cell(0);
+  return <button onClick={() => count.set((value) => value + 1)}>{count.get()}</button>;
+}
+```
+
+React-style authoring uses the compatibility hook contract:
+
+```tsx
+import { useState } from "@reckona/mreact";
+
+export function CompatCounter() {
+  const [count, setCount] = useState(0);
+  return <button onClick={() => setCount((value) => value + 1)}>{count}</button>;
+}
+```
+
+Both examples describe a counter; optimization and fallback decisions may change the shipped work, but they preserve the observable state and event behavior covered by the selected API contract.
+
 ## Reactive values
 
 Use `cell()` for writable state. A cell stores one value, `.get()` reads it, and `.set()` writes either a replacement value or an updater function.
