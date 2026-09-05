@@ -5,7 +5,7 @@ export const description = "How Mreact's React-compatible runtime fits into app 
 
 Mreact's primary path for new applications is the compiled App Router model with native `cell()`, `computed()`, and `effect()` primitives. The workspace also includes `@reckona/mreact-compat` for React-style authoring and runtime behavior. Use the compatibility path when migrating an existing React codebase, evaluating a third-party React library, or integrating code that depends on React-style JSX runtimes, hooks, roots, scheduling, hydration, Suspense, or server rendering APIs.
 
-React-style application code should import compatibility exports from `@reckona/mreact`:
+Most applications should import from `@reckona/mreact`. React-style application code should import compatibility exports from that entrypoint:
 
 ```ts
 import { createElement, useState } from "@reckona/mreact";
