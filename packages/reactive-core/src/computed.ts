@@ -1,6 +1,11 @@
 import type { ReactiveComputation, Source } from "./state.js";
 import { schedulePendingFlush } from "./scheduler.js";
-import { createUntrackedDependency, runtimeState, untrackedDependencyIsCurrent } from "./state.js";
+import {
+  bumpSourceVersion,
+  createUntrackedDependency,
+  runtimeState,
+  untrackedDependencyIsCurrent,
+} from "./state.js";
 import { registerCleanup } from "./cleanup-scope.js";
 import { registerReactiveDevtoolsResource } from "./devtools.js";
 import {
@@ -38,7 +43,10 @@ export function computed<T>(
   const source: Source = {
     isCurrent: () =>
       untrackedDependencies.every((dependency) => untrackedDependencyIsCurrent(dependency)),
-    onNoSubscribers: suspendIfUnobserved,
+    // Reattaching a cached computed can briefly remove its last direct
+    // subscriber while a sibling reader is still restoring the same graph.
+    // Preserve the dormant transitive dependencies through that transition.
+    onNoSubscribers: () => suspendIfUnobserved(true),
     subscribers: null,
   };
 
@@ -203,13 +211,17 @@ export function computed<T>(
     }
   }
 
-  function suspendIfUnobserved(): void {
+  function suspendIfUnobserved(preserveExisting = false): void {
     if (computation.disposed || source.subscribers !== null) {
       return;
     }
 
     const wasDirty = dirty;
     const capturedDependencies = Array.from(computation.deps, createUntrackedDependency);
+    if (preserveExisting && computation.deps.size === 0 && untrackedDependencies.length > 0) {
+      return;
+    }
+
     if (capturedDependencies.some((dependency) => dependency === undefined)) {
       untrackedDependencies = [];
       hasValue = false;
@@ -229,6 +241,7 @@ export function computed<T>(
 
   return {
     get(): T {
+      const wasDormant = untrackedDependencies.length > 0;
       const dependenciesChanged = untrackedDependencies.some(
         (dependency) => !untrackedDependencyIsCurrent(dependency),
       );
@@ -251,7 +264,20 @@ export function computed<T>(
         }
       }
 
-      return recompute();
+      const wasDirty = dirty;
+      const previousHasValue = hasValue;
+      const previousValue = value;
+      const nextValue = recompute();
+
+      if (wasDormant && wasDirty && previousHasValue && !equals(previousValue, nextValue)) {
+        // A dormant computed has no subscribers to notify before this read,
+        // but its source version still needs to advance so other dormant
+        // readers observe the refreshed value through their snapshots. The
+        // current reader publishes its own result after this nested read.
+        bumpSourceVersion(source);
+      }
+
+      return nextValue;
     },
   };
 

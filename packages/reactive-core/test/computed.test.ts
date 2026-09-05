@@ -45,6 +45,21 @@ describe("computed", () => {
     secondDispose();
   });
 
+  test("keeps transitive dependencies when sibling readers reattach to a dormant computed", () => {
+    const source = cell(1);
+    const shared = computed(() => source.get() * 2);
+    const first = computed(() => shared.get() + 10);
+    const second = computed(() => shared.get() + 20);
+
+    expect(first.get()).toBe(12);
+    expect(second.get()).toBe(22);
+
+    source.set(2);
+
+    expect(first.get()).toBe(14);
+    expect(second.get()).toBe(24);
+  });
+
   test("releases restored upstream dependencies when a dormant computed throws", () => {
     const shouldThrow = cell(false);
     const source = cell(1);
