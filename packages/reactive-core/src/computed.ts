@@ -1,6 +1,11 @@
 import type { ReactiveComputation, Source } from "./state.js";
 import { schedulePendingFlush } from "./scheduler.js";
-import { runtimeState } from "./state.js";
+import {
+  createUntrackedDependency,
+  runtimeState,
+  untrackedDependencyIsCurrent,
+} from "./state.js";
+import { registerCleanup } from "./cleanup-scope.js";
 import {
   cleanupAddedDeps,
   cleanupDeps,
@@ -8,6 +13,7 @@ import {
   nextTrackingVersionFor,
   notifySubscribers,
   preserveIncrementalTracking,
+  addSourceSubscriber,
   trackSource,
 } from "./tracking.js";
 import type { ReadonlyCell } from "./types.js";
@@ -28,9 +34,13 @@ export function computed<T>(
   let hasValue = false;
   let value: T;
   let dirty = true;
+  let untrackedDependencies: Array<
+    NonNullable<ReturnType<typeof createUntrackedDependency>>
+  > = [];
   const equals = typeof options === "function" ? options : (options?.equals ?? Object.is);
 
   const source: Source = {
+    onNoSubscribers: suspendIfUnobserved,
     subscribers: null,
   };
 
@@ -72,10 +82,16 @@ export function computed<T>(
       cleanupDeps(computation);
       computation.orderedDeps = undefined;
       source.subscribers = null;
+      source.onNoSubscribers = undefined;
+      hasValue = false;
+      value = undefined as T;
+      dirty = true;
+      untrackedDependencies = [];
     },
   };
 
   runtimeState.nextComputationId += 1;
+  registerCleanup(computation.dispose);
 
   function publishIfChanged(): void {
     const previousHasValue = hasValue;
@@ -103,6 +119,10 @@ export function computed<T>(
   }
 
   function recompute(): T {
+    if (computation.disposed) {
+      throw new Error("Cannot read a disposed computed value");
+    }
+
     if (!dirty && hasValue) {
       return value;
     }
@@ -158,7 +178,13 @@ export function computed<T>(
       hasValue = true;
       dirty = false;
 
-      return value;
+      if (source.subscribers === null) {
+        suspendIfUnobserved();
+      } else {
+        untrackedDependencies = [];
+      }
+
+      return nextValue;
     } catch (error) {
       cleanupAddedDeps(computation);
       dirty = true;
@@ -174,9 +200,45 @@ export function computed<T>(
     }
   }
 
+  function suspendIfUnobserved(): void {
+    if (computation.disposed || source.subscribers !== null) {
+      return;
+    }
+
+    const wasDirty = dirty;
+    const capturedDependencies = Array.from(computation.deps, createUntrackedDependency);
+    if (capturedDependencies.some((dependency) => dependency === undefined)) {
+      untrackedDependencies = [];
+      hasValue = false;
+      value = undefined as T;
+      dirty = true;
+    } else {
+      untrackedDependencies = capturedDependencies as Array<
+        NonNullable<ReturnType<typeof createUntrackedDependency>>
+      >;
+      dirty = wasDirty;
+    }
+    computation.queued = false;
+    runtimeState.pendingComputed.delete(computation);
+    cleanupDeps(computation);
+    computation.orderedDeps = undefined;
+  }
+
   return {
     get(): T {
+      const dependenciesChanged = untrackedDependencies.some(
+        (dependency) => !untrackedDependencyIsCurrent(dependency),
+      );
+      if (dependenciesChanged) {
+        dirty = true;
+        restoreUntrackedDependencies();
+      }
+
       trackSource(source);
+
+      if (source.subscribers !== null) {
+        restoreUntrackedDependencies();
+      }
 
       if (dirty) {
         const activeTracker = runtimeState.activeTracker;
@@ -189,4 +251,23 @@ export function computed<T>(
       return recompute();
     },
   };
+
+  function restoreUntrackedDependencies(): void {
+    if (untrackedDependencies.length === 0) {
+      return;
+    }
+
+    const dependencies = untrackedDependencies.map((dependency) => dependency.ref.deref());
+    if (dependencies.some((dependency) => dependency === undefined)) {
+      untrackedDependencies = [];
+      return;
+    }
+
+    for (const dependency of dependencies as Source[]) {
+      addSourceSubscriber(dependency, computation);
+      computation.deps.add(dependency);
+    }
+    computation.orderedDeps = dependencies as Source[];
+    untrackedDependencies = [];
+  }
 }

@@ -1,4 +1,9 @@
-import { runtimeState, type ReactiveComputation, type Source } from "./state.js";
+import {
+  bumpSourceVersion,
+  runtimeState,
+  type ReactiveComputation,
+  type Source,
+} from "./state.js";
 
 const maxPendingComputedFlushIterations = 100;
 
@@ -239,6 +244,7 @@ function cleanupAddedDependency(dep: Source, computation: ReactiveComputation): 
 }
 
 export function notifySubscribers(source: Source): void {
+  bumpSourceVersion(source);
   const subscribers = source.subscribers;
 
   if (subscribers === null) {

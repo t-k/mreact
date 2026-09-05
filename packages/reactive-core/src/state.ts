@@ -35,6 +35,11 @@ export interface ReactiveComputation {
   dispose(): void;
 }
 
+interface UntrackedDependency {
+  ref: WeakRef<Source>;
+  version: number;
+}
+
 export type Tracker = ReactiveComputation | null;
 
 export const runtimeState: {
@@ -54,3 +59,24 @@ export const runtimeState: {
   notificationDepth: 0,
   pendingComputed: new Set(),
 };
+
+const sourceVersions = new WeakMap<Source, number>();
+
+export function sourceVersion(source: Source): number {
+  return sourceVersions.get(source) ?? 0;
+}
+
+export function bumpSourceVersion(source: Source): void {
+  sourceVersions.set(source, sourceVersion(source) + 1);
+}
+
+export function createUntrackedDependency(source: Source): UntrackedDependency | undefined {
+  return typeof WeakRef === "function"
+    ? { ref: new WeakRef(source), version: sourceVersion(source) }
+    : undefined;
+}
+
+export function untrackedDependencyIsCurrent(dependency: UntrackedDependency): boolean {
+  const source = dependency.ref.deref();
+  return source !== undefined && sourceVersion(source) === dependency.version;
+}

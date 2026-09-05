@@ -1,6 +1,6 @@
 import type { Cell } from "./types.js";
 import type { Source } from "./state.js";
-import { runtimeState } from "./state.js";
+import { bumpSourceVersion, runtimeState } from "./state.js";
 import { notifySubscribers, sourceSubscriberCount, trackSource } from "./tracking.js";
 import { recordCellWriter } from "./writer-diagnostics.js";
 
@@ -101,6 +101,7 @@ function writeCellValue<T>(source: CellSource<T>, next: T | ((prev: T) => T)): v
   }
 
   source.value = resolved;
+  bumpSourceVersion(source);
 
   const activeTracker = runtimeState.activeTracker;
   if (

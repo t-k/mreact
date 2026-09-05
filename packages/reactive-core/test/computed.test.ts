@@ -1,10 +1,43 @@
 import { describe, expect, test } from "vitest";
 import { setScheduler } from "../src/internal.js";
 import { batch, cell, computed, effect, untrack } from "../src/index.js";
+import { getCellSource } from "../src/cell.js";
+import { withCleanupScope } from "../src/internal.js";
+import type { ReadonlyCell } from "../src/types.js";
 import { runtimeState, type ReactiveComputation } from "../src/state.js";
 import { flushEffects } from "../src/testing.js";
 
 describe("computed", () => {
+  test("does not retain upstream dependencies after an untracked read", () => {
+    const source = cell(1);
+    const doubled = computed(() => source.get() * 2);
+
+    expect(doubled.get()).toBe(2);
+    expect(getCellSource(source)?.subscribers).toBeNull();
+
+    source.set(2);
+
+    expect(doubled.get()).toBe(4);
+  });
+
+  test("releases upstream dependencies when its cleanup owner is disposed", () => {
+    const source = cell(1);
+    const disposers: Array<() => void> = [];
+    let doubled: ReadonlyCell<number> | undefined;
+
+    withCleanupScope(
+      (dispose) => disposers.push(dispose),
+      () => {
+        doubled = computed(() => source.get() * 2);
+        doubled.get();
+      },
+    );
+
+    expect(getCellSource(source)?.subscribers).toBeNull();
+    disposers[0]?.();
+    expect(() => doubled?.get()).toThrow(/disposed/i);
+  });
+
   test("computes initial value", () => {
     const count = cell(1);
     const doubled = computed(() => count.get() * 2);
