@@ -135,13 +135,22 @@ export default function Page() {
               components: readonly [
                 {
                   classification: "server-render";
+                  decision: {
+                    executionMode: "server";
+                    reasonChain: readonly string[];
+                  };
                   exportName: "default";
                   file: "app/page.tsx";
                   origin: "server-render";
                 },
               ];
               entry: "app/page.tsx";
+              executionModes: readonly ["server"];
               path: "/";
+              cost: {
+                status: "unavailable";
+                reason: "No production artifact supplied.";
+              };
             },
           ];
           summary: {
@@ -173,13 +182,22 @@ export default function Page() {
               components: [
                 {
                   classification: "server-render",
+                  decision: {
+                    executionMode: "server",
+                    reasonChain: ["classification:server-render", "origin:server-render"],
+                  },
                   exportName: "default",
                   file: "app/page.tsx",
                   origin: "server-render",
                 },
               ],
               entry: "app/page.tsx",
+              executionModes: ["server"],
               path: "/",
+              cost: {
+                status: "unavailable",
+                reason: "No production artifact supplied.",
+              },
             },
           ],
           summary: {

@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.0.209 - 2026-09-06
+
+### Added
+
+- Added DOM-independent cleanup scopes through `createCleanupScope()` and `runWithCleanupScope()` so effects, observers, timers, and other disposers can share an explicit lifecycle owner.
+- Added typed query definitions through `queryDefinition()`, discriminated query result states, bounded inactive query retention through `inactiveGcTime` and `maxInactiveEntries`, and explicit `Cell.setValue()` and `Cell.update()` operations.
+- Added readonly store views, independent snapshots, historical persisted-state validation, bounded devtools resource inspection, and opt-in route boundary execution contracts.
+
+### Changed
+
+- Changed boundary cost analysis to account for fetched dynamic imports reached through shared client chunks, and preserved route locations separately from server `Request` objects in Cloudflare rendering.
+- Changed form bindings to preserve field types across nullable and custom parse or format DOM values, and made unsupported asynchronous store transactions fail clearly.
+
+### Fixed
+
+- Fixed dormant and nested computed dependency recovery and notification ordering while preserving dependency order for cached reads.
+- Fixed query lifecycle key snapshots, inactive query garbage-collection ownership, and cancellation or retention races.
+- Fixed SSR stream queue bounds and terminal failure cleanup.
+- Fixed route boundary accounting, valid CSS prelude parsing including comments, and Tailwind source directive ordering.
+- Fixed reactive form nullable values and typed arrays, store snapshot and transaction boundaries, and devtools live resource counts.
+
 ## 0.0.208 - 2026-09-05
 
 ### Fixed
