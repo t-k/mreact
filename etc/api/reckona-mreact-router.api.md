@@ -144,6 +144,14 @@ export interface AppRouterCspInlineNonceWarningLogEvent {
 }
 
 // @public
+export interface AppRouterExecutionContracts {
+    // (undocumented)
+    noCompatComponents?: readonly string[] | undefined;
+    // (undocumented)
+    serverOnlyRoutes?: readonly string[] | undefined;
+}
+
+// @public
 export interface AppRouterImportPolicy {
     // (undocumented)
     allowedPackages?: readonly string[] | undefined;
@@ -230,6 +238,8 @@ export interface AppRouterProjectOptions {
     // (undocumented)
     clientSourceMaps?: AppRouterClientSourceMapOption | undefined;
     dehydratePolicyModule?: string | undefined;
+    // (undocumented)
+    executionContracts?: AppRouterExecutionContracts | undefined;
     // (undocumented)
     production?: AppRouterProductionOptions | undefined;
     // (undocumented)
@@ -445,6 +455,9 @@ export interface AwsLambdaArtifactManifest {
 // @public (undocumented)
 export type AwsLambdaGeneratedHandlerPreloadMode = "all" | "hot-route-requests" | "middleware" | "none";
 
+// @public (undocumented)
+export type BoundaryExecutionMode = "client" | "server" | "shared" | "unknown";
+
 // @public
 export interface BoundaryReport {
     // (undocumented)
@@ -457,16 +470,55 @@ export interface BoundaryReport {
     version: 1;
 }
 
+// @public (undocumented)
+export interface BoundaryReportByteCost {
+    // (undocumented)
+    gzipEstimateBytes: number;
+    // (undocumented)
+    observedTransferBytes?: number | undefined;
+    // (undocumented)
+    rawBytes: number;
+}
+
 // @public
 export interface BoundaryReportComponent {
     // (undocumented)
     classification: ClientRouteComponentClassification;
+    // (undocumented)
+    decision: BoundaryReportDecision;
     // (undocumented)
     exportName: string;
     // (undocumented)
     file: string;
     // (undocumented)
     origin: ClientRouteComponentOrigin;
+}
+
+// @public (undocumented)
+export interface BoundaryReportCost {
+    // (undocumented)
+    baseline?: {
+        initialGzipDeltaBytes?: number | undefined;
+        navigationGzipDeltaBytes?: number | undefined;
+    } | undefined;
+    // (undocumented)
+    initial?: BoundaryReportByteCost | undefined;
+    // (undocumented)
+    navigation?: BoundaryReportByteCost | undefined;
+    // (undocumented)
+    reason?: string | undefined;
+    // (undocumented)
+    status: "available" | "unavailable";
+}
+
+// @public (undocumented)
+export interface BoundaryReportDecision {
+    // (undocumented)
+    executionMode: BoundaryExecutionMode;
+    // (undocumented)
+    reasonChain: readonly string[];
+    // (undocumented)
+    sourceRange?: BoundarySourceRange | undefined;
 }
 
 // @public
@@ -476,7 +528,11 @@ export interface BoundaryReportRoute {
     // (undocumented)
     components: readonly BoundaryReportComponent[];
     // (undocumented)
+    cost: BoundaryReportCost;
+    // (undocumented)
     entry: string;
+    // (undocumented)
+    executionModes: readonly BoundaryExecutionMode[];
     // (undocumented)
     path: string;
 }
@@ -497,6 +553,22 @@ export interface BoundaryReportSummary {
     sharedComponents: number;
     // (undocumented)
     unknownComponents: number;
+}
+
+// @public (undocumented)
+export interface BoundarySourcePosition {
+    // (undocumented)
+    column: number;
+    // (undocumented)
+    line: number;
+}
+
+// @public (undocumented)
+export interface BoundarySourceRange {
+    // (undocumented)
+    end: BoundarySourcePosition;
+    // (undocumented)
+    start: BoundarySourcePosition;
 }
 
 // @public
@@ -775,11 +847,15 @@ export interface CreateBoundaryReportRouteInput {
     // (undocumented)
     components: readonly ClientRouteComponent[];
     // (undocumented)
+    cost?: BoundaryReportCost | undefined;
+    // (undocumented)
     diagnostics: readonly ClientRouteInferenceDiagnostic[];
     // (undocumented)
     entry: string;
     // (undocumented)
     path: string;
+    // (undocumented)
+    source?: string | undefined;
 }
 
 // @public
@@ -989,7 +1065,7 @@ export interface LayoutProps<TParams extends RouteParams = RouteParams> {
     // (undocumented)
     params: TParams;
     // (undocumented)
-    request: Request;
+    request: RouteLocation;
 }
 
 // @public
@@ -1298,7 +1374,7 @@ export interface PageProps<TData = unknown, TParams extends RouteParams = RouteP
     // (undocumented)
     params: TParams;
     // (undocumented)
-    request: Request;
+    request: RouteLocation;
 }
 
 // @public
@@ -1577,6 +1653,18 @@ export interface RouteHeadDescriptor {
 
 // @public
 export type RouteLoader = (...args: never[]) => unknown;
+
+// @public
+export interface RouteLocation {
+    // (undocumented)
+    readonly hash: string;
+    // (undocumented)
+    readonly pathname: string;
+    // (undocumented)
+    readonly search: string;
+    // (undocumented)
+    readonly url: string;
+}
 
 // @public (undocumented)
 export interface RouteMatcher {
@@ -1992,6 +2080,9 @@ export function traceContextFromRequest(request: Request): RouterTraceContext | 
 export type TrustedLinkHtml = {
     readonly [TRUSTED_LINK_HTML]: string;
 };
+
+// @public
+export function validateBoundaryExecutionContracts(report: BoundaryReport, contracts: AppRouterExecutionContracts | undefined): void;
 
 // @public
 export function validateFormCsrf(request: Request, formData: FormData): Response | undefined;

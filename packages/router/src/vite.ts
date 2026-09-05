@@ -24,6 +24,7 @@ import {
   type AppRouterProjectOptions,
   type ResolvedAppRouterProject,
 } from "./config.js";
+export type { AppRouterExecutionContracts } from "./config.js";
 import type { AppRouterImportPolicy } from "./import-policy.js";
 import { dehydrateOptionsFromModule } from "./dehydrate-policy.js";
 import {

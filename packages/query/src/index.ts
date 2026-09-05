@@ -27,7 +27,7 @@ export type MutationStatus = "idle" | "pending" | "success" | "error";
 /** Classifies why a query fetch failed. */
 export type QueryErrorReason = "aborted" | "retry-exhausted" | "network" | "unknown";
 
-interface QueryResultBase {
+export interface QueryResultBase {
   errorReason: QueryErrorReason | undefined;
   isFetching: boolean;
   updatedAt: number;

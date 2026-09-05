@@ -7,7 +7,20 @@ import {
 } from "./index.js";
 
 /** Re-exports devtools types used by the overlay. */
-export type { Devtools, DevtoolsEvent, DevtoolsListener } from "./index.js";
+export type {
+  Devtools,
+  DevtoolsEvent,
+  DevtoolsListener,
+  DevtoolsResourceCensus,
+  DevtoolsResourceHandle,
+  DevtoolsResourceInspector,
+  DevtoolsResourceKind,
+  DevtoolsResourceOwnership,
+  DevtoolsResourceRecord,
+  DevtoolsResourceRegistration,
+  DevtoolsResourceSnapshotDiff,
+  DevtoolsResourceSnapshotOptions,
+} from "./index.js";
 
 /** Names the event category tabs displayed by the devtools overlay. */
 export type DevtoolsOverlayTab = "query" | "reactive" | "router";

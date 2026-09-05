@@ -63,10 +63,16 @@ export interface CreateMutationOptions<TVariables, TData, TContext = unknown> {
 }
 
 // @public
+export function createQuery<TData, TQueryKey extends QueryKey = QueryKey>(client: QueryClient, definition: QueryDefinition<TData, TQueryKey>, options?: CreateQueryDefinitionOptions<TData>): QueryObserver<TData>;
+
+// @public (undocumented)
 export function createQuery<TData>(client: QueryClient, options: CreateQueryOptions<TData>): QueryObserver<TData>;
 
 // @public
-export function createQueryClient(): QueryClient;
+export function createQueryClient(options?: QueryClientOptions): QueryClient;
+
+// @public
+export type CreateQueryDefinitionOptions<TData> = Omit<CreateQueryOptions<TData>, "queryKey" | "queryFn">;
 
 // @public
 export interface CreateQueryOptions<TData> extends FetchQueryOptions<TData> {
@@ -118,11 +124,21 @@ export interface DehydrateOptions {
 }
 
 // @public
-export interface FetchQueryOptions<TData> {
+export interface ErrorQueryResult<TData> extends QueryResultBase {
     // (undocumented)
-    queryFn: (context: QueryFunctionContext) => Promise<TData> | TData;
+    data: TData | undefined;
     // (undocumented)
-    queryKey: QueryKey;
+    error: unknown;
+    // (undocumented)
+    status: "error";
+}
+
+// @public
+export interface FetchQueryOptions<TData, TQueryKey extends QueryKey = QueryKey> {
+    // (undocumented)
+    queryFn: (context: QueryFunctionContext<TQueryKey>) => Promise<TData> | TData;
+    // (undocumented)
+    queryKey: TQueryKey;
     // (undocumented)
     retry?: false | number | undefined;
     // (undocumented)
@@ -223,6 +239,16 @@ export interface MutationResult<TData> {
 export type MutationStatus = "idle" | "pending" | "success" | "error";
 
 // @public
+export interface PendingQueryResult extends QueryResultBase {
+    // (undocumented)
+    data: undefined;
+    // (undocumented)
+    error: undefined;
+    // (undocumented)
+    status: "pending";
+}
+
+// @public
 export interface QueryAsyncStorage<T> {
     // (undocumented)
     getStore(): T | undefined;
@@ -239,38 +265,85 @@ export interface QueryClient {
     // (undocumented)
     fetchQuery<TData>(options: FetchQueryOptions<TData>): Promise<TData>;
     // (undocumented)
+    fetchQuery<TDefinition extends QueryDefinition<unknown, QueryKey>>(definition: TDefinition, options?: QueryDefinitionFetchOptions<QueryDefinitionData<TDefinition>>): Promise<QueryDefinitionData<TDefinition>>;
+    // (undocumented)
     getQueryData<TData = unknown>(queryKey: QueryKey): TData | undefined;
     // (undocumented)
+    getQueryData<TDefinition extends QueryDefinition<unknown, QueryKey>>(definition: TDefinition): QueryDefinitionData<TDefinition> | undefined;
+    // (undocumented)
     getQueryEntry<TData = unknown>(queryKey: QueryKey): QueryEntry<TData> | undefined;
+    // (undocumented)
+    getQueryEntry<TDefinition extends QueryDefinition<unknown, QueryKey>>(definition: TDefinition): QueryEntry<QueryDefinitionData<TDefinition>> | undefined;
     // (undocumented)
     invalidateQueries(options?: InvalidateQueriesOptions): void;
     // (undocumented)
     prefetchQuery<TData>(options: FetchQueryOptions<TData>): Promise<void>;
     // (undocumented)
+    prefetchQuery<TDefinition extends QueryDefinition<unknown, QueryKey>>(definition: TDefinition, options?: QueryDefinitionFetchOptions<QueryDefinitionData<TDefinition>>): Promise<void>;
+    // (undocumented)
     removeQueries(options?: InvalidateQueriesOptions): void;
     // (undocumented)
     setQueryData<TData>(queryKey: QueryKey, data: TData | ((previous: TData | undefined) => TData)): void;
+    // (undocumented)
+    setQueryData<TDefinition extends QueryDefinition<unknown, QueryKey>>(definition: TDefinition, data: QueryDefinitionData<TDefinition> | ((previous: QueryDefinitionData<TDefinition> | undefined) => QueryDefinitionData<TDefinition>)): void;
     // (undocumented)
     subscribe<TData = unknown>(queryKey: QueryKey, listener: (entry: QueryEntry<TData>) => void, options?: QuerySubscriptionOptions): () => void;
 }
 
 // @public
-export interface QueryEntry<TData = unknown> extends QueryResult<TData> {
+export interface QueryClientOptions {
+    inactiveGcTime?: false | number | undefined;
+    maxInactiveEntries?: false | number | undefined;
+}
+
+// @public
+export interface QueryDefinition<TData, TQueryKey extends QueryKey = QueryKey> {
+    // (undocumented)
+    readonly __mreactQueryDefinition: true;
+    // (undocumented)
+    queryFn(context: QueryFunctionContext<TQueryKey>): Promise<TData> | TData;
+    // (undocumented)
+    readonly queryKey: TQueryKey;
+}
+
+// @public
+export function queryDefinition<const TQueryKey extends QueryKey, TData>(queryKey: TQueryKey, queryFn: (context: QueryFunctionContext<TQueryKey>) => Promise<TData> | TData): QueryDefinition<TData, TQueryKey>;
+
+// @public
+export type QueryDefinitionData<TDefinition> = TDefinition extends QueryDefinition<infer TData, QueryKey> ? TData : never;
+
+// @public
+export type QueryDefinitionFetchOptions<TData> = Omit<FetchQueryOptions<TData>, "queryKey" | "queryFn">;
+
+// @public
+export interface QueryEntry<TData = unknown> {
+    // (undocumented)
+    data: TData | undefined;
+    // (undocumented)
+    error: unknown;
+    // (undocumented)
+    errorReason: QueryErrorReason | undefined;
+    // (undocumented)
+    isFetching: boolean;
     // (undocumented)
     queryHash: string;
     // (undocumented)
     queryKey: QueryKey;
     // (undocumented)
     stale: boolean;
+    // (undocumented)
+    status: QueryStatus;
+    // (undocumented)
+    updatedAt: number;
 }
 
 // @public
 export type QueryErrorReason = "aborted" | "retry-exhausted" | "network" | "unknown";
 
 // @public
-export interface QueryFunctionContext {
+export interface QueryFunctionContext<TQueryKey extends QueryKey = QueryKey> {
     // (undocumented)
-    queryKey: QueryKey;
+    queryKey: TQueryKey;
     // (undocumented)
     signal: AbortSignal;
 }
@@ -289,17 +362,14 @@ export interface QueryObserver<TData> {
 }
 
 // @public
-export interface QueryResult<TData> {
-    // (undocumented)
-    data: TData | undefined;
-    // (undocumented)
-    error: unknown;
+export type QueryResult<TData> = PendingQueryResult | SuccessQueryResult<TData> | ErrorQueryResult<TData>;
+
+// @public (undocumented)
+export interface QueryResultBase {
     // (undocumented)
     errorReason: QueryErrorReason | undefined;
     // (undocumented)
     isFetching: boolean;
-    // (undocumented)
-    status: QueryStatus;
     // (undocumented)
     updatedAt: number;
 }
@@ -317,6 +387,16 @@ export interface QuerySubscriptionOptions {
 
 // @public
 export function runWithQueryClient<T>(client: QueryClient, fn: () => T): T;
+
+// @public
+export interface SuccessQueryResult<TData> extends QueryResultBase {
+    // (undocumented)
+    data: TData;
+    // (undocumented)
+    error: undefined;
+    // (undocumented)
+    status: "success";
+}
 
 // @public
 export function syncQueryClientAcrossTabs(client: QueryClient, options?: CrossTabQuerySyncOptions): () => void;

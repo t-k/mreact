@@ -14,10 +14,22 @@ export function batchAsync<T>(fn: () => Promise<T> | T): Promise<T>;
 export interface Cell<T> extends ReadonlyCell<T> {
     // (undocumented)
     set(value: T | ((prev: T) => T)): void;
+    setValue(value: T): void;
+    update(updater: (prev: T) => T): void;
 }
 
 // @public (undocumented)
 export function cell<T>(initial: T): Cell<T>;
+
+// @public
+export interface CleanupScope {
+    // (undocumented)
+    dispose(): void;
+    // (undocumented)
+    readonly disposed: boolean;
+    // (undocumented)
+    register(dispose: () => void): () => void;
+}
 
 // @public
 export function computed<T>(fn: () => T, options?: ComputedOptions<T> | ComputedEquality<T>): ReadonlyCell<T>;
@@ -32,6 +44,9 @@ export interface ComputedOptions<T> {
 }
 
 // @public
+export function createCleanupScope(): CleanupScope;
+
+// @public
 export function effect(fn: () => void | (() => void)): () => void;
 
 // @public
@@ -39,6 +54,9 @@ export interface ReadonlyCell<T> {
     // (undocumented)
     get(): T;
 }
+
+// @public
+export function runWithCleanupScope<T>(scope: CleanupScope, run: () => T): T;
 
 // @public
 export interface Selector<TValue, TKey = TValue> {

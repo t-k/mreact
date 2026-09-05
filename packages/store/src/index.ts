@@ -14,8 +14,8 @@ export type StoreSetter<T extends object> = StorePatch<T> | ((previous: T) => St
 /** Provides either a replacement object or a replacement-producing updater callback. */
 export type StoreReplacer<T extends object> = T | ((previous: T) => T);
 
-type ThenableLike = { then: (...args: never[]) => unknown };
-type RejectThenable<T> = [T] extends [never]
+export type ThenableLike = { then: (...args: never[]) => unknown };
+export type RejectThenable<T> = [T] extends [never]
   ? []
   : [T] extends [ThenableLike]
     ? [error: never]

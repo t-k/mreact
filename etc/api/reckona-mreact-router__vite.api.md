@@ -71,6 +71,14 @@ export interface AppRouterCspInlineNonceWarningLogEvent {
 }
 
 // @public
+export interface AppRouterExecutionContracts {
+    // (undocumented)
+    noCompatComponents?: readonly string[] | undefined;
+    // (undocumented)
+    serverOnlyRoutes?: readonly string[] | undefined;
+}
+
+// @public
 export interface AppRouterImportPolicy {
     // (undocumented)
     allowedPackages?: readonly string[] | undefined;
@@ -124,6 +132,8 @@ export interface AppRouterProjectOptions {
     // (undocumented)
     clientSourceMaps?: AppRouterClientSourceMapOption | undefined;
     dehydratePolicyModule?: string | undefined;
+    // (undocumented)
+    executionContracts?: AppRouterExecutionContracts | undefined;
     // (undocumented)
     production?: AppRouterProductionOptions | undefined;
     // (undocumented)
@@ -336,6 +346,8 @@ export interface ResolvedAppRouterProject {
     clientSourceMaps: AppRouterClientSourceMapMode;
     // (undocumented)
     dehydratePolicyModule?: string | undefined;
+    // (undocumented)
+    executionContracts?: AppRouterExecutionContracts | undefined;
     // (undocumented)
     projectRoot: string;
     // (undocumented)

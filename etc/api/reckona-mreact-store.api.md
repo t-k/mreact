@@ -7,10 +7,10 @@
 import { ReadonlyCell } from '@reckona/mreact-reactive-core';
 
 // @public
-export function createRequestStoreFactory<T extends object>(initial: () => T, options?: StoreOptions<T> | undefined): () => Store<T>;
+export function createRequestStoreFactory<T extends object, TPersisted extends object = T>(initial: () => T, options?: StoreOptions<T, TPersisted> | undefined): () => Store<T>;
 
 // @public
-export function createStore<T extends object>(initial: T, options?: StoreOptions<T>): Store<T>;
+export function createStore<T extends object, TPersisted extends object = T>(initial: T, options?: StoreOptions<T, TPersisted>): Store<T>;
 
 // @public
 export interface LegacyStorePersistedState<T extends object> {
@@ -24,6 +24,30 @@ export interface LegacyStorePersistedState<T extends object> {
 export function persistedStoreState<T extends object>(state: T, version: number): StorePersistedState<T>;
 
 // @public
+export interface ReadonlyStore<T extends object> {
+    // (undocumented)
+    get(): ReadonlyStoreValue<T>;
+    // (undocumented)
+    select<U>(selector: (state: ReadonlyStoreValue<T>) => U, equality?: StoreEquality<U>): SelectedCell<U>;
+    // (undocumented)
+    snapshot(): T;
+    // (undocumented)
+    readonly state: ReadonlyCell<ReadonlyStoreValue<T>>;
+    // (undocumented)
+    subscribe(listener: (state: ReadonlyStoreValue<T>, previous: ReadonlyStoreValue<T>) => void): () => void;
+}
+
+// @public
+export type ReadonlyStoreValue<T> = T extends (...args: never[]) => unknown ? T : T extends Date ? Readonly<T> : T extends RegExp ? Readonly<T> : T extends Map<infer TKey, infer TValue> ? ReadonlyMap<ReadonlyStoreValue<TKey>, ReadonlyStoreValue<TValue>> : T extends Set<infer TValue> ? ReadonlySet<ReadonlyStoreValue<TValue>> : T extends readonly unknown[] ? {
+    readonly [TKey in keyof T]: ReadonlyStoreValue<T[TKey]>;
+} : T extends object ? {
+    readonly [TKey in keyof T]: ReadonlyStoreValue<T[TKey]>;
+} : T;
+
+// @public (undocumented)
+export type RejectThenable<T> = [T] extends [never] ? [] : [T] extends [ThenableLike] ? [error: never] : [];
+
+// @public
 export interface SelectedCell<T> extends ReadonlyCell<T> {
     // (undocumented)
     dispose(): void;
@@ -31,6 +55,9 @@ export interface SelectedCell<T> extends ReadonlyCell<T> {
 
 // @public
 export function shallowEqual<T>(left: T, right: T): boolean;
+
+// @public
+export function snapshotStoreValue<T>(value: T): T;
 
 // @public
 export interface Store<T extends object> {
@@ -45,21 +72,25 @@ export interface Store<T extends object> {
     // (undocumented)
     set(next: StoreSetter<T>): void;
     // (undocumented)
+    snapshot(): T;
+    // (undocumented)
     readonly state: ReadonlyCell<T>;
     // (undocumented)
     subscribe(listener: StoreListener<T>): () => void;
     // (undocumented)
-    transaction(fn: () => void): void;
+    transaction<TResult>(fn: () => TResult, ...error: RejectThenable<TResult>): void;
     // (undocumented)
     update(updater: (previous: T) => StorePatch<T> | T): void;
+    // (undocumented)
+    readonly view: ReadonlyStore<T>;
 }
 
 // @public
-export interface StoreCurrentPersistOptions<T extends object> extends StorePersistBaseOptions<T> {
+export interface StoreCurrentPersistOptions<T extends object, TPersisted extends object = T> extends StorePersistBaseOptions<T, TPersisted> {
     // (undocumented)
     acceptLegacyPersistedState?: false | undefined;
     // (undocumented)
-    load?: (() => StorePersistedState<T> | T | undefined | Promise<StorePersistedState<T> | T | undefined>) | undefined;
+    load?: (() => StorePersistedState<TPersisted> | TPersisted | undefined | Promise<StorePersistedState<TPersisted> | TPersisted | undefined>) | undefined;
 }
 
 // @public
@@ -79,35 +110,37 @@ export interface StoreInstrumentationEvent<T extends object> {
 }
 
 // @public
-export interface StoreLegacyPersistOptions<T extends object> extends StorePersistBaseOptions<T> {
+export interface StoreLegacyPersistOptions<T extends object, TPersisted extends object = T> extends StorePersistBaseOptions<T, TPersisted> {
     // (undocumented)
     acceptLegacyPersistedState: true;
     // (undocumented)
-    load?: (() => LegacyStorePersistedState<T> | StorePersistedState<T> | T | undefined | Promise<LegacyStorePersistedState<T> | StorePersistedState<T> | T | undefined>) | undefined;
+    load?: (() => LegacyStorePersistedState<TPersisted> | StorePersistedState<TPersisted> | TPersisted | undefined | Promise<LegacyStorePersistedState<TPersisted> | StorePersistedState<TPersisted> | TPersisted | undefined>) | undefined;
 }
 
 // @public
 export type StoreListener<T extends object> = (state: T, previous: T) => void;
 
 // @public
-export interface StoreOptions<T extends object> {
+export interface StoreOptions<T extends object, TPersisted extends object = T> {
     // (undocumented)
     instrument?: ((event: StoreInstrumentationEvent<T>) => void) | undefined;
     // (undocumented)
-    persist?: StorePersist<T> | undefined;
+    persist?: StorePersist<T, TPersisted> | undefined;
 }
 
 // @public
 export type StorePatch<T extends object> = Partial<T>;
 
 // @public (undocumented)
-export type StorePersist<T extends object> = ((state: T) => void | Promise<void>) | StorePersistOptions<T>;
+export type StorePersist<T extends object, TPersisted extends object = T> = ((state: T) => void | Promise<void>) | StorePersistOptions<T, TPersisted>;
 
 // @public
-export interface StorePersistBaseOptions<T extends object> {
+export interface StorePersistBaseOptions<T extends object, TPersisted extends object = T> {
     hydrationConflict?: StoreHydrationConflict<T> | undefined;
-    migrate?: ((state: T, version: number | undefined) => T | Promise<T>) | undefined;
+    migrate?: ((state: TPersisted, version: number | undefined) => T | Promise<T>) | undefined;
     save?: ((state: T) => void | Promise<void>) | undefined;
+    validate?: ((state: unknown, version: number | undefined) => boolean) | undefined;
+    validateCurrent?: ((state: unknown) => state is T) | undefined;
     version?: number | undefined;
 }
 
@@ -146,13 +179,18 @@ export type StorePersistenceFailurePhase = "load" | "migrate" | "save";
 export type StorePersistenceStatus = "hydrating" | "ready" | "error";
 
 // @public
-export type StorePersistOptions<T extends object> = StoreCurrentPersistOptions<T> | StoreLegacyPersistOptions<T>;
+export type StorePersistOptions<T extends object, TPersisted extends object = T> = StoreCurrentPersistOptions<T, TPersisted> | StoreLegacyPersistOptions<T, TPersisted>;
 
 // @public
 export type StoreReplacer<T extends object> = T | ((previous: T) => T);
 
 // @public
 export type StoreSetter<T extends object> = StorePatch<T> | ((previous: T) => StorePatch<T> | T);
+
+// @public (undocumented)
+export type ThenableLike = {
+    then: (...args: never[]) => unknown;
+};
 
 // (No @packageDocumentation comment for this package)
 

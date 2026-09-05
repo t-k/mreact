@@ -7,6 +7,11 @@
 import { ReadonlyCell } from '@reckona/mreact-reactive-core';
 
 // @public
+export type ArrayFieldName<TValues extends FormValues> = {
+    [Name in FieldName<TValues>]: NonNullable<TValues[Name]> extends readonly unknown[] ? Name : never;
+}[FieldName<TValues>];
+
+// @public
 export type ArrayFieldValue<TValues extends FormValues, Name extends FieldName<TValues>> = TValues[Name] extends readonly (infer Item)[] ? Item : never;
 
 // @public
@@ -45,7 +50,7 @@ export interface CreateFormOptionsWithSchema<TValues extends FormValues, TSubmit
 // @public
 export interface FieldApi<TValues extends FormValues, Name extends FieldName<TValues>> {
     // (undocumented)
-    bind(options?: FieldBindingOptions): FieldBinding<TValues[Name]>;
+    bind<TBoundValue = TValues[Name]>(options?: FieldBindingOptions<TValues[Name], TBoundValue>): FieldBinding<TBoundValue>;
     // (undocumented)
     blur(): Promise<void>;
     // (undocumented)
@@ -55,7 +60,7 @@ export interface FieldApi<TValues extends FormValues, Name extends FieldName<TVa
 }
 
 // @public
-export interface FieldArrayApi<TValues extends FormValues, Name extends FieldName<TValues>> {
+export interface FieldArrayApi<TValues extends FormValues, Name extends ArrayFieldName<TValues>> {
     // (undocumented)
     append(value: ArrayFieldValue<TValues, Name>): Promise<void>;
     // (undocumented)
@@ -81,7 +86,7 @@ export interface FieldArrayRow<TValue> {
 }
 
 // @public
-export interface FieldBinding<TValue> {
+export interface FieldBinding<TBoundValue> {
     // (undocumented)
     onBlur(event: Event): Promise<void>;
     // (undocumented)
@@ -89,13 +94,17 @@ export interface FieldBinding<TValue> {
     // (undocumented)
     onInput(event: Event): Promise<void>;
     // (undocumented)
-    value: TValue;
+    value: TBoundValue;
 }
 
 // @public
-export interface FieldBindingOptions {
+export interface FieldBindingOptions<TValue, TBoundValue = TValue> {
     // (undocumented)
     event?: "change" | "input" | undefined;
+    // (undocumented)
+    format?: ((value: TValue) => TBoundValue) | undefined;
+    // (undocumented)
+    parse?: ((value: unknown, event: Event) => TValue) | undefined;
 }
 
 // @public
@@ -134,7 +143,7 @@ export interface FormApi<TValues extends FormValues, TSubmitValues> {
     // (undocumented)
     field<Name extends FieldName<TValues>>(name: Name): FieldApi<TValues, Name>;
     // (undocumented)
-    fieldArray<Name extends FieldName<TValues>>(name: Name): FieldArrayApi<TValues, Name>;
+    fieldArray<Name extends ArrayFieldName<TValues>>(name: Name): FieldArrayApi<TValues, Name>;
     // (undocumented)
     getValues(): TValues;
     // (undocumented)

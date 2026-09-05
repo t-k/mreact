@@ -13,6 +13,8 @@ export interface Devtools {
     // (undocumented)
     events(): DevtoolsEvent[];
     // (undocumented)
+    resources(): DevtoolsResourceInspector;
+    // (undocumented)
     subscribe(listener: DevtoolsListener): () => void;
 }
 
@@ -43,6 +45,96 @@ export interface DevtoolsOverlayOptions {
 
 // @public
 export type DevtoolsOverlayTab = "query" | "reactive" | "router";
+
+// @public (undocumented)
+export interface DevtoolsResourceCensus {
+    // (undocumented)
+    byKind: Readonly<Record<string, {
+        created: number;
+        disposed: number;
+        live: number;
+    }>>;
+    // (undocumented)
+    live: number;
+    // (undocumented)
+    missingMetadata: number;
+    // (undocumented)
+    retainedMetadata: number;
+}
+
+// @public (undocumented)
+export interface DevtoolsResourceHandle {
+    // (undocumented)
+    dispose(): void;
+    // (undocumented)
+    readonly id: string;
+    // (undocumented)
+    update(patch: Partial<DevtoolsResourceRegistration>): void;
+}
+
+// @public (undocumented)
+export interface DevtoolsResourceInspector {
+    // (undocumented)
+    census(options?: Pick<DevtoolsResourceSnapshotOptions, "ownerId">): DevtoolsResourceCensus;
+    // (undocumented)
+    clearSnapshots(): void;
+    // (undocumented)
+    dispose(): void;
+    // (undocumented)
+    register(input: DevtoolsResourceRegistration): DevtoolsResourceHandle;
+    // (undocumented)
+    snapshot(options?: DevtoolsResourceSnapshotOptions): readonly DevtoolsResourceRecord[];
+}
+
+// @public (undocumented)
+export type DevtoolsResourceKind = "computed" | "effect" | "inactive-query" | "other" | "pending-task" | "scope" | "subscription" | (string & {});
+
+// @public (undocumented)
+export type DevtoolsResourceOwnership = "owned" | "shared" | "unknown";
+
+// @public (undocumented)
+export interface DevtoolsResourceRecord extends DevtoolsResourceRegistration {
+    // (undocumented)
+    id: string;
+    // (undocumented)
+    status: "disposed" | "live";
+}
+
+// @public (undocumented)
+export interface DevtoolsResourceRegistration {
+    // (undocumented)
+    kind: DevtoolsResourceKind;
+    // (undocumented)
+    label?: string | undefined;
+    // (undocumented)
+    location?: string | undefined;
+    // (undocumented)
+    ownerId?: string | undefined;
+    // (undocumented)
+    ownership?: DevtoolsResourceOwnership | undefined;
+}
+
+// @public (undocumented)
+export interface DevtoolsResourceSnapshotDiff {
+    // (undocumented)
+    addedIds: readonly string[];
+    // (undocumented)
+    byKind: Readonly<Record<string, {
+        added: number;
+        disposed: number;
+        live: number;
+    }>>;
+    // (undocumented)
+    disposedIds: readonly string[];
+}
+
+// @public (undocumented)
+export interface DevtoolsResourceSnapshotOptions {
+    // (undocumented)
+    includeDisposed?: boolean | undefined;
+    // (undocumented)
+    ownerId?: string | undefined;
+}
 
 // @public
 export function mountDevtoolsOverlay(options?: DevtoolsOverlayOptions): MountedDevtoolsOverlay;
