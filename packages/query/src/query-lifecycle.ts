@@ -8,6 +8,8 @@ import type {
   FetchQueryOptions,
   InvalidateQueriesOptions,
   QueryClient,
+  QueryDefinition,
+  QueryDefinitionFetchOptions,
   QueryEntry,
   QueryErrorReason,
   QueryKey,
@@ -269,7 +271,11 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
         }
       }
     },
-    async fetchQuery<TData>(options: FetchQueryOptions<TData>): Promise<TData> {
+    async fetchQuery<TData>(
+      optionsOrDefinition: FetchQueryOptions<TData> | QueryDefinition<TData, QueryKey>,
+      definitionOptions?: QueryDefinitionFetchOptions<TData>,
+    ): Promise<TData> {
+      const options = normalizeFetchOptions(optionsOrDefinition, definitionOptions);
       const entry = getOrCreateEntry<TData>(options.queryKey);
 
       if (entry.status === "success" && !entry.stale && isFresh(entry, options.staleTime)) {
@@ -322,18 +328,37 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
 
       return entry.promise;
     },
-    async prefetchQuery<TData>(options: FetchQueryOptions<TData>): Promise<void> {
-      await this.fetchQuery(options).catch(() => {});
+    async prefetchQuery<TData>(
+      optionsOrDefinition: FetchQueryOptions<TData> | QueryDefinition<TData, QueryKey>,
+      definitionOptions?: QueryDefinitionFetchOptions<TData>,
+    ): Promise<void> {
+      await (
+        this.fetchQuery as unknown as <TValue>(
+          input: FetchQueryOptions<TValue> | QueryDefinition<TValue, QueryKey>,
+          options?: QueryDefinitionFetchOptions<TValue>,
+        ) => Promise<TValue>
+      )(optionsOrDefinition, definitionOptions).catch(() => {});
     },
-    getQueryData<TData = unknown>(queryKey: QueryKey): TData | undefined {
+    getQueryData<TData = unknown>(
+      queryKeyOrDefinition: QueryKey | QueryDefinition<TData, QueryKey>,
+    ): TData | undefined {
+      const queryKey = queryKeyFromDefinition(queryKeyOrDefinition);
       return cache.get(hashQueryKey(queryKey))?.data as TData | undefined;
     },
-    getQueryEntry<TData = unknown>(queryKey: QueryKey): QueryEntry<TData> | undefined {
+    getQueryEntry<TData = unknown>(
+      queryKeyOrDefinition: QueryKey | QueryDefinition<TData, QueryKey>,
+    ): QueryEntry<TData> | undefined {
+      const queryKey = queryKeyFromDefinition(queryKeyOrDefinition);
       const entry = cache.get(hashQueryKey(queryKey));
 
       return entry === undefined ? undefined : (toPublicEntry(entry) as QueryEntry<TData>);
     },
-    setQueryData: setSuccess,
+    setQueryData<TData>(
+      queryKeyOrDefinition: QueryKey | QueryDefinition<TData, QueryKey>,
+      data: TData | ((previous: TData | undefined) => TData),
+    ): void {
+      setSuccess(queryKeyFromDefinition(queryKeyOrDefinition), data);
+    },
     [hydrateQueryDataSymbol]: hydrateQueryData,
     invalidateQueries(options: InvalidateQueriesOptions = {}): void {
       const prefixSegments =
@@ -410,6 +435,38 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
       return Array.from(cache.values(), toPublicEntry);
     },
   };
+}
+
+function normalizeFetchOptions<TData>(
+  optionsOrDefinition: FetchQueryOptions<TData> | QueryDefinition<TData, QueryKey>,
+  definitionOptions: QueryDefinitionFetchOptions<TData> | undefined,
+): FetchQueryOptions<TData> {
+  if (isQueryDefinition(optionsOrDefinition)) {
+    return {
+      ...definitionOptions,
+      queryFn: optionsOrDefinition.queryFn as FetchQueryOptions<TData>["queryFn"],
+      queryKey: optionsOrDefinition.queryKey,
+    };
+  }
+
+  return optionsOrDefinition;
+}
+
+function queryKeyFromDefinition<TData>(
+  queryKeyOrDefinition: QueryKey | QueryDefinition<TData, QueryKey>,
+): QueryKey {
+  return isQueryDefinition(queryKeyOrDefinition)
+    ? queryKeyOrDefinition.queryKey
+    : queryKeyOrDefinition;
+}
+
+function isQueryDefinition(value: unknown): value is QueryDefinition<unknown, QueryKey> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    (value as { __mreactQueryDefinition?: unknown }).__mreactQueryDefinition === true
+  );
 }
 
 async function executeQueryWithRetry<TData>(

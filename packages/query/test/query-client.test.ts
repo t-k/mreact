@@ -1,11 +1,30 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createQueryClient, dehydrate, hydrate, hashQueryKey } from "../src/index.js";
+import {
+  createQueryClient,
+  dehydrate,
+  hydrate,
+  hashQueryKey,
+  queryDefinition,
+} from "../src/index.js";
 
 afterEach(() => {
   vi.useRealTimers();
 });
 
 describe("createQueryClient", () => {
+  it("uses one typed query definition for fetch, cache reads, and writes", async () => {
+    const client = createQueryClient();
+    const definition = queryDefinition(["profile", 1] as const, () => ({ name: "Ada" }));
+
+    await client.fetchQuery(definition);
+    expect(client.getQueryData(definition)).toEqual({ name: "Ada" });
+
+    client.setQueryData(definition, { name: "Grace" });
+    expect(client.getQueryData(definition)).toEqual({ name: "Grace" });
+    await client.prefetchQuery(definition, { staleTime: 60_000 });
+    expect(client.getQueryData(["profile", 1])).toEqual({ name: "Grace" });
+  });
+
   it("stores function-valued fetch results without invoking them", async () => {
     let calls = 0;
     const data = () => {

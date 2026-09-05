@@ -1,4 +1,4 @@
-import type { QueryResult } from "../src/index.js";
+import { createQuery, createQueryClient, queryDefinition, type QueryResult } from "../src/index.js";
 
 type Equal<Left, Right> = (<T>() => T extends Left ? 1 : 2) extends <T>() =>
   T extends Right ? 1 : 2
@@ -26,3 +26,26 @@ export function readErrorQueryData(result: QueryResult<number>): number | undefi
 
   return undefined;
 }
+
+const client = createQueryClient();
+const profileDefinition = queryDefinition(["profile", 1] as const, ({ queryKey }) => ({
+  id: queryKey[1],
+  name: "Ada",
+}));
+
+const profile = client.getQueryData(profileDefinition);
+const profileId: number | undefined = profile?.id;
+void profileId;
+client.setQueryData(profileDefinition, { id: 1, name: "Grace" });
+client.setQueryData(profileDefinition, (previous) => ({
+  id: previous?.id ?? 1,
+  name: "Lin",
+}));
+void client.fetchQuery(profileDefinition);
+void client.prefetchQuery(profileDefinition);
+createQuery(client, profileDefinition, { autoFetch: false });
+
+// @ts-expect-error A definition-bound read cannot override its inferred data type.
+client.getQueryData<number>(profileDefinition);
+// @ts-expect-error Definition-bound writes must use the definition's inferred data type.
+client.setQueryData(profileDefinition, { id: "wrong", name: "invalid" });

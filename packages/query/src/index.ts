@@ -82,8 +82,8 @@ export interface QueryEntry<TData = unknown> {
 }
 
 /** Provides query key and cancellation signal data to a query function. */
-export interface QueryFunctionContext {
-  queryKey: QueryKey;
+export interface QueryFunctionContext<TQueryKey extends QueryKey = QueryKey> {
+  queryKey: TQueryKey;
   signal: AbortSignal;
 }
 
@@ -93,14 +93,32 @@ export interface InfiniteQueryFunctionContext<TPageParam> extends QueryFunctionC
 }
 
 /** Configures a direct query fetch through a query client. */
-export interface FetchQueryOptions<TData> {
-  queryKey: QueryKey;
-  queryFn: (context: QueryFunctionContext) => Promise<TData> | TData;
+export interface FetchQueryOptions<TData, TQueryKey extends QueryKey = QueryKey> {
+  queryKey: TQueryKey;
+  queryFn: (context: QueryFunctionContext<TQueryKey>) => Promise<TData> | TData;
   retry?: false | number | undefined;
   retryDelay?: number | ((attempt: number, error: unknown) => number) | undefined;
   signal?: AbortSignal | undefined;
   staleTime?: number;
 }
+
+/** Binds one query key to the data returned by its query function. */
+export interface QueryDefinition<TData, TQueryKey extends QueryKey = QueryKey> {
+  readonly __mreactQueryDefinition: true;
+  readonly queryKey: TQueryKey;
+  queryFn(context: QueryFunctionContext<TQueryKey>): Promise<TData> | TData;
+}
+
+/** Infers the cached data type associated with a query definition. */
+export type QueryDefinitionData<TDefinition> = TDefinition extends QueryDefinition<
+  infer TData,
+  QueryKey
+>
+  ? TData
+  : never;
+
+/** Options applied when fetching a query definition. */
+export type QueryDefinitionFetchOptions<TData> = Omit<FetchQueryOptions<TData>, "queryKey" | "queryFn">;
 
 /** Configures cache subscription matching and idle garbage collection. */
 export interface QuerySubscriptionOptions {
@@ -117,12 +135,32 @@ export interface InvalidateQueriesOptions {
 export interface QueryClient {
   cancelQueries(options?: InvalidateQueriesOptions): void;
   fetchQuery<TData>(options: FetchQueryOptions<TData>): Promise<TData>;
+  fetchQuery<TDefinition extends QueryDefinition<unknown, QueryKey>>(
+    definition: TDefinition,
+    options?: QueryDefinitionFetchOptions<QueryDefinitionData<TDefinition>>,
+  ): Promise<QueryDefinitionData<TDefinition>>;
   prefetchQuery<TData>(options: FetchQueryOptions<TData>): Promise<void>;
+  prefetchQuery<TDefinition extends QueryDefinition<unknown, QueryKey>>(
+    definition: TDefinition,
+    options?: QueryDefinitionFetchOptions<QueryDefinitionData<TDefinition>>,
+  ): Promise<void>;
   getQueryData<TData = unknown>(queryKey: QueryKey): TData | undefined;
+  getQueryData<TDefinition extends QueryDefinition<unknown, QueryKey>>(
+    definition: TDefinition,
+  ): QueryDefinitionData<TDefinition> | undefined;
   getQueryEntry<TData = unknown>(queryKey: QueryKey): QueryEntry<TData> | undefined;
+  getQueryEntry<TDefinition extends QueryDefinition<unknown, QueryKey>>(
+    definition: TDefinition,
+  ): QueryEntry<QueryDefinitionData<TDefinition>> | undefined;
   setQueryData<TData>(
     queryKey: QueryKey,
     data: TData | ((previous: TData | undefined) => TData),
+  ): void;
+  setQueryData<TDefinition extends QueryDefinition<unknown, QueryKey>>(
+    definition: TDefinition,
+    data:
+      | QueryDefinitionData<TDefinition>
+      | ((previous: QueryDefinitionData<TDefinition> | undefined) => QueryDefinitionData<TDefinition>),
   ): void;
   invalidateQueries(options?: InvalidateQueriesOptions): void;
   removeQueries(options?: InvalidateQueriesOptions): void;
@@ -165,6 +203,9 @@ export interface CreateQueryOptions<TData> extends FetchQueryOptions<TData> {
   /** Continue interval polling while the document is hidden. Defaults to false. */
   refetchIntervalInBackground?: boolean | undefined;
 }
+
+/** Options applied when creating an observer from a query definition. */
+export type CreateQueryDefinitionOptions<TData> = Omit<CreateQueryOptions<TData>, "queryKey" | "queryFn">;
 
 /** Observes one query result and exposes refetch and disposal controls. */
 export interface QueryObserver<TData> {
@@ -304,6 +345,18 @@ export function createQueryClient(): QueryClient {
   return createQueryLifecycle();
 }
 
+/** Creates a reusable, type-linked query definition for cache and fetch APIs. */
+export function queryDefinition<const TQueryKey extends QueryKey, TData>(
+  queryKey: TQueryKey,
+  queryFn: (context: QueryFunctionContext<TQueryKey>) => Promise<TData> | TData,
+): QueryDefinition<TData, TQueryKey> {
+  return {
+    __mreactQueryDefinition: true,
+    queryFn,
+    queryKey,
+  };
+}
+
 /**
  * Returns the current scoped query client on the server or the shared browser query client in the browser.
  *
@@ -374,10 +427,27 @@ export function isQueryClientScopeUnavailableError(
  *
  * The observer exposes a `ReadonlyCell` result, subscribes to exact cache updates, can auto-fetch in the browser, and must be disposed when the consuming scope ends.
  */
+export function createQuery<TData, TQueryKey extends QueryKey = QueryKey>(
+  client: QueryClient,
+  definition: QueryDefinition<TData, TQueryKey>,
+  options?: CreateQueryDefinitionOptions<TData>,
+): QueryObserver<TData>;
 export function createQuery<TData>(
   client: QueryClient,
   options: CreateQueryOptions<TData>,
+): QueryObserver<TData>;
+export function createQuery<TData>(
+  client: QueryClient,
+  optionsOrDefinition: CreateQueryOptions<TData> | QueryDefinition<TData, QueryKey>,
+  definitionOptions?: CreateQueryDefinitionOptions<TData>,
 ): QueryObserver<TData> {
+  const options = isQueryDefinition(optionsOrDefinition)
+    ? ({
+        ...definitionOptions,
+        queryFn: optionsOrDefinition.queryFn,
+        queryKey: optionsOrDefinition.queryKey,
+      } as CreateQueryOptions<TData>)
+    : optionsOrDefinition;
   const queryHash = hashQueryKey(options.queryKey);
   const result = cell(resultFromQueryEntry<TData>(client.getQueryEntry<TData>(options.queryKey)));
   const updateResult = (next: QueryResult<TData>): QueryResult<TData> => {
@@ -465,6 +535,16 @@ function queryResultsEqual<TData>(previous: QueryResult<TData>, next: QueryResul
     previous.isFetching === next.isFetching &&
     previous.status === next.status &&
     previous.updatedAt === next.updatedAt
+  );
+}
+
+function isQueryDefinition<TData>(
+  value: CreateQueryOptions<TData> | QueryDefinition<TData, QueryKey>,
+): value is QueryDefinition<TData, QueryKey> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { __mreactQueryDefinition?: unknown }).__mreactQueryDefinition === true
   );
 }
 
