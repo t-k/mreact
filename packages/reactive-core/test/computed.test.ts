@@ -121,6 +121,32 @@ describe("computed", () => {
     expect(seen).toEqual([0, 5]);
   });
 
+  test("clears a queued computed when its last subscriber is removed", () => {
+    const source = cell(0);
+    const derived = computed(() => source.get() * 2);
+    const dispose = effect(() => {
+      derived.get();
+    });
+
+    try {
+      batch(() => {
+        source.set(1);
+        const queued = Array.from(runtimeState.pendingComputed)[0];
+
+        expect(queued).toBeDefined();
+        expect(queued?.queued).toBe(true);
+
+        dispose();
+
+        expect(queued?.queued).toBe(false);
+        expect(runtimeState.pendingComputed.has(queued as ReactiveComputation)).toBe(false);
+      });
+    } finally {
+      dispose();
+      runtimeState.pendingComputed.clear();
+    }
+  });
+
   test("flat computed fan-in reruns do not append touched dependency metadata", () => {
     const first = cell(0);
     const second = cell(0);

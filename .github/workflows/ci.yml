@@ -84,6 +84,9 @@ jobs:
           - name: API reference
             run: pnpm docs:api:check
 
+          - name: Lifecycle smoke scenario
+            run: pnpm scenario:lifecycle
+
           - name: Test router build
             run: pnpm exec vitest run packages/router/test/build.test.ts --passWithNoTests --maxWorkers=1 --maxConcurrency=1
 

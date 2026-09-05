@@ -16,6 +16,7 @@ import { renderAppRequest } from "../src/render.js";
 import { Link } from "../src/link.js";
 import { stripRouteClientOnlyExports } from "../src/route-source.js";
 import { renderAppRouterClientAsset } from "../src/vite.js";
+import { measureBrowserDelivery, type BrowserDeliveryManifest } from "../../../size/delivery.js";
 
 const nativeFetch = globalThis.fetch;
 
@@ -186,6 +187,14 @@ export default function Page() {
     await buildApp({ appDir, outDir });
     const defaultPayloadGzipBytes = await sumClientJavaScriptGzipBytes(join(outDir, "client"));
     const navigationGzipBytes = await sumNavigationJavaScriptGzipBytes(join(outDir, "client"));
+    const deliveryReport = await measureBrowserDelivery({
+      clientDir: join(outDir, "client"),
+      initialIncludesNavigationRuntime: true,
+      initialPath: "/",
+      manifest: JSON.parse(
+        await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+      ) as BrowserDeliveryManifest,
+    });
 
     expect(gzipSync(withNav.code).length, "default interactive gzip bytes").toBeLessThanOrEqual(
       12_200,
@@ -193,6 +202,11 @@ export default function Page() {
     expect(
       defaultPayloadGzipBytes,
       "default interactive route + navigation chunk gzip bytes",
+    ).toBeLessThanOrEqual(16_200);
+    expect(deliveryReport.initial.unavailablePaths).toEqual([]);
+    expect(
+      deliveryReport.initial.gzipEstimateBytes,
+      "initial browser delivery gzip bytes",
     ).toBeLessThanOrEqual(16_200);
     expect(navigationGzipBytes, "navigation chunk gzip bytes").toBeLessThanOrEqual(8_500);
     expect(
