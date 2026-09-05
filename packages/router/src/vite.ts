@@ -19,6 +19,7 @@ import {
 } from "vite";
 import type { AppRouterServerActionOptions } from "./actions.js";
 import type { AppRouterCache } from "./cache.js";
+import { reactiveDevtoolsStubSource } from "./reactive-devtools-stub.js";
 import {
   resolveAppRouterProjectOptions,
   type AppRouterProjectOptions,
@@ -371,13 +372,7 @@ export function cell(initial) {
       }
 
       if (id === virtualReactiveDevtoolsId) {
-        return `export function emitReactiveDevtoolsEvent() {}
-export function emitReactiveEffectRunDevtoolsEvent() {}
-export function hasReactiveDevtoolsEmitter() { return false; }
-export function currentDevtoolsEmitter() { return undefined; }
-export function currentReactiveDevtools() { return undefined; }
-export function invalidateReactiveDevtoolsCache() {}
-export function prepareReactiveEffectRunDevtoolsEvent() { return undefined; }`;
+        return reactiveDevtoolsStubSource;
       }
 
       if (id.startsWith(virtualClientPrefix)) {

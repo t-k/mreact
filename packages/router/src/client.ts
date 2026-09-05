@@ -26,6 +26,7 @@ import {
   type CompilerModuleContext,
 } from "@reckona/mreact-compiler/internal";
 import { assetPath } from "./assets.js";
+import { reactiveDevtoolsStubSource } from "./reactive-devtools-stub.js";
 import {
   bundleRouterModule,
   bundleRouterModules,
@@ -5540,14 +5541,7 @@ export function cell(initial) {
         resolveDir: reactiveCoreDir,
       }));
       buildApi.onLoad({ filter: /^devtools$/, namespace: "mreact-devtools-stub" }, () => ({
-        contents: `export function emitReactiveDevtoolsEvent() {}
-export function emitReactiveEffectRunDevtoolsEvent() {}
-export function hasReactiveDevtoolsEmitter() { return false; }
-export function currentDevtoolsEmitter() { return undefined; }
-export function currentReactiveDevtools() { return undefined; }
-export function registerReactiveDevtoolsResource() { return { dispose() {}, update() {} }; }
-export function invalidateReactiveDevtoolsCache() {}
-export function prepareReactiveEffectRunDevtoolsEvent() { return undefined; }`,
+        contents: reactiveDevtoolsStubSource,
         loader: "ts",
       }));
       if (options.sourceRegionModulePaths !== undefined) {

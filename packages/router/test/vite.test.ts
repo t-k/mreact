@@ -5,10 +5,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import mdx from "@mdx-js/rollup";
+import { build } from "esbuild";
 import remarkFrontmatter from "remark-frontmatter";
 import remarkMdxFrontmatter from "remark-mdx-frontmatter";
 import { resolveConfig, type Connect } from "vite";
 import { afterEach, describe, expect, test } from "vitest";
+import * as reactiveDevtools from "../../reactive-core/src/devtools.js";
 import {
   createAppRouterViteMiddleware,
   mreactRouter,
@@ -209,6 +211,76 @@ describe("router Vite middleware", () => {
     expect(source).toContain("export function invalidateReactiveDevtoolsCache()");
     expect(source).toContain("export function prepareReactiveEffectRunDevtoolsEvent()");
     expect(source).toContain("return undefined");
+    const stub = (await import(
+      /* @vite-ignore */ `data:text/javascript,${encodeURIComponent(String(source))}`
+    )) as typeof reactiveDevtools;
+    expect(Object.keys(stub).sort()).toEqual(Object.keys(reactiveDevtools).sort());
+    const handle = stub.registerReactiveDevtoolsResource("effect");
+    expect(handle.update({ label: "updated" })).toBeUndefined();
+    expect(handle.dispose()).toBeUndefined();
+    expect(handle.dispose()).toBeUndefined();
+  });
+
+  test("runs reactive-core effects and computed values against the Vite devtools stub", async () => {
+    const plugin = mreactRouter({
+      projectRoot: process.cwd(),
+      routesDir: "packages/router/test",
+    });
+    const load = typeof plugin.load === "function" ? plugin.load : plugin.load?.handler;
+    const resolveId =
+      typeof plugin.resolveId === "function" ? plugin.resolveId : plugin.resolveId?.handler;
+    const result = await build({
+      entryPoints: [
+        String(
+          await resolveId?.call(
+            {} as never,
+            "@reckona/mreact-reactive-core",
+            join(process.cwd(), "packages/reactive-dom/src/index.ts"),
+            {},
+          ),
+        ),
+      ],
+      bundle: true,
+      write: false,
+      format: "esm",
+      platform: "browser",
+      plugins: [
+        {
+          name: "vite-devtools-stub",
+          setup(buildApi) {
+            buildApi.onResolve({ filter: /^\.\/devtools\.js$/ }, async (args) => {
+              const id = await resolveId?.call({} as never, args.path, args.importer, {});
+              expect(id).toBe("\0mreact-router-reactive-devtools");
+              return { path: String(id), namespace: "devtools-stub" };
+            });
+            buildApi.onLoad({ filter: /.*/, namespace: "devtools-stub" }, async (args) => ({
+              contents: String(await load?.call({} as never, args.path, {})),
+              loader: "js",
+            }));
+          },
+        },
+      ],
+    });
+    const runtime = (await import(
+      /* @vite-ignore */ `data:text/javascript,${encodeURIComponent(result.outputFiles[0]!.text)}`
+    )) as typeof import("@reckona/mreact-reactive-core");
+    const count = runtime.cell(1);
+    const doubled = runtime.computed(() => count.get() * 2);
+    const values: number[] = [];
+    const dispose = runtime.effect(() => {
+      values.push(doubled.get());
+    });
+    try {
+      expect(values).toEqual([2]);
+      runtime.batch(() => count.set(2));
+      await Promise.resolve();
+      expect(values).toEqual([2, 4]);
+    } finally {
+      dispose();
+    }
+    runtime.batch(() => count.set(3));
+    await Promise.resolve();
+    expect(values).toEqual([2, 4]);
   });
 
   test("contains dev CSS source loads to the canonical project root and Vite allow rules", async () => {
