@@ -4,7 +4,7 @@ import { batch, cell, computed, effect, untrack } from "../src/index.js";
 import { subscribeCell } from "../src/internal.js";
 import { resetSchedulerStateForTesting, setScheduler } from "../src/scheduler.js";
 import { runtimeState, type ReactiveComputation, type Source } from "../src/state.js";
-import { notifySubscribers } from "../src/tracking.js";
+import { flushPendingComputed, notifySubscribers } from "../src/tracking.js";
 
 describe("reactive-core: coverage fill for the remaining branches", () => {
   test("batch nests without triggering schedulePendingFlush until the outer batch closes", () => {
@@ -204,6 +204,31 @@ describe("reactive-core: coverage fill for the remaining branches", () => {
     } finally {
       disposeEffect();
       runtimeState.pendingComputed.clear();
+    }
+  });
+
+  test("computed flush overflow clears queued flags for discarded work", () => {
+    const computation: ReactiveComputation = {
+      deps: new Set(),
+      dispose() {},
+      disposed: false,
+      id: 999_999,
+      markDirty() {},
+      queued: true,
+      run() {
+        this.queued = true;
+        runtimeState.pendingComputed.add(this);
+      },
+    };
+    runtimeState.pendingComputed.add(computation);
+
+    try {
+      expect(() => flushPendingComputed()).toThrow(/computed flush limit exceeded/i);
+      expect(computation.queued).toBe(false);
+      expect(runtimeState.pendingComputed.has(computation)).toBe(false);
+    } finally {
+      runtimeState.pendingComputed.delete(computation);
+      computation.queued = false;
     }
   });
 
@@ -464,6 +489,41 @@ describe("reactive-core: coverage fill for the remaining branches", () => {
         }
       }).toThrow(/writes a value it also reads/);
 
+      dispose();
+    } finally {
+      restore();
+    }
+  });
+
+  test("flushQueuedComputations clears queued flags so recovery can schedule the effect again", () => {
+    let pendingFlush: (() => void) | undefined;
+    const restore = setScheduler({
+      schedule(flush) {
+        pendingFlush = flush;
+      },
+    });
+
+    try {
+      const source = cell(0);
+      let looping = true;
+      let runs = 0;
+      const dispose = effect(() => {
+        const current = source.get();
+        runs += 1;
+        if (looping) {
+          source.set(current + 1);
+        }
+      });
+
+      const failedFlush = pendingFlush;
+      pendingFlush = undefined;
+      expect(() => failedFlush?.()).toThrow(/flush limit exceeded/i);
+      looping = false;
+      source.set(source.get() + 1);
+      expect(pendingFlush).toBeDefined();
+      pendingFlush?.();
+
+      expect(runs).toBeGreaterThan(100);
       dispose();
     } finally {
       restore();

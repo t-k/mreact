@@ -301,11 +301,12 @@ export function flushPendingComputed(): void {
   }
 
   runtimeState.flushingComputed = true;
+  let completed = false;
 
   try {
     for (let iteration = 0; runtimeState.pendingComputed.size > 0; iteration += 1) {
       if (iteration >= maxPendingComputedFlushIterations) {
-        runtimeState.pendingComputed.clear();
+        discardPendingComputed();
         throw new Error(
           `Reactive computed flush limit exceeded after ${maxPendingComputedFlushIterations} iterations; a computed likely writes a value it also reads. Check for cell.set() inside a computation that reads the same cell.`,
         );
@@ -325,9 +326,22 @@ export function flushPendingComputed(): void {
         }
       }
     }
+
+    completed = true;
   } finally {
+    if (!completed) {
+      discardPendingComputed();
+    }
     runtimeState.flushingComputed = false;
   }
+}
+
+function discardPendingComputed(): void {
+  for (const computation of runtimeState.pendingComputed) {
+    computation.queued = false;
+  }
+
+  runtimeState.pendingComputed.clear();
 }
 
 function orderedComputations(

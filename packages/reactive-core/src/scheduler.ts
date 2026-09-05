@@ -42,11 +42,7 @@ export function setScheduler(nextScheduler: Scheduler): () => void {
 }
 
 export function resetSchedulerStateForTesting(): void {
-  for (const computation of queue) {
-    computation.queued = false;
-  }
-
-  clearQueue();
+  discardQueuedComputations();
   scheduled = false;
   flushing = false;
 }
@@ -83,10 +79,7 @@ export function schedulePendingFlush(): void {
     scheduler.schedule(flushQueuedComputations);
   } catch (error) {
     scheduled = false;
-    for (const computation of queue) {
-      computation.queued = false;
-    }
-    clearQueue();
+    discardQueuedComputations();
     throw error;
   }
 }
@@ -102,6 +95,7 @@ export function flushQueuedComputations(): void {
   scheduled = false;
   flushing = true;
   let firstError: unknown;
+  let completed = false;
 
   try {
     for (let iteration = 0; queue.length > 0; iteration += 1) {
@@ -138,10 +132,23 @@ export function flushQueuedComputations(): void {
     if (firstError !== undefined) {
       throw firstError;
     }
+
+    completed = true;
   } finally {
+    if (!completed) {
+      discardQueuedComputations();
+    }
     flushing = false;
     clearCellWriterDiagnostics();
   }
+}
+
+function discardQueuedComputations(): void {
+  for (const computation of queue) {
+    computation.queued = false;
+  }
+
+  clearQueue();
 }
 
 function clearQueue(): void {
