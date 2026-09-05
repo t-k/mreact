@@ -68,7 +68,7 @@ function skipCssTrivia(code: string, start: number): number {
 }
 
 function consumeLeadingCssRule(code: string, start: number): number | undefined {
-  const match = /^@(charset|import|layer)(?=\s|[;{])/iu.exec(code.slice(start));
+  const match = /^@(charset|import|layer)(?=\s|[;{]|\/\*)/iu.exec(code.slice(start));
   const ruleName = match?.[1]?.toLowerCase();
   if (match === null || ruleName === undefined) {
     return undefined;

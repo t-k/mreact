@@ -57,4 +57,42 @@ main { color: red; }\r
 main { color: red; }\r
 `);
   });
+
+  test("places source directives after imports separated by comments", () => {
+    const code = `@import/* comment */ "./extra.css";
+@import "tailwindcss";
+main { color: red; }
+`;
+
+    expect(
+      prependTailwindSourceDirectives({
+        code,
+        cssFile: "/project/src/styles/global.css",
+        sourceDirs: ["/project/src"],
+      }),
+    ).toBe(`@import/* comment */ "./extra.css";
+@import "tailwindcss";
+@source "../**/*.{js,jsx,ts,tsx,mdx}";
+main { color: red; }
+`);
+  });
+
+  test("does not treat similarly named at-rules as CSS prelude imports", () => {
+    const code = `@import-other "tailwindcss";
+@import "tailwindcss";
+main { color: red; }
+`;
+
+    expect(
+      prependTailwindSourceDirectives({
+        code,
+        cssFile: "/project/src/styles/global.css",
+        sourceDirs: ["/project/src"],
+      }),
+    ).toBe(`@source "../**/*.{js,jsx,ts,tsx,mdx}";
+@import-other "tailwindcss";
+@import "tailwindcss";
+main { color: red; }
+`);
+  });
 });
