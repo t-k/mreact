@@ -118102,7 +118102,8 @@
 								{
 									"fileName": "reactive-dom/src/insert-render-value.ts",
 									"line": 5,
-									"character": 16
+									"character": 16,
+									"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/insert-render-value.ts#L5"
 								}
 							],
 							"signatures": [
@@ -118124,7 +118125,8 @@
 										{
 											"fileName": "reactive-dom/src/insert-render-value.ts",
 											"line": 5,
-											"character": 16
+											"character": 16,
+											"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/insert-render-value.ts#L5"
 										}
 									],
 									"parameters": [
@@ -118223,7 +118225,8 @@
 																{
 																	"fileName": "reactive-dom/src/insert-render-value.ts",
 																	"line": 9,
-																	"character": 14
+																	"character": 14,
+																	"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/insert-render-value.ts#L9"
 																}
 															],
 															"type": {
@@ -202837,7 +202840,8 @@
 						{
 							"fileName": "server-render-value-internal.ts",
 							"line": 1,
-							"character": 0
+							"character": 0,
+							"url": "https://github.com/t-k/mreact/blob/main/packages/shared/src/server-render-value-internal.ts#L1"
 						}
 					]
 				},
