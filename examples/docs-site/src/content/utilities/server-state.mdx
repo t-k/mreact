@@ -53,6 +53,23 @@ const profile = createQuery(getQueryClient(), {
 
 Set `staleTime` when browser observers should reuse server-fetched data during initial mount instead of immediately revalidating.
 
+Use `queryDefinition()` when one query key and data type should be shared across loaders, prefetches, cache reads, and updates. The definition-bound APIs infer the cached data type; raw-key APIs remain available for dynamic caches.
+
+```ts
+import { queryDefinition } from "@reckona/mreact-query";
+
+const profileQuery = queryDefinition(["profile", userId] as const, ({ queryKey, signal }) =>
+  fetch(`/api/profile/${queryKey[1]}`, { signal }).then((response) => response.json() as Promise<Profile>),
+);
+
+await queryClient.prefetchQuery(profileQuery);
+const profile = queryClient.getQueryData(profileQuery);
+queryClient.setQueryData(profileQuery, (previous) => ({
+  ...(previous ?? { id: userId, name: "" }),
+  name: "Ada Lovelace",
+}));
+```
+
 ## Router loaders
 
 Inside Mreact Router, prefer the request-scoped query client from the route `loader` context when server data should also hydrate client-side observers.
@@ -228,6 +245,8 @@ queryClient.removeQueries({ queryKey: ["search"] });
 ```
 
 Use `gcTime` on short-lived browser views when idle cache entries should be evicted after observers dispose.
+
+For a client-wide memory policy, pass `inactiveGcTime` to `createQueryClient()`. It expires unused successful or failed prefetch entries after they settle. `maxInactiveEntries` adds a count cap that evicts the oldest settled inactive entries while preserving active observers. Both settings are opt-in and default to the existing unlimited retention behavior.
 
 ## API surface
 

@@ -126,6 +126,14 @@ export interface QuerySubscriptionOptions {
   gcTime?: false | number | undefined;
 }
 
+/** Sets client-wide retention defaults for entries without active observers. */
+export interface QueryClientOptions {
+  /** Evict inactive entries after this delay; undefined preserves infinite retention. */
+  inactiveGcTime?: false | number | undefined;
+  /** Keep at most this many inactive, settled entries; active entries are never counted. */
+  maxInactiveEntries?: false | number | undefined;
+}
+
 /** Selects query entries for invalidation, cancellation, or removal. */
 export interface InvalidateQueriesOptions {
   queryKey?: QueryKey;
@@ -341,8 +349,8 @@ interface QueryClientScopeUnavailableError extends Error {
 /**
  * Creates an isolated query client for cache reads, fetches, mutations, hydration, and subscriptions.
  */
-export function createQueryClient(): QueryClient {
-  return createQueryLifecycle();
+export function createQueryClient(options?: QueryClientOptions): QueryClient {
+  return createQueryLifecycle(options);
 }
 
 /** Creates a reusable, type-linked query definition for cache and fetch APIs. */

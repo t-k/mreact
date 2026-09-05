@@ -8,6 +8,7 @@ import type {
   FetchQueryOptions,
   InvalidateQueriesOptions,
   QueryClient,
+  QueryClientOptions,
   QueryDefinition,
   QueryDefinitionFetchOptions,
   QueryEntry,
@@ -36,17 +37,25 @@ interface SetSuccessOptions {
 
 interface QuerySubscription<TData = unknown> {
   exact: boolean;
+  gcTime: QuerySubscriptionOptions["gcTime"];
   queryHash: string;
+  policyId: symbol;
   queryKey: QueryKey;
   queryKeySegments: readonly string[];
   listener: (entry: QueryEntry<TData>) => void;
 }
 
-export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
+export function createQueryLifecycle(
+  clientOptions: QueryClientOptions = {},
+): QueryClient & HydratableQueryClient {
   const cache = new Map<string, InternalQueryEntry>();
   const exactSubscriptions = new Map<string, Set<QuerySubscription>>();
   const prefixSubscriptions = new Set<QuerySubscription>();
   const subscriberCounts = new Map<string, number>();
+  const subscriptionPolicies = new Map<
+    string,
+    Map<symbol, QuerySubscriptionOptions["gcTime"]>
+  >();
   const gcTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const pendingInvalidationNotifications = new Set<InternalQueryEntry>();
   let invalidationNotifyScheduled = false;
@@ -150,6 +159,7 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
     options: SetSuccessOptions = {},
   ): void {
     const entry = getOrCreateEntry<TData>(queryKey, options.queryHash);
+    clearInactiveTimer(entry.queryHash);
     const sharedData = replaceEqualDeep(entry.data, data) as TData;
     if (entry.abortController !== undefined && !entry.abortController.signal.aborted) {
       entry.abortController.abort(createQueryAbortReason(entry.queryKey));
@@ -167,6 +177,8 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
     entry.status = "success";
     entry.updatedAt = options.updatedAt ?? Date.now();
     notify(entry);
+    scheduleInactiveExpiry(entry.queryHash);
+    enforceInactiveLimit();
   }
 
   function hydrateQueryData<TData>(
@@ -180,23 +192,32 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
     });
   }
 
-  function retainSubscription(queryKey: QueryKey): void {
+  function retainSubscription(
+    queryKey: QueryKey,
+    policyId: symbol,
+    gcTime: QuerySubscriptionOptions["gcTime"],
+  ): void {
     const queryHash = hashQueryKey(queryKey);
-    const timer = gcTimers.get(queryHash);
-    if (timer !== undefined) {
-      clearTimeout(timer);
-      gcTimers.delete(queryHash);
-    }
+    clearInactiveTimer(queryHash);
 
     subscriberCounts.set(queryHash, (subscriberCounts.get(queryHash) ?? 0) + 1);
+    let policies = subscriptionPolicies.get(queryHash);
+    if (policies === undefined) {
+      policies = new Map();
+      subscriptionPolicies.set(queryHash, policies);
+    }
+    policies.set(policyId, gcTime);
   }
 
   function releaseSubscription(
     queryKey: QueryKey,
-    gcTime: QuerySubscriptionOptions["gcTime"],
+    policyId: symbol,
   ): void {
     const queryHash = hashQueryKey(queryKey);
     const count = Math.max(0, (subscriberCounts.get(queryHash) ?? 0) - 1);
+    const policies = subscriptionPolicies.get(queryHash);
+    const gcTime = selectGcTime(policies?.values());
+    policies?.delete(policyId);
 
     if (count > 0) {
       subscriberCounts.set(queryHash, count);
@@ -204,26 +225,72 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
     }
 
     subscriberCounts.delete(queryHash);
+    subscriptionPolicies.delete(queryHash);
+    scheduleInactiveExpiry(queryHash, gcTime);
+  }
 
-    if (gcTime === false || gcTime === undefined) {
+  function scheduleInactiveExpiry(
+    queryHash: string,
+    gcTime: QuerySubscriptionOptions["gcTime"] = clientOptions.inactiveGcTime,
+  ): void {
+    clearInactiveTimer(queryHash);
+    if (gcTime === false || gcTime === undefined || (subscriberCounts.get(queryHash) ?? 0) > 0) {
       return;
     }
 
-    const timer = setTimeout(
-      () => {
-        gcTimers.delete(queryHash);
-        if ((subscriberCounts.get(queryHash) ?? 0) > 0) {
-          return;
-        }
+    const timer = setTimeout(() => {
+      gcTimers.delete(queryHash);
+      if ((subscriberCounts.get(queryHash) ?? 0) > 0) {
+        return;
+      }
 
-        const entry = cache.get(queryHash);
-        if (entry !== undefined) {
-          removeEntry(entry);
-        }
-      },
-      Math.max(0, gcTime),
-    );
+      const entry = cache.get(queryHash);
+      if (entry !== undefined) {
+        removeEntry(entry);
+      }
+    }, Math.max(0, gcTime));
     gcTimers.set(queryHash, timer);
+  }
+
+  function clearInactiveTimer(queryHash: string): void {
+    const timer = gcTimers.get(queryHash);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      gcTimers.delete(queryHash);
+    }
+  }
+
+  function enforceInactiveLimit(): void {
+    const maxInactiveEntries = clientOptions.maxInactiveEntries;
+    if (maxInactiveEntries === undefined || maxInactiveEntries === false) {
+      return;
+    }
+
+    const inactiveEntries = Array.from(cache.values())
+      .filter((entry) => (subscriberCounts.get(entry.queryHash) ?? 0) === 0 && !entry.isFetching)
+      .sort((left, right) => left.updatedAt - right.updatedAt);
+
+    while (inactiveEntries.length > Math.max(0, maxInactiveEntries)) {
+      const entry = inactiveEntries.shift();
+      if (entry === undefined) {
+        return;
+      }
+      removeEntry(entry);
+    }
+  }
+
+  function selectGcTime(
+    policies: Iterable<QuerySubscriptionOptions["gcTime"]> | undefined,
+  ): QuerySubscriptionOptions["gcTime"] {
+    const values = policies === undefined ? [] : Array.from(policies);
+    const numeric = values.filter((value): value is number => typeof value === "number");
+    if (numeric.length > 0) {
+      return Math.min(...numeric);
+    }
+    if (values.includes(false)) {
+      return false;
+    }
+    return clientOptions.inactiveGcTime;
   }
 
   function removeEntry(entry: InternalQueryEntry): void {
@@ -277,8 +344,10 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
     ): Promise<TData> {
       const options = normalizeFetchOptions(optionsOrDefinition, definitionOptions);
       const entry = getOrCreateEntry<TData>(options.queryKey);
+      clearInactiveTimer(entry.queryHash);
 
       if (entry.status === "success" && !entry.stale && isFresh(entry, options.staleTime)) {
+        scheduleInactiveExpiry(entry.queryHash);
         return entry.data as TData;
       }
 
@@ -322,6 +391,8 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
           entry.status = "error";
           entry.updatedAt = Date.now();
           notify(entry);
+          scheduleInactiveExpiry(entry.queryHash);
+          enforceInactiveLimit();
           throw error;
         },
       );
@@ -398,15 +469,17 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
       listener: (entry: QueryEntry<TData>) => void,
       options: QuerySubscriptionOptions = {},
     ): () => void {
-      retainSubscription(queryKey);
       const queryHash = hashQueryKey(queryKey);
       const subscription: QuerySubscription<TData> = {
         exact: options.exact === true,
+        gcTime: options.gcTime ?? clientOptions.inactiveGcTime,
         listener,
+        policyId: Symbol("mreact.query.subscription"),
         queryKey,
         queryHash,
         queryKeySegments: hashQueryKeySegments(queryKey),
       };
+      retainSubscription(queryKey, subscription.policyId, subscription.gcTime);
       if (subscription.exact) {
         let subscriptions = exactSubscriptions.get(queryHash);
         if (subscriptions === undefined) {
@@ -428,7 +501,7 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
         } else {
           prefixSubscriptions.delete(subscription as QuerySubscription);
         }
-        releaseSubscription(queryKey, options.gcTime);
+        releaseSubscription(queryKey, subscription.policyId);
       };
     },
     entries(): QueryEntry[] {

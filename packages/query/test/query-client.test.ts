@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createQueryClient,
+  createQuery,
   dehydrate,
   hydrate,
   hashQueryKey,
@@ -12,6 +13,70 @@ afterEach(() => {
 });
 
 describe("createQueryClient", () => {
+  it("expires successful and failed unused prefetches with the client policy", async () => {
+    vi.useFakeTimers();
+    const client = createQueryClient({ inactiveGcTime: 10 });
+    const failure = new Error("prefetch failed");
+
+    await client.prefetchQuery({
+      queryKey: ["unused-success"],
+      queryFn: () => "cached",
+    });
+    await client.prefetchQuery({
+      queryKey: ["unused-error"],
+      queryFn: () => {
+        throw failure;
+      },
+    });
+    expect(client.entries()).toHaveLength(2);
+
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(client.getQueryEntry(["unused-success"])).toBeUndefined();
+    expect(client.getQueryEntry(["unused-error"])).toBeUndefined();
+  });
+
+  it("cancels inactive expiry while an observer is active and evicts after disposal", async () => {
+    vi.useFakeTimers();
+    const client = createQueryClient({ inactiveGcTime: 10 });
+    await client.prefetchQuery({
+      queryKey: ["shared-inactive"],
+      queryFn: () => "cached",
+    });
+
+    const observer = createQuery(client, {
+      autoFetch: false,
+      queryKey: ["shared-inactive"],
+      queryFn: () => "fresh",
+    });
+    await vi.advanceTimersByTimeAsync(20);
+    expect(client.getQueryEntry(["shared-inactive"])).toBeDefined();
+
+    observer.dispose();
+    await vi.advanceTimersByTimeAsync(9);
+    expect(client.getQueryEntry(["shared-inactive"])).toBeDefined();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(client.getQueryEntry(["shared-inactive"])).toBeUndefined();
+  });
+
+  it("caps inactive entries without evicting active entries", async () => {
+    vi.useFakeTimers();
+    const client = createQueryClient({ maxInactiveEntries: 1 });
+    const observer = createQuery(client, {
+      autoFetch: false,
+      queryKey: ["active-entry"],
+      queryFn: () => "active",
+    });
+    client.setQueryData(["active-entry"], "active");
+    client.setQueryData(["old-entry"], "old");
+    client.setQueryData(["new-entry"], "new");
+
+    expect(client.getQueryEntry(["active-entry"])).toBeDefined();
+    expect(client.getQueryEntry(["old-entry"])).toBeUndefined();
+    expect(client.getQueryEntry(["new-entry"])).toBeDefined();
+    observer.dispose();
+  });
+
   it("uses one typed query definition for fetch, cache reads, and writes", async () => {
     const client = createQueryClient();
     const definition = queryDefinition(["profile", 1] as const, () => ({ name: "Ada" }));

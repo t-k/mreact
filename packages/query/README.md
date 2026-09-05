@@ -27,6 +27,20 @@ const state = dehydrate(queryClient);
 hydrate(getQueryClient(), state);
 ```
 
+For a reusable type-linked cache contract, define the key and query function once and pass the definition to fetch, prefetch, read, and write APIs.
+
+```ts
+import { queryDefinition } from "@reckona/mreact-query";
+
+const profileQuery = queryDefinition(["profile", userId] as const, ({ queryKey, signal }) =>
+  fetch(`/api/profile/${queryKey[1]}`, { signal }).then((response) => response.json() as Promise<Profile>),
+);
+
+const profile = await queryClient.fetchQuery(profileQuery);
+queryClient.setQueryData(profileQuery, { ...profile, name: "Ada" });
+const cached = queryClient.getQueryData(profileQuery);
+```
+
 ## Core APIs
 
 - `createQueryClient()` creates a query cache.
@@ -38,6 +52,7 @@ hydrate(getQueryClient(), state);
 - `removeQueries()` aborts matching in-flight queries, evicts matching cache entries, and resets subscribed observers to an empty pending result.
 - `createQuery()` creates a reactive query observer. It auto-fetches empty queries in browsers by default and remains observe-only during server render. Hydrated entries render immediately, then revalidate on mount unless their server `updatedAt` timestamp is still covered by `staleTime`; pass `autoFetch: false` to require loader-prefetched data only.
 - `createQuery()` accepts `gcTime` to evict an idle cache entry after the last observer disposes. It is disabled by default; pass a non-negative millisecond value when short-lived browser views should release data after unmount.
+- `createQueryClient({ inactiveGcTime, maxInactiveEntries })` can bound entries that have no active observers, including successful and failed unused prefetches. Both options are disabled by default, so existing clients retain entries until an observer-level `gcTime` or explicit removal is used. When observer policies conflict, the shortest numeric `gcTime` wins after the last observer disposes; `false` wins only when no numeric policy is present.
 - `createQuery()` can opt into browser revalidation with `refetchOnWindowFocus`, `refetchOnReconnect`, and `refetchOnInvalidate`. These hooks are disabled by default and refetch through the same cache entry and abort signal path as manual `refetch()`.
 - `createQuery()` and `createInfiniteQuery()` accept `refetchInterval` in milliseconds for browser polling. Each interval is scheduled after the preceding fetch settles, pauses while the document is hidden, and is cleared automatically when the observer disposes.
 - `createInfiniteQuery()` stores cursor pages under one query key, exposes `pages`, `pageParams`, `hasNextPage`, and `fetchNextPage()`, and dedupes concurrent requests for the same next page.
