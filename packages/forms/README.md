@@ -35,7 +35,7 @@ input({
 });
 ```
 
-Use `field.bind({ event: "change" })` for controls such as `<select>` that should update on change instead of input. `binding.value` is read live from form state, so repeated reads after validation or reset return the current value.
+Use `field.bind({ event: "change" })` for controls such as `<select>` that should update on change instead of input. Pass `parse` and `format` when the control representation differs from the field type; their declared field type is preserved at the DOM boundary, including explicit `null` and `undefined` results. `binding.value` is read live from form state, so repeated reads after validation or reset return the current value.
 
 Bindings read values from the DOM control kind. Text and `datetime-local` controls emit strings, checkboxes emit booleans, number and range inputs emit numbers, date, month, time, and week inputs emit `Date | null`, file inputs emit `FileList | null`, and multiple selects emit `string[]`. Match the field's TypeScript value type to the control you bind; use an explicit event handler with `field.setValue()` when a custom component needs different conversion semantics.
 

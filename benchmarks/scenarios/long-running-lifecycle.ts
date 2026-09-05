@@ -34,6 +34,7 @@ interface ScenarioReport {
     routeOwnerRuns: number;
     schedulerRecovered: boolean;
     ssrPeakChunkCapacity: number;
+    ssrPeakRetainedBufferCount: number;
     ssrSlowReaderChunks: number;
     slowReaderCompleted: boolean;
     ssrTerminalFailures: number;
@@ -43,7 +44,7 @@ interface ScenarioReport {
     gcAvailable: boolean;
     platform: NodeJS.Platform;
   };
-  version: 2;
+  version: 3;
   warmupCycles: number;
 }
 
@@ -154,6 +155,7 @@ async function runScenario(options: {
 
   let ssrTerminalFailures = 0;
   let ssrPeakChunkCapacity = 0;
+  let ssrPeakRetainedBufferCount = 0;
   let ssrSlowReaderChunks = 0;
   let slowReaderCompleted = true;
   for (let cycle = 0; cycle < options.cycles; cycle += 1) {
@@ -175,7 +177,16 @@ async function runScenario(options: {
           })(),
         );
       },
-      { maxQueuedBytes: 16_384 },
+      {
+        maxQueuedBytes: 16_384,
+        onQueueStateChange(state) {
+          ssrPeakChunkCapacity = Math.max(ssrPeakChunkCapacity, state.retainedBackingBytes);
+          ssrPeakRetainedBufferCount = Math.max(
+            ssrPeakRetainedBufferCount,
+            state.retainedBackingBufferCount,
+          );
+        },
+      },
     );
     const slowReader = slowStream.getReader();
     const slowParts: string[] = [];
@@ -185,7 +196,6 @@ async function runScenario(options: {
         break;
       }
       ssrSlowReaderChunks += 1;
-      ssrPeakChunkCapacity = Math.max(ssrPeakChunkCapacity, result.value.buffer.byteLength);
       if (result.value.buffer.byteLength > result.value.byteLength * 2) {
         throw new Error(
           `slow reader received a chunk retaining excess backing capacity in cycle ${cycle}`,
@@ -201,6 +211,12 @@ async function runScenario(options: {
     ) {
       slowReaderCompleted = false;
       throw new Error(`slow reader lost streamed output in cycle ${cycle}`);
+    }
+    if (ssrPeakChunkCapacity <= 0) {
+      throw new Error("slow reader did not report retained queue capacity");
+    }
+    if (ssrPeakRetainedBufferCount < 2) {
+      throw new Error("slow reader did not retain more than one backing buffer at once");
     }
 
     const stream = renderToReadableStream(
@@ -224,6 +240,10 @@ async function runScenario(options: {
     });
     await expectStreamFailure(failed);
     ssrTerminalFailures += 1;
+
+    await verifyPendingWaiterAfterFailure("async");
+    await verifyPendingWaiterAfterFailure("deferred");
+    ssrTerminalFailures += 2;
     updatePeak();
   }
 
@@ -280,11 +300,18 @@ async function runScenario(options: {
     }
     looping = false;
     trigger.set(trigger.get() + 1);
+    const recoveryRunsBefore = schedulerRuns;
+    const recoveryValueBefore = trigger.get();
     const recoveryFlush = pendingFlush;
     pendingFlush = undefined;
     recoveryFlush?.();
+    const recoveryRunsAfter = schedulerRuns;
     schedulerRecovered =
-      iterationLimitObserved && schedulerRuns > 100 && recoveryFlush !== undefined;
+      iterationLimitObserved &&
+      schedulerRuns > 100 &&
+      recoveryFlush !== undefined &&
+      recoveryRunsAfter > recoveryRunsBefore &&
+      trigger.get() === recoveryValueBefore;
     stop();
     if (!schedulerRecovered) {
       throw new Error(`scheduler did not recover after iteration limit: ${schedulerRuns} runs`);
@@ -310,13 +337,14 @@ async function runScenario(options: {
       routeOwnerRuns,
       schedulerRecovered,
       ssrPeakChunkCapacity,
+      ssrPeakRetainedBufferCount,
       ssrSlowReaderChunks,
       slowReaderCompleted,
       ssrTerminalFailures,
       unusedQueryEntries,
     },
     runtime: { gcAvailable: typeof globalThis.gc === "function", platform: process.platform },
-    version: 2,
+    version: 3,
     warmupCycles: options.warmupCycles,
   };
 }
@@ -337,11 +365,80 @@ async function expectStreamFailure(stream: ReadableStream<Uint8Array>): Promise<
   reader.releaseLock();
 }
 
+async function verifyPendingWaiterAfterFailure(mode: "async" | "deferred"): Promise<void> {
+  let signal: AbortSignal | undefined;
+  let pressure: Promise<void> | undefined;
+  let rejectFailure: ((error: unknown) => void) | undefined;
+  const failure = new Error(`${mode} scenario failure`);
+  const failurePromise = new Promise<void>((_, reject) => {
+    rejectFailure = reject;
+  });
+  const stream = renderToReadableStream(
+    mode === "async"
+      ? async (sink) => {
+          signal = sink.signal;
+          sink.append("SHELL");
+          queueMicrotask(() => {
+            pressure = sink.backpressure?.();
+          });
+          await failurePromise;
+        }
+      : (sink) => {
+          signal = sink.signal;
+          sink.append("SHELL");
+          queueMicrotask(() => {
+            pressure = sink.backpressure?.();
+          });
+          sink.defer?.(failurePromise);
+        },
+  );
+
+  await Promise.resolve();
+  await Promise.resolve();
+  if (pressure === undefined) {
+    throw new Error(`${mode} scenario did not create a backpressure waiter`);
+  }
+  let pressureSettled = false;
+  pressure.then(() => {
+    pressureSettled = true;
+  });
+  await Promise.resolve();
+  if (pressureSettled) {
+    throw new Error(`${mode} scenario waiter settled before the terminal failure`);
+  }
+
+  const reader = stream.getReader();
+  rejectFailure?.(failure);
+  const shell = await reader.read();
+  if (shell.done) {
+    throw new Error(`${mode} scenario closed before delivering its shell`);
+  }
+  await expectRejectWithIdentity(reader.read(), failure);
+  await pressure;
+  reader.releaseLock();
+  if (!signal?.aborted) {
+    throw new Error(`${mode} scenario did not abort its producer`);
+  }
+}
+
 async function expectReject<T>(promise: Promise<T>): Promise<void> {
   try {
     await promise;
   } catch {
     return;
+  }
+
+  throw new Error("expected stream failure");
+}
+
+async function expectRejectWithIdentity<T>(promise: Promise<T>, expected: unknown): Promise<void> {
+  try {
+    await promise;
+  } catch (error) {
+    if (error === expected) {
+      return;
+    }
+    throw new Error(`stream rejected with an unexpected reason: ${String(error)}`);
   }
 
   throw new Error("expected stream failure");

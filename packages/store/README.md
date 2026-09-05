@@ -31,7 +31,7 @@ independent.count = 10;
 - `store.select()` subscribes to a reactive slice of store state and returns a selected cell with `dispose()` for code that creates selectors outside the framework cleanup lifecycle.
 - `store.subscribe()` observes changes from outside the framework runtime.
 - `store.view` exposes readonly state, selectors, and subscriptions without cloning each read.
-- `store.snapshot()` clones arrays, plain objects, dates, regular expressions, maps, sets, and custom object instances. Functions remain shared references; weak collections and promises are rejected.
+- `store.snapshot()` clones arrays, plain objects, dates, regular expressions, URLs, maps, sets, ArrayBuffers, DataViews, and typed arrays. Functions remain shared references; arbitrary class instances, weak collections, and promises are rejected.
 - `store.transaction()` batches multiple updates into one notification.
 - `createRequestStoreFactory()` creates request-isolated store instances.
 - The `persist` option connects store state to a storage adapter. Pass a callback for write-only persistence, or use `{ load, save, version, migrate }` when the store should hydrate and migrate saved state. Persisted envelopes are version-tagged so ordinary application values shaped like `{ state, version }` remain ordinary state. To read a legacy untagged `{ state, version }` record during migration, set the literal `acceptLegacyPersistedState: true`; this opt-in prevents domain state from being guessed as an envelope. When the choice comes from a runtime boolean, branch into separate current and legacy option objects so TypeScript can preserve the corresponding load contract.

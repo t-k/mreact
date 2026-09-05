@@ -8,6 +8,20 @@ export interface RenderToReadableStreamOptions {
   maxQueuedBytes?: number;
   /** Maximum chunks retained by the stream before consumption. Defaults to 16,384. */
   maxQueuedChunks?: number;
+  /** Receives local queue retention metrics for diagnostics and lifecycle measurements. */
+  onQueueStateChange?: ((state: RenderToReadableStreamQueueState) => void) | undefined;
+}
+
+/** Describes the encoded bytes and chunks currently retained before consumption. */
+export interface RenderToReadableStreamQueueState {
+  controllerQueuedBytes: number;
+  controllerQueuedChunkCount: number;
+  retainedBackingBufferCount: number;
+  retainedBackingBytes: number;
+  queuedBytes: number;
+  queuedChunkCount: number;
+  retainedBytes: number;
+  retainedChunkCount: number;
 }
 
 const streamQueuedChunkSoftLimitBytes = 1024 * 1024;
@@ -42,6 +56,7 @@ export function renderToReadableStream(
   let terminated = false;
   let controllerQueuedBytes = 0;
   let controllerQueuedChunkCount = 0;
+  let controllerQueuedBuffer: ArrayBufferLike | undefined;
   let queuedBytes = 0;
   let warnedQueuedBytes = false;
   let backpressurePromise: Promise<void> | undefined;
@@ -67,6 +82,8 @@ export function renderToReadableStream(
       controller.enqueue(buffer);
       controllerQueuedBytes = (controller.desiredSize ?? 0) <= 0 ? buffer.byteLength : 0;
       controllerQueuedChunkCount = (controller.desiredSize ?? 0) <= 0 ? 1 : 0;
+      controllerQueuedBuffer = (controller.desiredSize ?? 0) <= 0 ? buffer.buffer : undefined;
+      reportQueueState();
       resolveBackpressureIfReady();
       return;
     }
@@ -81,6 +98,7 @@ export function renderToReadableStream(
         controller.enqueue(chunk);
         controllerQueuedBytes = (controller.desiredSize ?? 0) <= 0 ? chunk.byteLength : 0;
         controllerQueuedChunkCount = (controller.desiredSize ?? 0) <= 0 ? 1 : 0;
+        controllerQueuedBuffer = (controller.desiredSize ?? 0) <= 0 ? chunk.buffer : undefined;
       }
     }
 
@@ -88,6 +106,7 @@ export function renderToReadableStream(
       controller.close();
     }
 
+    reportQueueState();
     resolveBackpressureIfReady();
   };
 
@@ -171,6 +190,8 @@ export function renderToReadableStream(
     pull(controller) {
       controllerQueuedBytes = 0;
       controllerQueuedChunkCount = 0;
+      controllerQueuedBuffer = undefined;
+      reportQueueState();
       drainQueuedChunks(controller);
       resolveBackpressureAfterPull();
     },
@@ -241,6 +262,7 @@ export function renderToReadableStream(
   function queueChunk(buffer: Uint8Array): void {
     queuedChunks.push(buffer);
     queuedBytes += buffer.byteLength;
+    reportQueueState();
 
     if (
       !warnedQueuedBytes &&
@@ -281,8 +303,10 @@ export function renderToReadableStream(
     queuedChunks.length = 0;
     controllerQueuedBytes = 0;
     controllerQueuedChunkCount = 0;
+    controllerQueuedBuffer = undefined;
     queuedBytes = 0;
     abortController.abort(reason);
+    reportQueueState();
     resolveBackpressureIfReady();
   }
 
@@ -293,6 +317,35 @@ export function renderToReadableStream(
 
     terminate(error);
     controllerRef?.error(error);
+  }
+
+  function reportQueueState(): void {
+    const callback = options.onQueueStateChange;
+    if (callback === undefined) {
+      return;
+    }
+
+    const backingBuffers = new Set<ArrayBufferLike>();
+    if (controllerQueuedBuffer !== undefined) {
+      backingBuffers.add(controllerQueuedBuffer);
+    }
+    for (const chunk of queuedChunks) {
+      backingBuffers.add(chunk.buffer);
+    }
+
+    callback({
+      controllerQueuedBytes,
+      controllerQueuedChunkCount,
+      retainedBackingBufferCount: backingBuffers.size,
+      retainedBackingBytes: [...backingBuffers].reduce(
+        (total, buffer) => total + buffer.byteLength,
+        0,
+      ),
+      queuedBytes,
+      queuedChunkCount: queuedChunks.length,
+      retainedBytes: controllerQueuedBytes + queuedBytes,
+      retainedChunkCount: controllerQueuedChunkCount + queuedChunks.length,
+    });
   }
 }
 

@@ -82,7 +82,7 @@ export type {
 } from "./sink.js";
 
 export { renderToReadableStream } from "./stream.js";
-export type { RenderToReadableStreamOptions } from "./stream.js";
+export type { RenderToReadableStreamOptions, RenderToReadableStreamQueueState } from "./stream.js";
 
 export {
   reactSuspenseRevealExternalScript,

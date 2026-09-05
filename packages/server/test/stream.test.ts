@@ -63,6 +63,39 @@ describe("server streaming runtime", () => {
     await expect(readStream(stream)).resolves.toBe("<p>Stream</p>");
   });
 
+  test("reports simultaneous controller and local queue retention", async () => {
+    const states: Array<{
+      retainedBackingBufferCount: number;
+      retainedBackingBytes: number;
+      retainedBytes: number;
+      retainedChunkCount: number;
+    }> = [];
+    const stream = renderToReadableStream(
+      (sink) => {
+        sink.append("SHELL");
+        sink.defer?.(Promise.resolve().then(() => sink.append("BODY")));
+      },
+      {
+        onQueueStateChange(state) {
+          states.push({
+            retainedBackingBufferCount: state.retainedBackingBufferCount,
+            retainedBackingBytes: state.retainedBackingBytes,
+            retainedBytes: state.retainedBytes,
+            retainedChunkCount: state.retainedChunkCount,
+          });
+        },
+      },
+    );
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(Math.max(...states.map((state) => state.retainedBytes))).toBeGreaterThan(5);
+    expect(Math.max(...states.map((state) => state.retainedChunkCount))).toBeGreaterThan(1);
+    expect(Math.max(...states.map((state) => state.retainedBackingBytes))).toBeGreaterThan(5);
+    expect(Math.max(...states.map((state) => state.retainedBackingBufferCount))).toBeGreaterThan(1);
+    await expect(readStream(stream)).resolves.toBe("SHELLBODY");
+  });
+
   test("rejects the reader when synchronous render throws undefined", async () => {
     const stream = renderToReadableStream(() => {
       throw undefined;
@@ -316,12 +349,9 @@ describe("server streaming runtime", () => {
     const stream = renderToReadableStream((sink) => {
       signal = sink.signal;
       sink.append("SHELL");
-      sink.defer!(
-        (async () => {
-          pressure = sink.backpressure?.();
-          await pressure;
-        })(),
-      );
+      queueMicrotask(() => {
+        pressure = sink.backpressure?.();
+      });
       sink.defer!(
         new Promise<void>((_, reject) => {
           rejectFailure = reject;
@@ -337,6 +367,80 @@ describe("server streaming runtime", () => {
 
     await expect(reader.read()).resolves.toMatchObject({ done: false });
     await expect(reader.read()).rejects.toThrow("deferred render failed");
+    await expect(pressure).resolves.toBeUndefined();
+    expect(signal?.aborted).toBe(true);
+  });
+
+  test("async render failure settles a pending backpressure waiter", async () => {
+    let signal: AbortSignal | undefined;
+    let pressure: Promise<void> | undefined;
+    let rejectRender: ((error: unknown) => void) | undefined;
+    const renderGate = new Promise<void>((_, reject) => {
+      rejectRender = reject;
+    });
+    const failure = new Error("async render failed");
+    const stream = renderToReadableStream(async (sink) => {
+      signal = sink.signal;
+      sink.append("SHELL");
+      sink.defer!(
+        Promise.resolve().then(async () => {
+          pressure = sink.backpressure?.();
+          await pressure;
+        }),
+      );
+      await renderGate;
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(pressure).toBeDefined();
+    let pressureSettled = false;
+    pressure?.then(() => {
+      pressureSettled = true;
+    });
+    await Promise.resolve();
+    expect(pressureSettled).toBe(false);
+
+    const reader = stream.getReader();
+    rejectRender?.(failure);
+    await expect(reader.read()).resolves.toMatchObject({ done: false });
+    await expect(reader.read()).rejects.toBe(failure);
+    await expect(pressure).resolves.toBeUndefined();
+    expect(signal?.aborted).toBe(true);
+  });
+
+  test("deferred render failure settles a pending backpressure waiter", async () => {
+    let signal: AbortSignal | undefined;
+    let pressure: Promise<void> | undefined;
+    let rejectDeferred: ((error: unknown) => void) | undefined;
+    const failure = new Error("deferred render failed");
+    const stream = renderToReadableStream((sink) => {
+      signal = sink.signal;
+      sink.append("SHELL");
+      queueMicrotask(() => {
+        pressure = sink.backpressure?.();
+      });
+      sink.defer!(
+        new Promise<void>((_, reject) => {
+          rejectDeferred = reject;
+        }),
+      );
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(pressure).toBeDefined();
+    let pressureSettled = false;
+    pressure?.then(() => {
+      pressureSettled = true;
+    });
+    await Promise.resolve();
+    expect(pressureSettled).toBe(false);
+
+    const reader = stream.getReader();
+    rejectDeferred?.(failure);
+    await expect(reader.read()).resolves.toMatchObject({ done: false });
+    await expect(reader.read()).rejects.toBe(failure);
     await expect(pressure).resolves.toBeUndefined();
     expect(signal?.aborted).toBe(true);
   });

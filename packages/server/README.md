@@ -29,10 +29,7 @@ const response = html(markup);
 
 ### Streaming diagnostics
 
-`renderToReadableStream(render, { logAbortedDeferredErrors: true })` can log
-deferred task errors that arrive after the stream has already been aborted. The
-log is development-only, opt-in, and never writes the ignored error into the
-HTTP response body.
+`renderToReadableStream(render, { logAbortedDeferredErrors: true })` can log deferred task errors that arrive after the stream has already been aborted. The log is development-only, opt-in, and never writes the ignored error into the HTTP response body. `onQueueStateChange` is an opt-in diagnostic callback that reports the bytes, chunk count, and distinct backing buffer capacity retained by the local stream queues while a reader is slow.
 
 ## Subpaths
 
