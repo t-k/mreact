@@ -60,6 +60,35 @@ describe("computed", () => {
     expect(second.get()).toBe(24);
   });
 
+  test("does not refresh a sibling dormant reader when the shared value is unchanged", () => {
+    const source = cell(1);
+    let sharedRuns = 0;
+    let firstRuns = 0;
+    let secondRuns = 0;
+    const shared = computed(() => {
+      sharedRuns += 1;
+      return source.get() % 2;
+    });
+    const first = computed(() => {
+      firstRuns += 1;
+      return shared.get() + 10;
+    });
+    const second = computed(() => {
+      secondRuns += 1;
+      return shared.get() + 20;
+    });
+
+    expect(first.get()).toBe(11);
+    expect(second.get()).toBe(21);
+    expect([sharedRuns, firstRuns, secondRuns]).toEqual([1, 1, 1]);
+
+    source.set(3);
+
+    expect(first.get()).toBe(11);
+    expect(second.get()).toBe(21);
+    expect([sharedRuns, firstRuns, secondRuns]).toEqual([2, 2, 1]);
+  });
+
   test("releases restored upstream dependencies when a dormant computed throws", () => {
     const shouldThrow = cell(false);
     const source = cell(1);
