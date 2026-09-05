@@ -350,7 +350,7 @@ export default function Page() {
 
     expect(chunks.length).toBeGreaterThan(0);
     expect(dynamicImports.length).toBeGreaterThan(0);
-    expect(graphEdges).toEqual(expect.arrayContaining(dynamicImports));
+    expect(graphEdges).toEqual(expect.arrayContaining([...dynamicImports]));
 
     for (const file of new Set([
       ...chunks.map((chunk) => chunk.file),
@@ -373,7 +373,7 @@ export default function Page() {
 
     expect(report.initial.unavailablePaths).toEqual([]);
     expect(report.navigation?.unavailablePaths).toEqual([]);
-    expect(report.navigation?.fetchedPaths).toEqual(expect.arrayContaining(dynamicImports));
+    expect(report.navigation?.fetchedPaths).toEqual(expect.arrayContaining([...dynamicImports]));
   });
 
   test("omits route cell state runtime when the client route does not call cell", async () => {
