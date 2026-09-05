@@ -1,7 +1,15 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { cell, createCleanupScope, effect } from "../../packages/reactive-core/src/index.ts";
-import { batch } from "../../packages/reactive-core/src/index.ts";
+import {
+  cell,
+  createCleanupScope,
+  effect,
+  runWithCleanupScope,
+} from "../../packages/reactive-core/src/index.ts";
+import {
+  resetSchedulerStateForTesting,
+  setScheduler,
+} from "../../packages/reactive-core/src/scheduler.ts";
 import { createQuery, createQueryClient } from "../../packages/query/src/index.ts";
 import { renderToReadableStream } from "../../packages/server/src/index.ts";
 
@@ -21,9 +29,13 @@ interface ScenarioReport {
   };
   node: string;
   results: {
+    abortReleasedWaiter: boolean;
     activeQueryRetained: boolean;
     routeOwnerRuns: number;
     schedulerRecovered: boolean;
+    ssrPeakChunkCapacity: number;
+    ssrSlowReaderChunks: number;
+    slowReaderCompleted: boolean;
     ssrTerminalFailures: number;
     unusedQueryEntries: number;
   };
@@ -31,7 +43,7 @@ interface ScenarioReport {
     gcAvailable: boolean;
     platform: NodeJS.Platform;
   };
-  version: 1;
+  version: 2;
   warmupCycles: number;
 }
 
@@ -83,6 +95,31 @@ async function runScenario(options: {
   if (routeOwnerRuns !== expectedRouteRuns) {
     throw new Error(`route owner run count drifted: ${routeOwnerRuns} !== ${expectedRouteRuns}`);
   }
+  const runsBeforePostDisposeUpdate = routeOwnerRuns;
+  shared.set((value) => value + 1);
+  await tick();
+  if (routeOwnerRuns !== runsBeforePostDisposeUpdate) {
+    throw new Error("disposed route owners still responded to a shared store update");
+  }
+
+  const partialScope = createCleanupScope();
+  let partialCleanupRuns = 0;
+  try {
+    runWithCleanupScope(partialScope, () => {
+      partialScope.register(() => {
+        partialCleanupRuns += 1;
+      });
+      throw new Error("partial route construction failed");
+    });
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== "partial route construction failed") {
+      throw error;
+    }
+  }
+  partialScope.dispose();
+  if (!partialScope.disposed || partialCleanupRuns !== 1) {
+    throw new Error("partial route construction left an owned cleanup behind");
+  }
 
   const client = createQueryClient({ inactiveGcTime: 0, maxInactiveEntries: 4 });
   await client.prefetchQuery({ queryKey: ["shared"], queryFn: async () => "retained" });
@@ -91,6 +128,7 @@ async function runScenario(options: {
     queryFn: async () => "retained",
     queryKey: ["shared"],
   });
+  const unsubscribeRetained = client.subscribe(["shared"], () => {}, { exact: true, gcTime: 0 });
   for (let index = 0; index < options.cycles; index += 1) {
     await client.prefetchQuery({
       queryKey: ["unused", index],
@@ -104,10 +142,67 @@ async function runScenario(options: {
     .entries()
     .filter((entry) => entry.queryKey[0] === "unused").length;
   retained.dispose();
+  unsubscribeRetained();
   client.removeQueries();
 
+  if (!activeQueryRetained) {
+    throw new Error("an actively subscribed query was evicted under inactive cache pressure");
+  }
+  if (unusedQueryEntries > 4) {
+    throw new Error(`inactive query cap was exceeded: ${unusedQueryEntries} entries`);
+  }
+
   let ssrTerminalFailures = 0;
+  let ssrPeakChunkCapacity = 0;
+  let ssrSlowReaderChunks = 0;
+  let slowReaderCompleted = true;
   for (let cycle = 0; cycle < options.cycles; cycle += 1) {
+    const slowStream = renderToReadableStream(
+      (sink) => {
+        sink.append(`<section data-cycle="${cycle}">`);
+        for (let fragment = 0; fragment < 8; fragment += 1) {
+          sink.defer?.(
+            (async () => {
+              await tick();
+              sink.append(`<span>${fragment}</span>`);
+            })(),
+          );
+        }
+        sink.defer?.(
+          (async () => {
+            await tick();
+            sink.append("</section>");
+          })(),
+        );
+      },
+      { maxQueuedBytes: 16_384 },
+    );
+    const slowReader = slowStream.getReader();
+    const slowParts: string[] = [];
+    for (;;) {
+      const result = await slowReader.read();
+      if (result.done) {
+        break;
+      }
+      ssrSlowReaderChunks += 1;
+      ssrPeakChunkCapacity = Math.max(ssrPeakChunkCapacity, result.value.buffer.byteLength);
+      if (result.value.buffer.byteLength > result.value.byteLength * 2) {
+        throw new Error(
+          `slow reader received a chunk retaining excess backing capacity in cycle ${cycle}`,
+        );
+      }
+      slowParts.push(new TextDecoder().decode(result.value));
+      await tick();
+    }
+    const slowOutput = slowParts.join("");
+    if (
+      slowOutput !==
+      `<section data-cycle="${cycle}">${Array.from({ length: 8 }, (_, index) => `<span>${index}</span>`).join("")}</section>`
+    ) {
+      slowReaderCompleted = false;
+      throw new Error(`slow reader lost streamed output in cycle ${cycle}`);
+    }
+
     const stream = renderToReadableStream(
       async (sink) => {
         for (let fragment = 0; fragment < 4; fragment += 1) {
@@ -132,21 +227,71 @@ async function runScenario(options: {
     updatePeak();
   }
 
-  const trigger = cell(0);
-  let schedulerRuns = 0;
-  const stop = effect(() => {
-    trigger.get();
-    schedulerRuns += 1;
+  let abortReleasedWaiter = false;
+  let abortSignal: AbortSignal | undefined;
+  let backpressureWaiter: Promise<void> | undefined;
+  const abortStream = renderToReadableStream((sink) => {
+    abortSignal = sink.signal;
+    sink.append("SHELL");
+    sink.defer?.(
+      Promise.resolve().then(async () => {
+        backpressureWaiter = sink.backpressure?.();
+        await backpressureWaiter;
+      }),
+    );
   });
-  batch(() => {
-    trigger.set(1);
-    trigger.set(2);
+  await Promise.resolve();
+  await Promise.resolve();
+  const abortReader = abortStream.getReader();
+  await abortReader.cancel("scenario abort");
+  if (backpressureWaiter !== undefined) {
+    abortReleasedWaiter = await resolvesBeforeTimeout(backpressureWaiter, 1_000);
+  }
+  if (!abortSignal?.aborted || !abortReleasedWaiter) {
+    throw new Error("aborting an SSR stream did not release its backpressure waiter");
+  }
+
+  resetSchedulerStateForTesting();
+  let pendingFlush: (() => void) | undefined;
+  const restoreScheduler = setScheduler({
+    schedule(flush) {
+      pendingFlush = flush;
+    },
   });
-  await tick();
-  stop();
-  const schedulerRecovered = schedulerRuns >= 2;
-  if (!schedulerRecovered) {
-    throw new Error(`scheduler did not recover: ${schedulerRuns} runs`);
+  let schedulerRecovered = false;
+  try {
+    const trigger = cell(0);
+    let looping = true;
+    let schedulerRuns = 0;
+    const stop = effect(() => {
+      const value = trigger.get();
+      schedulerRuns += 1;
+      if (looping) {
+        trigger.set(value + 1);
+      }
+    });
+    const failedFlush = pendingFlush;
+    pendingFlush = undefined;
+    let iterationLimitObserved = false;
+    try {
+      failedFlush?.();
+    } catch (error) {
+      iterationLimitObserved = /flush limit exceeded/i.test(String(error));
+    }
+    looping = false;
+    trigger.set(trigger.get() + 1);
+    const recoveryFlush = pendingFlush;
+    pendingFlush = undefined;
+    recoveryFlush?.();
+    schedulerRecovered =
+      iterationLimitObserved && schedulerRuns > 100 && recoveryFlush !== undefined;
+    stop();
+    if (!schedulerRecovered) {
+      throw new Error(`scheduler did not recover after iteration limit: ${schedulerRuns} runs`);
+    }
+  } finally {
+    restoreScheduler();
+    resetSchedulerStateForTesting();
   }
 
   if (typeof globalThis.gc === "function") {
@@ -160,14 +305,18 @@ async function runScenario(options: {
     memory: { after, before, peak },
     node: process.version,
     results: {
+      abortReleasedWaiter,
       activeQueryRetained,
       routeOwnerRuns,
       schedulerRecovered,
+      ssrPeakChunkCapacity,
+      ssrSlowReaderChunks,
+      slowReaderCompleted,
       ssrTerminalFailures,
       unusedQueryEntries,
     },
     runtime: { gcAvailable: typeof globalThis.gc === "function", platform: process.platform },
-    version: 1,
+    version: 2,
     warmupCycles: options.warmupCycles,
   };
 }
@@ -200,4 +349,14 @@ async function expectReject<T>(promise: Promise<T>): Promise<void> {
 
 async function tick(): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+
+async function resolvesBeforeTimeout(promise: Promise<void>, timeoutMs: number): Promise<boolean> {
+  return await new Promise<boolean>((resolve) => {
+    const timeout = setTimeout(() => resolve(false), timeoutMs);
+    promise.then(() => {
+      clearTimeout(timeout);
+      resolve(true);
+    });
+  });
 }
