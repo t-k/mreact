@@ -309,6 +309,73 @@ export default function Page() {
     }
   });
 
+  test("records the complete static and dynamic client chunk graph in production manifests", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-chunk-graph-"));
+    const outDir = join(appDir, ".mreact");
+    await mkdir(join(appDir, "about"), { recursive: true });
+    await writeFile(join(appDir, "shared.ts"), 'export const shared = "shared";');
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `const loadShared = () => import("./shared");
+
+export default function Page() {
+  return <button type="button" onClick={() => void loadShared()}>Load</button>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "about", "page.tsx"),
+      `export default function About() {
+  return <main>About</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+
+    const manifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as BrowserDeliveryManifest & {
+      routes: Array<{
+        dynamicImports?: string[];
+        path: string;
+        script?: string;
+      }>;
+    };
+    const chunks = manifest.chunks ?? [];
+    const graphEdges = chunks.flatMap((chunk) => [
+      ...(chunk.imports ?? []),
+      ...(chunk.dynamicImports ?? []),
+    ]);
+    const dynamicImports =
+      manifest.routes.find((route) => route.path === "/")?.dynamicImports ?? [];
+
+    expect(chunks.length).toBeGreaterThan(0);
+    expect(dynamicImports.length).toBeGreaterThan(0);
+    expect(graphEdges).toEqual(expect.arrayContaining(dynamicImports));
+
+    for (const file of new Set([
+      ...chunks.map((chunk) => chunk.file),
+      ...graphEdges,
+      ...manifest.routes.flatMap((route) => (route.script === undefined ? [] : [route.script])),
+    ])) {
+      await expect(readFile(join(outDir, "client", file))).resolves.toBeDefined();
+    }
+
+    const report = await measureBrowserDelivery({
+      clientDir: join(outDir, "client"),
+      initialPath: "/",
+      manifest,
+      navigation: {
+        from: "/",
+        fetchedDynamicImports: dynamicImports,
+        to: "/",
+      },
+    });
+
+    expect(report.initial.unavailablePaths).toEqual([]);
+    expect(report.navigation?.unavailablePaths).toEqual([]);
+    expect(report.navigation?.fetchedPaths).toEqual(expect.arrayContaining(dynamicImports));
+  });
+
   test("omits route cell state runtime when the client route does not call cell", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-no-cell-state-"));
     const file = join(appDir, "page.mreact.tsx");

@@ -73,6 +73,7 @@ export interface RouterBundleModulesOutput {
 
 export interface RouterBundleChunkOutput {
   code: string;
+  dynamicImports: string[];
   fileName: string;
   imports: string[];
   isEntry: boolean;
@@ -87,6 +88,7 @@ export interface RouterBundleAssetOutput {
 
 interface RouterBundlerChunk {
   code: string;
+  dynamicImports?: string[] | undefined;
   fileName: string;
   imports?: string[] | undefined;
   isEntry?: boolean | undefined;
@@ -282,7 +284,8 @@ async function bundleRouterModuleUncached(
     plugins: [
       nodeBuiltinsForBrowserPlugin(options.platform, options.nodeBuiltins ?? "reject"),
       mreactJsxRuntimeAliasPlugin({
-        externalize: options.platform === "node" && options.externalizeMreactRuntimeAliases === true,
+        externalize:
+          options.platform === "node" && options.externalizeMreactRuntimeAliases === true,
       }),
       ...(options.vitePlugins ?? []),
       virtualEntryPlugin(entryId, options.code),
@@ -369,8 +372,7 @@ function cloneRouterBundleOutput(output: RouterBundleOutput): RouterBundleOutput
       : {
           assets: output.assets.map((asset) => ({
             fileName: asset.fileName,
-            source:
-              typeof asset.source === "string" ? asset.source : new Uint8Array(asset.source),
+            source: typeof asset.source === "string" ? asset.source : new Uint8Array(asset.source),
           })),
         }),
     code: output.code,
@@ -459,6 +461,7 @@ export async function bundleRouterModules(
           options.sourceRegionModulePaths,
           options.root ?? dirname(options.entries[0]?.filename ?? process.cwd()),
         ),
+        dynamicImports: chunk.dynamicImports ?? [],
         fileName: chunk.fileName,
         imports: chunk.imports ?? [],
         isEntry: chunk.isEntry === true,
@@ -490,7 +493,9 @@ function mreactJsxRuntimeAliasPlugin(options?: { externalize?: boolean | undefin
         return undefined;
       }
 
-      return options?.externalize === true ? { external: true, id: pathToFileURL(path).href } : path;
+      return options?.externalize === true
+        ? { external: true, id: pathToFileURL(path).href }
+        : path;
     },
   };
 }

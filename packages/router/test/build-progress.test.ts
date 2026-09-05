@@ -79,6 +79,18 @@ export function Counter() {
 
     expect(reports).toHaveLength(2);
     expect(reports[0]).toEqual(reports[1]);
+    expect(reports[0]?.routes[0]?.cost).toMatchObject({
+      initial: {
+        gzipEstimateBytes: expect.any(Number),
+        rawBytes: expect.any(Number),
+      },
+      navigation: {
+        gzipEstimateBytes: expect.any(Number),
+        rawBytes: expect.any(Number),
+      },
+      status: "available",
+    });
+    expect(reports[0]?.routes[0]?.cost.initial?.rawBytes).toBeGreaterThan(0);
     expect(reports[0]?.routes).toEqual([
       expect.objectContaining({
         classification: "server-render",

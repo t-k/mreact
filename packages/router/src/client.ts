@@ -53,6 +53,7 @@ const nodeBuiltinPackages = new Set(builtinModules.flatMap((name) => [name, `nod
 export interface ClientRouteManifestEntry {
   bytes?: number;
   css?: readonly string[];
+  dynamicImports?: readonly string[];
   path: string;
   kind: AppRoute["kind"];
   client: boolean;

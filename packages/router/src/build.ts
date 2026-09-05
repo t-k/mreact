@@ -16,6 +16,7 @@ import { builtinModules } from "node:module";
 import { availableParallelism } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { gzipSync } from "node:zlib";
 import type { DehydrateOptions } from "@reckona/mreact-query";
 import {
   collectStaticImportReferences,
@@ -267,9 +268,15 @@ interface IncrementalBuildServerManifestOutputs {
 
 interface IncrementalBuildClientManifestOutputs {
   assets?: readonly string[];
+  chunks?: readonly {
+    dynamicImports?: readonly string[];
+    file: string;
+    imports?: readonly string[];
+  }[];
   publicAssets?: readonly string[];
   routes: readonly {
     css?: readonly string[];
+    dynamicImports?: readonly string[];
     imports?: readonly string[];
     navigationScript?: string | undefined;
     script?: string | undefined;
@@ -526,7 +533,6 @@ async function buildAppWithResolvedProject(
             vitePlugins,
           }),
         );
-  options.onBoundaryReport?.(sourceAnalysis.boundaryReport);
   validateBoundaryExecutionContracts(sourceAnalysis.boundaryReport, project.executionContracts);
 
   if (shouldTrackBuildPhases === false) {
@@ -563,6 +569,18 @@ async function buildAppWithResolvedProject(
       outDir: options.outDir,
     }))
   ) {
+    if (options.onBoundaryReport !== undefined) {
+      const clientManifest = await readJsonBuildOutput<ClientArtifactManifest>(
+        join(options.outDir, "client", "manifest.json"),
+      );
+      options.onBoundaryReport(
+        await boundaryReportWithArtifactCosts({
+          clientDir,
+          manifest: clientManifest,
+          report: sourceAnalysis.boundaryReport,
+        }),
+      );
+    }
     return { routes };
   }
 
@@ -857,6 +875,7 @@ async function buildAppWithResolvedProject(
   } satisfies BuiltServerManifest;
   const clientManifest = {
     ...(clientManifestAssets.length === 0 ? {} : { assets: clientManifestAssets }),
+    ...(clientBundle.chunks.length === 0 ? {} : { chunks: clientBundle.chunks }),
     ...(publicAssets.length === 0 ? {} : { publicAssets }),
     routes: clientManifestRoutes,
     ...(clientBundle.styles.length === 0 ? {} : { styles: clientBundle.styles }),
@@ -938,7 +957,221 @@ async function buildAppWithResolvedProject(
     await writeIncrementalBuildCacheManifest(options.outDir, incrementalBuildFingerprint);
   }
 
+  if (options.onBoundaryReport !== undefined) {
+    options.onBoundaryReport(
+      await boundaryReportWithArtifactCosts({
+        clientDir,
+        manifest: clientManifest,
+        report: sourceAnalysis.boundaryReport,
+      }),
+    );
+  }
+
   return { routes };
+}
+
+async function boundaryReportWithArtifactCosts(options: {
+  clientDir: string;
+  manifest: ClientArtifactManifest | undefined;
+  report: BoundaryReport;
+}): Promise<BoundaryReport> {
+  if (options.manifest === undefined) {
+    return {
+      ...options.report,
+      routes: options.report.routes.map((route) => ({
+        ...route,
+        cost: {
+          reason: "Production client manifest is unavailable.",
+          status: "unavailable",
+        },
+      })),
+    };
+  }
+
+  const manifest = options.manifest;
+  const chunks = new Map((manifest.chunks ?? []).map((chunk) => [chunk.file, chunk]));
+  const routeClosures = options.report.routes.map((route) => {
+    const manifestRoute = manifest.routes.find(
+      (candidate) => candidate.path === route.path && candidate.client && candidate.script,
+    );
+
+    if (manifestRoute === undefined) {
+      return { initial: undefined, navigation: undefined, route };
+    }
+
+    const initial = clientArtifactStaticClosure(manifestRoute, chunks);
+    const navigation = new Set(initial);
+    for (const dynamicImport of manifestRoute.dynamicImports ?? []) {
+      addClientArtifactStaticClosure(navigation, dynamicImport, chunks);
+    }
+
+    return { initial, navigation, route };
+  });
+  const availableClosures = routeClosures.flatMap((entry) =>
+    entry.initial === undefined ? [] : [entry.initial],
+  );
+  const sharedPaths = intersectionOfPathSets(availableClosures);
+  const allPaths = new Set<string>();
+  for (const entry of routeClosures) {
+    for (const path of entry.navigation ?? []) {
+      allPaths.add(path);
+    }
+  }
+  const measurements = await measureClientArtifactPaths(options.clientDir, allPaths);
+
+  return {
+    ...options.report,
+    routes: routeClosures.map((entry) => {
+      if (entry.initial === undefined || entry.navigation === undefined) {
+        return {
+          ...entry.route,
+          cost: {
+            reason: "No client route artifact was generated for this route.",
+            status: "unavailable",
+          },
+        };
+      }
+
+      const routePaths = new Set(entry.navigation);
+      const unavailable = [...routePaths]
+        .filter((path) => measurements.get(path)?.available !== true)
+        .sort();
+      if (unavailable.length > 0) {
+        return {
+          ...entry.route,
+          cost: {
+            reason: `Missing client artifacts: ${unavailable.join(", ")}.`,
+            status: "unavailable",
+          },
+        };
+      }
+
+      const initial = byteCostForPaths(entry.initial, measurements);
+      const navigation = byteCostForPaths(
+        new Set([...entry.navigation].filter((path) => !sharedPaths.has(path))),
+        measurements,
+      );
+      const shared = byteCostForPaths(sharedPaths, measurements);
+
+      return {
+        ...entry.route,
+        cost: {
+          baseline: {
+            initialGzipDeltaBytes: initial.gzipEstimateBytes - shared.gzipEstimateBytes,
+            navigationGzipDeltaBytes: navigation.gzipEstimateBytes,
+          },
+          initial,
+          navigation,
+          status: "available",
+        },
+      };
+    }),
+  };
+}
+
+interface ClientArtifactMeasurement {
+  available: boolean;
+  gzipEstimateBytes?: number;
+  rawBytes?: number;
+}
+
+function clientArtifactStaticClosure(
+  route: ClientRouteManifestEntry,
+  chunks: ReadonlyMap<string, ClientArtifactChunkManifest>,
+): Set<string> {
+  const paths = new Set<string>();
+  for (const path of route.css ?? []) {
+    paths.add(path);
+  }
+  if (route.navigation === true && route.navigationScript !== undefined) {
+    paths.add(route.navigationScript);
+  }
+  for (const path of route.imports ?? []) {
+    addClientArtifactStaticClosure(paths, path, chunks);
+  }
+  if (route.script !== undefined) {
+    addClientArtifactStaticClosure(paths, route.script, chunks);
+  }
+  return paths;
+}
+
+function addClientArtifactStaticClosure(
+  paths: Set<string>,
+  path: string,
+  chunks: ReadonlyMap<string, ClientArtifactChunkManifest>,
+): void {
+  if (path === "" || paths.has(path)) {
+    return;
+  }
+
+  paths.add(path);
+  for (const imported of chunks.get(path)?.imports ?? []) {
+    addClientArtifactStaticClosure(paths, imported, chunks);
+  }
+}
+
+function intersectionOfPathSets(sets: readonly Set<string>[]): Set<string> {
+  const [first, ...rest] = sets;
+  if (first === undefined || sets.length < 2) {
+    return new Set();
+  }
+
+  return new Set([...first].filter((path) => rest.every((set) => set.has(path))));
+}
+
+async function measureClientArtifactPaths(
+  clientDir: string,
+  paths: ReadonlySet<string>,
+): Promise<ReadonlyMap<string, ClientArtifactMeasurement>> {
+  const measurements = await Promise.all(
+    [...paths].map(async (path) => {
+      const absolutePath = safeClientArtifactPath(clientDir, path);
+      if (absolutePath === undefined) {
+        return [path, { available: false }] as [string, ClientArtifactMeasurement];
+      }
+
+      try {
+        const content = await readFile(absolutePath);
+        return [
+          path,
+          {
+            available: true,
+            gzipEstimateBytes: gzipSync(content).byteLength,
+            rawBytes: content.byteLength,
+          },
+        ] as [string, ClientArtifactMeasurement];
+      } catch {
+        return [path, { available: false }] as [string, ClientArtifactMeasurement];
+      }
+    }),
+  );
+
+  return new Map(measurements);
+}
+
+function safeClientArtifactPath(clientDir: string, path: string): string | undefined {
+  const absolutePath = resolve(clientDir, path);
+  const relativePath = relative(resolve(clientDir), absolutePath);
+
+  return relativePath === "" || relativePath === ".." || relativePath.startsWith(`..${sep}`)
+    ? undefined
+    : absolutePath;
+}
+
+function byteCostForPaths(
+  paths: ReadonlySet<string>,
+  measurements: ReadonlyMap<string, ClientArtifactMeasurement>,
+): { gzipEstimateBytes: number; rawBytes: number } {
+  return [...paths].reduce(
+    (cost, path) => {
+      const measurement = measurements.get(path);
+      return {
+        gzipEstimateBytes: cost.gzipEstimateBytes + (measurement?.gzipEstimateBytes ?? 0),
+        rawBytes: cost.rawBytes + (measurement?.rawBytes ?? 0),
+      };
+    },
+    { gzipEstimateBytes: 0, rawBytes: 0 },
+  );
 }
 
 const incrementalBuildCacheFilename = "build-cache.json";
@@ -1095,6 +1328,11 @@ function collectClientManifestOutputFiles(
     files.add(asset);
     files.add(`public/${asset}`);
   }
+  for (const chunk of manifest.chunks ?? []) {
+    for (const file of [chunk.file, ...(chunk.imports ?? []), ...(chunk.dynamicImports ?? [])]) {
+      files.add(file);
+    }
+  }
   for (const route of manifest.routes) {
     for (const file of [
       route.script,
@@ -1102,6 +1340,7 @@ function collectClientManifestOutputFiles(
       route.navigationScript,
       ...(route.css ?? []),
       ...(route.imports ?? []),
+      ...(route.dynamicImports ?? []),
     ]) {
       if (file !== undefined) {
         files.add(file);
@@ -6291,8 +6530,22 @@ function viteManifestFromClientRoutes(routes: ClientRouteManifestEntry[]): Recor
 
 interface ClientRouteBundleManifest {
   assets: string[];
+  chunks: ClientArtifactChunkManifest[];
   routes: ClientRouteManifestEntry[];
   styles: ClientStyleManifestEntry[];
+}
+
+interface ClientArtifactChunkManifest {
+  dynamicImports?: readonly string[];
+  file: string;
+  imports?: readonly string[];
+}
+
+interface ClientArtifactManifest {
+  assets?: readonly string[];
+  chunks?: readonly ClientArtifactChunkManifest[];
+  routes: readonly ClientRouteManifestEntry[];
+  styles?: readonly ClientStyleManifestEntry[];
 }
 
 interface ClientStyleManifestEntry {
@@ -6454,6 +6707,7 @@ async function writeClientRouteBundles(options: {
   if (clientEntries.length === 0) {
     return {
       assets: [...routeCssAssets.assets, ...specialCssAssets.assets].sort(),
+      chunks: [],
       routes: entries.flatMap((entry) => ("manifest" in entry ? [entry.manifest] : [])),
       styles: specialCssAssets.styles,
     };
@@ -6564,6 +6818,9 @@ async function writeClientRouteBundles(options: {
         ? {}
         : { clientReferenceManifest: entry.build.clientReferenceManifest }),
       ...(entry.css.length === 0 ? {} : { css: entry.css }),
+      ...(routeOutput.chunk.dynamicImports.length === 0
+        ? {}
+        : { dynamicImports: routeOutput.chunk.dynamicImports }),
       ...(routeOutput.chunk.imports.length === 0 ? {} : { imports: routeOutput.chunk.imports }),
       ...(navigation ? { navigation } : {}),
       routeId,
@@ -6575,6 +6832,11 @@ async function writeClientRouteBundles(options: {
 
   return {
     assets: Array.from(generatedAssets).sort(),
+    chunks: output.chunks.map((chunk) => ({
+      ...(chunk.dynamicImports.length === 0 ? {} : { dynamicImports: chunk.dynamicImports }),
+      file: chunk.fileName,
+      ...(chunk.imports.length === 0 ? {} : { imports: chunk.imports }),
+    })),
     routes,
     styles: specialCssAssets.styles,
   };
