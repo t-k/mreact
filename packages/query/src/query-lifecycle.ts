@@ -138,7 +138,16 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
       typeof data === "function"
         ? (data as (previous: TData | undefined) => TData)(entry.data)
         : data;
-    const sharedData = replaceEqualDeep(entry.data, resolvedData) as TData;
+    setSuccessValue(queryKey, resolvedData, options);
+  }
+
+  function setSuccessValue<TData>(
+    queryKey: QueryKey,
+    data: TData,
+    options: SetSuccessOptions = {},
+  ): void {
+    const entry = getOrCreateEntry<TData>(queryKey, options.queryHash);
+    const sharedData = replaceEqualDeep(entry.data, data) as TData;
     if (entry.abortController !== undefined && !entry.abortController.signal.aborted) {
       entry.abortController.abort(createQueryAbortReason(entry.queryKey));
     }
@@ -162,7 +171,7 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
     data: TData,
     options: HydrateQueryDataOptions,
   ): void {
-    setSuccess(queryKey, data, {
+    setSuccessValue(queryKey, data, {
       queryHash: options.queryHash,
       updatedAt: options.updatedAt,
     });
@@ -282,7 +291,7 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
         (data) => {
           removeExternalAbort();
           if (cache.get(entry.queryHash) === entry && entry.version === fetchVersion) {
-            setSuccess(options.queryKey, data, {
+            setSuccessValue(options.queryKey, data, {
               stale: entry.invalidationRevision !== fetchInvalidationRevision,
             });
           }

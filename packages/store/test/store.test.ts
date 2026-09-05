@@ -5,6 +5,27 @@ import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { createStore, persistedStoreState, shallowEqual } from "../src/index.js";
 
 describe("createStore", () => {
+  it("preserves function-valued selector results without invoking them", () => {
+    let firstCalls = 0;
+    let secondCalls = 0;
+    const first = () => {
+      firstCalls += 1;
+      return "first";
+    };
+    const second = () => {
+      secondCalls += 1;
+      return "second";
+    };
+    const store = createStore({ handler: first });
+    const selected = store.select((state) => state.handler);
+
+    store.set({ handler: second });
+
+    expect(selected.get()).toBe(second);
+    expect(firstCalls).toBe(0);
+    expect(secondCalls).toBe(0);
+  });
+
   it("returns the current state and shallow-merges set patches", () => {
     const store = createStore({ count: 0, name: "Ada" });
 

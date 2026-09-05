@@ -495,7 +495,7 @@ function createSelectedCell<T extends object, U>(
 
     if (!equality(selected, nextSelected)) {
       selected = nextSelected;
-      selectedCell.set(nextSelected);
+      selectedCell.set(() => nextSelected);
     }
   };
   const dispose = () => {

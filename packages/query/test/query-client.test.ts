@@ -6,6 +6,24 @@ afterEach(() => {
 });
 
 describe("createQueryClient", () => {
+  it("stores function-valued fetch results without invoking them", async () => {
+    let calls = 0;
+    const data = () => {
+      calls += 1;
+      return "called";
+    };
+    const client = createQueryClient();
+
+    const result = await client.fetchQuery({
+      queryKey: ["function-data"],
+      queryFn: () => data,
+    });
+
+    expect(result).toBe(data);
+    expect(client.getQueryData(["function-data"])).toBe(data);
+    expect(calls).toBe(0);
+  });
+
   it("deduplicates concurrent fetches for the same query key", async () => {
     const client = createQueryClient();
     let calls = 0;
