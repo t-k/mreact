@@ -463,6 +463,68 @@ describe("createStore", () => {
     expect(migrations).toEqual([[{ count: 1 }, 1]]);
   });
 
+  it("migrates a structurally different persisted schema through an explicit boundary", async () => {
+    const store = createStore<{ count: number }, { countText: string }>(
+      { count: 0 },
+      {
+        persist: {
+          load: () => persistedStoreState({ countText: "7" }, 1),
+          migrate: (state) => ({ count: Number(state.countText) }),
+          validate: (state) =>
+            typeof state === "object" &&
+            state !== null &&
+            typeof (state as { countText?: unknown }).countText === "string",
+          validateCurrent: (state): state is { count: number } =>
+            typeof state === "object" &&
+            state !== null &&
+            typeof (state as { count?: unknown }).count === "number",
+          version: 2,
+        },
+      },
+    );
+
+    await store.persistence.ready;
+
+    expect(store.get()).toEqual({ count: 7 });
+  });
+
+  it("keeps valid state and reports a version mismatch without a migrator", async () => {
+    const store = createStore(
+      { count: 0 },
+      {
+        persist: {
+          load: () => persistedStoreState({ count: 7 }, 1),
+          version: 2,
+        },
+      },
+    );
+
+    await store.persistence.ready;
+
+    expect(store.get()).toEqual({ count: 0 });
+    expect(store.persistence.error.get()).toMatchObject({ phase: "load" });
+  });
+
+  it("keeps valid state when persisted validation rejects malformed data", async () => {
+    const store = createStore(
+      { count: 0 },
+      {
+        persist: {
+          load: () => ({ count: "not-a-number" } as never),
+          validate: (state) =>
+            typeof state === "object" &&
+            state !== null &&
+            typeof (state as { count?: unknown }).count === "number",
+        },
+      },
+    );
+
+    await store.persistence.ready;
+
+    expect(store.get()).toEqual({ count: 0 });
+    expect(store.persistence.error.get()).toMatchObject({ phase: "load" });
+  });
+
   it("coalesces pending async persist descriptor saves to the latest state", async () => {
     let releaseFirst: (() => void) | undefined;
     const saved: number[] = [];

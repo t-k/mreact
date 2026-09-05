@@ -83,11 +83,15 @@ export function persistedStoreState<T extends object>(state: T, version: number)
 }
 
 /** Configures persistence behavior shared by current and legacy record contracts. */
-export interface StorePersistBaseOptions<T extends object> {
+export interface StorePersistBaseOptions<T extends object, TPersisted extends object = T> {
   /** Chooses how a loaded value interacts with local commits made during hydration. */
   hydrationConflict?: StoreHydrationConflict<T> | undefined;
-  /** Migrates a loaded state from its saved version to the configured version. */
-  migrate?: ((state: T, version: number | undefined) => T | Promise<T>) | undefined;
+  /** Validates the historical state before a migration receives it. */
+  validate?: ((state: unknown, version: number | undefined) => boolean) | undefined;
+  /** Validates the current state produced by a migration or current-version load. */
+  validateCurrent?: ((state: unknown) => state is T) | undefined;
+  /** Migrates a loaded historical state from its saved version to the configured version. */
+  migrate?: ((state: TPersisted, version: number | undefined) => T | Promise<T>) | undefined;
   /** Persists committed state changes in queue order. */
   save?: ((state: T) => void | Promise<void>) | undefined;
   /** Declares the current persistence schema version. */
@@ -95,34 +99,36 @@ export interface StorePersistBaseOptions<T extends object> {
 }
 
 /** Configures raw or tagged persistence records without legacy envelope inference. */
-export interface StoreCurrentPersistOptions<T extends object> extends StorePersistBaseOptions<T> {
+export interface StoreCurrentPersistOptions<T extends object, TPersisted extends object = T>
+  extends StorePersistBaseOptions<T, TPersisted> {
   acceptLegacyPersistedState?: false | undefined;
   load?:
     | (() =>
-        | StorePersistedState<T>
-        | T
+        | StorePersistedState<TPersisted>
+        | TPersisted
         | undefined
-        | Promise<StorePersistedState<T> | T | undefined>)
+        | Promise<StorePersistedState<TPersisted> | TPersisted | undefined>)
     | undefined;
 }
 
 /** Configures persistence with explicit support for deprecated untagged envelopes. */
-export interface StoreLegacyPersistOptions<T extends object> extends StorePersistBaseOptions<T> {
+export interface StoreLegacyPersistOptions<T extends object, TPersisted extends object = T>
+  extends StorePersistBaseOptions<T, TPersisted> {
   acceptLegacyPersistedState: true;
   load?:
     | (() =>
-        | LegacyStorePersistedState<T>
-        | StorePersistedState<T>
-        | T
+        | LegacyStorePersistedState<TPersisted>
+        | StorePersistedState<TPersisted>
+        | TPersisted
         | undefined
-        | Promise<LegacyStorePersistedState<T> | StorePersistedState<T> | T | undefined>)
+        | Promise<LegacyStorePersistedState<TPersisted> | StorePersistedState<TPersisted> | TPersisted | undefined>)
     | undefined;
 }
 
 /** Configures store persistence with an explicit current or legacy record contract. */
-export type StorePersistOptions<T extends object> =
-  | StoreCurrentPersistOptions<T>
-  | StoreLegacyPersistOptions<T>;
+export type StorePersistOptions<T extends object, TPersisted extends object = T> =
+  | StoreCurrentPersistOptions<T, TPersisted>
+  | StoreLegacyPersistOptions<T, TPersisted>;
 
 /** Controls how hydration resolves a loaded value after local state has changed. */
 export type StoreHydrationConflict<T extends object> =
@@ -131,9 +137,9 @@ export type StoreHydrationConflict<T extends object> =
   | "replace"
   | ((loaded: T, current: T) => T);
 
-export type StorePersist<T extends object> =
+export type StorePersist<T extends object, TPersisted extends object = T> =
   | ((state: T) => void | Promise<void>)
-  | StorePersistOptions<T>;
+  | StorePersistOptions<T, TPersisted>;
 
 interface StoreListenerEntry<T extends object> {
   addedVersion: number;
@@ -147,9 +153,9 @@ interface NormalizedPersistedState<T extends object> {
 }
 
 /** Configures store instrumentation and persistence hooks. */
-export interface StoreOptions<T extends object> {
+export interface StoreOptions<T extends object, TPersisted extends object = T> {
   instrument?: ((event: StoreInstrumentationEvent<T>) => void) | undefined;
-  persist?: StorePersist<T> | undefined;
+  persist?: StorePersist<T, TPersisted> | undefined;
 }
 
 /** Represents a selected reactive value that can be disposed manually. */
@@ -191,9 +197,12 @@ export interface Store<T extends object> {
  *
  * The store keeps state in a `ReadonlyCell`; selectors should be disposed when their consumer scope ends.
  */
-export function createStore<T extends object>(initial: T, options: StoreOptions<T> = {}): Store<T> {
+export function createStore<T extends object, TPersisted extends object = T>(
+  initial: T,
+  options: StoreOptions<T, TPersisted> = {},
+): Store<T> {
   const state = cell(initial);
-  const persist = normalizePersistOptions(options.persist);
+  const persist = normalizePersistOptions<T, TPersisted>(options.persist);
   const listeners = new Set<StoreListener<T>>();
   const listenerEntriesByListener = new Map<StoreListener<T>, StoreListenerEntry<T>>();
   let listenerEntries: Array<StoreListenerEntry<T>> = [];
@@ -294,20 +303,40 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
       const hydrationRevision = stateRevision;
       const loaded = await persist.load?.();
       if (loaded !== undefined) {
-        const persisted = normalizePersistedState(loaded, persist.acceptLegacyPersistedState === true);
-        let migrated = persisted.state;
+        const persisted = normalizePersistedState<TPersisted>(
+          loaded,
+          persist.acceptLegacyPersistedState === true,
+        );
+        if (!isObject(persisted.state)) {
+          throw new TypeError("Store persistence loaded state must be an object.");
+        }
+        if (persist.validate !== undefined && !persist.validate(persisted.state, persisted.version)) {
+          throw new TypeError("Store persistence validation rejected the loaded state.");
+        }
 
-        if (
-          persist.migrate !== undefined &&
-          persist.version !== undefined &&
-          persisted.version !== persist.version
-        ) {
+        let migrated = persisted.state as unknown as T;
+        const versionMismatch =
+          persist.version !== undefined && persisted.version !== persist.version;
+
+        if (versionMismatch && persist.migrate === undefined) {
+          throw new Error(
+            `Store persistence version ${String(persisted.version)} requires a migration to version ${persist.version}.`,
+          );
+        }
+
+        if (versionMismatch && persist.migrate !== undefined) {
           try {
             migrated = await persist.migrate(persisted.state, persisted.version);
           } catch (error) {
             recordPersistenceFailure("migrate", error);
             return;
           }
+        }
+
+        if (persist.validateCurrent !== undefined && !persist.validateCurrent(migrated)) {
+          const error = new TypeError("Store persistence validation rejected the current state.");
+          recordPersistenceFailure(versionMismatch ? "migrate" : "load", error);
+          return;
         }
 
         const current = readUntracked();
@@ -518,9 +547,9 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
  *
  * Use this when SSR or server actions need isolated store instances instead of sharing process-global state.
  */
-export function createRequestStoreFactory<T extends object>(
+export function createRequestStoreFactory<T extends object, TPersisted extends object = T>(
   initial: () => T,
-  options?: StoreOptions<T> | undefined,
+  options?: StoreOptions<T, TPersisted> | undefined,
 ): () => Store<T> {
   return () => createStore(initial(), options);
 }
@@ -626,9 +655,9 @@ function mergePatch<T extends object>(previous: T, patch: StorePatch<T> | T): T 
   return changed ? (next as T) : previous;
 }
 
-function normalizePersistOptions<T extends object>(
-  persist: StorePersist<T> | undefined,
-): StorePersistOptions<T> {
+function normalizePersistOptions<T extends object, TPersisted extends object = T>(
+  persist: StorePersist<T, TPersisted> | undefined,
+): StorePersistOptions<T, TPersisted> {
   if (persist === undefined) {
     return {};
   }
@@ -637,7 +666,7 @@ function normalizePersistOptions<T extends object>(
 }
 
 function normalizePersistedState<T extends object>(
-  value: LegacyStorePersistedState<T> | StorePersistedState<T> | T,
+  value: unknown,
   acceptLegacyPersistedState: boolean,
 ): NormalizedPersistedState<T> {
   if (
@@ -651,7 +680,7 @@ function normalizePersistedState<T extends object>(
 }
 
 function isPersistedStateDescriptor<T extends object>(
-  value: LegacyStorePersistedState<T> | StorePersistedState<T> | T,
+  value: unknown,
 ): value is StorePersistedState<T> {
   return (
     typeof value === "object" &&
@@ -666,7 +695,7 @@ function isPersistedStateDescriptor<T extends object>(
 }
 
 function isLegacyPersistedStateDescriptor<T extends object>(
-  value: LegacyStorePersistedState<T> | StorePersistedState<T> | T,
+  value: unknown,
 ): boolean {
   if (
     typeof value !== "object" ||

@@ -1,4 +1,4 @@
-import { createStore } from "../src/index.js";
+import { createStore, persistedStoreState } from "../src/index.js";
 
 const store = createStore({ count: 0 });
 
@@ -15,6 +15,18 @@ snapshot.profile.name = "Grace";
 store.transaction(() => {
   store.set({ count: 1 });
 });
+
+const migratedStore = createStore<{ count: number }, { countText: string }>(
+  { count: 0 },
+  {
+    persist: {
+      load: () => persistedStoreState({ countText: "1" }, 1),
+      migrate: (state) => ({ count: Number(state.countText) }),
+      version: 2,
+    },
+  },
+);
+void migratedStore;
 
 // @ts-expect-error Store transactions are synchronous and cannot accept async callbacks.
 store.transaction(async () => {
