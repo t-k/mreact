@@ -273,6 +273,38 @@ describe("server streaming runtime", () => {
     expect(events).toEqual(["deferred-ready", "deferred-resumed"]);
   });
 
+  test("render failure aborts producers and releases backpressure waiters", async () => {
+    let signal: AbortSignal | undefined;
+    let pressure: Promise<void> | undefined;
+    let rejectFailure: ((error: unknown) => void) | undefined;
+    const stream = renderToReadableStream((sink) => {
+      signal = sink.signal;
+      sink.append("SHELL");
+      sink.defer!(
+        (async () => {
+          pressure = sink.backpressure?.();
+          await pressure;
+        })(),
+      );
+      sink.defer!(
+        new Promise<void>((_, reject) => {
+          rejectFailure = reject;
+        }),
+      );
+    });
+    const reader = stream.getReader();
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(pressure).toBeDefined();
+    rejectFailure?.(new Error("deferred render failed"));
+
+    await expect(reader.read()).resolves.toMatchObject({ done: false });
+    await expect(reader.read()).rejects.toThrow("deferred render failed");
+    await expect(pressure).resolves.toBeUndefined();
+    expect(signal?.aborted).toBe(true);
+  });
+
   test("renderAsyncBoundary waits for downstream backpressure before rendering resolved content", async () => {
     let rendered = false;
     const stream = renderToReadableStream((sink) => {

@@ -35,6 +35,7 @@ export function renderToReadableStream(
   let controllerRef: ReadableStreamDefaultController<Uint8Array> | undefined;
   let cancelled = false;
   let complete = false;
+  let terminated = false;
   let controllerQueuedBytes = 0;
   let queuedBytes = 0;
   let warnedQueuedBytes = false;
@@ -123,7 +124,7 @@ export function renderToReadableStream(
         if (abortController.signal.aborted) {
           return;
         }
-        controller.error(error);
+        terminate(error, error);
         return;
       }
 
@@ -156,7 +157,7 @@ export function renderToReadableStream(
           if (abortController.signal.aborted) {
             return;
           }
-          controller.error(error);
+          terminate(error, error);
         }
       }
     },
@@ -166,12 +167,7 @@ export function renderToReadableStream(
       resolveBackpressureAfterPull();
     },
     cancel(reason) {
-      cancelled = true;
-      queuedChunks.length = 0;
-      controllerQueuedBytes = 0;
-      queuedBytes = 0;
-      abortController.abort(reason);
-      resolveBackpressureIfReady();
+      terminate(reason);
     },
   });
 
@@ -259,13 +255,26 @@ export function renderToReadableStream(
     const error = new RangeError(
       `renderToReadableStream exceeded its maximum queued byte limit of ${maxQueuedBytes} bytes (attempted ${attemptedBytes} bytes).`,
     );
+    terminate(error, error);
+  }
+
+  function terminate(reason: unknown, error?: unknown): void {
+    if (terminated) {
+      return;
+    }
+
+    terminated = true;
     cancelled = true;
+    complete = false;
     queuedChunks.length = 0;
     controllerQueuedBytes = 0;
     queuedBytes = 0;
-    abortController.abort(error);
-    controllerRef?.error(error);
+    abortController.abort(reason);
     resolveBackpressureIfReady();
+
+    if (error !== undefined) {
+      controllerRef?.error(error);
+    }
   }
 }
 
