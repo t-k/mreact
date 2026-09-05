@@ -222,7 +222,7 @@ export default function Page() {
     await buildApp({
       appDir,
       boundaryCost: {
-        fetchedDynamicImports: { "/": [lazy as string] },
+        fetchedDynamicImports: { "/": [lazy as string, "assets/chunks/not-in-manifest.js"] },
       },
       onBoundaryReport(report) {
         reports.push(report);
