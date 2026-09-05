@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.210 - 2026-09-06
+
+### Fixed
+
+- Fixed the App Router Vite development reactive devtools stub so it exposes the complete reactive-core hook surface, keeping client route hydration compatible when devtools are disabled.
+
 ## 0.0.209 - 2026-09-06
 
 ### Added
