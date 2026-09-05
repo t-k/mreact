@@ -29,9 +29,19 @@ selected.get();
 dispose();
 ```
 
+Use `setValue()` when the cell's value is callable and must be stored literally. Use `update()` when the next value should be derived from the previous value; the compatibility `set()` method continues to support both existing forms.
+
+```ts
+const handler = cell<() => void>(() => {});
+handler.setValue(() => console.log("stored handler"));
+handler.update((previous) => () => previous());
+```
+
 ## Core APIs
 
 - `cell()` creates a writable reactive value.
+- `Cell.setValue(value)` writes a literal value without interpreting a function value as an updater.
+- `Cell.update(updater)` applies an updater function exactly once.
 - `computed()` creates a derived readonly value. Pass `{ equals }` or an equality function as the second argument to skip downstream notifications for equivalent results.
 - `effect()` runs side effects when dependencies change.
 - `batch()` groups updates into one flush.

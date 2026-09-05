@@ -96,6 +96,12 @@ function writeCellValue<T>(source: CellSource<T>, next: T | ((prev: T) => T)): v
   const resolved =
     typeof next === "function" ? (next as (prev: T) => T)(previous) : next;
 
+  writeResolvedCellValue(source, resolved);
+}
+
+function writeResolvedCellValue<T>(source: CellSource<T>, resolved: T): void {
+  const previous = source.value;
+
   if (Object.is(previous, resolved)) {
     return;
   }
@@ -146,6 +152,12 @@ export function cell<T>(initial: T): Cell<T> {
     },
     set(next: T | ((prev: T) => T)): void {
       writeCellValue(source, next);
+    },
+    setValue(next: T): void {
+      writeResolvedCellValue(source, next);
+    },
+    update(updater: (prev: T) => T): void {
+      writeResolvedCellValue(source, updater(source.value));
     },
   };
 

@@ -44,4 +44,41 @@ describe("cell", () => {
     expect(current.get()).toBe(second);
     expect(current.get()()).toBe(2);
   });
+
+  test("setValue stores callable values without invoking them", () => {
+    let calls = 0;
+    const first = () => 1;
+    const second = () => {
+      calls += 1;
+      return 2;
+    };
+    const current = cell<() => number>(first);
+
+    current.setValue(second);
+
+    expect(current.get()).toBe(second);
+    expect(calls).toBe(0);
+  });
+
+  test("update receives the previous value exactly once", () => {
+    const count = cell(1);
+    let calls = 0;
+
+    count.update((previous) => {
+      calls += 1;
+      return previous + 1;
+    });
+
+    expect(count.get()).toBe(2);
+    expect(calls).toBe(1);
+  });
+
+  test("setValue and update support undefined payloads", () => {
+    const value = cell<string | undefined>("ready");
+
+    value.setValue(undefined);
+    value.update(() => "done");
+
+    expect(value.get()).toBe("done");
+  });
 });
