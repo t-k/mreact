@@ -464,6 +464,7 @@ export interface RenderToReadableStreamOptions {
     // (undocumented)
     logAbortedDeferredErrors?: boolean;
     maxQueuedBytes?: number;
+    maxQueuedChunks?: number;
 }
 
 // @public

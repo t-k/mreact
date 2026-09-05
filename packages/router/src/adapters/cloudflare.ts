@@ -99,6 +99,7 @@ export type {
   MetadataThemeColor,
   MetadataViewport,
   RouteHeadDescriptor,
+  RouteLocation,
   RouteMetadata,
   RouteParams,
   RouteSecurityHeaders,

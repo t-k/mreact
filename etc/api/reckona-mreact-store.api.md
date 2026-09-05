@@ -45,7 +45,7 @@ export type ReadonlyStoreValue<T> = T extends (...args: never[]) => unknown ? T 
 } : T;
 
 // @public (undocumented)
-export type RejectThenable<T> = [T] extends [never] ? [] : [T] extends [ThenableLike] ? [error: never] : [];
+export type RejectThenable<T> = [T] extends [never] ? [] : [Extract<T, ThenableLike>] extends [never] ? [] : [error: never];
 
 // @public
 export interface SelectedCell<T> extends ReadonlyCell<T> {

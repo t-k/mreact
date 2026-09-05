@@ -367,6 +367,8 @@ export interface ClientRouteManifestEntry {
     // (undocumented)
     devScript?: string;
     // (undocumented)
+    dynamicImports?: readonly string[];
+    // (undocumented)
     imports?: readonly string[];
     // (undocumented)
     kind: AppRoute["kind"];
@@ -527,7 +529,7 @@ export interface CloudflareRouteModule<Data = unknown, Env = unknown> {
 }
 
 // @public
-export type CloudflareRouteModuleComponent<Data = unknown, Env = unknown> = (props: CloudflareRouteModuleComponentProps<Data, Env>) => Response | string | PromiseLike<Response | string>;
+export type CloudflareRouteModuleComponent<Data = unknown, Env = unknown> = (props: CloudflareRouteModuleComponentProps<Data, Env>, request?: Request) => Response | string | PromiseLike<Response | string>;
 
 // @public
 export interface CloudflareRouteModuleComponentProps<Data = unknown, Env = unknown> extends CloudflareBuiltRouteRenderContext<Env> {
@@ -536,7 +538,7 @@ export interface CloudflareRouteModuleComponentProps<Data = unknown, Env = unkno
     // (undocumented)
     queryClient: QueryClient;
     // (undocumented)
-    request: Request;
+    request: RouteLocation;
 }
 
 // @public
@@ -740,6 +742,18 @@ export interface RouteHeadDescriptor {
     nonce?: boolean | string;
     // (undocumented)
     tag: "base" | "link" | "meta" | "script" | "style";
+}
+
+// @public
+export interface RouteLocation {
+    // (undocumented)
+    readonly hash: string;
+    // (undocumented)
+    readonly pathname: string;
+    // (undocumented)
+    readonly search: string;
+    // (undocumented)
+    readonly url: string;
 }
 
 // @public
