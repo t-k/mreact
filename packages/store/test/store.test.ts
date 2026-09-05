@@ -222,6 +222,45 @@ describe("createStore", () => {
     expect(calls).toEqual([]);
   });
 
+  it("rejects a returned thenable before committing a transaction", () => {
+    const store = createStore({ count: 0 });
+    const calls: number[] = [];
+    store.subscribe((state) => {
+      calls.push(state.count);
+    });
+
+    expect(() => {
+      store.transaction((() => {
+        store.set({ count: 1 });
+        return Promise.resolve();
+      }) as unknown as () => void);
+    }).toThrow(/synchronous/i);
+
+    expect(store.get()).toEqual({ count: 0 });
+    expect(calls).toEqual([]);
+  });
+
+  it("rolls back the root transaction when a nested thenable is caught", () => {
+    const store = createStore({ count: 0 });
+
+    expect(() => {
+      store.transaction(() => {
+        try {
+          store.transaction((() => {
+            store.set({ count: 1 });
+            return { then: () => undefined };
+          }) as unknown as () => void);
+        } catch {
+          store.set({ count: 2 });
+        }
+      });
+    }).toThrow(/synchronous/i);
+
+    expect(store.get()).toEqual({ count: 0 });
+    store.set({ count: 3 });
+    expect(store.get()).toEqual({ count: 3 });
+  });
+
   it("skips no-op shallow patches", () => {
     const store = createStore({ count: 0, name: "Ada" });
     let calls = 0;

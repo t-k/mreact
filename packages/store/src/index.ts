@@ -14,6 +14,13 @@ export type StoreSetter<T extends object> = StorePatch<T> | ((previous: T) => St
 /** Provides either a replacement object or a replacement-producing updater callback. */
 export type StoreReplacer<T extends object> = T | ((previous: T) => T);
 
+type ThenableLike = { then: (...args: never[]) => unknown };
+type RejectThenable<T> = [T] extends [never]
+  ? []
+  : [T] extends [ThenableLike]
+    ? [error: never]
+    : [];
+
 /** Compares selected store values to decide whether subscribers should update. */
 export type StoreEquality<T> = (left: T, right: T) => boolean;
 
@@ -140,7 +147,7 @@ export interface Store<T extends object> {
   get(): T;
   set(next: StoreSetter<T>): void;
   replace(next: StoreReplacer<T>): void;
-  transaction(fn: () => void): void;
+  transaction<TResult>(fn: () => TResult, ...error: RejectThenable<TResult>): void;
   update(updater: (previous: T) => StorePatch<T> | T): void;
   select<U>(selector: (state: T) => U, equality?: StoreEquality<U>): SelectedCell<U>;
   subscribe(listener: StoreListener<T>): () => void;
@@ -166,6 +173,7 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
   let transactionChanged = false;
   let transactionType: StoreInstrumentationEvent<T>["type"] | undefined;
   let transactionMutationCount = 0;
+  let transactionThenableError: TypeError | undefined;
   let persistSaveQueue: Promise<void> = Promise.resolve();
   let persistSaveQueued = false;
   let persistSavePendingState: T | undefined;
@@ -376,21 +384,32 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
     commit(resolved, previous, "replace");
   }
 
-  function transaction(fn: () => void): void {
+  function transaction<TResult>(fn: () => TResult, ..._error: RejectThenable<TResult>): void {
     const rootTransaction = transactionDepth === 0;
     let thrown: unknown;
     let didThrow = false;
     transactionDepth += 1;
 
     try {
-      fn();
+      const result = fn();
+      if (isThenable(result)) {
+        const error = new TypeError(
+          "Store.transaction() callbacks must be synchronous; await outside the transaction.",
+        );
+        transactionThenableError ??= error;
+        throw error;
+      }
     } catch (error) {
       didThrow = true;
       thrown = error;
     } finally {
       transactionDepth -= 1;
 
-      if (didThrow && rootTransaction && transactionPrevious !== undefined) {
+      if (
+        rootTransaction &&
+        (didThrow || transactionThenableError !== undefined) &&
+        transactionPrevious !== undefined
+      ) {
         state.set(transactionPrevious);
       }
 
@@ -398,14 +417,26 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
         const previous = transactionPrevious;
         const type =
           transactionMutationCount === 1 ? (transactionType ?? "transaction") : "transaction";
+        const thenableError = transactionThenableError;
         transactionPrevious = undefined;
         transactionType = undefined;
         transactionMutationCount = 0;
+        transactionThenableError = undefined;
 
-        if (transactionChanged && previous !== undefined && !didThrow) {
+        if (
+          transactionChanged &&
+          previous !== undefined &&
+          !didThrow &&
+          thenableError === undefined
+        ) {
           notify(readUntracked(), previous, type);
         }
         transactionChanged = false;
+
+        if (thenableError !== undefined && !didThrow) {
+          thrown = thenableError;
+          didThrow = true;
+        }
       }
     }
 
@@ -617,6 +648,14 @@ function isDangerousObjectKey(key: PropertyKey): boolean {
 
 function isObject(value: unknown): value is object {
   return typeof value === "object" && value !== null;
+}
+
+function isThenable(value: unknown): value is ThenableLike {
+  if ((typeof value !== "object" || value === null) && typeof value !== "function") {
+    return false;
+  }
+
+  return typeof (value as { then?: unknown }).then === "function";
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
