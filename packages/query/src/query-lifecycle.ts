@@ -59,6 +59,7 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
       return existing;
     }
 
+    const stableQueryKey = snapshotQueryKey(queryKey);
     const entry: InternalQueryEntry<TData> = {
       data: undefined,
       error: undefined,
@@ -66,8 +67,8 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
       isFetching: false,
       invalidationRevision: 0,
       queryHash,
-      queryKey,
-      queryKeySegments: hashQueryKeySegments(queryKey),
+      queryKey: stableQueryKey,
+      queryKeySegments: hashQueryKeySegments(stableQueryKey),
       stale: true,
       status: "pending",
       updatedAt: 0,
@@ -516,17 +517,8 @@ function createQueryAbortReason(queryKey: QueryKey): Error {
 
 /** Creates the stable string hash used to index a query key in the cache. */
 export function hashQueryKey(queryKey: QueryKey): string {
-  const cached = queryHashCache.get(queryKey);
-  if (cached !== undefined) {
-    return cached;
-  }
-
-  const hash = stableStringify(queryKey);
-  queryHashCache.set(queryKey, hash);
-  return hash;
+  return stableStringify(queryKey);
 }
-
-const queryHashCache = new WeakMap<QueryKey, string>();
 
 export function resultFromQueryEntry<TData>(
   entry: QueryEntry<TData> | undefined,
@@ -556,7 +548,7 @@ function toPublicEntry<TData>(entry: InternalQueryEntry<TData>): QueryEntry<TDat
     errorReason: entry.errorReason,
     isFetching: entry.isFetching,
     queryHash: entry.queryHash,
-    queryKey: entry.queryKey,
+    queryKey: snapshotQueryKey(entry.queryKey),
     stale: entry.stale,
     status: entry.status,
     updatedAt: entry.updatedAt,
@@ -576,6 +568,71 @@ function isFresh(entry: InternalQueryEntry, staleTime: number | undefined): bool
 
 function hashQueryKeySegments(queryKey: QueryKey): readonly string[] {
   return queryKey.map(stableStringify);
+}
+
+function snapshotQueryKey(queryKey: QueryKey): QueryKey {
+  return queryKey.map((value) => snapshotQueryKeyValue(value, []));
+}
+
+function snapshotQueryKeyValue(value: unknown, ancestors: object[]): unknown {
+  if (value === null || typeof value !== "object") {
+    if (typeof value === "function" || typeof value === "symbol") {
+      throw unsupportedQueryKeyValue(value);
+    }
+    return value;
+  }
+
+  if (ancestors.includes(value)) {
+    throw new TypeError("Cyclic query key value is not supported");
+  }
+
+  ancestors.push(value);
+  try {
+    if (Array.isArray(value)) {
+      return value.map((entry) => snapshotQueryKeyValue(entry, ancestors));
+    }
+
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype === Object.prototype || prototype === null) {
+      const snapshot: Record<string, unknown> = {};
+      for (const key of Object.keys(value).sort()) {
+        const entry = (value as Record<string, unknown>)[key];
+        if (entry !== undefined) {
+          Object.defineProperty(snapshot, key, {
+            configurable: true,
+            enumerable: true,
+            value: snapshotQueryKeyValue(entry, ancestors),
+            writable: true,
+          });
+        }
+      }
+      return snapshot;
+    }
+    if (value instanceof Date) {
+      return new Date(value.getTime());
+    }
+    if (value instanceof URL) {
+      return new URL(value.href);
+    }
+    if (value instanceof RegExp) {
+      return new RegExp(value.source, value.flags);
+    }
+    if (value instanceof Set) {
+      return new Set(Array.from(value, (entry) => snapshotQueryKeyValue(entry, ancestors)));
+    }
+    if (value instanceof Map) {
+      return new Map(
+        Array.from(value, ([key, entry]) => [
+          snapshotQueryKeyValue(key, ancestors),
+          snapshotQueryKeyValue(entry, ancestors),
+        ]),
+      );
+    }
+
+    throw unsupportedQueryKeyValue(value);
+  } finally {
+    ancestors.pop();
+  }
 }
 
 function queryKeyStartsWith(

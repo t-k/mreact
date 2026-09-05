@@ -460,6 +460,24 @@ describe("createQueryClient", () => {
     );
   });
 
+  it("treats mutated key input as a new identity and preserves old entry metadata", () => {
+    const client = createQueryClient();
+    const key = ["profile", { userId: 1 }];
+
+    client.setQueryData(key, "user-1");
+    (key[1] as { userId: number }).userId = 2;
+    client.setQueryData(key, "user-2");
+
+    expect(client.getQueryData(["profile", { userId: 1 }])).toBe("user-1");
+    expect(client.getQueryData(["profile", { userId: 2 }])).toBe("user-2");
+    expect(
+      client.entries().map((entry) => [entry.queryKey, entry.data]),
+    ).toEqual([
+      [["profile", { userId: 1 }], "user-1"],
+      [["profile", { userId: 2 }], "user-2"],
+    ]);
+  });
+
   it.each([
     ["Date", new Date("2026-08-15T00:00:00.000Z"), new Date("2026-08-16T00:00:00.000Z")],
     ["Set", new Set([1, 2]), new Set([1, 3])],
@@ -522,7 +540,7 @@ describe("createQueryClient", () => {
     );
   });
 
-  it("memoizes query-key hashes for repeated reads of the same key array", () => {
+  it("rehashes mutable query-key input for repeated reads of the same key array", () => {
     const queryKey = ["search", { page: 1, q: "mreact" }] as const;
     const originalStringify = JSON.stringify;
     let stringifyCalls = 0;
@@ -540,7 +558,7 @@ describe("createQueryClient", () => {
       JSON.stringify = originalStringify;
     }
 
-    expect(stringifyCalls).toBe(0);
+    expect(stringifyCalls).toBeGreaterThan(0);
   });
 });
 
