@@ -132,6 +132,55 @@ export default function Page(props: { data: { runtime: string } }) {
       await mf.dispose();
     }
   });
+
+  test("passes RouteLocation to pages and layouts while loaders retain the Request", async () => {
+    const testRoot = join(process.cwd(), "tmp");
+    await mkdir(testRoot, { recursive: true });
+    const rootDir = await mkdtemp(join(testRoot, "mreact-cloudflare-route-location-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export default function Layout({ request }) {
+  return <html><body><aside data-layout-location={request.pathname + request.search}><Slot /></aside></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export function loader({ request }) {
+  return { token: request.headers.get("x-route-token"), url: request.url };
+}
+
+export default function Page({ data, request }) {
+  return <main data-page-location={request.pathname + request.search}>{data.token}:{data.url}</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
+    await linkRouterPackage(rootDir);
+    const bundledWorker = await bundleWorkerForMiniflare(outDir);
+    const mf = new Miniflare({
+      compatibilityDate: "2026-05-22",
+      modules: true,
+      scriptPath: bundledWorker,
+    });
+
+    try {
+      const response = await mf.dispatchFetch("https://app.example/?tab=details", {
+        headers: { "x-route-token": "loader-request" },
+      });
+      const html = await response.text();
+
+      expect(response.status).toBe(200);
+      expect(html).toContain('data-layout-location="/?tab=details"');
+      expect(html).toContain('data-page-location="/?tab=details"');
+      expect(html).toContain("loader-request");
+      expect(html).toContain("https://app.example/?tab=details");
+    } finally {
+      await mf.dispose();
+    }
+  });
 });
 
 async function bundleWorkerForMiniflare(outDir: string): Promise<string> {

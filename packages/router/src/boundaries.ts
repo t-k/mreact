@@ -351,7 +351,7 @@ export function validateBoundaryExecutionContracts(
         continue;
       }
 
-      if (component.origin === "compat-filename") {
+      if (component.origin === "compat-filename" || isCompatComponentFile(component.file)) {
         violations.push(
           `no-compat component ${componentId} uses compat fallback from its filename`,
         );
@@ -366,6 +366,10 @@ export function validateBoundaryExecutionContracts(
       `mreactRouter execution contract violation(s):\n${violations.map((violation) => `- ${violation}`).join("\n")}`,
     );
   }
+}
+
+function isCompatComponentFile(file: string): boolean {
+  return /\.compat(?:\.mreact)?\.[cm]?[jt]sx?$/.test(file.replaceAll("\\", "/"));
 }
 
 function executionModesForComponents(

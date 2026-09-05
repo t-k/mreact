@@ -4062,14 +4062,14 @@ const componentGenerateMetadata = readComponentModuleExport(componentModule, "ge
 const componentMetadata = readComponentModuleExport(componentModule, "metadata");
 const componentSecurityHeadersApplied = readComponentModuleExport(componentModule, "__mreactSecurityHeadersApplied");
 
-export function App(props) {
-  return renderCloudflareRouteComponent(props);
+export function App(props, request) {
+  return renderCloudflareRouteComponent(props, request);
 }
-export default function CloudflareDefaultRouteComponent(props) {
-  return renderCloudflareRouteComponent(props);
+export default function CloudflareDefaultRouteComponent(props, request) {
+  return renderCloudflareRouteComponent(props, request);
 }
-export function CloudflareRouteComponent(props) {
-  return renderCloudflareRouteComponent(props);
+export function CloudflareRouteComponent(props, request) {
+  return renderCloudflareRouteComponent(props, request);
 }
 export const slots = componentSlots === undefined ? undefined : { ...componentSlots };
 export const generateMetadata =
@@ -4077,13 +4077,13 @@ export const generateMetadata =
 export const metadata = componentMetadata;
 export const __mreactSecurityHeadersApplied = componentSecurityHeadersApplied === true;
 
-function renderCloudflareRouteComponent(props) {
+function renderCloudflareRouteComponent(props, request) {
   const routeComponent = resolveCloudflareRouteComponent();
   if (routeComponent === undefined) {
     throw new Error("No Cloudflare component export was found for ${componentImport}.");
   }
 
-  return routeComponent(props);
+  return routeComponent(props, request);
 }
 
 function resolveCloudflareRouteComponent() {
@@ -4449,14 +4449,14 @@ ${shellModules.join("\n")}
 const pageComponent = selectComponent(pageModule, ${JSON.stringify(options.filename)});
 const shells = [${shellDefinitions.join(", ")}];
 export const slots = pageModule.slots;
-export default function CloudflareStringRouteComponent(props) {
-  return renderCloudflareStringRoute(props);
+export default function CloudflareStringRouteComponent(props, request) {
+  return renderCloudflareStringRoute(props, request);
 }
 
-async function renderCloudflareStringRoute(props) {
+async function renderCloudflareStringRoute(props, request) {
   const slotHtml = await renderRouteSlots(pageModule.slots, props);
   const layoutShells = await renderLayoutShells(shells, props, slotHtml);
-  const metadata = await resolveRouteMetadata([...shells.map((shell) => shell.module), pageModule], props);
+  const metadata = await resolveRouteMetadata([...shells.map((shell) => shell.module), pageModule], { ...props, request });
   let html = "<!DOCTYPE html>";
   for (const shell of layoutShells) {
     html += shell.prefix;
@@ -4467,7 +4467,7 @@ async function renderCloudflareStringRoute(props) {
   }
   html = injectCloudflareHead(html, metadata, cloudflareRouteHeadTags(props.clientManifest, props.route.path));
   return new Response(html, {
-    headers: cloudflareMetadataHeaders(metadata, props.request, {
+    headers: cloudflareMetadataHeaders(metadata, request, {
       "content-type": "text/html; charset=utf-8"
     })
   });
@@ -4633,14 +4633,14 @@ ${shellImports.join("\n")}
 const pageComponent = selectComponent(pageModule, ${JSON.stringify(options.filename)});
 const shells = [${shellDefinitions.join(", ")}];
 export const slots = pageModule.slots;
-export default function CloudflareStringRouteComponent(props) {
-  return renderCloudflareStringRoute(props);
+export default function CloudflareStringRouteComponent(props, request) {
+  return renderCloudflareStringRoute(props, request);
 }
 
-async function renderCloudflareStringRoute(props) {
+async function renderCloudflareStringRoute(props, request) {
   const slotHtml = await renderRouteSlots(pageModule.slots, props);
   const layoutShells = await renderLayoutShells(shells, props, slotHtml);
-  const metadata = await resolveRouteMetadata([...shells.map((shell) => shell.module), pageModule], props);
+  const metadata = await resolveRouteMetadata([...shells.map((shell) => shell.module), pageModule], { ...props, request });
   let html = "<!DOCTYPE html>";
   for (const shell of layoutShells) {
     html += shell.prefix;
@@ -4651,7 +4651,7 @@ async function renderCloudflareStringRoute(props) {
   }
   html = injectCloudflareHead(html, metadata, cloudflareRouteHeadTags(props.clientManifest, props.route.path));
   return new Response(html, {
-    headers: cloudflareMetadataHeaders(metadata, props.request, {
+    headers: cloudflareMetadataHeaders(metadata, request, {
       "content-type": "text/html; charset=utf-8"
     })
   });
@@ -4746,8 +4746,8 @@ export const slots = pageModule.slots;
 export const App = renderCloudflareStreamRoute;
 export default renderCloudflareStreamRoute;
 
-async function renderCloudflareStreamRoute(props) {
-  const metadata = await resolveRouteMetadata([...shells.map((shell) => shell.module), pageModule], props);
+async function renderCloudflareStreamRoute(props, request) {
+  const metadata = await resolveRouteMetadata([...shells.map((shell) => shell.module), pageModule], { ...props, request });
   const body = renderToReadableStream(async ($sink) => {
     const slotHtml = await renderRouteSlots(pageModule.slots, props);
     const layoutShells = await renderLayoutShells(shells, props, slotHtml);
@@ -4770,7 +4770,7 @@ async function renderCloudflareStreamRoute(props) {
     }
   });
   return new Response(body, {
-    headers: cloudflareMetadataHeaders(metadata, props.request, {
+    headers: cloudflareMetadataHeaders(metadata, request, {
       "content-type": "text/html; charset=utf-8",
       "x-mreact-stream": "1"
     })

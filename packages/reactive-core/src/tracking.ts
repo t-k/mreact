@@ -326,6 +326,9 @@ export function flushPendingComputed(): void {
 
       for (let index = 0; index < computations.length; index += 1) {
         const computation = computations[index];
+        if (computation === undefined) {
+          continue;
+        }
         computation.queued = false;
 
         try {
@@ -337,7 +340,10 @@ export function flushPendingComputed(): void {
           // queued flags for work that was in the same snapshot so recovery can
           // schedule it again after the caller handles the failure.
           for (let remaining = index + 1; remaining < computations.length; remaining += 1) {
-            computations[remaining].queued = false;
+            const pending = computations[remaining];
+            if (pending !== undefined) {
+              pending.queued = false;
+            }
           }
           throw error;
         }

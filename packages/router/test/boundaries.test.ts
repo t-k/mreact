@@ -9,6 +9,7 @@ import {
   formatBoundaryReportJson,
   validateBoundaryExecutionContracts,
 } from "../src/boundaries.js";
+import { inferClientRouteModule } from "../src/client.js";
 
 describe("boundary reports", () => {
   test("normalizes routes and components into deterministic text and JSON", () => {
@@ -245,6 +246,48 @@ describe("boundary reports", () => {
         serverOnlyRoutes: ["/account"],
       }),
     ).toThrow(/server-only route.*client execution|no-compat component.*compat fallback/s);
+  });
+
+  test("keeps compat compiler mode ahead of a use-client directive", async () => {
+    const inference = await inferClientRouteModule({
+      code: '"use client"; export default function Page() { return null; }',
+      collectComponents: true,
+      filename: "/workspace/src/components/Page.compat.tsx",
+      routePath: "/",
+    });
+
+    expect(inference.components).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ exportName: "default", origin: "compat-filename" }),
+      ]),
+    );
+  });
+
+  test("rejects a no-compat contract from the filename even with a stale origin", () => {
+    const report = createBoundaryReport({
+      projectRoot: "/workspace",
+      routes: [
+        {
+          components: [
+            {
+              classification: "client-boundary",
+              exportName: "Panel",
+              file: "/workspace/src/components/Panel.compat.tsx",
+              origin: "use-client-directive",
+            },
+          ],
+          diagnostics: [],
+          entry: "/workspace/src/app/page.tsx",
+          path: "/",
+        },
+      ],
+    });
+
+    expect(() =>
+      validateBoundaryExecutionContracts(report, {
+        noCompatComponents: ["src/components/**"],
+      }),
+    ).toThrow(/no-compat component.*compat fallback/);
   });
 
   test("ignores unmatched execution contract patterns", () => {

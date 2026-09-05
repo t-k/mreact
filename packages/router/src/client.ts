@@ -842,12 +842,12 @@ function clientRouteComponentOrigin(options: {
     return "server-only-import";
   }
 
-  if (options.analysis.hasUseClientDirective) {
-    return "use-client-directive";
-  }
-
   if (/\.compat(?:\.mreact)?\.[cm]?[jt]sx?$/.test(options.filename)) {
     return "compat-filename";
+  }
+
+  if (options.analysis.hasUseClientDirective) {
+    return "use-client-directive";
   }
 
   if (/\.client(?:\.mreact)?\.[cm]?[jt]sx?$/.test(options.filename)) {

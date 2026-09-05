@@ -32,6 +32,7 @@ import {
 import { middlewareMatches, type MiddlewareModule } from "../middleware.js";
 import { normalizeRoutePath } from "../route-path.js";
 import type { AppRoute } from "../routes.js";
+import { routeLocationFromRequest } from "../request-header-tracking.js";
 import { contentSecurityPolicy } from "../csp.js";
 import { isNotFoundError, isRedirectError, rewriteLocation } from "../navigation.js";
 import { validateRouteMetadata } from "../metadata.js";
@@ -205,7 +206,7 @@ export interface CloudflareRouteModuleComponentProps<
 > extends CloudflareBuiltRouteRenderContext<Env> {
   data: Data;
   queryClient: QueryClient;
-  request: Request;
+  request: import("../types.js").RouteLocation;
 }
 
 /**
@@ -213,6 +214,7 @@ export interface CloudflareRouteModuleComponentProps<
  */
 export type CloudflareRouteModuleComponent<Data = unknown, Env = unknown> = (
   props: CloudflareRouteModuleComponentProps<Data, Env>,
+  request?: Request,
 ) => Response | string | PromiseLike<Response | string>;
 
 /**
@@ -601,12 +603,12 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
       ...context,
       data,
       queryClient,
-      request,
+      request: routeLocationFromRequest(request),
     };
     let rendered: Awaited<ReturnType<typeof component>>;
 
     try {
-      rendered = await runWithCloudflareQueryClient(queryClient, () => component(props));
+      rendered = await runWithCloudflareQueryClient(queryClient, () => component(props, request));
     } catch (error) {
       if (isRedirectError(error)) {
         return new Response(null, {
@@ -623,7 +625,7 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
     }
 
     const metadata = await runWithCloudflareQueryClient(queryClient, () =>
-      resolveCloudflareRouteMetadata([pageModule], props),
+      resolveCloudflareRouteMetadata([pageModule], { ...props, request }),
     );
 
     if (rendered instanceof Response) {
