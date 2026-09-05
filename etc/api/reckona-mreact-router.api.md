@@ -455,6 +455,11 @@ export interface AwsLambdaArtifactManifest {
 // @public (undocumented)
 export type AwsLambdaGeneratedHandlerPreloadMode = "all" | "hot-route-requests" | "middleware" | "none";
 
+// @public
+export interface BoundaryCostOptions {
+    fetchedDynamicImports?: Readonly<Record<string, readonly string[]>> | undefined;
+}
+
 // @public (undocumented)
 export type BoundaryExecutionMode = "client" | "server" | "shared" | "unknown";
 
@@ -580,6 +585,8 @@ export interface BuildAppOptions extends AppRouterProjectOptions {
     awsLambdaPreload?: AwsLambdaGeneratedHandlerPreloadMode | undefined;
     // (undocumented)
     awsLambdaPreloadRoutes?: readonly string[] | undefined;
+    // (undocumented)
+    boundaryCost?: BoundaryCostOptions | undefined;
     onBoundaryReport?: ((report: BoundaryReport) => void) | undefined;
     // (undocumented)
     onBuildPhaseTiming?: ((timing: BuildAppPhaseTiming) => void) | undefined;

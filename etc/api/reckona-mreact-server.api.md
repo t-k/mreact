@@ -465,6 +465,27 @@ export interface RenderToReadableStreamOptions {
     logAbortedDeferredErrors?: boolean;
     maxQueuedBytes?: number;
     maxQueuedChunks?: number;
+    onQueueStateChange?: ((state: RenderToReadableStreamQueueState) => void) | undefined;
+}
+
+// @public
+export interface RenderToReadableStreamQueueState {
+    // (undocumented)
+    controllerQueuedBytes: number;
+    // (undocumented)
+    controllerQueuedChunkCount: number;
+    // (undocumented)
+    queuedBytes: number;
+    // (undocumented)
+    queuedChunkCount: number;
+    // (undocumented)
+    retainedBackingBufferCount: number;
+    // (undocumented)
+    retainedBackingBytes: number;
+    // (undocumented)
+    retainedBytes: number;
+    // (undocumented)
+    retainedChunkCount: number;
 }
 
 // @public
