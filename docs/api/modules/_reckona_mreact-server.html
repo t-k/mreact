@@ -18,10 +18,7 @@ hydration data.</li>
 <li><code>html()</code> wraps rendered HTML in a <code>Response</code>.</li>
 </ul>
 <h3 id="streaming-diagnostics" class="tsd-anchor-link">Streaming diagnostics<a href="#streaming-diagnostics" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
-<p><code>renderToReadableStream(render, { logAbortedDeferredErrors: true })</code> can log
-deferred task errors that arrive after the stream has already been aborted. The
-log is development-only, opt-in, and never writes the ignored error into the
-HTTP response body.</p>
+<p><code>renderToReadableStream(render, { logAbortedDeferredErrors: true })</code> can log deferred task errors that arrive after the stream has already been aborted. The log is development-only, opt-in, and never writes the ignored error into the HTTP response body. <code>onQueueStateChange</code> is an opt-in diagnostic callback that reports the bytes, chunk count, and distinct backing buffer capacity retained by the local stream queues while a reader is slow.</p>
 <h2 id="subpaths" class="tsd-anchor-link">Subpaths<a href="#subpaths" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <ul>
 <li><code>@reckona/mreact-server/reorder</code> applies out-of-order SSR fragments in the
