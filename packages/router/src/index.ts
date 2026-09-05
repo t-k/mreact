@@ -5,13 +5,20 @@ export {
   createBoundaryReport,
   formatBoundaryReport,
   formatBoundaryReportJson,
+  validateBoundaryExecutionContracts,
 } from "./boundaries.js";
 export type {
   AnalyzeAppBoundariesOptions,
+  BoundaryExecutionMode,
+  BoundaryReportByteCost,
   BoundaryReport,
   BoundaryReportComponent,
+  BoundaryReportCost,
+  BoundaryReportDecision,
   BoundaryReportRoute,
   BoundaryReportSummary,
+  BoundarySourcePosition,
+  BoundarySourceRange,
   CreateBoundaryReportInput,
   CreateBoundaryReportRouteInput,
 } from "./boundaries.js";
@@ -209,6 +216,7 @@ export type {
   AppRouterClientConsoleMethod,
   AppRouterClientSourceMapMode,
   AppRouterClientSourceMapOption,
+  AppRouterExecutionContracts,
   AppRouterProductionOptions,
 } from "./config.js";
 export type {

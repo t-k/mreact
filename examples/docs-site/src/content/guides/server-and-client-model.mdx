@@ -5,6 +5,8 @@ export const description = "How Mreact decides what runs on the server and what 
 
 Mreact renders routes on the server by default and only ships browser runtime when a rendered code path needs it. Use this page to decide whether a feature should stay server-only, become client-interactive through inference, use an explicit client boundary, or turn the whole route into a client route.
 
+The package you import does not by itself determine the execution mode. Native `cell()`, `computed()`, and `effect()` APIs are the recommended starting point for new App Router code; compatibility hooks remain available for React-style authoring, migrations, and verified ecosystem integrations. The compiler and route boundary determine what executes on the server and what hydrates in the browser.
+
 ## Server by default
 
 A route with no client behavior can stay JavaScript-free in the browser. Loaders, route handlers, metadata functions, middleware, and server-rendered components run on the server side of the route graph.
@@ -50,6 +52,8 @@ export default function Chart() {
 ```
 
 Server string and stream rendering omit `domRef` without evaluating its callback. During hydration, the callback receives the retained SSR element rather than a detached client clone. `domRef` is supported on intrinsic elements only; pass an explicit callback prop when a component needs to expose one of its elements. The callback identity is not reactive, so use a keyed or conditional replacement when a different lifecycle owner must attach.
+
+Low-level DOM work has an explicit owner contract: keep the disposer returned by `createRoot()` or register each resource with `createCleanupScope()`. The owner covers DOM bindings, event listeners, subscriptions, effects, and pending tasks; this makes repeated mount and unmount cycles return to a stable live-resource baseline.
 
 ## Client boundaries
 
@@ -149,6 +153,25 @@ Unguarded browser access, or guards hidden behind aliases the analyzer cannot fo
 - **Explicit integration boundary**: `.client.tsx`.
 - **Whole page is browser-owned**: route-level `"use client"`.
 - **Browser behavior is hidden behind dynamic dispatch**: explicit `.client.tsx` or `"use client"`.
+
+## Enforcing an execution contract
+
+Projects that need a build-time guard can pass `executionContracts` to `buildApp()`. The option is opt-in; leaving it out keeps the normal inference and compatibility behavior.
+
+```ts
+await buildApp({
+  appDir: "src/app",
+  outDir: ".mreact",
+  executionContracts: {
+    serverOnlyRoutes: ["/account/**"],
+    noCompatComponents: ["src/components/**"],
+  },
+});
+```
+
+`serverOnlyRoutes` rejects client, shared, or unresolved boundaries reachable from a matching route. `noCompatComponents` rejects filename-based compatibility fallbacks and unresolved components whose normalized file or export matches the pattern. `*` matches one path segment and `**` matches across segments. Matching is evaluated during source analysis, before production artifacts are emitted, so a failed contract does not silently produce a build with a different execution mode.
+
+Use these contracts when deployment or ownership rules require an explicit boundary policy. Keep the patterns narrow and review them with the generated boundary report so a new client dependency or compatibility fallback fails close to its source.
 
 ## Related pages
 

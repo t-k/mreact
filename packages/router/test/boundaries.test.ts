@@ -7,6 +7,7 @@ import {
   createBoundaryReport,
   formatBoundaryReport,
   formatBoundaryReportJson,
+  validateBoundaryExecutionContracts,
 } from "../src/boundaries.js";
 
 describe("boundary reports", () => {
@@ -50,18 +51,33 @@ describe("boundary reports", () => {
           components: [
             {
               classification: "server-render",
+              decision: {
+                executionMode: "server",
+                reasonChain: ["classification:server-render", "origin:server-render"],
+              },
               exportName: "default",
               file: "src/app/dashboard/page.tsx",
               origin: "server-render",
             },
             {
               classification: "client-boundary",
+              decision: {
+                executionMode: "client",
+                reasonChain: [
+                  "classification:client-boundary",
+                  "origin:inferred-client-runtime",
+                  "client-runtime-inference",
+                  "reachable-from:src/app/dashboard/page.tsx",
+                ],
+              },
               exportName: "Counter",
               file: "src/components/Counter.tsx",
               origin: "inferred-client-runtime",
             },
           ],
+          cost: { reason: "No production artifact supplied.", status: "unavailable" },
           entry: "src/app/dashboard/page.tsx",
+          executionModes: ["client", "server"],
           path: "/dashboard",
         },
       ],
@@ -146,6 +162,100 @@ describe("boundary reports", () => {
 
     expect(report.summary.sharedComponents).toBe(1);
     expect(formatBoundaryReport(report)).toContain("1 shared component");
+  });
+
+  test("reports source ranges, mixed execution modes, and supplied artifact costs", () => {
+    const report = createBoundaryReport({
+      projectRoot: "/workspace",
+      routes: [
+        {
+          components: [
+            {
+              classification: "client-boundary",
+              exportName: "Counter",
+              file: "/workspace/src/app/page.tsx",
+              origin: "use-client-directive",
+            },
+            {
+              classification: "server-render",
+              exportName: "default",
+              file: "/workspace/src/app/page.tsx",
+              origin: "server-render",
+            },
+          ],
+          cost: {
+            initial: { gzipEstimateBytes: 120, rawBytes: 300 },
+            navigation: { gzipEstimateBytes: 40, rawBytes: 90 },
+            status: "available",
+          },
+          diagnostics: [],
+          entry: "/workspace/src/app/page.tsx",
+          path: "/",
+          source:
+            '"use client";\nexport function Counter() { return null; }\nexport default function Page() { return null; }',
+        },
+      ],
+    });
+
+    expect(report.routes[0]).toMatchObject({
+      cost: {
+        initial: { gzipEstimateBytes: 120, rawBytes: 300 },
+        status: "available",
+      },
+      executionModes: ["client", "server"],
+    });
+    expect(report.routes[0]?.components[0]).toMatchObject({
+      decision: {
+        executionMode: "client",
+        sourceRange: { start: { line: 2 } },
+      },
+    });
+    expect(formatBoundaryReport(report)).toContain("modes: client, server");
+  });
+
+  test("enforces opt-in server-only and no-compat contracts conservatively", () => {
+    const report = createBoundaryReport({
+      projectRoot: "/workspace",
+      routes: [
+        {
+          components: [
+            {
+              classification: "shared",
+              exportName: "CompatPanel",
+              file: "/workspace/src/components/Panel.compat.tsx",
+              origin: "compat-filename",
+            },
+            {
+              classification: "unknown",
+              exportName: "Missing",
+              file: "/workspace/src/components/Missing.tsx",
+              origin: "unresolved-reference",
+            },
+          ],
+          diagnostics: [],
+          entry: "/workspace/src/app/account/page.tsx",
+          path: "/account",
+        },
+      ],
+    });
+
+    expect(() =>
+      validateBoundaryExecutionContracts(report, {
+        noCompatComponents: ["src/components/**"],
+        serverOnlyRoutes: ["/account"],
+      }),
+    ).toThrow(/server-only route.*client execution|no-compat component.*compat fallback/s);
+  });
+
+  test("ignores unmatched execution contract patterns", () => {
+    const report = createBoundaryReport({ projectRoot: "/workspace", routes: [] });
+
+    expect(() =>
+      validateBoundaryExecutionContracts(report, {
+        noCompatComponents: ["src/components/**"],
+        serverOnlyRoutes: ["/admin/**"],
+      }),
+    ).not.toThrow();
   });
 
   test("analyzes routes, shells, explicit boundaries, barrels, and Vite transforms without building", async () => {

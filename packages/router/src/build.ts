@@ -41,7 +41,11 @@ import {
   type ClientRouteInferenceDiagnostic,
   type ClientRouteInferenceCache,
 } from "./client-route-inference.js";
-import { createBoundaryReport, type BoundaryReport } from "./boundaries.js";
+import {
+  createBoundaryReport,
+  validateBoundaryExecutionContracts,
+  type BoundaryReport,
+} from "./boundaries.js";
 import {
   buildClientRouteBatchOutput,
   buildNavigationRuntimeBundle,
@@ -523,6 +527,7 @@ async function buildAppWithResolvedProject(
           }),
         );
   options.onBoundaryReport?.(sourceAnalysis.boundaryReport);
+  validateBoundaryExecutionContracts(sourceAnalysis.boundaryReport, project.executionContracts);
 
   if (shouldTrackBuildPhases === false) {
     await validateProductionRoutes({
@@ -1473,6 +1478,7 @@ async function analyzeBuildRouteSources(options: {
         diagnostics: analysis.diagnostics,
         entry: analysis.route.file,
         path: analysis.route.path,
+        source: analysis.source,
       })),
     }),
     byFile,

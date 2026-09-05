@@ -461,6 +461,26 @@ describe("mreact app build", () => {
     );
   });
 
+  test("enforces opt-in execution contracts during production builds", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-contracts-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `"use client";
+export default function Page() { return <main>Client page</main>; }`,
+    );
+
+    await expect(
+      buildApp({
+        appDir,
+        executionContracts: { serverOnlyRoutes: ["/"] },
+        outDir,
+      }),
+    ).rejects.toThrow(/server-only route.*client execution/s);
+  });
+
   test("injects source-root directives before production route CSS plugins transform Tailwind entries", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-tailwind-source-"));
     const appDir = join(rootDir, "src", "app");
@@ -3235,8 +3255,12 @@ export default function Page(props) {
 export const prerender = true;
 export const revalidate = 60;
 
-export default function Page(context) {
-  return <main>{readHost(context)}</main>;
+export function loader(context) {
+  return { host: readHost(context) };
+}
+
+export default function Page(props) {
+  return <main>{props.data.host}</main>;
 }
 `,
     );

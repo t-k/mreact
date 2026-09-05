@@ -32,6 +32,12 @@ export interface AppRouterProductionOptions {
   dropClientConsole?: boolean | readonly AppRouterClientConsoleMethod[] | undefined;
 }
 
+/** Opt-in compile-time constraints for route and component execution modes. */
+export interface AppRouterExecutionContracts {
+  noCompatComponents?: readonly string[] | undefined;
+  serverOnlyRoutes?: readonly string[] | undefined;
+}
+
 export interface AppRouterProjectOptions {
   assetBaseUrl?: string | undefined;
   buildConcurrency?: number | undefined;
@@ -39,6 +45,7 @@ export interface AppRouterProjectOptions {
   clientSourceMaps?: AppRouterClientSourceMapOption | undefined;
   /** Project-local server module exporting a named `dehydrateOptions` policy. */
   dehydratePolicyModule?: string | undefined;
+  executionContracts?: AppRouterExecutionContracts | undefined;
   /**
    * Legacy route root. When provided without routesDir/projectRoot, this keeps
    * the historical "appDir is the whole app boundary" behavior.
@@ -64,6 +71,7 @@ export interface ResolvedAppRouterProject {
   clientSourceMaps: AppRouterClientSourceMapMode;
   clientConsolePureFunctions?: readonly string[] | undefined;
   dehydratePolicyModule?: string | undefined;
+  executionContracts?: AppRouterExecutionContracts | undefined;
   projectRoot: string;
   publicAssetBaseUrl?: string | undefined;
   publicDir: string;
@@ -105,6 +113,9 @@ export function resolveAppRouterProjectOptions(
               allowedSourceDirs,
             ),
           }),
+      ...(options.executionContracts === undefined
+        ? {}
+        : { executionContracts: normalizeExecutionContracts(options.executionContracts) }),
       projectRoot: appDir,
       ...(options.publicAssetBaseUrl === undefined
         ? {}
@@ -140,6 +151,9 @@ export function resolveAppRouterProjectOptions(
             allowedSourceDirs,
           ),
         }),
+    ...(options.executionContracts === undefined
+      ? {}
+      : { executionContracts: normalizeExecutionContracts(options.executionContracts) }),
     projectRoot,
     ...(options.publicAssetBaseUrl === undefined
       ? {}
@@ -147,6 +161,24 @@ export function resolveAppRouterProjectOptions(
     publicDir: resolveProjectPath(projectRoot, options.publicDir ?? "public", "publicDir"),
     routesDir,
   };
+}
+
+function normalizeExecutionContracts(
+  contracts: AppRouterExecutionContracts,
+): AppRouterExecutionContracts {
+  const noCompatComponents = uniquePatterns(contracts.noCompatComponents);
+  const serverOnlyRoutes = uniquePatterns(contracts.serverOnlyRoutes);
+
+  return {
+    ...(noCompatComponents.length === 0 ? {} : { noCompatComponents }),
+    ...(serverOnlyRoutes.length === 0 ? {} : { serverOnlyRoutes }),
+  };
+}
+
+function uniquePatterns(patterns: readonly string[] | undefined): string[] {
+  return [...new Set((patterns ?? []).filter((pattern) => pattern.length > 0))].sort(
+    (left, right) => left.localeCompare(right),
+  );
 }
 
 function resolvePolicyModule(
