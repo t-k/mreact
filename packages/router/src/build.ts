@@ -145,12 +145,19 @@ export type AwsLambdaGeneratedHandlerPreloadMode =
   | "middleware"
   | "none";
 
+/** Supplies observed dynamic imports when boundary navigation costs are measured. */
+export interface BoundaryCostOptions {
+  /** Maps a route path to dynamic import entry files fetched during navigation. */
+  fetchedDynamicImports?: Readonly<Record<string, readonly string[]>> | undefined;
+}
+
 /**
  * Configures an app-router production build and its deployment targets.
  */
 export interface BuildAppOptions extends AppRouterProjectOptions {
   awsLambdaPreload?: AwsLambdaGeneratedHandlerPreloadMode | undefined;
   awsLambdaPreloadRoutes?: readonly string[] | undefined;
+  boundaryCost?: BoundaryCostOptions | undefined;
   /** Receives the full route and component boundary report after source analysis. */
   onBoundaryReport?: ((report: BoundaryReport) => void) | undefined;
   onBuildProgress?: ((event: BuildAppProgressEvent) => void) | undefined;
@@ -575,6 +582,7 @@ async function buildAppWithResolvedProject(
       );
       options.onBoundaryReport(
         await boundaryReportWithArtifactCosts({
+          boundaryCost: options.boundaryCost,
           clientDir,
           manifest: clientManifest,
           report: sourceAnalysis.boundaryReport,
@@ -960,6 +968,7 @@ async function buildAppWithResolvedProject(
   if (options.onBoundaryReport !== undefined) {
     options.onBoundaryReport(
       await boundaryReportWithArtifactCosts({
+        boundaryCost: options.boundaryCost,
         clientDir,
         manifest: clientManifest,
         report: sourceAnalysis.boundaryReport,
@@ -971,6 +980,7 @@ async function buildAppWithResolvedProject(
 }
 
 async function boundaryReportWithArtifactCosts(options: {
+  boundaryCost: BoundaryCostOptions | undefined;
   clientDir: string;
   manifest: ClientArtifactManifest | undefined;
   report: BoundaryReport;
@@ -991,9 +1001,7 @@ async function boundaryReportWithArtifactCosts(options: {
   const manifest = options.manifest;
   const chunks = new Map((manifest.chunks ?? []).map((chunk) => [chunk.file, chunk]));
   const routeClosures = options.report.routes.map((route) => {
-    const manifestRoute = manifest.routes.find(
-      (candidate) => candidate.path === route.path && candidate.client && candidate.script,
-    );
+    const manifestRoute = manifest.routes.find((candidate) => candidate.path === route.path);
 
     if (manifestRoute === undefined) {
       return { initial: undefined, navigation: undefined, route };
@@ -1001,8 +1009,11 @@ async function boundaryReportWithArtifactCosts(options: {
 
     const initial = clientArtifactStaticClosure(manifestRoute, chunks);
     const navigation = new Set(initial);
-    for (const dynamicImport of manifestRoute.dynamicImports ?? []) {
-      addClientArtifactStaticClosure(navigation, dynamicImport, chunks);
+    const reachableDynamicImports = new Set(manifestRoute.dynamicImports ?? []);
+    for (const dynamicImport of options.boundaryCost?.fetchedDynamicImports?.[route.path] ?? []) {
+      if (reachableDynamicImports.has(dynamicImport)) {
+        addClientArtifactStaticClosure(navigation, dynamicImport, chunks);
+      }
     }
 
     return { initial, navigation, route };

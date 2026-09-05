@@ -42,7 +42,9 @@ export function computed<T>(
 
   const source: Source = {
     isCurrent: () =>
+      !dirty &&
       untrackedDependencies.every((dependency) => untrackedDependencyIsCurrent(dependency)),
+    onFirstSubscriber: () => attachUntrackedDependencies(),
     // Reattaching a cached computed can briefly remove its last direct
     // subscriber while a sibling reader is still restoring the same graph.
     // Preserve the dormant transitive dependencies through that transition.
@@ -88,6 +90,7 @@ export function computed<T>(
       cleanupDeps(computation);
       computation.orderedDeps = undefined;
       source.subscribers = null;
+      source.onFirstSubscriber = undefined;
       source.onNoSubscribers = undefined;
       hasValue = false;
       value = undefined as T;
@@ -282,11 +285,7 @@ export function computed<T>(
   };
 
   function restoreUntrackedDependencies(): void {
-    if (untrackedDependencies.length === 0) {
-      return;
-    }
-
-    const dependencies = untrackedDependencies.map((dependency) => dependency.ref.deref());
+    const dependencies = liveUntrackedDependencies();
     if (dependencies.some((dependency) => dependency === undefined)) {
       untrackedDependencies = [];
       return;
@@ -298,5 +297,27 @@ export function computed<T>(
     }
     computation.orderedDeps = dependencies as Source[];
     untrackedDependencies = [];
+  }
+
+  function attachUntrackedDependencies(): void {
+    if (untrackedDependencies.length === 0) {
+      return;
+    }
+
+    const dependencies = liveUntrackedDependencies();
+    if (dependencies.some((dependency) => dependency === undefined)) {
+      untrackedDependencies = [];
+      return;
+    }
+
+    for (const dependency of dependencies as Source[]) {
+      addSourceSubscriber(dependency, computation);
+      computation.deps.add(dependency);
+    }
+    computation.orderedDeps = dependencies as Source[];
+  }
+
+  function liveUntrackedDependencies(): Array<Source | undefined> {
+    return untrackedDependencies.map((dependency) => dependency.ref.deref());
   }
 }

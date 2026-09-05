@@ -149,6 +149,7 @@ export async function rotateSession<TData>(
 export type {
   AwsLambdaArtifactManifest,
   AwsLambdaGeneratedHandlerPreloadMode,
+  BoundaryCostOptions,
   BuildAppPhase,
   BuildAppPhaseTiming,
   BuildAppOptions,

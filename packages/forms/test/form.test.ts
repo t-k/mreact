@@ -275,10 +275,34 @@ describe("createForm", () => {
     });
 
     expect(binding.value).toBeNull();
-    await binding.onInput({ currentTarget: { value: "ignored", type: "text" } } as unknown as Event);
+    await binding.onInput({
+      currentTarget: { value: "ignored", type: "text" },
+    } as unknown as Event);
 
     expect(form.getValues()).toEqual({ value: null });
     expect(binding.value).toBeNull();
+  });
+
+  it("accepts nullable parse results after a non-null number or string value", async () => {
+    const numberForm = createForm<{ value: number | null }>({
+      initialValues: { value: 123 },
+    });
+    const numberBinding = numberForm.field("value").bind({ parse: () => null });
+
+    await expect(
+      numberBinding.onInput({ currentTarget: { value: "", type: "text" } } as unknown as Event),
+    ).resolves.toBeUndefined();
+    expect(numberForm.getValues()).toEqual({ value: null });
+
+    const stringForm = createForm<{ value: string | null }>({
+      initialValues: { value: "present" },
+    });
+    const stringBinding = stringForm.field("value").bind({ parse: () => null });
+
+    await expect(
+      stringBinding.onInput({ currentTarget: { value: "", type: "text" } } as unknown as Event),
+    ).resolves.toBeUndefined();
+    expect(stringForm.getValues()).toEqual({ value: null });
   });
 
   it("rejects incompatible inferred DOM values and invalid numbers before commit", async () => {
@@ -296,7 +320,9 @@ describe("createForm", () => {
       form
         .field("amount")
         .bind()
-        .onInput({ currentTarget: { type: "number", valueAsNumber: Number.NaN } } as unknown as Event),
+        .onInput({
+          currentTarget: { type: "number", valueAsNumber: Number.NaN },
+        } as unknown as Event),
     ).rejects.toThrow(/number/i);
 
     expect(form.getValues()).toEqual({ amount: 1, title: "initial" });

@@ -45,6 +45,26 @@ describe("computed", () => {
     secondDispose();
   });
 
+  test("restores transitive dependencies when a cached nested computed is re-subscribed", async () => {
+    const source = cell(1);
+    const inner = computed(() => source.get() * 2);
+    const outer = computed(() => inner.get() + 1);
+    const observed: number[] = [];
+
+    expect(outer.get()).toBe(3);
+
+    const dispose = effect(() => {
+      observed.push(outer.get());
+    });
+
+    expect(observed).toEqual([3]);
+    source.set(3);
+    await flushEffects();
+
+    expect(observed).toEqual([3, 7]);
+    dispose();
+  });
+
   test("keeps transitive dependencies when sibling readers reattach to a dormant computed", () => {
     const source = cell(1);
     const shared = computed(() => source.get() * 2);
@@ -247,10 +267,7 @@ describe("computed", () => {
     let pushCalls = 0;
 
     try {
-      Array.prototype.push = function countedPush<T>(
-        this: T[],
-        ...items: T[]
-      ): number {
+      Array.prototype.push = function countedPush<T>(this: T[], ...items: T[]): number {
         pushCalls += 1;
         return originalPush.apply(this, items);
       };
@@ -282,11 +299,7 @@ describe("computed", () => {
 
     try {
       Set.prototype.has = function countedHas<T>(this: Set<T>, value: T): boolean {
-        if (
-          typeof value === "object" &&
-          value !== null &&
-          "subscribers" in value
-        ) {
+        if (typeof value === "object" && value !== null && "subscribers" in value) {
           sourceHasCalls += 1;
         }
 
@@ -315,11 +328,7 @@ describe("computed", () => {
 
     try {
       Set.prototype.has = function countedHas<T>(this: Set<T>, value: T): boolean {
-        if (
-          typeof value === "object" &&
-          value !== null &&
-          "subscribers" in value
-        ) {
+        if (typeof value === "object" && value !== null && "subscribers" in value) {
           sourceHasCalls += 1;
         }
 
@@ -370,8 +379,7 @@ describe("computed", () => {
     const third = cell(0);
     let capturedComputation: ReactiveComputation | undefined;
     const total = computed(() => {
-      capturedComputation =
-        (runtimeState.activeTracker as ReactiveComputation | null) ?? undefined;
+      capturedComputation = (runtimeState.activeTracker as ReactiveComputation | null) ?? undefined;
       return first.get() + second.get() + third.get();
     });
 
@@ -448,10 +456,9 @@ describe("computed", () => {
 
   test("uses a custom equality comparator to skip downstream notifications", async () => {
     const source = cell({ id: 1, label: "first" });
-    const selected = computed(
-      () => ({ id: source.get().id }),
-      { equals: (previous, next) => previous.id === next.id },
-    );
+    const selected = computed(() => ({ id: source.get().id }), {
+      equals: (previous, next) => previous.id === next.id,
+    });
     const calls: Array<{ id: number }> = [];
 
     effect(() => {
@@ -500,9 +507,7 @@ describe("computed", () => {
     const includeSecond = cell(true);
     const first = cell(1);
     const second = cell(10);
-    const value = computed(() =>
-      includeSecond.get() ? first.get() + second.get() : first.get(),
-    );
+    const value = computed(() => (includeSecond.get() ? first.get() + second.get() : first.get()));
 
     expect(value.get()).toBe(11);
     includeSecond.set(false);
@@ -610,5 +615,27 @@ describe("computed", () => {
     } finally {
       restoreScheduler();
     }
+  });
+
+  test("propagates an upstream computed failure instead of returning a stale downstream cache", () => {
+    const source = cell(1);
+    const inner = computed(() => {
+      const value = source.get();
+      if (value === 2) {
+        throw new Error("inner failed");
+      }
+
+      return value;
+    });
+    const outer = computed(() => inner.get() + 10);
+
+    expect(outer.get()).toBe(11);
+    source.set(2);
+
+    expect(() => inner.get()).toThrow("inner failed");
+    expect(() => outer.get()).toThrow("inner failed");
+
+    source.set(3);
+    expect(outer.get()).toBe(13);
   });
 });

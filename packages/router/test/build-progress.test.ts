@@ -1,6 +1,7 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { gzipSync } from "node:zlib";
 import { describe, expect, test } from "vitest";
 import { buildApp } from "../src/build.js";
 import type { BoundaryReport } from "../src/boundaries.js";
@@ -110,5 +111,99 @@ export function Counter() {
         path: "/",
       }),
     ]);
+  });
+
+  test("excludes unfetched lazy chunks from boundary navigation cost", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-boundary-lazy-cost-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const reports: BoundaryReport[] = [];
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main><button onClick={() => void import("./lazy")}>Lazy</button></main>;
+}`,
+    );
+    await writeFile(join(appDir, "lazy.ts"), `export const payload = "${"lazy".repeat(2_000)}";`);
+
+    await buildApp({
+      appDir,
+      outDir,
+      onBoundaryReport(report) {
+        reports.push(report);
+      },
+    });
+
+    const manifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as {
+      routes: Array<{ dynamicImports?: string[]; path: string }>;
+    };
+    const route = manifest.routes.find((entry) => entry.path === "/");
+    const cost = reports[0]?.routes.find((entry) => entry.path === "/")?.cost;
+
+    expect(route?.dynamicImports?.length).toBeGreaterThan(0);
+    expect(cost?.navigation?.gzipEstimateBytes).toBe(cost?.initial?.gzipEstimateBytes);
+
+    const lazyBytes = await Promise.all(
+      (route?.dynamicImports ?? []).map(
+        async (path) => gzipSync(await readFile(join(outDir, "client", path))).byteLength,
+      ),
+    );
+    expect(lazyBytes.reduce((total, bytes) => total + bytes, 0)).toBeGreaterThan(0);
+
+    await buildApp({
+      appDir,
+      boundaryCost: {
+        fetchedDynamicImports: { "/": route?.dynamicImports ?? [] },
+      },
+      onBoundaryReport(report) {
+        reports.push(report);
+      },
+      outDir,
+    });
+
+    const fetchedCost = reports[1]?.routes.find((entry) => entry.path === "/")?.cost;
+    expect(fetchedCost?.navigation?.gzipEstimateBytes).toBeGreaterThan(
+      fetchedCost?.initial?.gzipEstimateBytes ?? 0,
+    );
+  });
+
+  test("reports CSS costs for a server-only route", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-boundary-css-cost-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const reports: BoundaryReport[] = [];
+    await mkdir(appDir, { recursive: true });
+    await writeFile(join(appDir, "style.css"), "main { color: red; }");
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import "./style.css";
+export default function Page() {
+  return <main>Server only</main>;
+}`,
+    );
+
+    await buildApp({
+      appDir,
+      outDir,
+      onBoundaryReport(report) {
+        reports.push(report);
+      },
+      targets: ["node"],
+    });
+
+    expect(reports[0]?.routes[0]?.cost).toMatchObject({
+      initial: {
+        gzipEstimateBytes: expect.any(Number),
+        rawBytes: expect.any(Number),
+      },
+      navigation: {
+        gzipEstimateBytes: expect.any(Number),
+        rawBytes: expect.any(Number),
+      },
+      status: "available",
+    });
   });
 });

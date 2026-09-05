@@ -10,7 +10,9 @@ export type FieldName<TValues extends FormValues> = Extract<keyof TValues, strin
 
 /** Extracts field names whose current value is an initialized or optional readonly array. */
 export type ArrayFieldName<TValues extends FormValues> = {
-  [Name in FieldName<TValues>]: NonNullable<TValues[Name]> extends readonly unknown[] ? Name : never;
+  [Name in FieldName<TValues>]: NonNullable<TValues[Name]> extends readonly unknown[]
+    ? Name
+    : never;
 }[FieldName<TValues>];
 
 /** Maps field names and the root form key to validation error messages. */
@@ -516,7 +518,9 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     await setValue(name, values as TValues[Name]);
   }
 
-  async function validateArrayField<Name extends ArrayFieldName<TValues>>(name: Name): Promise<void> {
+  async function validateArrayField<Name extends ArrayFieldName<TValues>>(
+    name: Name,
+  ): Promise<void> {
     if (validateOn.has("change")) {
       await validateFields([name, ...dependentFieldsFor(name)]);
     }
@@ -600,7 +604,10 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
               bindingOptions.parse === undefined
                 ? rawValue
                 : bindingOptions.parse(rawValue, inputEvent);
-            await setValue(name, validateBoundValue(parsedValue, currentValue));
+            await setValue(
+              name,
+              validateBoundValue(parsedValue, currentValue, bindingOptions.parse !== undefined),
+            );
           };
 
           return {
@@ -619,9 +626,11 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
             },
             get value() {
               const currentValue = state.get().values[name];
-              return (bindingOptions.format === undefined
-                ? currentValue
-                : bindingOptions.format(currentValue)) as TBoundValue;
+              return (
+                bindingOptions.format === undefined
+                  ? currentValue
+                  : bindingOptions.format(currentValue)
+              ) as TBoundValue;
             },
           };
         },
@@ -855,9 +864,20 @@ function eventValue(event: Event, currentValue: unknown): unknown {
   return currentValue;
 }
 
-function validateBoundValue<TValue>(value: unknown, currentValue: TValue): TValue {
+function validateBoundValue<TValue>(
+  value: unknown,
+  currentValue: TValue,
+  allowParsedNullish: boolean,
+): TValue {
   if (typeof value === "number" && Number.isNaN(value)) {
     throw new TypeError("Form binding received an invalid number (NaN).");
+  }
+
+  if (
+    (value === null || value === undefined) &&
+    (allowParsedNullish || currentValue === null || currentValue === undefined)
+  ) {
+    return value as TValue;
   }
 
   if (currentValue === null || currentValue === undefined) {

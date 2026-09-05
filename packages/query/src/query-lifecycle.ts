@@ -54,6 +54,11 @@ interface QuerySubscription<TData = unknown> {
   resource: QueryDevtoolsResourceHandle;
 }
 
+interface GcTimeAggregate {
+  hasFalse: boolean;
+  shortestNumeric?: number | undefined;
+}
+
 export function createQueryLifecycle(
   clientOptions: QueryClientOptions = {},
 ): QueryClient & HydratableQueryClient {
@@ -62,7 +67,7 @@ export function createQueryLifecycle(
   const prefixSubscriptions = new Set<QuerySubscription>();
   const subscriberCounts = new Map<string, number>();
   const subscriptionPolicies = new Map<string, Map<symbol, QuerySubscriptionOptions["gcTime"]>>();
-  const releasedSubscriptionPolicies = new Map<string, Array<QuerySubscriptionOptions["gcTime"]>>();
+  const releasedSubscriptionPolicies = new Map<string, GcTimeAggregate>();
   const inactiveGcTimes = new Map<string, QuerySubscriptionOptions["gcTime"]>();
   const gcTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const pendingInvalidationNotifications = new Set<InternalQueryEntry>();
@@ -219,7 +224,7 @@ export function createQueryLifecycle(
     const previousCount = subscriberCounts.get(queryHash) ?? 0;
     if (previousCount === 0) {
       inactiveGcTimes.delete(queryHash);
-      releasedSubscriptionPolicies.set(queryHash, []);
+      releasedSubscriptionPolicies.set(queryHash, { hasFalse: false });
       subscriptionPolicies.set(queryHash, new Map());
     }
     clearInactiveTimer(queryHash);
@@ -239,8 +244,8 @@ export function createQueryLifecycle(
     }
 
     policies.delete(policyId);
-    const released = releasedSubscriptionPolicies.get(queryHash) ?? [];
-    released.push(gcTime);
+    const released = releasedSubscriptionPolicies.get(queryHash) ?? { hasFalse: false };
+    addGcTime(released, gcTime);
     releasedSubscriptionPolicies.set(queryHash, released);
     const count = Math.max(0, (subscriberCounts.get(queryHash) ?? 0) - 1);
 
@@ -252,9 +257,17 @@ export function createQueryLifecycle(
 
     subscriberCounts.delete(queryHash);
     subscriptionPolicies.delete(queryHash);
-    released.push(...policies.values());
-    const selectedGcTime = selectGcTime(released);
+    for (const activeGcTime of policies.values()) {
+      addGcTime(released, activeGcTime);
+    }
     releasedSubscriptionPolicies.delete(queryHash);
+
+    if (cache.get(queryHash) === undefined) {
+      inactiveGcTimes.delete(queryHash);
+      return;
+    }
+
+    const selectedGcTime = selectGcTime(released);
     inactiveGcTimes.set(queryHash, selectedGcTime);
     scheduleInactiveExpiry(queryHash, selectedGcTime);
     enforceInactiveLimit();
@@ -281,6 +294,9 @@ export function createQueryLifecycle(
         const entry = cache.get(queryHash);
         if (entry !== undefined) {
           removeEntry(entry);
+        } else {
+          inactiveGcTimes.delete(queryHash);
+          releasedSubscriptionPolicies.delete(queryHash);
         }
       },
       Math.max(0, gcTime),
@@ -341,15 +357,25 @@ export function createQueryLifecycle(
     }
   }
 
-  function selectGcTime(
-    policies: Iterable<QuerySubscriptionOptions["gcTime"]> | undefined,
-  ): QuerySubscriptionOptions["gcTime"] {
-    const values = policies === undefined ? [] : Array.from(policies);
-    const numeric = values.filter((value): value is number => typeof value === "number");
-    if (numeric.length > 0) {
-      return Math.min(...numeric);
+  function addGcTime(aggregate: GcTimeAggregate, gcTime: QuerySubscriptionOptions["gcTime"]): void {
+    if (gcTime === false) {
+      aggregate.hasFalse = true;
+      return;
     }
-    if (values.includes(false)) {
+
+    if (
+      typeof gcTime === "number" &&
+      (aggregate.shortestNumeric === undefined || gcTime < aggregate.shortestNumeric)
+    ) {
+      aggregate.shortestNumeric = gcTime;
+    }
+  }
+
+  function selectGcTime(aggregate: GcTimeAggregate): QuerySubscriptionOptions["gcTime"] {
+    if (aggregate.shortestNumeric !== undefined) {
+      return aggregate.shortestNumeric;
+    }
+    if (aggregate.hasFalse) {
       return false;
     }
     return clientOptions.inactiveGcTime;

@@ -1,9 +1,4 @@
-import {
-  bumpSourceVersion,
-  runtimeState,
-  type ReactiveComputation,
-  type Source,
-} from "./state.js";
+import { bumpSourceVersion, runtimeState, type ReactiveComputation, type Source } from "./state.js";
 
 const maxPendingComputedFlushIterations = 100;
 
@@ -32,6 +27,7 @@ export function addSourceSubscriber(source: Source, computation: ReactiveComputa
 
   if (subscribers === null) {
     source.subscribers = computation;
+    source.onFirstSubscriber?.();
   } else if (subscribers instanceof Set) {
     subscribers.add(computation);
   } else if (subscribers !== computation) {

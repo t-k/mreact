@@ -225,6 +225,32 @@ describe("createQueryClient", () => {
     expect(client.getQueryEntry(["capped"])).toBeUndefined();
   });
 
+  it("bounds released gc policy history during long-lived subscription churn", () => {
+    const client = createQueryClient({ maxInactiveEntries: 0 });
+    client.setQueryData(["long-lived"], "cached");
+    const releaseLong = client.subscribe(["long-lived"], () => {}, { gcTime: 1_000 });
+
+    for (let index = 0; index < 150_000; index += 1) {
+      const releaseShort = client.subscribe(["long-lived"], () => {}, { gcTime: 1 });
+      releaseShort();
+    }
+
+    expect(() => releaseLong()).not.toThrow();
+    expect(client.getQueryEntry(["long-lived"])).toBeUndefined();
+  }, 20_000);
+
+  it("does not retain gc policy state for an uncached subscription", async () => {
+    vi.useFakeTimers();
+    const client = createQueryClient({ inactiveGcTime: 10 });
+    const release = client.subscribe(["uncached"], () => {}, { gcTime: false });
+
+    release();
+    client.setQueryData(["uncached"], "cached");
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(client.getQueryEntry(["uncached"])).toBeUndefined();
+  });
+
   it("enforces the inactive entry cap after canceling an unused fetch", async () => {
     const client = createQueryClient({ maxInactiveEntries: 0 });
     const deferred = createDeferred<string>();
