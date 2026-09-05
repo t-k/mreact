@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
-import { createBufferSink } from "../src/buffer-sink.js";
+import { createBufferSink, createStreamingBufferSink } from "../src/buffer-sink.js";
 
 const originalAllocUnsafe = Buffer.allocUnsafe;
 
@@ -8,6 +8,40 @@ afterEach(() => {
 });
 
 describe("server buffer-sink growth and edge branches", () => {
+  test("compacts low-utilization streaming chunks without retaining the full backing buffer", () => {
+    const chunks: Uint8Array[] = [];
+    const sink = createStreamingBufferSink({
+      flushThreshold: 8192,
+      initialSize: 8192,
+      onFlush(buffer) {
+        chunks.push(buffer);
+      },
+    });
+
+    sink.append("x".repeat(64));
+    sink.flush();
+
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.byteLength).toBe(64);
+    expect(chunks[0]?.buffer.byteLength).toBe(64);
+  });
+
+  test("keeps a full streaming chunk zero-copy", () => {
+    const chunks: Uint8Array[] = [];
+    const sink = createStreamingBufferSink({
+      flushThreshold: 8192,
+      initialSize: 8192,
+      onFlush(buffer) {
+        chunks.push(buffer);
+      },
+    });
+
+    sink.append("x".repeat(8192));
+
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.buffer.byteLength).toBe(8192);
+  });
+
   test("grows the backing buffer geometrically when the initial size is exceeded", () => {
     const sink = createBufferSink({ initialSize: 4, growthFactor: 2 });
     sink.append("0123456789ABCDEF");

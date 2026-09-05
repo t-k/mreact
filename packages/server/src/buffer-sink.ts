@@ -102,28 +102,43 @@ export function createStreamingBufferSink(
 
   const flushThreshold = options.flushThreshold ?? 8192;
   const initialSize = options.initialSize ?? flushThreshold;
-  let inner = createBufferSink({ initialSize });
+  let inner: BufferSink | undefined = createBufferSink({ initialSize });
   const emitAndReset = () => {
-    const buf = inner.toBuffer();
-    inner = createBufferSink({ initialSize });
-    options.onFlush(buf);
+    const current = inner;
+    if (current === undefined) {
+      return;
+    }
+
+    inner = undefined;
+    options.onFlush(compactLowUtilizationBuffer(current.toBuffer()));
   };
   return {
     append(chunk) {
       if (chunk === "") return;
+      inner ??= createBufferSink({ initialSize });
       inner.append(chunk);
       if (inner.size() >= flushThreshold) {
         emitAndReset();
       }
     },
     flush() {
-      if (inner.size() === 0) return;
+      if (inner?.size() === 0 || inner === undefined) return;
       emitAndReset();
     },
     size() {
-      return inner.size();
+      return inner?.size() ?? 0;
     },
   };
+}
+
+function compactLowUtilizationBuffer(buffer: NodeBuffer): NodeBuffer {
+  if (buffer.byteLength * 2 > buffer.buffer.byteLength) {
+    return buffer;
+  }
+
+  const compacted = Buffer.alloc(buffer.byteLength);
+  buffer.copy(compacted);
+  return compacted;
 }
 
 function createStreamingEncodedSink(options: StreamingBufferSinkOptions): StreamingBufferSink {
