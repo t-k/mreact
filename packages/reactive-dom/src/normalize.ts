@@ -1,4 +1,5 @@
 import type { RenderValue } from "./types.js";
+import { isMemoRenderValue } from "./create-memo.js";
 
 const maxRenderValueDepth = 256;
 const renderValueNormalizerGlobalKey = Symbol.for("mreact.reactiveDom.renderValueNormalizer");
@@ -40,6 +41,10 @@ export function normalizeRenderValue(value: RenderValue, depth = 0): Node[] {
 
   if (value instanceof Node) {
     return [value];
+  }
+
+  if (isMemoRenderValue(value)) {
+    return normalizeRenderValue(value.render(value.props), depth + 1);
   }
 
   const normalizer =

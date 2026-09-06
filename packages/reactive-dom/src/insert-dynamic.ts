@@ -2,6 +2,7 @@ import { cell, effect, type Cell } from "@reckona/mreact-reactive-core";
 import { effectWithDebugLabel, registerCleanup } from "@reckona/mreact-reactive-core/internal";
 import { bindList } from "./bind-list.js";
 import { isListRenderValue } from "./create-list.js";
+import { isMemoRenderValue } from "./create-memo.js";
 import { isDynamicHydrationEnabled, markDynamicNode, markDynamicNodes } from "./dynamic-node.js";
 import { createScopedRenderNodes } from "./render-scope.js";
 import { registerDispose } from "./scope.js";
@@ -85,7 +86,10 @@ export function insertDynamic(
 
     try {
       next = createScopedRenderNodes(() => {
-        nextValueRef.value = value();
+        const valueResult = value();
+        nextValueRef.value = isMemoRenderValue(valueResult)
+          ? valueResult.render(valueResult.props)
+          : valueResult;
         const nextValue = nextValueRef.value;
         return isListRenderValue(nextValue) ? null : nextValue;
       });

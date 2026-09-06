@@ -198,6 +198,10 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
     internalSpecifiers.add("insertMemoDynamic");
   }
 
+  if (ir.components.some((component) => treeUsesDeferredComponentRenderValues(component.root))) {
+    internalSpecifiers.add("createMemo");
+  }
+
   if (JSON.stringify(ir).includes(OXC_BIND_DOM_REF_PLACEHOLDER)) {
     specifiers.add("bindDomRef");
   }
@@ -1047,13 +1051,9 @@ function emitComponentRenderValueExpression(children: JsxNodeIr[], state: EmitSe
 }
 
 function emitComponentRenderValueNode(node: JsxNodeIr, state: EmitSetupState): string {
-  if (node.kind === "conditional" && needsOwnedDynamicRenderValue(node)) {
+  if (shouldDeferComponentRenderValue(node)) {
     const expression = emitNodeRenderValueExpression(node, state);
-    return emitOwnedDynamicRenderValue(
-      expression,
-      state,
-      ownerScopedMemoInsertionHelper(node, state),
-    );
+    return `${state.helperNames.createMemo}(null, null, () => ${expression}, () => false)`;
   }
 
   if (node.kind === "fragment") {
@@ -1074,56 +1074,58 @@ function emitComponentRenderValueNode(node: JsxNodeIr, state: EmitSetupState): s
   return emitNodeRenderValueExpression(node, state);
 }
 
-function emitOwnedDynamicRenderValue(
-  valueExpression: string,
-  state: EmitSetupState,
-  insertionHelper = state.helperNames.insertDynamic,
-): string {
-  const fragmentName = state.allocateName("_ownedFragment");
-  const markerName = state.allocateName("_ownedMarker");
-
-  return [
-    "(() => {",
-    `  const ${fragmentName} = document.createDocumentFragment();`,
-    `  const ${markerName} = document.createComment("");`,
-    `  ${fragmentName}.append(${markerName});`,
-    `  ${insertionHelper}(${fragmentName}, ${markerName}, () => ${valueExpression}${emitDynamicOptions(state.debugLabel)});`,
-    `  return ${fragmentName};`,
-    "})()",
-  ].join("\n");
-}
-
-function needsOwnedDynamicRenderValue(node: JsxNodeIr): boolean {
-  return (
-    node.kind === "conditional" &&
-    readsReactiveSourceCode(node.conditionCode) &&
-    [...node.whenTrue, ...node.whenFalse].some(rendersDomNode)
-  );
-}
-
-function rendersDomNode(node: JsxNodeIr): boolean {
-  if (
-    node.kind === "element" ||
-    node.kind === "component" ||
-    node.kind === "list" ||
-    node.kind === "async-boundary"
-  ) {
+function shouldDeferComponentRenderValue(node: JsxNodeIr): boolean {
+  if (node.kind === "component" || node.kind === "element") {
     return true;
   }
 
-  if (node.kind === "fragment") {
-    return node.children.some(rendersDomNode);
+  if (node.kind === "conditional") {
+    return [...node.whenTrue, ...node.whenFalse].some(
+      (child) => child.kind === "list" || shouldDeferComponentRenderValue(child),
+    );
   }
 
-  if (node.kind === "conditional") {
-    return [...node.whenTrue, ...node.whenFalse].some(rendersDomNode);
+  if (node.kind === "fragment") {
+    return node.children.some(shouldDeferComponentRenderValue);
   }
 
   return false;
 }
 
-function readsReactiveSourceCode(code: string): boolean {
-  return /\.\s*get\s*\(/.test(code);
+function treeUsesDeferredComponentRenderValues(node: JsxNodeIr): boolean {
+  if (node.kind === "component") {
+    if (
+      node.children.some(shouldDeferComponentRenderValue) ||
+      node.props.some(
+        (prop) => prop.kind === "render-prop" && prop.children.some(shouldDeferComponentRenderValue),
+      )
+    ) {
+      return true;
+    }
+
+    return (
+      node.children.some(treeUsesDeferredComponentRenderValues) ||
+      node.props.some(
+        (prop) =>
+          prop.kind === "render-prop" &&
+          prop.children.some(treeUsesDeferredComponentRenderValues),
+      )
+    );
+  }
+
+  if (node.kind === "conditional") {
+    return [...node.whenTrue, ...node.whenFalse].some(treeUsesDeferredComponentRenderValues);
+  }
+
+  if (node.kind === "list") {
+    return node.children.some(treeUsesDeferredComponentRenderValues);
+  }
+
+  if (node.kind === "element" || node.kind === "fragment") {
+    return node.children.some(treeUsesDeferredComponentRenderValues);
+  }
+
+  return false;
 }
 
 function emitAsyncBoundarySetup(

@@ -2206,6 +2206,93 @@ export default function Page() {
   }
 });
 
+test("PanelSlot route module conditional child hydrates, unmounts and remounts", async ({
+  page,
+}) => {
+  const { close, url } = await startFixtureServer({
+    "state.ts": `import { cell } from "@reckona/mreact-reactive-core";
+
+export const panelTicket = cell(null);`,
+    "panel-slot.tsx": `"use client";
+
+export function PanelSlot(props) {
+  return <section data-testid="panel-slot">{props.open ? props.children : null}</section>;
+}`,
+    "ticket-panel.tsx": `"use client";
+
+import { computed } from "@reckona/mreact-reactive-core";
+import { panelTicket } from "./state";
+
+function itemFor(number) {
+  const ticket = panelTicket.get();
+  return ticket === null ? null : { title: "Ticket " + number };
+}
+
+export function TicketPanel(props) {
+  const viewModel = computed(() => {
+    const item = itemFor(props.number);
+    return item === null ? null : { item };
+  });
+
+  function view() {
+    const value = viewModel.get();
+    if (value === null) {
+      throw new Error("view() must not run while the panel is closed");
+    }
+    return value;
+  }
+
+  return <aside data-testid="panel">{view().item.title}</aside>;
+}`,
+    "page.tsx": `"use client";
+
+import { panelTicket } from "./state";
+import { PanelSlot } from "./panel-slot";
+import { TicketPanel } from "./ticket-panel";
+
+export default function Page() {
+  return (
+    <main>
+      <h1>Tickets</h1>
+      <button type="button" data-testid="open" onClick={() => panelTicket.set(1)}>open</button>
+      <button type="button" data-testid="next" onClick={() => panelTicket.set(2)}>next</button>
+      <button type="button" data-testid="close" onClick={() => panelTicket.set(null)}>close</button>
+      <PanelSlot open={panelTicket.get() !== null}>
+        <TicketPanel number={panelTicket.get() ?? 0} />
+      </PanelSlot>
+    </main>
+  );
+}`,
+  });
+  const pageErrors: string[] = [];
+
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+
+  try {
+    await page.goto(url);
+    await expect(page.getByRole("heading", { name: "Tickets" })).toBeVisible();
+    await expect(page.getByTestId("panel-slot")).toHaveCount(1);
+    await expect(page.getByTestId("panel")).toHaveCount(0);
+
+    await page.getByTestId("open").click();
+    await expect(page.getByTestId("panel")).toHaveText("Ticket 1");
+
+    await page.getByTestId("next").click();
+    await expect(page.getByTestId("panel")).toHaveText("Ticket 2");
+
+    await page.getByTestId("close").click();
+    await expect(page.getByTestId("panel")).toHaveCount(0);
+    await expect(page.getByTestId("panel-slot")).toHaveCount(1);
+
+    await page.getByTestId("open").click();
+    await expect(page.getByTestId("panel")).toHaveText("Ticket 1");
+    await expect(page.getByTestId("panel")).toHaveCount(1);
+    expect(pageErrors).toEqual([]);
+  } finally {
+    await close();
+  }
+});
+
 async function startWorkspaceFixtureServer(files: Record<string, string>): Promise<{
   close(): Promise<void>;
   url: string;

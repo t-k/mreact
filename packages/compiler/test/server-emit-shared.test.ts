@@ -753,6 +753,26 @@ export function App(props) {
     );
   });
 
+  test("string and stream emitters defer closed component children", async () => {
+    await expectServerPairHtml(
+      `const ticket = null;
+function view() {
+  if (ticket === null) throw new Error("closed child was evaluated");
+  return ticket;
+}
+function TicketPanel() {
+  return <aside data-panel>{view()}</aside>;
+}
+function PanelSlot(props) {
+  return <section data-slot>{props.open ? props.children : null}</section>;
+}
+export function App() {
+  return <PanelSlot open={ticket !== null}><TicketPanel /></PanelSlot>;
+}`,
+      '<section data-slot=""></section>',
+    );
+  });
+
   test("string and stream emitters avoid collisions with option selection locals", async () => {
     await expectServerPairHtml(
       `const _optionValue = "done";

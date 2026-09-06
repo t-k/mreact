@@ -142,7 +142,9 @@ export function emitServerStream(
     index: allocateNestedBindingSafeName(ir, "_i"),
     candidate: allocateNestedBindingSafeName(ir, "_candidate"),
   };
-  const selectionParameterName = allocateNestedBindingSafeName(ir, "_selectedValue");
+  const selectionParameterName = containsSelectElement(ir)
+    ? allocateNestedBindingSafeName(ir, "_selectedValue")
+    : undefined;
   const urlSafeHelperName = allocateHelperName(ir, "_urlAttrSafe");
   currentUrlSafeHelperName = urlSafeHelperName;
   setOxcServerStringUrlSafeHelperName(urlSafeHelperName);
@@ -217,7 +219,7 @@ export function emitServerStream(
             : { reactSuspenseRevealScriptSrc: options.reactSuspenseRevealScriptSrc }),
           dynamicAttributes: options.dynamicAttributes ?? "emit",
           ...(escapeBatchHelperName === undefined ? {} : { escapeBatchHelperName }),
-          selectionParameterName,
+          ...(selectionParameterName === undefined ? {} : { selectionParameterName }),
         },
       );
       return component.serverRenderValuePlaceholder === undefined
@@ -701,14 +703,16 @@ function emitComponent(
     Omit<EmitServerStreamOptions, "serverBootstrap"> & {
       dynamicAttributes: "drop" | "emit";
       escapeBatchHelperName?: string;
-      selectionParameterName: string;
+      selectionParameterName?: string;
     },
 ): string {
   const { serverBootstrap, serverBootstrapNonce, serverBootstrapSrc } = options;
   const sinkName = allocateComponentSinkName(component);
-  const parameters = [sinkName, ...component.parameters, options.selectionParameterName].join(
-    ", ",
-  );
+  const parameters = [
+    sinkName,
+    ...component.parameters,
+    ...(options.selectionParameterName === undefined ? [] : [options.selectionParameterName]),
+  ].join(", ");
   const body = component.bodyStatements.map(
     (statement) =>
       `  ${statement.replaceAll(
@@ -797,7 +801,7 @@ function emitAppendStatements(
   awaitHydration: boolean,
   dynamicAttributes: "drop" | "emit",
   escapeBatchHelperName: string | undefined,
-  selectionParameterName: string,
+  selectionParameterName: string | undefined,
 ): string[] {
   if (node.kind === "conditional") {
     const emitBranch = (children: readonly JsxNodeIr[]): string[] =>
@@ -860,7 +864,7 @@ function emitAppendStatements(
     nextFragmentId: 0,
     ...(reactSuspenseRevealScriptNonce === undefined ? {} : { reactSuspenseRevealScriptNonce }),
     ...(reactSuspenseRevealScriptSrc === undefined ? {} : { reactSuspenseRevealScriptSrc }),
-    selectedValueCode: selectionParameterName,
+    ...(selectionParameterName === undefined ? {} : { selectedValueCode: selectionParameterName }),
   };
   const collected = collectHtmlParts(
     node,
@@ -3101,6 +3105,44 @@ function containsAsyncComponent(children: readonly JsxNodeIr[]): boolean {
   });
 }
 
+function containsSelectElement(ir: ModuleIr): boolean {
+  return ir.components.some((component) => containsSelectElementInNode(component.root));
+}
+
+function containsSelectElementInNode(node: JsxNodeIr): boolean {
+  if (node.kind === "element") {
+    return node.tagName === "select" || node.children.some(containsSelectElementInNode);
+  }
+
+  if (node.kind === "component") {
+    return (
+      node.children.some(containsSelectElementInNode) ||
+      node.props.some(
+        (prop) =>
+          prop.kind === "render-prop" && prop.children.some(containsSelectElementInNode),
+      )
+    );
+  }
+
+  if (node.kind === "conditional") {
+    return [...node.whenTrue, ...node.whenFalse].some(containsSelectElementInNode);
+  }
+
+  if (node.kind === "list" || node.kind === "fragment") {
+    return node.children.some(containsSelectElementInNode);
+  }
+
+  if (node.kind === "async-boundary") {
+    return [
+      ...node.children,
+      ...(node.placeholderChildren ?? []),
+      ...(node.catchChildren ?? []),
+    ].some(containsSelectElementInNode);
+  }
+
+  return false;
+}
+
 function containsCompatComponent(node: JsxNodeIr): boolean {
   if (node.kind === "component") {
     return (
@@ -3366,9 +3408,20 @@ function emitPropsObject(
   });
 
   if (children.length > 0) {
+    const shouldDeferChildren =
+      childrenExpressionOverride === undefined &&
+      !isRouterLinkComponentName(componentName) &&
+      children.some(needsLazyServerChildren);
+    const streamedChildren =
+      childrenExpressionOverride === undefined
+        ? emitStreamRendererFromChildren(children, escapeHelperName, false, selectedValueCode)
+        : undefined;
     const childrenExpression =
       childrenExpressionOverride ??
-      emitStreamRendererFromChildren(children, escapeHelperName, false, selectedValueCode) ??
+      (shouldDeferChildren
+        ? (streamedChildren ??
+          emitStreamRendererFromChildren(children, escapeHelperName, true, selectedValueCode))
+        : streamedChildren) ??
       emitHtmlExpressionFromChildren(children, escapeHelperName, selectedValueCode);
     entries.push(
       `children: ${isRouterLinkComponentName(componentName) ? `${componentName}.trustedHtml(${childrenExpression})` : childrenExpression}`,
@@ -3380,6 +3433,34 @@ function emitPropsObject(
 
 function isRouterLinkComponentName(name: string | undefined): name is string {
   return name !== undefined && (name === "Link" || name.endsWith(".Link"));
+}
+
+function needsLazyServerChildren(node: JsxNodeIr): boolean {
+  if (node.kind === "component" || node.kind === "element") {
+    return true;
+  }
+
+  if (node.kind === "conditional") {
+    return [...node.whenTrue, ...node.whenFalse].some(needsLazyServerChildren);
+  }
+
+  if (node.kind === "list") {
+    return node.children.some(needsLazyServerChildren);
+  }
+
+  if (node.kind === "fragment") {
+    return node.children.some(needsLazyServerChildren);
+  }
+
+  if (node.kind === "async-boundary") {
+    return [
+      ...node.children,
+      ...(node.placeholderChildren ?? []),
+      ...(node.catchChildren ?? []),
+    ].some(needsLazyServerChildren);
+  }
+
+  return false;
 }
 
 function emitCompatRuntimePropsObject(

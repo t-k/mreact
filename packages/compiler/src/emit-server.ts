@@ -47,6 +47,7 @@ let currentMarkServerRenderValueHelperName: string = "_registerServerRenderValue
 let currentRenderServerValueHelperName: string = "_renderServerValue";
 let currentContainsServerRenderValueHelperName: string = "_containsServerRenderValue";
 let currentServerRenderAttributeValueName: string = "_serverRenderAttributeValue";
+let currentRenderServerChildHelperName: string = "_renderServerChild";
 let currentOptionSelectedLocalNames: OptionSelectedLocalNames = {
   selected: "_selected",
   optionValue: "_optionValue",
@@ -121,7 +122,10 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
     ir,
     "_serverRenderAttributeValue",
   );
-  const selectionParameterName = allocateNestedBindingSafeName(ir, "_selectedValue");
+  const renderServerChildHelperName = allocateNestedBindingSafeName(ir, "_renderServerChild");
+  const selectionParameterName = containsSelectElement(ir)
+    ? allocateNestedBindingSafeName(ir, "_selectedValue")
+    : undefined;
   currentOptionSelectedLocalNames = {
     selected: allocateNestedBindingSafeName(ir, "_selected"),
     optionValue: allocateNestedBindingSafeName(ir, "_optionValue"),
@@ -141,6 +145,7 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
   currentRenderServerValueHelperName = renderServerValueHelperName;
   currentContainsServerRenderValueHelperName = containsServerRenderValueHelperName;
   currentServerRenderAttributeValueName = serverRenderAttributeValueName;
+  currentRenderServerChildHelperName = renderServerChildHelperName;
   const helper = emitEscapeHtmlHelper(escapeHelperName);
   // Inline URL-scheme guard mirroring packages/server/src/url-safety.ts.
   // Returns the original value when safe to emit and undefined when the
@@ -239,6 +244,15 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
         escapeHelperName,
       )
     : "";
+  const serverChildBlock = emittedServerCode.includes(renderServerChildHelperName)
+    ? emitServerChildHelper(
+        renderServerChildHelperName,
+        escapeHelperName,
+        needsServerRenderValue ? isServerRenderValueHelperName : undefined,
+        needsServerRenderValue ? readServerRenderValueHelperName : undefined,
+        needsServerRenderValue ? renderServerValueHelperName : undefined,
+      )
+    : "";
   const serverRenderValueImport =
     serverRenderValueBlock === ""
       ? ""
@@ -271,6 +285,7 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
   code.section(clientBoundaryBlock);
   code.section(spreadAttributesBlock);
   code.section(serverRenderValueBlock);
+  code.section(serverChildBlock);
   code.section(components);
 
   return {
@@ -359,14 +374,17 @@ function emitComponent(
   contextProviderHelperName?: string,
   contextConsumerHelperName?: string,
   reactNodeRenderHelperName?: string,
-  selectionParameterName = "_selectedValue",
+  selectionParameterName?: string,
 ): string {
   const body = component.bodyStatements.map(
     (statement) =>
       `  ${replaceOxcServerStringReactNodeRenderHelper(statement, reactNodeRenderHelperName)}`,
   );
-  const parameters = [...component.parameters, selectionParameterName].join(", ");
-  const htmlStatements = withSelectedValueCode(selectionParameterName, () =>
+  const parameters = [
+    ...component.parameters,
+    ...(selectionParameterName === undefined ? [] : [selectionParameterName]),
+  ].join(", ");
+  const collect = () =>
     collectHtmlStatements(
       component.root,
       outAccumulatorName,
@@ -377,8 +395,11 @@ function emitComponent(
       contextProviderHelperName,
       contextConsumerHelperName,
       reactNodeRenderHelperName,
-    ),
-  );
+    );
+  const htmlStatements =
+    selectionParameterName === undefined
+      ? collect()
+      : withSelectedValueCode(selectionParameterName, collect);
 
   const markerStart = stringLiteral(`<!--mreact-h:start:${encodeURIComponent(component.name)}-->`);
   const markerEnd = stringLiteral(`<!--mreact-h:end:${encodeURIComponent(component.name)}-->`);
@@ -465,6 +486,10 @@ function collectHtmlStatements(
   }
 
   if (node.kind === "expr") {
+    if (isChildrenExpressionCode(node.code)) {
+      return [`${outVar} += ${currentRenderServerChildHelperName}(${node.code});`];
+    }
+
     if (node.renderMode === "html") {
       return [`${outVar} += ${rawHtmlExpression(node.code)};`];
     }
@@ -947,6 +972,10 @@ function collectHtmlParts(
   }
 
   if (node.kind === "expr") {
+    if (isChildrenExpressionCode(node.code)) {
+      return [`${currentRenderServerChildHelperName}(${node.code})`];
+    }
+
     if (node.renderMode === "html") {
       return [rawHtmlExpression(node.code)];
     }
@@ -2074,8 +2103,15 @@ function emitPropsObject(
         contextConsumerHelperName,
         reactNodeRenderHelperName,
       );
+    const shouldDeferChildren =
+      childrenExpressionOverride === undefined &&
+      !isRouterLinkComponentName(componentName) &&
+      !containsAsyncServerOperationInChildren(children, asyncComponentNames) &&
+      children.some(needsLazyServerChildren);
     entries.push(
-      `children: ${isRouterLinkComponentName(componentName) ? `${componentName}.trustedHtml(${childrenExpression})` : childrenExpression}`,
+      shouldDeferChildren
+        ? `children: () => (${childrenExpression})`
+        : `children: ${isRouterLinkComponentName(componentName) ? `${componentName}.trustedHtml(${childrenExpression})` : childrenExpression}`,
     );
   }
 
@@ -2084,6 +2120,72 @@ function emitPropsObject(
 
 function isRouterLinkComponentName(name: string | undefined): name is string {
   return name !== undefined && (name === "Link" || name.endsWith(".Link"));
+}
+
+function needsLazyServerChildren(node: JsxNodeIr): boolean {
+  if (node.kind === "component" || node.kind === "element") {
+    return true;
+  }
+
+  if (node.kind === "conditional") {
+    return [...node.whenTrue, ...node.whenFalse].some(needsLazyServerChildren);
+  }
+
+  if (node.kind === "list") {
+    return node.children.some(needsLazyServerChildren);
+  }
+
+  if (node.kind === "fragment") {
+    return node.children.some(needsLazyServerChildren);
+  }
+
+  if (node.kind === "async-boundary") {
+    return [
+      ...node.children,
+      ...(node.placeholderChildren ?? []),
+      ...(node.catchChildren ?? []),
+    ].some(needsLazyServerChildren);
+  }
+
+  return false;
+}
+
+function isChildrenExpressionCode(code: string): boolean {
+  const trimmed = code.trim();
+  return (
+    trimmed === "children" ||
+    trimmed.endsWith(".children") ||
+    trimmed.endsWith('["children"]') ||
+    trimmed.endsWith("['children']")
+  );
+}
+
+function emitServerChildHelper(
+  name: string,
+  escapeHelperName: string,
+  isServerRenderValueHelperName?: string,
+  readServerRenderValueHelperName?: string,
+  renderServerValueHelperName?: string,
+): string {
+  const renderRegisteredValue =
+    isServerRenderValueHelperName === undefined ||
+    readServerRenderValueHelperName === undefined ||
+    renderServerValueHelperName === undefined
+      ? undefined
+      : `if (${isServerRenderValueHelperName}(value)) return ${renderServerValueHelperName}(value);`;
+  const renderArray =
+    renderServerValueHelperName === undefined
+      ? `if (Array.isArray(value)) return value.join("");`
+      : `if (Array.isArray(value)) return ${renderServerValueHelperName}(value);`;
+  return [
+    `function ${name}(value) {`,
+    `  if (value == null || typeof value === "boolean") return "";`,
+    `  if (typeof value === "function") return value();`,
+    `  ${renderArray}`,
+    ...(renderRegisteredValue === undefined ? [] : [`  ${renderRegisteredValue}`]),
+    `  return ${escapeHelperName}(value);`,
+    `}`,
+  ].join("\n");
 }
 
 function emitCompatRuntimePropsObject(
@@ -2206,6 +2308,47 @@ function containsAsyncServerOperation(
 
   if (node.kind === "element" || node.kind === "fragment") {
     return containsAsyncServerOperationInChildren(node.children, asyncComponentNames);
+  }
+
+  return false;
+}
+
+function containsSelectElement(ir: ModuleIr): boolean {
+  return ir.components.some((component) => containsSelectElementInNode(component.root));
+}
+
+function containsSelectElementInNode(node: JsxNodeIr): boolean {
+  if (node.kind === "element") {
+    return (
+      node.tagName === "select" ||
+      node.children.some(containsSelectElementInNode)
+    );
+  }
+
+  if (node.kind === "component") {
+    return (
+      node.children.some(containsSelectElementInNode) ||
+      node.props.some(
+        (prop) =>
+          prop.kind === "render-prop" && prop.children.some(containsSelectElementInNode),
+      )
+    );
+  }
+
+  if (node.kind === "conditional") {
+    return [...node.whenTrue, ...node.whenFalse].some(containsSelectElementInNode);
+  }
+
+  if (node.kind === "list" || node.kind === "fragment") {
+    return node.children.some(containsSelectElementInNode);
+  }
+
+  if (node.kind === "async-boundary") {
+    return [
+      ...node.children,
+      ...(node.placeholderChildren ?? []),
+      ...(node.catchChildren ?? []),
+    ].some(containsSelectElementInNode);
   }
 
   return false;

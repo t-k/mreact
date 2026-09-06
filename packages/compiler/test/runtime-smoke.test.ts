@@ -1854,6 +1854,59 @@ export function App() {
     expect(node.querySelector("[data-state='open']")?.textContent).toBe("Open");
   });
 
+  test("client transform defers component children into the branch owner", async () => {
+    const output = transform({
+      code: `import { cell, computed } from "@reckona/mreact-reactive-core";
+
+const ticket = cell<number | null>(null);
+const viewModel = computed(() => {
+  const item = ticket.get() === null ? null : { title: "Ticket " + ticket.get() };
+  return item === null ? null : { item };
+});
+
+function view() {
+  const value = viewModel.get();
+  if (value === null) throw new Error("view() must not run while closed");
+  return value;
+}
+
+function TicketPanel() {
+  return <aside data-panel>{view().item.title}</aside>;
+}
+
+function PanelSlot(props) {
+  return <section data-slot>{props.open ? props.children : null}</section>;
+}
+
+export function App() {
+  return <main>
+    <button id="open" type="button" onClick={() => ticket.set(1)}>Open</button>
+    <button id="close" type="button" onClick={() => ticket.set(null)}>Close</button>
+    <PanelSlot open={ticket.get() !== null}><TicketPanel /></PanelSlot>
+  </main>;
+}`,
+      filename: "component-children-branch-owner.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+
+    expect(node.querySelector("[data-panel]")).toBeNull();
+    node.querySelector<HTMLButtonElement>("#open")?.click();
+    await expect(flushEffects()).resolves.toBeUndefined();
+    expect(node.querySelector("[data-panel]")?.textContent).toBe("Ticket 1");
+
+    node.querySelector<HTMLButtonElement>("#close")?.click();
+    await expect(flushEffects()).resolves.toBeUndefined();
+    expect(node.querySelector("[data-panel]")).toBeNull();
+
+    node.querySelector<HTMLButtonElement>("#open")?.click();
+    await expect(flushEffects()).resolves.toBeUndefined();
+    expect(node.querySelectorAll("[data-panel]")).toHaveLength(1);
+  });
+
   test("client transform disposes child prop reads when a parent conditional clears a nullable source", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";
