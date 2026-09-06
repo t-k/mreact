@@ -3249,8 +3249,8 @@ __mreactGlobal.__mreactRouteCell = (nativeCell, initial) => {
     });
   };
   stateCell.set = setRouteStateCell;
-  stateCell.setValue = setRouteStateCell;
-  stateCell.update = setRouteStateCell;
+  stateCell.setValue = (next) => stateCell.set(() => next);
+  stateCell.update = (updater) => stateCell.set(updater);
 
   __mreactActiveCellRecords.set(cellKey, record);
   return stateCell;

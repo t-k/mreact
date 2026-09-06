@@ -6087,6 +6087,45 @@ export default function Page() {
     expect(document.querySelector("#update")?.textContent).toBe("update 2");
   });
 
+  test("keeps function values opaque across route cell write APIs", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cell-function-writes-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+
+export default function Page() {
+  const callback = cell(() => "initial");
+  return <main><button id="set-value" type="button" onClick={() => callback.setValue(() => "set-value")}>{callback.get()()}</button><button id="update" type="button" onClick={() => callback.update(() => () => "updated")}>{callback.get()()}</button></main>;
+}`;
+    await writeFile(file, code);
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><main><button id="set-value" type="button">initial</button><button id="update" type="button">initial</button></main></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+    const routeModule = (await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#route-cell-function-writes`
+    )) as { __mreactHydrateRoute: () => void };
+
+    document.querySelector<HTMLButtonElement>("#set-value")?.click();
+    await Promise.resolve();
+    expect(document.querySelector("#set-value")?.textContent).toBe("set-value");
+
+    routeModule.__mreactHydrateRoute();
+    expect(document.querySelector("#set-value")?.textContent).toBe("set-value");
+
+    document.querySelector<HTMLButtonElement>("#update")?.click();
+    await Promise.resolve();
+    expect(document.querySelector("#update")?.textContent).toBe("updated");
+
+    routeModule.__mreactHydrateRoute();
+    expect(document.querySelector("#update")?.textContent).toBe("updated");
+  });
+
   test("preserves route cell state across fresh hot module imports", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-hot-fresh-runtime-"));
     const file = join(appDir, "page.mreact.tsx");
