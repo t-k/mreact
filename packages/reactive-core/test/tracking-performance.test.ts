@@ -67,13 +67,21 @@ describe("reactive-core tracking hot path", () => {
 
     expect(
       untrackedDependencyIsCurrent(
-        { ref: new WeakRef(source), version: 1 },
+        {
+          ref: new WeakRef(source),
+          requiresCurrentCheckContext: true,
+          version: 1,
+        },
         context,
       ),
     ).toBe(false);
     expect(
       untrackedDependencyIsCurrent(
-        { ref: new WeakRef(source), version: 0 },
+        {
+          ref: new WeakRef(source),
+          requiresCurrentCheckContext: true,
+          version: 0,
+        },
         context,
       ),
     ).toBe(true);
