@@ -43,15 +43,27 @@ export function computed<T>(
 
   const source: Source = {
     isCurrent: (context?: CurrentCheckContext) => {
-      const currentCheckContext =
-        context ?? (untrackedDependencies.length > 1 ? createCurrentCheckContext() : undefined);
+      if (dirty) {
+        return false;
+      }
 
-      return (
-        !dirty &&
-        untrackedDependencies.every((dependency) =>
-          untrackedDependencyIsCurrent(dependency, currentCheckContext),
-        )
-      );
+      const canShareCurrentCheckContext = untrackedDependencies.length > 1;
+      let currentCheckContext = context;
+      for (const dependency of untrackedDependencies) {
+        if (
+          currentCheckContext === undefined &&
+          canShareCurrentCheckContext &&
+          dependency.requiresCurrentCheckContext
+        ) {
+          currentCheckContext = createCurrentCheckContext();
+        }
+
+        if (!untrackedDependencyIsCurrent(dependency, currentCheckContext)) {
+          return false;
+        }
+      }
+
+      return true;
     },
     onFirstSubscriber: () => attachUntrackedDependencies(),
     // Reattaching a cached computed can briefly remove its last direct
@@ -254,11 +266,23 @@ export function computed<T>(
   return {
     get(): T {
       const wasDormant = untrackedDependencies.length > 0;
-      const currentCheckContext =
-        untrackedDependencies.length > 1 ? createCurrentCheckContext() : undefined;
-      const dependenciesChanged = untrackedDependencies.some(
-        (dependency) => !untrackedDependencyIsCurrent(dependency, currentCheckContext),
-      );
+      const canShareCurrentCheckContext = untrackedDependencies.length > 1;
+      let currentCheckContext: CurrentCheckContext | undefined;
+      let dependenciesChanged = false;
+      for (const dependency of untrackedDependencies) {
+        if (
+          currentCheckContext === undefined &&
+          canShareCurrentCheckContext &&
+          dependency.requiresCurrentCheckContext
+        ) {
+          currentCheckContext = createCurrentCheckContext();
+        }
+
+        if (!untrackedDependencyIsCurrent(dependency, currentCheckContext)) {
+          dependenciesChanged = true;
+          break;
+        }
+      }
       if (dependenciesChanged) {
         dirty = true;
         restoreUntrackedDependencies();

@@ -98,6 +98,59 @@ describe("reactive-core tracking hot path", () => {
     expect(receivedContext).toBeUndefined();
   });
 
+  test("does not allocate a shared context for independent dormant cell inputs", () => {
+    const originalWeakMap = globalThis.WeakMap;
+    let allocations = 0;
+
+    class CountingWeakMap<K extends object, V> {
+      readonly map: WeakMap<K, V>;
+
+      constructor(entries?: readonly (readonly [K, V])[] | null) {
+        allocations += 1;
+        this.map = new originalWeakMap<K, V>(entries);
+      }
+
+      delete(key: K): boolean {
+        return this.map.delete(key);
+      }
+
+      get(key: K): V | undefined {
+        return this.map.get(key);
+      }
+
+      has(key: K): boolean {
+        return this.map.has(key);
+      }
+
+      set(key: K, value: V): this {
+        this.map.set(key, value);
+        return this;
+      }
+    }
+
+    const first = cell(1);
+    const second = cell(2);
+    const total = computed(() => first.get() + second.get());
+    expect(total.get()).toBe(3);
+
+    Object.defineProperty(globalThis, "WeakMap", {
+      configurable: true,
+      value: CountingWeakMap,
+      writable: true,
+    });
+
+    try {
+      expect(total.get()).toBe(3);
+      expect(allocations).toBe(0);
+    } finally {
+      Object.defineProperty(globalThis, "WeakMap", {
+        configurable: true,
+        value: originalWeakMap,
+        writable: true,
+      });
+    }
+  });
+
   test("validates shared dormant diamonds within a linear traversal bound", () => {
     const originalWeakRef = globalThis.WeakRef;
     let derefCount = 0;

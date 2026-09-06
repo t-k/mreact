@@ -40,6 +40,7 @@ export interface ReactiveComputation {
 
 interface UntrackedDependency {
   ref: WeakRef<Source>;
+  requiresCurrentCheckContext: boolean;
   version: number;
 }
 
@@ -79,7 +80,11 @@ export function bumpSourceVersion(source: Source): void {
 
 export function createUntrackedDependency(source: Source): UntrackedDependency | undefined {
   return typeof WeakRef === "function"
-    ? { ref: new WeakRef(source), version: sourceVersion(source) }
+    ? {
+        ref: new WeakRef(source),
+        requiresCurrentCheckContext: source.isCurrent !== undefined,
+        version: sourceVersion(source),
+      }
     : undefined;
 }
 
