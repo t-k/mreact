@@ -11,8 +11,38 @@ export interface CleanupScope {
 /** Creates an idempotent LIFO cleanup owner. */
 export function createCleanupScope(): CleanupScope {
   const resource = registerReactiveDevtoolsResource("scope");
-  const cleanups: Array<() => void> = [];
+  interface CleanupEntry {
+    active: boolean;
+    cleanup: (() => void) | undefined;
+    next: CleanupEntry | undefined;
+    previous: CleanupEntry | undefined;
+  }
+
+  let head: CleanupEntry | undefined;
+  let tail: CleanupEntry | undefined;
   let disposed = false;
+
+  const unlink = (entry: CleanupEntry): void => {
+    if (!entry.active) {
+      return;
+    }
+
+    entry.active = false;
+    if (entry.previous === undefined) {
+      head = entry.next;
+    } else {
+      entry.previous.next = entry.next;
+    }
+    if (entry.next === undefined) {
+      tail = entry.previous;
+    } else {
+      entry.next.previous = entry.previous;
+    }
+
+    entry.cleanup = undefined;
+    entry.next = undefined;
+    entry.previous = undefined;
+  };
 
   const register = (dispose: () => void): (() => void) => {
     if (disposed) {
@@ -20,17 +50,20 @@ export function createCleanupScope(): CleanupScope {
       return () => {};
     }
 
-    let active = true;
-    cleanups.push(() => {
-      if (!active) {
-        return;
-      }
-      active = false;
-      dispose();
-    });
-    return () => {
-      active = false;
+    const entry: CleanupEntry = {
+      active: true,
+      cleanup: dispose,
+      next: undefined,
+      previous: tail,
     };
+    if (tail === undefined) {
+      head = entry;
+    } else {
+      tail.next = entry;
+    }
+    tail = entry;
+
+    return () => unlink(entry);
   };
 
   const dispose = (): void => {
@@ -40,8 +73,10 @@ export function createCleanupScope(): CleanupScope {
 
     disposed = true;
     let firstError: unknown;
-    while (cleanups.length > 0) {
-      const cleanup = cleanups.pop();
+    while (tail !== undefined) {
+      const entry = tail;
+      const cleanup = entry.cleanup;
+      unlink(entry);
       if (cleanup === undefined) {
         continue;
       }

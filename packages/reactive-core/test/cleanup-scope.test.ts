@@ -55,6 +55,37 @@ describe("createCleanupScope", () => {
     expect(events).toEqual(["child"]);
   });
 
+  it("does not retain unregistered cleanup entries during a long-lived scope", () => {
+    const scope = createCleanupScope();
+    let calls = 0;
+    const unregisters = Array.from({ length: 10_000 }, () =>
+      scope.register(() => {
+        calls += 1;
+      }),
+    );
+
+    for (const unregister of unregisters) {
+      unregister();
+      unregister();
+    }
+
+    scope.dispose();
+
+    expect(calls).toBe(0);
+  });
+
+  it("keeps an unregister handle harmless after its entry is released", () => {
+    const scope = createCleanupScope();
+    const events: string[] = [];
+    const unregister = scope.register(() => events.push("released"));
+
+    unregister();
+    unregister();
+    scope.dispose();
+
+    expect(events).toEqual([]);
+  });
+
   it("runs all cleanups before rethrowing the first cleanup error", () => {
     const scope = createCleanupScope();
     const events: string[] = [];
