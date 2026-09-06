@@ -1938,17 +1938,21 @@ export default function Page() {
   }
 });
 
-test("select SSR selection marks the saved option before hydration", async ({ browser }) => {
+test("select SSR selection survives hydration and a cell update", async ({ browser }) => {
   const { close, url } = await startFixtureServer({
-    "page.tsx": `const STATUSES = ["open", "in_progress", "done"];
+    "page.tsx": `import { cell } from "@reckona/mreact-reactive-core";
+
+const status = cell("in_progress");
 
 export default function Page() {
-  const status = "in_progress";
   return (
     <main>
       <h1>Ticket</h1>
-      <select data-testid="status" value={status}>
-        {STATUSES.map((value) => <option key={value} value={value}>{value}</option>)}
+      <button type="button" data-testid="advance" onClick={() => status.set("done")}>Advance</button>
+      <select data-testid="status" value={status.get()}>
+        <option value="open">open</option>
+        <option value="in_progress">in_progress</option>
+        <option value="done">done</option>
       </select>
     </main>
   );
@@ -1982,8 +1986,9 @@ export default function Page() {
       await hydrated.goto(url);
       await expect(hydrated.getByRole("heading", { name: "Ticket" })).toBeVisible();
       await expect(hydrated.getByTestId("status")).toHaveValue("in_progress");
-      await hydrated.getByTestId("status").selectOption("done");
+      await hydrated.getByTestId("advance").click();
       await expect(hydrated.getByTestId("status")).toHaveValue("done");
+      await expect(hydrated.getByTestId("status").locator("option:checked")).toHaveText("done");
     } finally {
       await hydrated.close();
     }

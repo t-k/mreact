@@ -550,5 +550,19 @@ describe("react-compat server render", () => {
           '</optgroup><option value="done" selected="">done</option></select>',
       );
     });
+
+    test("isolates an independent renderToString call from an enclosing select", () => {
+      let independent = "";
+
+      function Nested() {
+        independent = renderToString(() => createElement("option", { value: "b" }, "independent"));
+        return createElement("option", { value: "b" }, "actual");
+      }
+
+      expect(
+        renderToString(() => createElement("select", { value: "b" }, createElement(Nested))),
+      ).toBe('<select><option value="b" selected="">actual</option></select>');
+      expect(independent).toBe('<option value="b">independent</option>');
+    });
   });
 });

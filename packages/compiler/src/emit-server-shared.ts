@@ -326,6 +326,20 @@ export function isBooleanishStringAttribute(name: string): boolean {
 
 const SELECTED_MARKER_LITERAL = '" selected=\\"\\""';
 
+export interface OptionSelectedLocalNames {
+  selected: string;
+  optionValue: string;
+  index: string;
+  candidate: string;
+}
+
+const DEFAULT_OPTION_SELECTED_LOCAL_NAMES: OptionSelectedLocalNames = {
+  selected: "_selected",
+  optionValue: "_optionValue",
+  index: "_i",
+  candidate: "_candidate",
+};
+
 /**
  * Combines a `<select>` element's `value` and `defaultValue` expressions into the
  * single selection expression its descendant `<option>` elements compare against.
@@ -359,19 +373,26 @@ export function emitSelectSelectionValueCode(
  */
 export function emitOptionSelectedAttributeCode(
   selectedValueCode: string,
-  optionValueCode: string,
+  optionValueCode: string | undefined,
   ownSelectedFallbackCode: string,
+  localNames: OptionSelectedLocalNames = DEFAULT_OPTION_SELECTED_LOCAL_NAMES,
 ): string {
+  const { selected, optionValue, index, candidate } = localNames;
+
+  if (optionValueCode === undefined) {
+    return `(() => { const ${selected} = (${selectedValueCode}); if (${selected} == null) return ${ownSelectedFallbackCode}; return ""; })()`;
+  }
+
   return (
-    `(() => { const _selected = (${selectedValueCode}); ` +
-    `if (_selected == null) return ${ownSelectedFallbackCode}; ` +
-    `const _optionValue = String(${optionValueCode}); ` +
-    `if (Array.isArray(_selected)) { ` +
-    `for (let _i = 0; _i < _selected.length; _i++) { ` +
-    `const _candidate = _selected[_i]; ` +
-    `if (_candidate != null && String(_candidate) === _optionValue) return ${SELECTED_MARKER_LITERAL}; ` +
+    `(() => { const ${selected} = (${selectedValueCode}); ` +
+    `if (${selected} == null) return ${ownSelectedFallbackCode}; ` +
+    `const ${optionValue} = String(${optionValueCode}); ` +
+    `if (Array.isArray(${selected})) { ` +
+    `for (let ${index} = 0; ${index} < ${selected}.length; ${index}++) { ` +
+    `const ${candidate} = ${selected}[${index}]; ` +
+    `if (${candidate} != null && String(${candidate}) === ${optionValue}) return ${SELECTED_MARKER_LITERAL}; ` +
     `} return ""; } ` +
-    `return String(_selected) === _optionValue ? ${SELECTED_MARKER_LITERAL} : ""; })()`
+    `return String(${selected}) === ${optionValue} ? ${SELECTED_MARKER_LITERAL} : ""; })()`
   );
 }
 

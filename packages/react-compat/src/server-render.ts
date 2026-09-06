@@ -48,7 +48,7 @@ export function renderToString<TProps>(
     idMode: "server",
   });
 
-  return runWithCacheScope(createCacheScope(), () => {
+  return withSelectSelection(undefined, () => runWithCacheScope(createCacheScope(), () => {
     try {
       const rendered = renderWithRootRuntime(runtime, "0", () => {
         if (isClassComponentType(component)) {
@@ -70,7 +70,7 @@ export function renderToString<TProps>(
     } finally {
       runtime.dispose();
     }
-  });
+  }));
 }
 
 // Renders a single child value the way the interpreter renders expression

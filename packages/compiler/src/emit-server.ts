@@ -15,6 +15,7 @@ import {
   parseStaticStyleObjectLiteral,
   parseStyleLiteralValue,
   simpleSideEffectFreeExpression,
+  type OptionSelectedLocalNames,
 } from "./emit-server-shared.js";
 import {
   emitOxcCompatObjectChildren,
@@ -44,6 +45,12 @@ let currentMarkServerRenderValueHelperName: string = "_registerServerRenderValue
 let currentRenderServerValueHelperName: string = "_renderServerValue";
 let currentContainsServerRenderValueHelperName: string = "_containsServerRenderValue";
 let currentServerRenderAttributeValueName: string = "_serverRenderAttributeValue";
+let currentOptionSelectedLocalNames: OptionSelectedLocalNames = {
+  selected: "_selected",
+  optionValue: "_optionValue",
+  index: "_i",
+  candidate: "_candidate",
+};
 /**
  * Selection expression of the nearest enclosing `<select>`, or `undefined` outside
  * one. Emit-time only (this walker is a synchronous tree walk, and nothing here
@@ -103,6 +110,12 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
     ir,
     "_serverRenderAttributeValue",
   );
+  currentOptionSelectedLocalNames = {
+    selected: allocateNestedBindingSafeName(ir, "_selected"),
+    optionValue: allocateNestedBindingSafeName(ir, "_optionValue"),
+    index: allocateNestedBindingSafeName(ir, "_i"),
+    candidate: allocateNestedBindingSafeName(ir, "_candidate"),
+  };
   const outAccumulatorName = allocateHelperName(ir, "_out");
   const urlSafeHelperName = allocateHelperName(ir, "_urlAttrSafe");
   currentUrlSafeHelperName = urlSafeHelperName;
@@ -1742,14 +1755,11 @@ function collectOptionSelectedAttributePart(
   }
 
   const optionValueCode = findOptionValueCode(node);
-  if (optionValueCode === undefined) {
-    return undefined;
-  }
-
   return emitOptionSelectedAttributeCode(
     selectedValueCode,
     optionValueCode,
     emitOwnSelectedFallbackCode(node),
+    currentOptionSelectedLocalNames,
   );
 }
 

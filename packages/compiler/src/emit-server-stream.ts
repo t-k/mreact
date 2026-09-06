@@ -28,6 +28,7 @@ import {
   parseStaticStyleObjectLiteral,
   parseStyleLiteralValue,
   simpleSideEffectFreeExpression,
+  type OptionSelectedLocalNames,
 } from "./emit-server-shared.js";
 import {
   emitOxcCompatObjectChildren,
@@ -69,6 +70,12 @@ let currentRenderServerValueHelperName: string = "_renderServerValue";
 let currentContainsServerRenderValueHelperName: string = "_containsServerRenderValue";
 let currentServerRenderValueSinkName: string = "$sink";
 let currentServerRenderAttributeValueName: string = "_serverRenderAttributeValue";
+let currentOptionSelectedLocalNames: OptionSelectedLocalNames = {
+  selected: "_selected",
+  optionValue: "_optionValue",
+  index: "_i",
+  candidate: "_candidate",
+};
 
 export function emitServerStream(
   ir: ModuleIr,
@@ -119,6 +126,12 @@ export function emitServerStream(
     ir,
     "_serverRenderAttributeValue",
   );
+  currentOptionSelectedLocalNames = {
+    selected: allocateNestedBindingSafeName(ir, "_selected"),
+    optionValue: allocateNestedBindingSafeName(ir, "_optionValue"),
+    index: allocateNestedBindingSafeName(ir, "_i"),
+    candidate: allocateNestedBindingSafeName(ir, "_candidate"),
+  };
   const urlSafeHelperName = allocateHelperName(ir, "_urlAttrSafe");
   currentUrlSafeHelperName = urlSafeHelperName;
   setOxcServerStringUrlSafeHelperName(urlSafeHelperName);
@@ -2484,16 +2497,13 @@ function collectOptionSelectedAttributePart(
   }
 
   const optionValueCode = findOptionValueCode(node);
-  if (optionValueCode === undefined) {
-    return undefined;
-  }
-
   return {
     kind: "raw-dynamic",
     code: emitOptionSelectedAttributeCode(
       selectedValueCode,
       optionValueCode,
       emitOwnSelectedFallbackCode(node),
+      currentOptionSelectedLocalNames,
     ),
   };
 }

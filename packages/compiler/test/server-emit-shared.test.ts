@@ -667,6 +667,16 @@ export function App(props) {
     );
   });
 
+  test("string and stream emitters avoid collisions with option selection locals", async () => {
+    await expectServerPairHtml(
+      `const _optionValue = "done";
+export function App() {
+  return <select value="done"><option value={_optionValue}>done</option></select>;
+}`,
+      '<select><option value="done" selected="">done</option></select>',
+    );
+  });
+
   test("string and stream emitters keep the select value across fragment, optgroup and nested lists", async () => {
     await expectServerPairHtml(
       `const GROUPS = [
@@ -765,6 +775,23 @@ export function App(props) {
       source,
       '<select><option value="open">open</option><option value="done">done</option></select>',
       { fallback: undefined, markDone: false, status: undefined },
+    );
+  });
+
+  test("string and stream emitters preserve own selected for an unknown option value when uncontrolled", async () => {
+    const source = `export function App(props) {
+  return <select value={props.value}><option>open</option><option selected>{props.label}</option></select>;
+}`;
+
+    await expectServerPairHtml(
+      source,
+      '<select><option>open</option><option selected="">done</option></select>',
+      { value: undefined, label: "done" },
+    );
+    await expectServerPairHtml(
+      source,
+      '<select><option>open</option><option selected="">done</option></select>',
+      { value: null, label: "done" },
     );
   });
 
