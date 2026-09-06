@@ -1,8 +1,9 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
+import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 import { buildApp } from "../dist/build.js";
 import { buildClientRouteBundle } from "../dist/client.js";
@@ -1936,6 +1937,181 @@ export default function Page() {
     await close();
   }
 });
+
+test("select SSR selection marks the saved option before hydration", async ({ browser }) => {
+  const { close, url } = await startFixtureServer({
+    "page.tsx": `const STATUSES = ["open", "in_progress", "done"];
+
+export default function Page() {
+  const status = "in_progress";
+  return (
+    <main>
+      <h1>Ticket</h1>
+      <select data-testid="status" value={status}>
+        {STATUSES.map((value) => <option key={value} value={value}>{value}</option>)}
+      </select>
+    </main>
+  );
+}`,
+  });
+
+  try {
+    const response = await fetch(url);
+    const html = await response.text();
+    const optionTags = html.match(/<option\b[^>]*>/g) ?? [];
+    const selectedTags = optionTags.filter((tag) => /\bselected\b/.test(tag));
+
+    expect(response.status).toBe(200);
+    expect(optionTags).toHaveLength(3);
+    expect(selectedTags).toHaveLength(1);
+    expect(selectedTags[0]).toContain('value="in_progress"');
+
+    const scriptless = await browser.newContext({ javaScriptEnabled: false });
+
+    try {
+      const scriptlessPage = await scriptless.newPage();
+      await scriptlessPage.goto(url);
+      await expect(scriptlessPage.getByTestId("status")).toHaveValue("in_progress");
+    } finally {
+      await scriptless.close();
+    }
+
+    const hydrated = await browser.newPage();
+
+    try {
+      await hydrated.goto(url);
+      await expect(hydrated.getByRole("heading", { name: "Ticket" })).toBeVisible();
+      await expect(hydrated.getByTestId("status")).toHaveValue("in_progress");
+      await hydrated.getByTestId("status").selectOption("done");
+      await expect(hydrated.getByTestId("status")).toHaveValue("done");
+    } finally {
+      await hydrated.close();
+    }
+  } finally {
+    await close();
+  }
+});
+
+test("reactive Link href follows a cell update and navigates to the updated url", async ({
+  page,
+}) => {
+  const { close, url } = await startWorkspaceFixtureServer({
+    "ticket-link.tsx": `"use client";
+
+import { Link } from "@reckona/mreact-router/link";
+import { ticket } from "./ticket-state";
+
+function ticketHref(id) {
+  return "/tickets/" + id;
+}
+
+export function TicketLink(props) {
+  return (
+    <Link data-testid="ticket-link" href={ticketHref(ticket.get() ?? props.number)}>
+      Open detail page
+    </Link>
+  );
+}`,
+    "ticket-state.ts": `import { cell } from "@reckona/mreact-reactive-core";
+
+export const ticket = cell(null);`,
+    "page.tsx": `"use client";
+
+import { TicketLink } from "./ticket-link";
+import { ticket } from "./ticket-state";
+
+export default function Page() {
+  return (
+    <main>
+      <h1>Home</h1>
+      <TicketLink number={1} />
+      <button type="button" data-testid="next" onClick={() => ticket.set(2)}>next</button>
+    </main>
+  );
+}`,
+    "tickets/$id/page.tsx": `export default function Ticket(props) {
+  return <main><h1>Ticket {props.params.id}</h1></main>;
+}`,
+  });
+
+  try {
+    await page.goto(url);
+    await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
+    await expect(page.getByTestId("ticket-link")).toHaveAttribute("href", "/tickets/1");
+
+    const anchorBefore = await page.evaluateHandle(() =>
+      document.querySelector('[data-testid="ticket-link"]'),
+    );
+
+    await page.getByTestId("next").click();
+    await expect(page.getByTestId("ticket-link")).toHaveAttribute("href", "/tickets/2");
+
+    await expect(
+      page.evaluate(
+        (previous) => previous === document.querySelector('[data-testid="ticket-link"]'),
+        anchorBefore,
+      ),
+    ).resolves.toBe(true);
+
+    await page.getByTestId("ticket-link").click();
+    await expect(page.getByRole("heading", { name: "Ticket 2" })).toBeVisible();
+    expect(new URL(page.url()).pathname).toBe("/tickets/2");
+  } finally {
+    await close();
+  }
+});
+
+async function startWorkspaceFixtureServer(files: Record<string, string>): Promise<{
+  close(): Promise<void>;
+  url: string;
+}> {
+  // Rooted inside the repository, with the router package linked under its
+  // published name, so fixture sources can import subpath exports such as
+  // `@reckona/mreact-router/link` exactly as an installed app would. The
+  // workspace does not hoist `@reckona/*` into the repository root, so a
+  // fixture in the OS temp directory cannot resolve that specifier.
+  const fixtureParentDir = join(process.cwd(), "test-results");
+  await mkdir(fixtureParentDir, { recursive: true });
+  const rootDir = await mkdtemp(join(fixtureParentDir, "mreact-router-workspace-e2e-fixture-"));
+  const appDir = join(rootDir, "app");
+  const outDir = join(rootDir, ".mreact");
+  const scopeDir = join(rootDir, "node_modules", "@reckona");
+
+  await mkdir(scopeDir, { recursive: true });
+  await symlink(
+    fileURLToPath(new URL("..", import.meta.url)),
+    join(scopeDir, "mreact-router"),
+    "dir",
+  );
+
+  await writeFile(
+    join(rootDir, "tsconfig.json"),
+    JSON.stringify({
+      compilerOptions: {
+        jsx: "react-jsx",
+        jsxImportSource: "@reckona/mreact",
+      },
+    }),
+  );
+
+  for (const [relativePath, code] of Object.entries(files)) {
+    const file = join(appDir, relativePath);
+
+    await mkdir(join(file, ".."), { recursive: true });
+    await writeFile(file, code);
+  }
+
+  await buildApp({ appDir, outDir });
+  const server = await startServer({ outDir, port: 0 });
+
+  return {
+    url: server.url,
+    async close() {
+      await server.close();
+      await rm(rootDir, { force: true, recursive: true });
+    },
+  };
+}
 
 async function startFixtureServer(files: Record<string, string>): Promise<{
   close(): Promise<void>;
