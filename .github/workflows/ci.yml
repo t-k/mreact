@@ -78,6 +78,9 @@ jobs:
           - name: Typecheck forms with strict options
             run: pnpm typecheck:forms:strict
 
+          - name: Primitive browser fixture build smoke
+            run: NODE_ENV=production pnpm bench:primitive-browser:build
+
           - name: E2E smoke
             run: pnpm exec playwright test packages/router/e2e/navigation.spec.ts --grep "client navigation preserves layouts"
 

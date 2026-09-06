@@ -6,6 +6,14 @@ const readWorkflow = (name: string) =>
   readFile(join(process.cwd(), ".github", "workflows", name), "utf8");
 
 describe("GitHub workflows", () => {
+  test("runs the primitive browser fixture build smoke in normal CI", async () => {
+    const workflow = await readWorkflow("ci.yml");
+
+    expect(workflow).toContain(
+      "          - name: Primitive browser fixture build smoke\n            run: NODE_ENV=production pnpm bench:primitive-browser:build",
+    );
+  });
+
   test("builds before parallel CI verify steps that consume workspace dist", async () => {
     const workflow = await readWorkflow("ci.yml");
     const buildIndex = workflow.indexOf("      - name: Build\n        run: pnpm build");
