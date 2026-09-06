@@ -66,7 +66,6 @@ export function collectOxcReactiveReadAliases(
       const id = readObject(declaration.id);
       const initializer = unwrapOxcParentheses(readObject(declaration.init));
 
-      if (typeof id.name !== "string") continue;
       if (
         !isOxcReactiveAliasExpression(initializer, aliases) &&
         !isOxcReactiveDerivedAliasExpression(initializer, reactiveDerivedFunctions)
@@ -74,15 +73,54 @@ export function collectOxcReactiveReadAliases(
         continue;
       }
 
-      aliases.set(
-        id.name,
+      const initializerCode =
         rewriteOxcReactiveAliasExpressionCode(code, initializer, aliases) ??
-          readSource(code, initializer),
-      );
+        readSource(code, initializer);
+
+      if (typeof id.name === "string") {
+        aliases.set(id.name, initializerCode);
+        continue;
+      }
+
+      for (const [name, expressionCode] of collectOxcPatternReactiveAliases(
+        code,
+        id,
+        initializerCode,
+      )) {
+        aliases.set(name, expressionCode);
+      }
     }
   }
 
   return aliases;
+}
+
+export function collectOxcReactiveJsxBindingNames(
+  statements: readonly unknown[],
+  aliases: ReadonlyMap<string, string>,
+): Set<string> {
+  const names = new Set<string>();
+
+  for (const statementValue of statements) {
+    const statement = readObject(statementValue);
+    if (statement.type !== "VariableDeclaration") continue;
+
+    for (const declarationValue of readArray(statement.declarations)) {
+      const declaration = readObject(declarationValue);
+      const id = readObject(declaration.id);
+      const initializer = unwrapOxcParentheses(readObject(declaration.init));
+
+      if (
+        typeof id.name === "string" &&
+        containsOxcJsxSyntax(initializer) &&
+        containsOxcReactiveDependency(initializer, aliases)
+      ) {
+        names.add(id.name);
+      }
+    }
+  }
+
+  return names;
 }
 
 export function formatOxcUntrackedReactiveAliasDeclaration(
@@ -112,19 +150,18 @@ export function formatOxcUntrackedReactiveAliasDeclaration(
     const start = readNumber(initializer.start);
     const end = readNumber(initializer.end);
 
-    if (
-      typeof id.name !== "string" ||
-      !aliases.has(id.name) ||
-      start === undefined ||
-      end === undefined
-    ) {
+    const hasAlias =
+      (typeof id.name === "string" && aliases.has(id.name)) ||
+      (id.type !== "Identifier" && hasOxcReactiveAliasBinding(id, aliases));
+
+    if (!hasAlias || start === undefined || end === undefined) {
       continue;
     }
 
     replacements.push({
       start,
       end,
-      name: id.name,
+      name: typeof id.name === "string" ? id.name : "pattern",
       text: `${OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER}(() => (${readSource(code, initializer)}))`,
     });
   }
@@ -180,6 +217,14 @@ export function collectOxcCompilerOwnedReactiveAliases(
         continue;
       }
 
+      const patternAliases = collectOxcReactiveAliasBindingNames(id, aliases);
+      if (patternAliases.length > 0) {
+        for (const name of patternAliases) {
+          dependencies.set(name, references);
+        }
+        continue;
+      }
+
       for (const name of references) {
         unownedReferences.add(name);
       }
@@ -190,14 +235,9 @@ export function collectOxcCompilerOwnedReactiveAliases(
     collectOxcReactiveAliasReferenceNames(readObject(rootStatement), aliases),
     dependencies,
   );
-  const disqualified = collectOxcReactiveAliasDependencyClosure(
-    unownedReferences,
-    dependencies,
-  );
+  const disqualified = collectOxcReactiveAliasDependencyClosure(unownedReferences, dependencies);
 
-  return new Map(
-    [...aliases].filter(([name]) => reachable.has(name) && !disqualified.has(name)),
-  );
+  return new Map([...aliases].filter(([name]) => reachable.has(name) && !disqualified.has(name)));
 }
 
 function collectOxcReactiveAliasReferenceNames(
@@ -205,15 +245,138 @@ function collectOxcReactiveAliasReferenceNames(
   aliases: ReadonlyMap<string, string>,
 ): Set<string> {
   const replacements: ReactiveAliasReplacement[] = [];
-  collectOxcReactiveAliasReplacements(
-    node,
-    undefined,
-    undefined,
-    aliases,
-    new Set(),
-    replacements,
-  );
+  collectOxcReactiveAliasReplacements(node, undefined, undefined, aliases, new Set(), replacements);
   return new Set(replacements.map((replacement) => replacement.name));
+}
+
+function collectOxcPatternReactiveAliases(
+  code: string,
+  pattern: Record<string, unknown>,
+  initializerCode: string,
+): Map<string, string> {
+  const aliases = new Map<string, string>();
+
+  collectOxcPatternReactiveAliasesInto(pattern, initializerCode, aliases, code);
+  return aliases;
+}
+
+function collectOxcPatternReactiveAliasesInto(
+  pattern: Record<string, unknown>,
+  sourceCode: string,
+  aliases: Map<string, string>,
+  code: string,
+): void {
+  if (pattern.type === "Identifier" && typeof pattern.name === "string") {
+    aliases.set(pattern.name, sourceCode);
+    return;
+  }
+
+  if (pattern.type === "AssignmentPattern") {
+    const left = readObject(pattern.left);
+    const right = readSource(code, pattern.right);
+    if (left.type === "Identifier" && typeof left.name === "string") {
+      aliases.set(
+        left.name,
+        `((__mreactAliasValue) => __mreactAliasValue === undefined ? (${right}) : __mreactAliasValue)(${sourceCode})`,
+      );
+    }
+    return;
+  }
+
+  if (pattern.type === "ObjectPattern") {
+    for (const propertyValue of readArray(pattern.properties)) {
+      const property = readObject(propertyValue);
+      if (
+        (property.type !== "Property" && property.type !== "ObjectProperty") ||
+        property.computed === true
+      ) {
+        continue;
+      }
+
+      const access = readStaticPropertyAccess(property);
+      if (access === undefined) continue;
+      collectOxcPatternReactiveAliasesInto(
+        readObject(property.value),
+        `(${sourceCode})${access}`,
+        aliases,
+        code,
+      );
+    }
+    return;
+  }
+
+  if (pattern.type === "ArrayPattern") {
+    for (const [index, elementValue] of readArray(pattern.elements).entries()) {
+      const element = readObject(elementValue);
+      if (Object.keys(element).length === 0 || element.type === "RestElement") continue;
+      collectOxcPatternReactiveAliasesInto(element, `(${sourceCode})[${index}]`, aliases, code);
+    }
+  }
+}
+
+function readStaticPropertyAccess(property: Record<string, unknown>): string | undefined {
+  const key = readObject(property.key);
+
+  if (key.type === "Identifier" && typeof key.name === "string") {
+    return `.${key.name}`;
+  }
+
+  if (key.type === "Literal" && (typeof key.value === "string" || typeof key.value === "number")) {
+    return `[${JSON.stringify(key.value)}]`;
+  }
+
+  return undefined;
+}
+
+function collectOxcReactiveAliasBindingNames(
+  pattern: Record<string, unknown>,
+  aliases: ReadonlyMap<string, string>,
+): string[] {
+  const names: string[] = [];
+
+  if (pattern.type === "Identifier" && typeof pattern.name === "string") {
+    if (aliases.has(pattern.name)) names.push(pattern.name);
+    return names;
+  }
+
+  if (pattern.type === "AssignmentPattern") {
+    return collectOxcReactiveAliasBindingNames(readObject(pattern.left), aliases);
+  }
+
+  if (pattern.type === "RestElement") {
+    return collectOxcReactiveAliasBindingNames(readObject(pattern.argument), aliases);
+  }
+
+  if (pattern.type === "ObjectPattern") {
+    for (const propertyValue of readArray(pattern.properties)) {
+      const property = readObject(propertyValue);
+      names.push(
+        ...collectOxcReactiveAliasBindingNames(
+          readObject(property.type === "RestElement" ? property.argument : property.value),
+          aliases,
+        ),
+      );
+    }
+    return names;
+  }
+
+  if (pattern.type === "ArrayPattern") {
+    for (const elementValue of readArray(pattern.elements)) {
+      const element = readObject(elementValue);
+      if (Object.keys(element).length > 0) {
+        names.push(...collectOxcReactiveAliasBindingNames(element, aliases));
+      }
+    }
+  }
+
+  return names;
+}
+
+function hasOxcReactiveAliasBinding(
+  pattern: Record<string, unknown>,
+  aliases: ReadonlyMap<string, string>,
+): boolean {
+  return collectOxcReactiveAliasBindingNames(pattern, aliases).length > 0;
 }
 
 function collectOxcReactiveAliasDependencyClosure(
@@ -747,10 +910,7 @@ function isJsxLikeInitializer(
   if (node.type === "ArrayExpression") {
     return readArray(node.elements).some((element) => {
       const object = readObject(element);
-      return (
-        Object.keys(object).length > 0 &&
-        isJsxLikeInitializer(object, jsxReturnFunctionNames)
-      );
+      return Object.keys(object).length > 0 && isJsxLikeInitializer(object, jsxReturnFunctionNames);
     });
   }
   if (node.type === "ObjectExpression") {
@@ -758,9 +918,7 @@ function isJsxLikeInitializer(
       const object = readObject(property);
       const value =
         object.type === "SpreadElement" ? readObject(object.argument) : readObject(object.value);
-      return (
-        Object.keys(value).length > 0 && isJsxLikeInitializer(value, jsxReturnFunctionNames)
-      );
+      return Object.keys(value).length > 0 && isJsxLikeInitializer(value, jsxReturnFunctionNames);
     });
   }
   return containsOxcJsxSyntax(node);
@@ -788,6 +946,49 @@ function isOxcReactiveAliasExpression(
 ): boolean {
   const state = analyzeOxcReactiveAliasExpression(expression, aliases);
   return state.safe && state.reactive;
+}
+
+function containsOxcReactiveDependency(
+  node: Record<string, unknown>,
+  aliases: ReadonlyMap<string, string>,
+): boolean {
+  if (isOxcFunctionNode(node)) {
+    return false;
+  }
+
+  if (isOxcReactiveAliasExpression(node, aliases)) {
+    return true;
+  }
+
+  for (const [key, value] of Object.entries(node)) {
+    if (key === "type" || key === "start" || key === "end" || key === "loc") {
+      continue;
+    }
+
+    if (Array.isArray(value)) {
+      if (
+        value.some(
+          (item) =>
+            typeof item === "object" &&
+            item !== null &&
+            containsOxcReactiveDependency(readObject(item), aliases),
+        )
+      ) {
+        return true;
+      }
+      continue;
+    }
+
+    if (
+      typeof value === "object" &&
+      value !== null &&
+      containsOxcReactiveDependency(readObject(value), aliases)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function isOxcReactiveDerivedAliasExpression(
@@ -1024,7 +1225,6 @@ function analyzeOxcReactiveAliasExpression(
 
   return { reactive: false, safe: false };
 }
-
 
 function collectOxcPushJsxBindingNames(statements: readonly unknown[], names: Set<string>): void {
   for (const statement of statements) {

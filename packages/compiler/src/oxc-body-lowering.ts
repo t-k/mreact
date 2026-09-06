@@ -2,7 +2,10 @@ import type { OxcBodyStatementJsxMode } from "./oxc-analysis-types.js";
 import { formatStatement } from "./oxc-bindings.js";
 import { stripOxcGeneratedImports } from "./oxc-code-utils.js";
 import { readArray, readObject, readSource, unwrapOxcParentheses } from "./oxc-node-utils.js";
-import { containsOxcJsxSyntax } from "./oxc-render-values.js";
+import {
+  containsOxcJsxSyntax,
+  rewriteOxcReactiveAliasExpressionCode,
+} from "./oxc-render-values.js";
 import { transformJsxWithOxc } from "./oxc-transform.js";
 import type { AnalyzeModuleOptions, CompileTarget, Diagnostic } from "./types.js";
 
@@ -11,6 +14,7 @@ export interface OxcBodyLowerers {
     code: string,
     expression: Record<string, unknown>,
     componentNames: Set<string>,
+    resolveExpressionCode?: (expression: Record<string, unknown>) => string,
   ): string | undefined;
   lowerCompatObjectExpression(
     code: string,
@@ -108,6 +112,8 @@ export function lowerOxcBodyStatementJsx(
   serverRenderValueWrapper?: string,
   serverRenderValueBindingNames?: ReadonlySet<string>,
   serverRenderValueCallNames?: ReadonlySet<string>,
+  reactiveAliasBindings?: ReadonlyMap<string, string>,
+  lazyRenderValueBindings?: ReadonlySet<string>,
 ): string | undefined {
   const object = readObject(statement);
 
@@ -170,8 +176,7 @@ export function lowerOxcBodyStatementJsx(
     const initializer = unwrapOxcParentheses(readObject(declaration.init));
     if (
       typeof id.name !== "string" ||
-      (!containsOxcJsxSyntax(initializer) &&
-        serverRenderValueBindingNames?.has(id.name) !== true)
+      (!containsOxcJsxSyntax(initializer) && serverRenderValueBindingNames?.has(id.name) !== true)
     ) {
       return readSource(code, declaration);
     }
@@ -182,9 +187,24 @@ export function lowerOxcBodyStatementJsx(
         : undefined;
     const lowered =
       mode === "dom-node"
-        ? lowerers.lowerDomNodeExpression(code, initializer, componentNames)
+        ? lowerers.lowerDomNodeExpression(
+            code,
+            initializer,
+            componentNames,
+            reactiveAliasBindings === undefined
+              ? undefined
+              : (expression) =>
+                  rewriteOxcReactiveAliasExpressionCode(code, expression, reactiveAliasBindings) ??
+                  readSource(code, expression),
+          )
         : mode === "compat-object"
-          ? lowerers.lowerCompatObjectExpression(code, initializer, componentNames, target, diagnostics)
+          ? lowerers.lowerCompatObjectExpression(
+              code,
+              initializer,
+              componentNames,
+              target,
+              diagnostics,
+            )
           : mode === "server-string"
             ? lowerers.lowerServerStringExpression(
                 code,
@@ -198,7 +218,9 @@ export function lowerOxcBodyStatementJsx(
             : undefined;
     if (lowered === undefined) return readSource(code, declaration);
     didLower = true;
-    return `${id.name} = ${lowered}`;
+    const renderValue =
+      lazyRenderValueBindings?.has(id.name) === true ? `() => ${lowered}` : lowered;
+    return `${id.name} = ${renderValue}`;
   });
 
   return didLower ? `${kind} ${loweredDeclarations.join(", ")};` : undefined;

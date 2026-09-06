@@ -3,10 +3,7 @@ import { type OxcBodyLowerers } from "./oxc-body-lowering.js";
 import { allocateOxcServerRenderValuePlaceholder } from "./oxc-code-utils.js";
 import { analyzeOxcExpressionChild, type OxcChildAnalysisContext } from "./oxc-child-analysis.js";
 import { markOxcCompatRuntimeReferences } from "./oxc-component-references.js";
-import {
-  lowerOxcDomNodeExpression,
-  lowerOxcNormalizedDomChildAppend,
-} from "./oxc-dom-lowering.js";
+import { lowerOxcDomNodeExpression, lowerOxcNormalizedDomChildAppend } from "./oxc-dom-lowering.js";
 import { readOxcJsxTagName } from "./oxc-jsx-attributes.js";
 import { normalizeOxcJsxText } from "./oxc-jsx-text.js";
 import { readArray, readObject, readSource, unwrapOxcParentheses } from "./oxc-node-utils.js";
@@ -242,13 +239,21 @@ export function lowerOxcReactiveValueExpression(
   code: string,
   expression: Record<string, unknown>,
   componentNames: Set<string>,
+  resolveExpressionCode?: (expression: Record<string, unknown>) => string,
 ): string | undefined {
   const unwrapped = unwrapOxcParentheses(expression);
 
   if (unwrapped.type === "JSXFragment") {
     const children = readArray(unwrapped.children)
       .map((child, index, siblings) =>
-        lowerOxcReactiveChildValue(code, readObject(child), componentNames, siblings, index),
+        lowerOxcReactiveChildValue(
+          code,
+          readObject(child),
+          componentNames,
+          siblings,
+          index,
+          resolveExpressionCode,
+        ),
       )
       .filter((child): child is string => child !== undefined);
 
@@ -269,8 +274,12 @@ export function lowerOxcReactiveValueExpression(
   const tagName = readOxcJsxTagName(readObject(openingElement.name));
 
   if (/^[a-z]/.test(tagName)) {
-    return lowerOxcDomNodeExpression(code, unwrapped, (expression) =>
-      lowerOxcNestedJsxExpression(code, expression, componentNames, "client", [], "dom-node"),
+    return lowerOxcDomNodeExpression(
+      code,
+      unwrapped,
+      (expression) =>
+        lowerOxcNestedJsxExpression(code, expression, componentNames, "client", [], "dom-node"),
+      resolveExpressionCode,
     );
   }
 
@@ -278,13 +287,14 @@ export function lowerOxcReactiveValueExpression(
     return undefined;
   }
 
-  return `${tagName}(${lowerOxcReactiveComponentProps(code, unwrapped, componentNames)})`;
+  return `${tagName}(${lowerOxcReactiveComponentProps(code, unwrapped, componentNames, resolveExpressionCode)})`;
 }
 
 function lowerOxcReactiveComponentProps(
   code: string,
   node: Record<string, unknown>,
   componentNames: Set<string>,
+  resolveExpressionCode?: (expression: Record<string, unknown>) => string,
 ): string {
   const openingElement = readObject(node.openingElement);
   const entries = readArray(openingElement.attributes).flatMap((attribute): string[] => {
@@ -314,6 +324,7 @@ function lowerOxcReactiveComponentProps(
       return [
         `${JSON.stringify(name)}: ${
           lowerOxcNestedJsxExpression(code, expression, componentNames, "client", [], "dom-node") ??
+          resolveExpressionCode?.(expression) ??
           readSource(code, expression)
         }`,
       ];
@@ -323,7 +334,14 @@ function lowerOxcReactiveComponentProps(
   });
   const children = readArray(node.children)
     .map((child, index, siblings) =>
-      lowerOxcReactiveChildValue(code, readObject(child), componentNames, siblings, index),
+      lowerOxcReactiveChildValue(
+        code,
+        readObject(child),
+        componentNames,
+        siblings,
+        index,
+        resolveExpressionCode,
+      ),
     )
     .filter((child): child is string => child !== undefined);
 
@@ -342,6 +360,7 @@ function lowerOxcReactiveChildValue(
   componentNames: Set<string>,
   siblings: readonly unknown[],
   index: number,
+  resolveExpressionCode?: (expression: Record<string, unknown>) => string,
 ): string | undefined {
   if (child.type === "JSXText") {
     const value =
@@ -353,11 +372,12 @@ function lowerOxcReactiveChildValue(
     const expression = readObject(child.expression);
     return (
       lowerOxcNestedJsxExpression(code, expression, componentNames, "client", [], "dom-node") ??
+      resolveExpressionCode?.(expression) ??
       readSource(code, expression)
     );
   }
 
-  return lowerOxcReactiveValueExpression(code, child, componentNames);
+  return lowerOxcReactiveValueExpression(code, child, componentNames, resolveExpressionCode);
 }
 
 export function lowerOxcServerStringExpression(

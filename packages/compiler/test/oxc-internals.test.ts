@@ -50,6 +50,7 @@ import {
   lowerOxcTopLevelStatement,
 } from "../src/oxc-body-lowering.js";
 import { analyzeOxcExpressionChild, analyzeOxcJsxNode } from "../src/oxc-child-analysis.js";
+import { analyzeWithOxc } from "../src/oxc.js";
 import {
   lowerOxcCompatReactNodeExpression,
   lowerOxcNestedJsxExpression,
@@ -66,6 +67,34 @@ import type { Diagnostic } from "../src/types.js";
 import type { TopLevelExportRenderInfo } from "../src/internal.js";
 
 describe("compiler OXC internals", () => {
+  test("classifies module helper calls in component props as ordinary expressions", () => {
+    const code = `
+function stringHelper(value) { return value + "!"; }
+function numberHelper(value) { return value + 1; }
+function objectHelper(value) { return { value }; }
+function Child(props) { return <output>{props.stringValue}{props.numberValue}{props.objectValue.value}</output>; }
+export function App() {
+  return <Child
+    stringValue={stringHelper("Ada")}
+    numberValue={numberHelper(1)}
+    objectValue={objectHelper("value")}
+  />;
+}`;
+    const analyzed = analyzeWithOxc({
+      code,
+      filename: "helper-props.tsx",
+      target: "client",
+      options: { bodyStatementJsx: "dom-node", topLevelJsx: "diagnostic" },
+    });
+    const root = analyzed.ir.components.find((component) => component.name === "App")?.root;
+
+    expect(analyzed.diagnostics).toEqual([]);
+    expect(root?.kind).toBe("component");
+    if (root?.kind !== "component") return;
+
+    expect(root.props.map((prop) => prop.kind)).toEqual(["prop", "prop", "prop"]);
+  });
+
   test("keeps top-level export render info compatible with the pre-local-name shape", () => {
     const legacyInfo: TopLevelExportRenderInfo = {
       calledComponentRoots: [],

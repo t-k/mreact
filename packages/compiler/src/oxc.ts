@@ -101,6 +101,7 @@ import {
   collectOxcBodyJsxBindingNames,
   collectOxcCompilerOwnedReactiveAliases,
   collectOxcReactiveDerivedFunctionNames,
+  collectOxcReactiveJsxBindingNames,
   collectOxcReactiveReadAliases,
   containsOxcJsxSyntax,
   formatOxcUntrackedReactiveAliasDeclaration,
@@ -169,9 +170,9 @@ function createOxcBodyLowerers(
   serverOutput?: AnalyzeModuleOptions["serverOutput"],
 ): OxcBodyLowerers {
   return {
-    lowerDomNodeExpression: (code, expression, componentNames) =>
-      lowerOxcReactiveValueExpression(code, expression, componentNames) ??
-      lowerOxcDomNodeExpression(code, expression),
+    lowerDomNodeExpression: (code, expression, componentNames, resolveExpressionCode) =>
+      lowerOxcReactiveValueExpression(code, expression, componentNames, resolveExpressionCode) ??
+      lowerOxcDomNodeExpression(code, expression, undefined, resolveExpressionCode),
     lowerCompatObjectExpression: lowerOxcCompatObjectExpression,
     lowerServerStringExpression: (
       code,
@@ -216,6 +217,7 @@ function createOxcChildAnalysisContext(
   componentConstBindings?: ReadonlySet<string>,
   moduleRenderValueBindingNames?: ReadonlySet<string>,
   reactiveAliasBindings?: ReadonlyMap<string, string>,
+  lazyRenderValueBindings?: ReadonlySet<string>,
   serverOutput?: AnalyzeModuleOptions["serverOutput"],
   componentCallNames?: Set<string>,
   bodyLowerers: OxcBodyLowerers = oxcBodyLowerers,
@@ -237,6 +239,7 @@ function createOxcChildAnalysisContext(
     ...(serverRenderValueWrapper === undefined ? {} : { serverRenderValueWrapper }),
     ...(serverRenderValueCallNames === undefined ? {} : { serverRenderValueCallNames }),
     ...(reactiveAliasBindings === undefined ? {} : { reactiveAliasBindings }),
+    ...(lazyRenderValueBindings === undefined ? {} : { lazyRenderValueBindings }),
     bodyLowerers,
     lowerNestedJsxExpression: lowerOxcNestedJsxExpression,
   };
@@ -383,8 +386,7 @@ function analyzeOxcToIr(
     options?.compatReactNodeReturnRenderMode === "react-node"
       ? collectOxcCompatReactNodeComponentReferences(program)
       : undefined;
-  const detectedLocalJsxReturnFunctionNames =
-    target === "server" ? collectOxcLocalJsxReturnFunctionNames(program) : new Set<string>();
+  const detectedLocalJsxReturnFunctionNames = collectOxcLocalJsxReturnFunctionNames(program);
   const detectedComponentCallNames = new Set([
     ...detectedLocalJsxReturnFunctionNames,
     ...collectOxcExportedComponents(program).filter((name) => name !== "default"),
@@ -419,10 +421,7 @@ function analyzeOxcToIr(
     target === "server"
       ? collectLocalJsxHelperHtmlParameters(program, localJsxReturnFunctionNames)
       : new Map<string, Set<number>>();
-  const bodyLowerers = createOxcBodyLowerers(
-    compatRuntimeImports,
-    options?.serverOutput,
-  );
+  const bodyLowerers = createOxcBodyLowerers(compatRuntimeImports, options?.serverOutput);
   const moduleRenderValueBindings = collectOxcBodyJsxBindingNames(
     body,
     localJsxReturnFunctionNames,
@@ -522,14 +521,11 @@ function analyzeOxcToIr(
   }
 
   const componentNames = componentNamesFromProgram(program, moduleBindingNames);
-  const componentCallNames =
-    target === "server"
-      ? componentCallNamesFromProgram(
-          program,
-          localJsxReturnFunctionNames,
-          reassignedLocalJsxReturnFunctionNames,
-        )
-      : undefined;
+  const componentCallNames = componentCallNamesFromProgram(
+    program,
+    localJsxReturnFunctionNames,
+    reassignedLocalJsxReturnFunctionNames,
+  );
   const asyncComponentNames = collectOxcAsyncComponentNames(program);
   const components = body.flatMap((statement) =>
     analyzeOxcComponent(
@@ -716,8 +712,7 @@ function containsOxcServerRenderValue(node: JsxNodeIr): boolean {
     return (
       node.children.some(containsOxcServerRenderValue) ||
       node.props.some(
-        (prop) =>
-          prop.kind === "render-prop" && prop.children.some(containsOxcServerRenderValue),
+        (prop) => prop.kind === "render-prop" && prop.children.some(containsOxcServerRenderValue),
       )
     );
   }
@@ -739,8 +734,7 @@ function requiresOxcAsyncStreamEmission(node: JsxNodeIr): boolean {
     return (
       node.children.some(requiresOxcAsyncStreamEmission) ||
       node.props.some(
-        (prop) =>
-          prop.kind === "render-prop" && prop.children.some(requiresOxcAsyncStreamEmission),
+        (prop) => prop.kind === "render-prop" && prop.children.some(requiresOxcAsyncStreamEmission),
       )
     );
   }
@@ -819,15 +813,12 @@ function containsOxcLocalJsxHelperCall(
           containsOxcLocalJsxHelperCall(readObject(item), localJsxReturnFunctionNames),
         )
       : typeof value === "object" &&
-          value !== null &&
-          containsOxcLocalJsxHelperCall(readObject(value), localJsxReturnFunctionNames),
+        value !== null &&
+        containsOxcLocalJsxHelperCall(readObject(value), localJsxReturnFunctionNames),
   );
 }
 
-function collectOxcReassignedNames(
-  node: unknown,
-  names: ReadonlySet<string>,
-): Set<string> {
+function collectOxcReassignedNames(node: unknown, names: ReadonlySet<string>): Set<string> {
   const reassigned = new Set<string>();
   const visit = (value: unknown, inheritedShadowedNames: ReadonlySet<string>): void => {
     if (Array.isArray(value)) {
@@ -856,10 +847,7 @@ function collectOxcReassignedNames(
           visit(initializer, parameterShadowedNames);
         }
       }
-      visit(
-        object.body,
-        collectOxcFunctionLocalShadowedNames(object, inheritedShadowedNames),
-      );
+      visit(object.body, collectOxcFunctionLocalShadowedNames(object, inheritedShadowedNames));
       return;
     }
     if (object.type === "ClassExpression") {
@@ -873,10 +861,7 @@ function collectOxcReassignedNames(
       return;
     }
     if (object.type === "StaticBlock") {
-      const shadowedNames = collectOxcStaticBlockShadowedNames(
-        object,
-        inheritedShadowedNames,
-      );
+      const shadowedNames = collectOxcStaticBlockShadowedNames(object, inheritedShadowedNames);
       for (const statement of readArray(object.body)) visit(statement, shadowedNames);
       return;
     }
@@ -903,7 +888,9 @@ function collectOxcReassignedNames(
         const statementObject = readObject(statement);
         if (statementObject.type === "VariableDeclaration" && statementObject.kind !== "var") {
           for (const declaration of readArray(statementObject.declarations)) {
-            for (const name of collectBindingNamesFromPattern(readObject(readObject(declaration).id))) {
+            for (const name of collectBindingNamesFromPattern(
+              readObject(readObject(declaration).id),
+            )) {
               if (names.has(name)) shadowedNames.add(name);
             }
           }
@@ -935,7 +922,9 @@ function collectOxcReassignedNames(
           const statementObject = readObject(statement);
           if (statementObject.type === "VariableDeclaration" && statementObject.kind !== "var") {
             for (const declaration of readArray(statementObject.declarations)) {
-              for (const name of collectBindingNamesFromPattern(readObject(readObject(declaration).id))) {
+              for (const name of collectBindingNamesFromPattern(
+                readObject(readObject(declaration).id),
+              )) {
                 if (names.has(name)) shadowedNames.add(name);
               }
             }
@@ -1064,10 +1053,7 @@ function collectOxcFunctionParameterShadowedNames(
   return shadowedNames;
 }
 
-function collectOxcScopedVarBindingNames(
-  root: Record<string, unknown>,
-  names: Set<string>,
-): void {
+function collectOxcScopedVarBindingNames(root: Record<string, unknown>, names: Set<string>): void {
   const pending: unknown[] = [root];
   while (pending.length > 0) {
     const current = pending.pop();
@@ -1114,14 +1100,9 @@ function collectOxcStaticBlockShadowedNames(
   return shadowedNames;
 }
 
-function collectOxcParameterInitializerExpressions(
-  pattern: Record<string, unknown>,
-): unknown[] {
+function collectOxcParameterInitializerExpressions(pattern: Record<string, unknown>): unknown[] {
   if (pattern.type === "AssignmentPattern") {
-    return [
-      pattern.right,
-      ...collectOxcParameterInitializerExpressions(readObject(pattern.left)),
-    ];
+    return [pattern.right, ...collectOxcParameterInitializerExpressions(readObject(pattern.left))];
   }
   if (pattern.type === "RestElement") {
     return collectOxcParameterInitializerExpressions(readObject(pattern.argument));
@@ -1877,10 +1858,7 @@ function analyzeOxcFunctionLikeComponent(
     /^[a-z]/.test(name) && componentNames.has(name)
       ? new Set([...componentNames].filter((componentName) => componentName !== name))
       : componentNames;
-  const unshadowedBodyComponentNames = collectOxcUnshadowedNames(
-    functionLike,
-    bodyComponentNames,
-  );
+  const unshadowedBodyComponentNames = collectOxcUnshadowedNames(functionLike, bodyComponentNames);
   const reactiveAliasBindings = collectOxcReactiveReadAliases(
     code,
     body,
@@ -1890,54 +1868,53 @@ function analyzeOxcFunctionLikeComponent(
     earlyIfRootReturn === undefined
       ? collectOxcCompilerOwnedReactiveAliases(body, rootStatement, reactiveAliasBindings)
       : new Map<string, string>();
+  const componentBodyStatements = body.filter(
+    (bodyStatement) =>
+      bodyStatement !== rootStatement &&
+      earlyIfRootReturn?.branchStatements.includes(bodyStatement) !== true &&
+      earlyIfRootReturn?.fallthroughBodyStatements.includes(bodyStatement) !== true &&
+      bodyStatement !== earlyIfRootReturn?.fallthroughStatement,
+  );
   const componentRenderValueBindings = collectOxcBodyJsxBindingNames(
-    body.filter(
-      (bodyStatement) =>
-        bodyStatement !== rootStatement &&
-        earlyIfRootReturn?.branchStatements.includes(bodyStatement) !== true &&
-        earlyIfRootReturn?.fallthroughBodyStatements.includes(bodyStatement) !== true &&
-        bodyStatement !== earlyIfRootReturn?.fallthroughStatement,
-    ),
+    componentBodyStatements,
     unshadowedLocalJsxReturnFunctionNames,
   );
+  const lazyRenderValueBindings =
+    target === "client"
+      ? collectOxcReactiveJsxBindingNames(componentBodyStatements, reactiveAliasBindings)
+      : new Set<string>();
   const serverRenderValuePlaceholder =
     target === "server" && bodyStatementJsx === "server-string"
       ? allocateOxcServerRenderValuePlaceholder(code, functionLike)
       : undefined;
-  const bodyStatements = body
-    .filter(
-      (bodyStatement) =>
-        bodyStatement !== rootStatement &&
-        earlyIfRootReturn?.branchStatements.includes(bodyStatement) !== true &&
-        earlyIfRootReturn?.fallthroughBodyStatements.includes(bodyStatement) !== true &&
-        bodyStatement !== earlyIfRootReturn?.fallthroughStatement,
-    )
-    .map((bodyStatement) => {
-      const loweredStatement = lowerOxcBodyStatementJsx(
-        code,
-        bodyStatement,
-        unshadowedBodyComponentNames,
-        target,
-        diagnostics,
-        bodyStatementJsx,
-        bodyLowerers,
-        serverRenderValuePlaceholder,
-        componentRenderValueBindings,
-        unshadowedLocalJsxReturnFunctionNames,
-      );
+  const bodyStatements = componentBodyStatements.map((bodyStatement) => {
+    const loweredStatement = lowerOxcBodyStatementJsx(
+      code,
+      bodyStatement,
+      unshadowedBodyComponentNames,
+      target,
+      diagnostics,
+      bodyStatementJsx,
+      bodyLowerers,
+      serverRenderValuePlaceholder,
+      componentRenderValueBindings,
+      unshadowedLocalJsxReturnFunctionNames,
+      reactiveAliasBindings,
+      lazyRenderValueBindings,
+    );
 
-      if (loweredStatement !== undefined) {
-        return loweredStatement;
-      }
+    if (loweredStatement !== undefined) {
+      return loweredStatement;
+    }
 
-      return target === "client" && bodyStatementJsx !== "compat-object"
-        ? (formatOxcUntrackedReactiveAliasDeclaration(
-            code,
-            bodyStatement,
-            compilerOwnedReactiveAliasBindings,
-          ) ?? formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx))
-        : formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx);
-    });
+    return target === "client" && bodyStatementJsx !== "compat-object"
+      ? (formatOxcUntrackedReactiveAliasDeclaration(
+          code,
+          bodyStatement,
+          compilerOwnedReactiveAliasBindings,
+        ) ?? formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx))
+      : formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx);
+  });
   const componentBodyBindings = collectOxcVariableInitializers(body);
   const componentPropBindings = collectOxcComponentPropBindings(
     functionLike.params,
@@ -1961,6 +1938,7 @@ function analyzeOxcFunctionLikeComponent(
     componentConstBindings,
     moduleRenderValueBindings,
     reactiveAliasBindings,
+    lazyRenderValueBindings,
     serverOutput,
     unshadowedComponentCallNames,
     bodyLowerers,
@@ -1989,10 +1967,7 @@ function analyzeOxcFunctionLikeComponent(
       ? analyzeOxcJsxNode(code, returnExpression, childAnalysisContext)
       : isOxcComponentCallExpression(returnExpression)
         ? analyzeOxcComponentCallExpression(code, returnExpression)
-        : isOxcLocalJsxHelperCallExpression(
-              returnExpression,
-              unshadowedLocalJsxReturnFunctionNames,
-            )
+        : isOxcLocalJsxHelperCallExpression(returnExpression, unshadowedLocalJsxReturnFunctionNames)
           ? {
               kind: "expr" as const,
               code: normalizeOxcExpressionCode(
@@ -2010,15 +1985,11 @@ function analyzeOxcFunctionLikeComponent(
                     )
                   : readSource(code, returnExpression),
               ),
-            renderMode:
-                serverOutput === "stream" ? ("stream-node" as const) : ("html" as const),
+              renderMode: serverOutput === "stream" ? ("stream-node" as const) : ("html" as const),
             }
           : bodyStatementJsx === "server-string" &&
               serverRenderValuePlaceholder !== undefined &&
-              containsOxcLocalJsxHelperCall(
-                returnExpression,
-                unshadowedLocalJsxReturnFunctionNames,
-              )
+              containsOxcLocalJsxHelperCall(returnExpression, unshadowedLocalJsxReturnFunctionNames)
             ? {
                 kind: "expr" as const,
                 code: normalizeOxcExpressionCode(
@@ -2036,29 +2007,29 @@ function analyzeOxcFunctionLikeComponent(
                 ),
                 renderMode: "server-render-value" as const,
               }
-          : (analyzeOxcDynamicRootReturn(
-              code,
-              returnExpression,
-              childAnalysisContext,
-              bodyStatementJsx,
-            ) ?? {
-              kind: "expr" as const,
-              code: normalizeOxcExpressionCode(
-                compatReactNodeReturn
-                  ? (lowerOxcCompatReactNodeExpression(
-                      code,
-                      returnExpression,
-                      componentNames,
-                      target,
-                      diagnostics,
-                    ) ??
-                      stripOxcGeneratedImports(
-                        transformJsxToCreateElementWithOxc(readSource(code, returnExpression)),
-                      ))
-                  : readSource(code, returnExpression),
-              ),
-              ...(compatReactNodeReturn ? { renderMode: "react-node" as const } : {}),
-            }));
+            : (analyzeOxcDynamicRootReturn(
+                code,
+                returnExpression,
+                childAnalysisContext,
+                bodyStatementJsx,
+              ) ?? {
+                kind: "expr" as const,
+                code: normalizeOxcExpressionCode(
+                  compatReactNodeReturn
+                    ? (lowerOxcCompatReactNodeExpression(
+                        code,
+                        returnExpression,
+                        componentNames,
+                        target,
+                        diagnostics,
+                      ) ??
+                        stripOxcGeneratedImports(
+                          transformJsxToCreateElementWithOxc(readSource(code, returnExpression)),
+                        ))
+                    : readSource(code, returnExpression),
+                ),
+                ...(compatReactNodeReturn ? { renderMode: "react-node" as const } : {}),
+              }));
   markOxcRenderValueExpressions(
     [root],
     htmlParameterNames,
@@ -2071,7 +2042,10 @@ function analyzeOxcFunctionLikeComponent(
   );
   markOxcRenderValueExpressions(
     [root],
-    componentRenderValueBindings,
+    new Set([
+      ...componentRenderValueBindings,
+      ...[...lazyRenderValueBindings].map((name) => `${name}()`),
+    ]),
     bodyStatementJsx === "server-string" ? "server-render-value" : "dynamic",
   );
 

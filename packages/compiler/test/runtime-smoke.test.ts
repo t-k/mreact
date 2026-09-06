@@ -1799,6 +1799,61 @@ export function App() {
     expect(host.querySelector("[aria-live='polite']")?.textContent).toBe("Saved");
   });
 
+  test("client transform tracks object destructuring aliases of reactive reads", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const state = cell({ open: false });
+
+export function App() {
+  const { open } = state.get();
+  return <main>
+    <button type="button" onClick={() => state.set({ open: true })}>Open</button>
+    {open ? <p data-state="open">Open</p> : <p data-state="closed">Closed</p>}
+  </main>;
+}`,
+      filename: "destructured-reactive-alias.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+
+    expect(node.querySelector("[data-state='closed']")).not.toBeNull();
+    node.querySelector("button")?.click();
+    await flushEffects();
+    expect(node.querySelector("[data-state='open']")?.textContent).toBe("Open");
+  });
+
+  test("client transform tracks JSX bindings derived from a reactive read alias", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const state = cell({ open: false });
+
+export function App() {
+  const value = state.get();
+  const node = value.open ? <p data-state="open">Open</p> : <p data-state="closed">Closed</p>;
+  return <main>
+    <button type="button" onClick={() => state.set({ open: true })}>Open</button>
+    {node}
+  </main>;
+}`,
+      filename: "jsx-reactive-alias.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+
+    expect(node.querySelector("[data-state='closed']")).not.toBeNull();
+    node.querySelector("button")?.click();
+    await flushEffects();
+    expect(node.querySelector("[data-state='open']")?.textContent).toBe("Open");
+  });
+
   test("client transform disposes child prop reads when a parent conditional clears a nullable source", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";

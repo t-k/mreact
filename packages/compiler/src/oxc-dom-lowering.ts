@@ -9,6 +9,7 @@ export function lowerOxcDomNodeExpression(
   code: string,
   node: Record<string, unknown>,
   lowerExpressionChild?: (expression: Record<string, unknown>) => string | undefined,
+  resolveExpressionCode?: (expression: Record<string, unknown>) => string,
 ): string | undefined {
   const unwrapped = unwrapOxcParentheses(node);
 
@@ -17,15 +18,20 @@ export function lowerOxcDomNodeExpression(
       code,
       readObject(unwrapped.consequent),
       lowerExpressionChild,
+      resolveExpressionCode,
     );
     const whenFalse = lowerOxcDomNodeExpression(
       code,
       readObject(unwrapped.alternate),
       lowerExpressionChild,
+      resolveExpressionCode,
     );
 
     if (whenTrue !== undefined && whenFalse !== undefined) {
-      return `((${readSource(code, readObject(unwrapped.test))}) ? ${whenTrue} : ${whenFalse})`;
+      const test =
+        resolveExpressionCode?.(readObject(unwrapped.test)) ??
+        readSource(code, readObject(unwrapped.test));
+      return `((${test}) ? ${whenTrue} : ${whenFalse})`;
     }
   }
 
@@ -34,14 +40,20 @@ export function lowerOxcDomNodeExpression(
       code,
       readObject(unwrapped.right),
       lowerExpressionChild,
+      resolveExpressionCode,
     );
 
     if (right !== undefined && unwrapped.operator === "&&") {
-      return `((${readSource(code, readObject(unwrapped.left))}) ? ${right} : false)`;
+      const left =
+        resolveExpressionCode?.(readObject(unwrapped.left)) ??
+        readSource(code, readObject(unwrapped.left));
+      return `((${left}) ? ${right} : false)`;
     }
 
     if (right !== undefined && unwrapped.operator === "||") {
-      const left = readSource(code, readObject(unwrapped.left));
+      const left =
+        resolveExpressionCode?.(readObject(unwrapped.left)) ??
+        readSource(code, readObject(unwrapped.left));
       return `(() => { const _left = (${left}); return _left ? _left : ${right}; })()`;
     }
   }
@@ -52,7 +64,7 @@ export function lowerOxcDomNodeExpression(
         const object = readObject(element);
         return Object.keys(object).length === 0
           ? "undefined"
-          : (lowerOxcDomNodeExpression(code, object, lowerExpressionChild) ??
+          : (lowerOxcDomNodeExpression(code, object, lowerExpressionChild, resolveExpressionCode) ??
               readSource(code, object));
       })
       .join(", ")}]`;
@@ -78,14 +90,23 @@ export function lowerOxcDomNodeExpression(
   return [
     "(() => {",
     `  const _node = document.createElement(${JSON.stringify(tagName)});`,
-    ...lowerOxcDomAttributes(code, readArray(openingElement.attributes)),
-    ...lowerOxcDomChildren(code, readArray(node.children), lowerExpressionChild),
+    ...lowerOxcDomAttributes(code, readArray(openingElement.attributes), resolveExpressionCode),
+    ...lowerOxcDomChildren(
+      code,
+      readArray(node.children),
+      lowerExpressionChild,
+      resolveExpressionCode,
+    ),
     "  return _node;",
     "})()",
   ].join("\n");
 }
 
-function lowerOxcDomAttributes(code: string, attributes: readonly unknown[]): string[] {
+function lowerOxcDomAttributes(
+  code: string,
+  attributes: readonly unknown[],
+  resolveExpressionCode?: (expression: Record<string, unknown>) => string,
+): string[] {
   const lines = attributes.flatMap((attribute): string[] => {
     const object = readObject(attribute);
 
@@ -106,8 +127,9 @@ function lowerOxcDomAttributes(code: string, attributes: readonly unknown[]): st
         return [];
       }
 
+      const expression = readObject(value.expression);
       return [
-        `  ${OXC_BIND_DOM_REF_PLACEHOLDER}(_node, ${readSource(code, readObject(value.expression))});`,
+        `  ${OXC_BIND_DOM_REF_PLACEHOLDER}(_node, ${resolveExpressionCode?.(expression) ?? readSource(code, expression)});`,
       ];
     }
 
@@ -116,8 +138,9 @@ function lowerOxcDomAttributes(code: string, attributes: readonly unknown[]): st
         return [];
       }
 
+      const expression = readObject(value.expression);
       return [
-        `  _node.addEventListener(${JSON.stringify(name.slice(2).toLowerCase())}, ${readSource(code, readObject(value.expression))});`,
+        `  _node.addEventListener(${JSON.stringify(name.slice(2).toLowerCase())}, ${resolveExpressionCode?.(expression) ?? readSource(code, expression)});`,
       ];
     }
 
@@ -143,7 +166,9 @@ function lowerOxcDomAttributes(code: string, attributes: readonly unknown[]): st
     }
 
     if (value.type === "JSXExpressionContainer") {
-      const expression = readSource(code, readObject(value.expression));
+      const expressionNode = readObject(value.expression);
+      const expression =
+        resolveExpressionCode?.(expressionNode) ?? readSource(code, expressionNode);
       if (isUrlAttribute(domName) || isSrcsetAttribute(domName)) {
         return [
           `  { const _value = __mreactSafeDomUrlAttribute(${JSON.stringify(domName)}, String(${expression})); if (_value !== undefined) _node.setAttribute(${JSON.stringify(domName)}, _value); }`,
@@ -285,6 +310,7 @@ function lowerOxcDomChildren(
   code: string,
   children: readonly unknown[],
   lowerExpressionChild?: (expression: Record<string, unknown>) => string | undefined,
+  resolveExpressionCode?: (expression: Record<string, unknown>) => string,
 ): string[] {
   return children.flatMap((child, index): string[] => {
     const object = readObject(child);
@@ -300,14 +326,21 @@ function lowerOxcDomChildren(
       const lowered = lowerExpressionChild?.(expression);
 
       if (lowered === undefined) {
-        return [`  _node.append(String(${readSource(code, expression)}));`];
+        return [
+          `  _node.append(String(${resolveExpressionCode?.(expression) ?? readSource(code, expression)}));`,
+        ];
       }
 
       return [lowerOxcNormalizedDomChildAppend("_node", lowered)];
     }
 
     if (object.type === "JSXElement") {
-      const lowered = lowerOxcDomNodeExpression(code, object, lowerExpressionChild);
+      const lowered = lowerOxcDomNodeExpression(
+        code,
+        object,
+        lowerExpressionChild,
+        resolveExpressionCode,
+      );
       if (lowered !== undefined) {
         return [`  _node.append(${lowered});`];
       }

@@ -88,6 +88,7 @@ export interface OxcChildAnalysisContext {
   compilerKeyedEventParent?: boolean;
   jsxNamespace?: "html" | "svg";
   reactiveAliasBindings?: ReadonlyMap<string, string>;
+  lazyRenderValueBindings?: ReadonlySet<string>;
   bodyLowerers: OxcBodyLowerers;
   lowerNestedJsxExpression: (
     code: string,
@@ -225,10 +226,7 @@ export function analyzeOxcJsxNode(
                 bodyStatementJsx,
               ),
             resolveServerRenderValueExpressionCode: (expression) => {
-              if (
-                context.target !== "server" ||
-                bodyStatementJsx !== "server-string"
-              ) {
+              if (context.target !== "server" || bodyStatementJsx !== "server-string") {
                 return undefined;
               }
 
@@ -648,6 +646,11 @@ export function analyzeOxcExpressionChild(
     !sameModuleComponentCall &&
     !isOxcRenderValueExpression(expression) &&
     isOxcPotentialComponentPropRenderValueExpression(expression, context);
+  const isUnoptimizedCall =
+    unwrappedExpression.type === "CallExpression" &&
+    readObject(unwrappedExpression.callee).type === "Identifier" &&
+    !sameModuleComponentCall &&
+    !isOxcRenderValueExpression(expression);
   const renderMode =
     sameModuleComponentStreamCall !== undefined
       ? ("stream-node" as const)
@@ -663,11 +666,13 @@ export function analyzeOxcExpressionChild(
             ? bodyStatementJsx === "server-string"
               ? ("html" as const)
               : ("dynamic" as const)
-            : loweredNestedJsx !== undefined && bodyStatementJsx === "server-string"
-              ? ("html" as const)
-              : loweredNestedJsx !== undefined && bodyStatementJsx === "dom-node"
-                ? ("dynamic" as const)
-                : undefined;
+            : isUnoptimizedCall
+              ? ("dynamic" as const)
+              : loweredNestedJsx !== undefined && bodyStatementJsx === "server-string"
+                ? ("html" as const)
+                : loweredNestedJsx !== undefined && bodyStatementJsx === "dom-node"
+                  ? ("dynamic" as const)
+                  : undefined;
 
   return [
     {
@@ -708,12 +713,7 @@ function isOxcPotentialComponentPropRenderValueExpression(
     if (
       (typeof object.name === "string" &&
         context.componentPropObjectNames?.has(object.name) === true) ||
-      isOxcPotentialComponentPropRenderValueExpression(
-        object,
-        context,
-        visited,
-        visitedNodes,
-      )
+      isOxcPotentialComponentPropRenderValueExpression(object, context, visited, visitedNodes)
     ) {
       return true;
     }
@@ -888,6 +888,10 @@ function readOxcReactiveExpressionCode(
   const unwrappedExpression = unwrapOxcParentheses(expression);
 
   if (unwrappedExpression.type === "Identifier" && typeof unwrappedExpression.name === "string") {
+    if (context.lazyRenderValueBindings?.has(unwrappedExpression.name) === true) {
+      return `${unwrappedExpression.name}()`;
+    }
+
     return (
       context.reactiveAliasBindings?.get(unwrappedExpression.name) ?? readSource(code, expression)
     );
@@ -1617,15 +1621,13 @@ function analyzeOxcListRenderer(
   }
 
   const statements = readArray(body.body);
-  const ifStatementIndex = statements.findIndex(
-    (statement) => {
-      const object = readObject(statement);
-      return (
-        object.type === "IfStatement" &&
-        readOxcReturnExpressionFromStatement(object.consequent) !== undefined
-      );
-    },
-  );
+  const ifStatementIndex = statements.findIndex((statement) => {
+    const object = readObject(statement);
+    return (
+      object.type === "IfStatement" &&
+      readOxcReturnExpressionFromStatement(object.consequent) !== undefined
+    );
+  });
 
   if (ifStatementIndex >= 0) {
     return analyzeOxcListIfRenderer(code, statements, ifStatementIndex, context, bodyStatementJsx);
@@ -1788,9 +1790,7 @@ function resolveOxcBodyStatementJsx(context: OxcChildAnalysisContext): OxcBodySt
   return context.bodyStatementJsx ?? (context.target === "server" ? "server-string" : "dom-node");
 }
 
-function collectOxcRendererScopeBindingNames(
-  renderer: Record<string, unknown>,
-): Set<string> {
+function collectOxcRendererScopeBindingNames(renderer: Record<string, unknown>): Set<string> {
   const names = new Set<string>();
   const body = readObject(renderer.body);
   if (body.type === "BlockStatement") {
@@ -1859,9 +1859,7 @@ function shadowOxcContextBindings(
   }
 
   const shadowed = new Set(names);
-  const componentNames = new Set(
-    [...context.componentNames].filter((name) => !shadowed.has(name)),
-  );
+  const componentNames = new Set([...context.componentNames].filter((name) => !shadowed.has(name)));
   const componentCallNames =
     context.componentCallNames === undefined
       ? undefined
@@ -1869,9 +1867,7 @@ function shadowOxcContextBindings(
   const serverRenderValueCallNames =
     context.serverRenderValueCallNames === undefined
       ? undefined
-      : new Set(
-          [...context.serverRenderValueCallNames].filter((name) => !shadowed.has(name)),
-        );
+      : new Set([...context.serverRenderValueCallNames].filter((name) => !shadowed.has(name)));
   return {
     ...context,
     componentNames,
