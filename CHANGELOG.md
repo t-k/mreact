@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.0.211 - 2026-09-06
+
+### Changed
+
+- Changed client-route intent prefetching to warm navigation HTML together with statically reachable route-script dependencies, while viewport prefetch keeps client-route HTML cold and prepares only the script and modulepreload assets.
+- Changed deferred streaming route verification to follow the `defer()` and `<Await>` contract so critical loader results settle before the shell and non-critical data can stream behind a boundary.
+
+### Fixed
+
+- Fixed navigation HTML cache isolation across cookie contexts, query variants, revalidation races, and bounded cache expiry, including stale responses that arrive after a newer request.
+- Fixed server-only routes with navigation enabled so their lightweight navigation runtime starts without turning the route into a hydrated client route.
+- Fixed route-cell writes so function values remain opaque and explicit `setValue()` and `update()` operations preserve route state across client navigation.
+- Fixed form binding inference for formatter-backed output types and nullable array field definitions, while requiring a formatter when a binding changes its value type.
+- Fixed dormant reactive dependency validation and reduced unnecessary shared context allocations for ordinary independent cell inputs.
+- Fixed generated client route asset manifests so statically reachable dependency chunks receive modulepreload links and remain compatible with configured asset aliases.
+
 ## 0.0.210 - 2026-09-06
 
 ### Fixed
