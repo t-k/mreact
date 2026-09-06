@@ -1,0 +1,1 @@
+{"framework":"vue-v3.5.42-keyed","keyed":true,"benchmark":"43_first-paint","type":"size","values":{"DEFAULT":{"min":235.8,"max":235.8,"median":235.8,"mean":235.8,"stddev":null,"values":[235.8]}}}
