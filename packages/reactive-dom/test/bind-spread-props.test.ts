@@ -3,6 +3,7 @@
 import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { describe, expect, test } from "vitest";
+import { applySelectValue } from "../src/form-state.js";
 import { bindSpreadProps, withPropBindingMetadata } from "../src/index.js";
 
 interface RetargetableElement extends HTMLElement {
@@ -318,6 +319,49 @@ describe("bindSpreadProps", () => {
     expect(Array.from(select.options, (option) => option.selected)).toEqual([true, false]);
 
     dispose();
+  });
+
+  test("falls back to the first enabled option for a missing single select value", async () => {
+    const props = cell<Record<string, unknown>>({ value: "third" });
+    const select = document.createElement("select");
+    for (const [value, disabled] of [
+      ["first", true],
+      ["second", false],
+      ["third", false],
+    ] as const) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.disabled = disabled;
+      select.append(option);
+    }
+    const dispose = bindSpreadProps(select, () => props.get());
+
+    await flushEffects();
+    expect(Array.from(select.options, (option) => option.selected)).toEqual([false, false, true]);
+
+    props.set({ value: "missing" });
+    await flushEffects();
+    expect(Array.from(select.options, (option) => option.selected)).toEqual([false, true, false]);
+
+    dispose();
+  });
+
+  test("applies the first enabled option when a single select has no current selection", () => {
+    const select = document.createElement("select");
+    for (const [value, disabled] of [
+      ["first", false],
+      ["second", false],
+    ] as const) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.disabled = disabled;
+      select.append(option);
+    }
+    select.selectedIndex = -1;
+
+    applySelectValue(select, "missing");
+
+    expect(Array.from(select.options, (option) => option.selected)).toEqual([true, false]);
   });
 
   test("does not rewrite unchanged spread props on reactive re-runs", async () => {

@@ -461,6 +461,39 @@ describe("react-compat server render", () => {
       }
     });
 
+    test("does not stringify nullish selection into option values", () => {
+      for (const value of [null, undefined]) {
+        expect(
+          renderToString(() =>
+            createElement(
+              "select",
+              { value },
+              createElement("option", { value: "undefined" }, "undefined"),
+              createElement("option", { value: "null" }, "null"),
+            ),
+          ),
+        ).toBe(
+          '<select><option value="undefined">undefined</option><option value="null">null</option></select>',
+        );
+      }
+    });
+
+    test("selects every duplicate option for a scalar value", () => {
+      expect(
+        renderToString(() =>
+          createElement(
+            "select",
+            { value: "done" },
+            createElement("option", { value: "done" }, "first"),
+            createElement("option", { value: "done" }, "second"),
+          ),
+        ),
+      ).toBe(
+        '<select><option value="done" selected="">first</option>' +
+          '<option value="done" selected="">second</option></select>',
+      );
+    });
+
     test("marks every option that matches a multiple select array value", () => {
       expect(
         renderToString(() =>

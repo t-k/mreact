@@ -15,10 +15,20 @@ export function applySelectValue(element: HTMLSelectElement, value: unknown): vo
   }
 
   const nextValue = String(value);
-  let matched = false;
-  for (const option of Array.from(element.options)) {
-    const optionMatches: boolean = !matched && option.value === nextValue;
-    option.selected = optionMatches;
-    matched ||= optionMatches;
+  const options = Array.from(element.options);
+  let selectedOption: HTMLOptionElement | undefined;
+  let firstEnabledOption: HTMLOptionElement | undefined;
+  for (const option of options) {
+    if (firstEnabledOption === undefined && !option.disabled) {
+      firstEnabledOption = option;
+    }
+    if (selectedOption === undefined && option.value === nextValue) {
+      selectedOption = option;
+    }
+  }
+
+  selectedOption ??= firstEnabledOption;
+  for (const option of options) {
+    option.selected = option === selectedOption;
   }
 }

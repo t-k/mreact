@@ -830,6 +830,34 @@ describe("react-compat render", () => {
     expect(Array.from(select.options, (option) => option.selected)).toEqual([true, false]);
   });
 
+  test("falls back to the first enabled option for a missing single select value", () => {
+    const container = document.createElement("div");
+
+    render(
+      createElement(
+        "select",
+        { value: "third" },
+        createElement("option", { value: "first", disabled: true }, "first"),
+        createElement("option", { value: "second" }, "second"),
+        createElement("option", { value: "third" }, "third"),
+      ),
+      container,
+    );
+    render(
+      createElement(
+        "select",
+        { value: "missing" },
+        createElement("option", { value: "first", disabled: true }, "first"),
+        createElement("option", { value: "second" }, "second"),
+        createElement("option", { value: "third" }, "third"),
+      ),
+      container,
+    );
+
+    const select = container.querySelector<HTMLSelectElement>("select")!;
+    expect(Array.from(select.options, (option) => option.selected)).toEqual([false, true, false]);
+  });
+
   test("applies array defaultValue to an uncontrolled multiple select", () => {
     const container = document.createElement("div");
 

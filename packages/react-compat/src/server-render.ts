@@ -158,7 +158,7 @@ function renderElementToString(
       return renderSelectToString(element, runtime, path);
     }
 
-    if (element.type === "option" && currentSelectSelection != null) {
+    if (element.type === "option") {
       return renderOptionToString(element, element.type, runtime, path);
     }
 
@@ -390,9 +390,11 @@ function renderOptionToString(
   const optionValue = (element.props as { value?: unknown }).value ?? element.props.children;
   const optionText = String(optionValue ?? "");
   const selected =
-    currentSelectMultiple && Array.isArray(selection)
-      ? selection.some((candidate) => candidate != null && String(candidate) === optionText)
-      : String(selection) === optionText;
+    selection == null
+      ? element.props.selected
+      : currentSelectMultiple && Array.isArray(selection)
+        ? selection.some((candidate) => candidate != null && String(candidate) === optionText)
+        : String(selection) === optionText;
   const props = { ...element.props, selected };
 
   // An <option> cannot contain another option, and a nested <select> installs

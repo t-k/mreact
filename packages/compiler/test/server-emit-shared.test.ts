@@ -683,6 +683,48 @@ export function App(props) {
     );
   });
 
+  test("string and stream emitters select every duplicate scalar option", async () => {
+    await expectServerPairHtml(
+      `export function App() {
+  return <select value="done">
+    <option value="done">first</option>
+    <option value="done">second</option>
+  </select>;
+}`,
+      '<select><option value="done" selected="">first</option><option value="done" selected="">second</option></select>',
+    );
+  });
+
+  test("string and stream emitters keep duplicate selection across option components", async () => {
+    await expectServerPairHtml(
+      `function StatusOption(props) {
+  return <option value={props.value}>{props.label}</option>;
+}
+export function App() {
+  return <select value="done">
+    <StatusOption value="done" label="first" />
+    <StatusOption value="done" label="second" />
+  </select>;
+}`,
+      '<select><option value="done" selected="">first</option><option value="done" selected="">second</option></select>',
+    );
+  });
+
+  test("string and stream emitters reset duplicate selection between deferred sibling selects", async () => {
+    await expectServerPairHtml(
+      `function Wrapper(props) {
+  return <div>{props.children}</div>;
+}
+export function App() {
+  return <Wrapper>
+    <select value="first"><option value="first">first</option></select>
+    <select value="second"><option value="second">second</option></select>
+  </Wrapper>;
+}`,
+      '<div><select><option value="first" selected="">first</option></select><select><option value="second" selected="">second</option></select></div>',
+    );
+  });
+
   test("string and stream emitters resolve select value from a spread", async () => {
     await expectServerPairHtml(
       `const OPTIONS = ["open", "done"];
