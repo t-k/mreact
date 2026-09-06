@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { cell, computed } from "@reckona/mreact-reactive-core";
 import { parseStaticStyleObjectLiteral } from "../src/emit-server-shared.js";
 import { transform } from "../src/index.js";
 import { runServerComponent, runServerStreamComponent } from "./helpers.js";
@@ -646,6 +647,236 @@ export function SunIcon(props: { class?: string }) {
   );
 }`,
       '<main><button>off</button><button disabled="">on</button><a download="">download</a><div aria-hidden="false" data-ready="false" autocapitalize="false" contenteditable="true" draggable="false" spellcheck="true" translate="false"></div></main>',
+    );
+  });
+
+  test("string and stream emitters select a mapped option matching the select value", async () => {
+    await expectServerPairHtml(
+      `const STATUSES = ["open", "in_progress", "done"];
+export function App(props) {
+  return (
+    <select name="status" value={props.status}>
+      {STATUSES.map((status) => (
+        <option key={status} value={status}>{status}</option>
+      ))}
+    </select>
+  );
+}`,
+      '<select name="status"><option value="open">open</option><option value="in_progress" selected="">in_progress</option><option value="done">done</option></select>',
+      { status: "in_progress" },
+    );
+  });
+
+  test("string and stream emitters keep the select value across fragment, optgroup and nested lists", async () => {
+    await expectServerPairHtml(
+      `const GROUPS = [
+  { label: "active", items: ["open", "in_progress"] },
+  { label: "closed", items: ["done"] },
+];
+export function App(props) {
+  return (
+    <select value={props.status}>
+      <>
+        <option value="">none</option>
+      </>
+      {GROUPS.map((group) => (
+        <optgroup key={group.label} label={group.label}>
+          {group.items.map((item) => (
+            <option key={item} value={item}>{item}</option>
+          ))}
+        </optgroup>
+      ))}
+    </select>
+  );
+}`,
+      '<select><option value="">none</option><optgroup label="active"><option value="open">open</option><option value="in_progress">in_progress</option></optgroup><optgroup label="closed"><option value="done" selected="">done</option></optgroup></select>',
+      { status: "done" },
+    );
+  });
+
+  test("string and stream emitters resolve the select value from a reactive computed", async () => {
+    const status = cell("done");
+    const selected = computed(() => status.get());
+
+    await expectServerPairHtml(
+      `const STATUSES = ["open", "done"];
+export function App(props) {
+  return (
+    <select value={props.selected.get()}>
+      {STATUSES.map((item) => <option key={item} value={item}>{item}</option>)}
+    </select>
+  );
+}`,
+      '<select><option value="open">open</option><option value="done" selected="">done</option></select>',
+      { selected },
+    );
+
+    status.set("open");
+    await expectServerPairHtml(
+      `const STATUSES = ["open", "done"];
+export function App(props) {
+  return (
+    <select value={props.selected.get()}>
+      {STATUSES.map((item) => <option key={item} value={item}>{item}</option>)}
+    </select>
+  );
+}`,
+      '<select><option value="open" selected="">open</option><option value="done">done</option></select>',
+      { selected },
+    );
+  });
+
+  test("string and stream emitters apply select value precedence over a stale option selected", async () => {
+    await expectServerPairHtml(
+      `export function App(props) {
+  return (
+    <select value={props.status} defaultValue="open">
+      <option value="open" selected>open</option>
+      <option value="done">done</option>
+    </select>
+  );
+}`,
+      '<select><option value="open">open</option><option value="done" selected="">done</option></select>',
+      { status: "done" },
+    );
+  });
+
+  test("string and stream emitters fall back to defaultValue and then to the option's own selected", async () => {
+    const source = `export function App(props) {
+  return (
+    <select value={props.status} defaultValue={props.fallback}>
+      <option value="open">open</option>
+      <option value="done" selected={props.markDone}>done</option>
+    </select>
+  );
+}`;
+
+    await expectServerPairHtml(
+      source,
+      '<select><option value="open">open</option><option value="done" selected="">done</option></select>',
+      { fallback: "done", markDone: false, status: undefined },
+    );
+    await expectServerPairHtml(
+      source,
+      '<select><option value="open">open</option><option value="done" selected="">done</option></select>',
+      { fallback: undefined, markDone: true, status: undefined },
+    );
+    await expectServerPairHtml(
+      source,
+      '<select><option value="open">open</option><option value="done">done</option></select>',
+      { fallback: undefined, markDone: false, status: undefined },
+    );
+  });
+
+  test("string and stream emitters compare option values by string, empty string included", async () => {
+    const source = `const NUMBERS = [1, 2, 3];
+export function App(props) {
+  return (
+    <select value={props.value}>
+      <option value="">none</option>
+      {NUMBERS.map((item) => <option key={item} value={item}>{"n" + item}</option>)}
+      <option>text</option>
+    </select>
+  );
+}`;
+
+    await expectServerPairHtml(
+      source,
+      '<select><option value="">none</option><option value="1">n1</option><option value="2" selected="">n2</option><option value="3">n3</option><option>text</option></select>',
+      { value: 2 },
+    );
+    await expectServerPairHtml(
+      source,
+      '<select><option value="" selected="">none</option><option value="1">n1</option><option value="2">n2</option><option value="3">n3</option><option>text</option></select>',
+      { value: "" },
+    );
+    await expectServerPairHtml(
+      source,
+      '<select><option value="">none</option><option value="1">n1</option><option value="2">n2</option><option value="3">n3</option><option selected="">text</option></select>',
+      { value: "text" },
+    );
+    await expectServerPairHtml(
+      source,
+      '<select><option value="">none</option><option value="1">n1</option><option value="2">n2</option><option value="3">n3</option><option>text</option></select>',
+      { value: null },
+    );
+    await expectServerPairHtml(
+      source,
+      '<select><option value="">none</option><option value="1">n1</option><option value="2">n2</option><option value="3">n3</option><option>text</option></select>',
+      { value: "missing" },
+    );
+  });
+
+  test("string and stream emitters select every match for a multiple select array value", async () => {
+    const source = `const STATUSES = ["open", "in_progress", "done"];
+export function App(props) {
+  return (
+    <select multiple value={props.statuses}>
+      {STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+    </select>
+  );
+}`;
+
+    await expectServerPairHtml(
+      source,
+      '<select multiple=""><option value="open" selected="">open</option><option value="in_progress">in_progress</option><option value="done" selected="">done</option></select>',
+      { statuses: ["done", "open"] },
+    );
+    await expectServerPairHtml(
+      source,
+      '<select multiple=""><option value="open">open</option><option value="in_progress">in_progress</option><option value="done">done</option></select>',
+      { statuses: [] },
+    );
+    // A single-element array must not be string-joined into "open,done".
+    await expectServerPairHtml(
+      source,
+      '<select multiple=""><option value="open">open</option><option value="in_progress" selected="">in_progress</option><option value="done">done</option></select>',
+      { statuses: ["in_progress"] },
+    );
+  });
+
+  test("string and stream emitters keep sibling selects and duplicate option values independent", async () => {
+    await expectServerPairHtml(
+      `const STATUSES = ["open", "done"];
+export function App(props) {
+  return (
+    <form>
+      <select name="left" value={props.left}>
+        {STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+      </select>
+      <select name="right" value={props.right}>
+        {STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+      </select>
+      <select name="plain">
+        {STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+      </select>
+      <option value="open">outside</option>
+    </form>
+  );
+}`,
+      '<form>' +
+        '<select name="left"><option value="open" selected="">open</option><option value="done">done</option></select>' +
+        '<select name="right"><option value="open">open</option><option value="done" selected="">done</option></select>' +
+        '<select name="plain"><option value="open">open</option><option value="done">done</option></select>' +
+        '<option value="open">outside</option>' +
+        "</form>",
+      { left: "open", right: "done" },
+    );
+  });
+
+  test("string and stream emitters escape mapped option values and labels while selecting", async () => {
+    await expectServerPairHtml(
+      `const STATUSES = ['<script>"&\\'', "safe"];
+export function App(props) {
+  return (
+    <select value={props.status}>
+      {STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+    </select>
+  );
+}`,
+      '<select><option value="&lt;script&gt;&quot;&amp;\'" selected="">&lt;script&gt;&quot;&amp;\'</option>' +
+        '<option value="safe">safe</option></select>',
+      { status: '<script>"&\'' },
     );
   });
 

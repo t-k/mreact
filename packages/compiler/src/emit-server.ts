@@ -4,6 +4,8 @@ import { emitEscapeHtmlHelper } from "./emit-escape-helper.js";
 import { createCodeBuilder } from "./emit-code-builder.js";
 import { escapeHtmlAttribute as escapeHtml } from "@reckona/mreact-shared/html-escape";
 import {
+  emitOptionSelectedAttributeCode,
+  emitSelectSelectionValueCode,
   htmlAttributeName,
   isBooleanishStringAttribute,
   isDangerousHtmlAttribute,
@@ -42,6 +44,26 @@ let currentMarkServerRenderValueHelperName: string = "_registerServerRenderValue
 let currentRenderServerValueHelperName: string = "_renderServerValue";
 let currentContainsServerRenderValueHelperName: string = "_containsServerRenderValue";
 let currentServerRenderAttributeValueName: string = "_serverRenderAttributeValue";
+/**
+ * Selection expression of the nearest enclosing `<select>`, or `undefined` outside
+ * one. Emit-time only (this walker is a synchronous tree walk, and nothing here
+ * survives into generated code), so unlike a runtime global it cannot leak between
+ * sibling selects or concurrent requests: every `<select>` saves and restores it
+ * around its own children. Threading it through the walker's parameter list would
+ * mean touching ~25 recursion sites, and the stream emitter already carries the
+ * same value on its `CollectHtmlState`.
+ */
+let currentSelectedValueCode: string | undefined;
+
+function withSelectedValueCode<T>(selectedValueCode: string | undefined, emit: () => T): T {
+  const previous = currentSelectedValueCode;
+  currentSelectedValueCode = selectedValueCode;
+  try {
+    return emit();
+  } finally {
+    currentSelectedValueCode = previous;
+  }
+}
 
 export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitResult {
   const escapeHelperName = allocateEscapeHelperName(ir);
@@ -402,7 +424,6 @@ function collectHtmlStatements(
   contextProviderHelperName?: string,
   contextConsumerHelperName?: string,
   reactNodeRenderHelperName?: string,
-  selectedValueCode?: string,
 ): string[] {
   if (node.kind === "text") {
     const literal = escapeHtml(node.value);
@@ -756,21 +777,23 @@ function collectHtmlStatements(
     !isVoidHtmlElement(node.tagName) &&
     node.attributes.some((attr) => attr.kind === "spread-attr")
   ) {
-    const selectedAttributePart = collectOptionSelectedAttributePart(node, selectedValueCode);
+    const selectedAttributePart = collectOptionSelectedAttributePart(node);
     statements.push(
       `${outVar} += ${emitMergedSpreadElementExpression(
         node.tagName,
         node.attributes,
         attributeScan,
-        emitHtmlExpressionFromChildren(
-          node.children,
-          escapeHelperName,
-          escapeBatchHelperName,
-          asyncComponentNames,
-          dynamicAttributes,
-          contextProviderHelperName,
-          contextConsumerHelperName,
-          reactNodeRenderHelperName,
+        withSelectedValueCode(selectedValueCodeForChildren(node, attributeScan), () =>
+          emitHtmlExpressionFromChildren(
+            node.children,
+            escapeHelperName,
+            escapeBatchHelperName,
+            asyncComponentNames,
+            dynamicAttributes,
+            contextProviderHelperName,
+            contextConsumerHelperName,
+            reactNodeRenderHelperName,
+          ),
         ),
         selectedAttributePart,
         containsAsyncServerOperationInChildren(node.children, asyncComponentNames),
@@ -791,7 +814,7 @@ function collectHtmlStatements(
   )) {
     statements.push(`${outVar} += ${attributePart};`);
   }
-  const selectedAttributePart = collectOptionSelectedAttributePart(node, selectedValueCode);
+  const selectedAttributePart = collectOptionSelectedAttributePart(node);
   if (selectedAttributePart !== undefined) {
     statements.push(`${outVar} += ${selectedAttributePart};`);
   }
@@ -801,6 +824,8 @@ function collectHtmlStatements(
   if (isVoidHtmlElement(node.tagName)) {
     return statements;
   }
+
+  const childSelectedValueCode = selectedValueCodeForChildren(node, attributeScan);
 
   const dangerousInnerHtml = emitDangerouslySetInnerHtmlExpression(
     node.attributes,
@@ -826,33 +851,50 @@ function collectHtmlStatements(
     escapeHelperName,
     escapeBatchHelperName,
   );
-  const childSelectedValueCode =
-    node.tagName === "select" ? attributeScan.formValueAttributeCode : undefined;
 
-  if (childrenExpression !== undefined && childSelectedValueCode === undefined) {
+  if (
+    childrenExpression !== undefined &&
+    !(node.tagName === "select" && attributeScan.formValueAttributeCode !== undefined)
+  ) {
     statements.push(`${outVar} += ${childrenExpression};`);
   } else {
-    for (const child of node.children) {
-      statements.push(
-        ...collectHtmlStatements(
-          child,
-          outVar,
-          escapeHelperName,
-          escapeBatchHelperName,
-          asyncComponentNames,
-          dynamicAttributes,
-          contextProviderHelperName,
-          contextConsumerHelperName,
-          reactNodeRenderHelperName,
-          childSelectedValueCode,
-        ),
-      );
-    }
+    withSelectedValueCode(childSelectedValueCode, () => {
+      for (const child of node.children) {
+        statements.push(
+          ...collectHtmlStatements(
+            child,
+            outVar,
+            escapeHelperName,
+            escapeBatchHelperName,
+            asyncComponentNames,
+            dynamicAttributes,
+            contextProviderHelperName,
+            contextConsumerHelperName,
+            reactNodeRenderHelperName,
+          ),
+        );
+      }
+    });
   }
 
   statements.push(`${outVar} += ${stringLiteral(`</${node.tagName}>`)};`);
 
   return statements;
+}
+
+/**
+ * Selection expression that this element's descendants compare against. A
+ * `<select>` installs its own (possibly `undefined`, when it is uncontrolled) and
+ * every other element simply passes the enclosing one through, so `<optgroup>`,
+ * fragments, conditionals and list bodies keep the selection.
+ */
+function selectedValueCodeForChildren(
+  node: Extract<JsxNodeIr, { kind: "element" }>,
+  attributeScan: ElementAttributeScan,
+): string | undefined {
+  return node.tagName === "select"
+    ? attributeScan.formValueAttributeCode
+    : currentSelectedValueCode;
 }
 
 function collectHtmlParts(
@@ -864,7 +906,6 @@ function collectHtmlParts(
   contextProviderHelperName?: string,
   contextConsumerHelperName?: string,
   reactNodeRenderHelperName?: string,
-  selectedValueCode?: string,
 ): string[] {
   if (node.kind === "text") {
     return [stringLiteral(escapeHtml(node.value))];
@@ -1143,9 +1184,10 @@ function collectHtmlParts(
     escapeBatchHelperName,
   );
   const attributeScan = scanElementAttributes(node.tagName, node.attributes);
-  const childSelectedValueCode =
-    node.tagName === "select" ? attributeScan.formValueAttributeCode : undefined;
-  const selectedAttributePart = collectOptionSelectedAttributePart(node, selectedValueCode);
+  const childSelectedValueCode = selectedValueCodeForChildren(node, attributeScan);
+  const forceChildWalk =
+    node.tagName === "select" && attributeScan.formValueAttributeCode !== undefined;
+  const selectedAttributePart = collectOptionSelectedAttributePart(node);
   if (
     dynamicAttributes === "emit" &&
     !isVoidHtmlElement(node.tagName) &&
@@ -1156,15 +1198,17 @@ function collectHtmlParts(
         node.tagName,
         node.attributes,
         attributeScan,
-        emitHtmlExpressionFromChildren(
-          node.children,
-          escapeHelperName,
-          escapeBatchHelperName,
-          asyncComponentNames,
-          dynamicAttributes,
-          contextProviderHelperName,
-          contextConsumerHelperName,
-          reactNodeRenderHelperName,
+        withSelectedValueCode(childSelectedValueCode, () =>
+          emitHtmlExpressionFromChildren(
+            node.children,
+            escapeHelperName,
+            escapeBatchHelperName,
+            asyncComponentNames,
+            dynamicAttributes,
+            contextProviderHelperName,
+            contextConsumerHelperName,
+            reactNodeRenderHelperName,
+          ),
         ),
         selectedAttributePart,
         containsAsyncServerOperationInChildren(node.children, asyncComponentNames),
@@ -1188,18 +1232,19 @@ function collectHtmlParts(
     ? []
     : dangerousInnerHtml !== undefined
       ? [dangerousInnerHtml]
-      : childrenExpression === undefined || childSelectedValueCode !== undefined
-        ? node.children.flatMap((child) =>
-            collectHtmlParts(
-              child,
-              escapeHelperName,
-              escapeBatchHelperName,
-              asyncComponentNames,
-              dynamicAttributes,
-              contextProviderHelperName,
-              contextConsumerHelperName,
-              reactNodeRenderHelperName,
-              childSelectedValueCode,
+      : childrenExpression === undefined || forceChildWalk
+        ? withSelectedValueCode(childSelectedValueCode, () =>
+            node.children.flatMap((child) =>
+              collectHtmlParts(
+                child,
+                escapeHelperName,
+                escapeBatchHelperName,
+                asyncComponentNames,
+                dynamicAttributes,
+                contextProviderHelperName,
+                contextConsumerHelperName,
+                reactNodeRenderHelperName,
+              ),
             ),
           )
         : [childrenExpression];
@@ -1396,7 +1441,8 @@ function collectElementAttributeParts(
       ((attr.name === "defaultValue" && attributeScan.hasExplicitInputValue) ||
         (attr.name === "defaultChecked" && attributeScan.hasExplicitInputChecked))) ||
       ((tagName === "textarea" || tagName === "select") &&
-        (attr.name === "value" || attr.name === "defaultValue")))
+        (attr.name === "value" || attr.name === "defaultValue")) ||
+      isSuppressedOptionSelectedAttribute(tagName, attr.name))
       ? []
       : collectHtmlAttributeParts(
           tagName,
@@ -1502,7 +1548,10 @@ function scanElementAttributes(
   return {
     hasExplicitInputValue,
     hasExplicitInputChecked,
-    formValueAttributeCode: valueAttributeCode ?? defaultValueAttributeCode,
+    formValueAttributeCode:
+      tagName === "select"
+        ? emitSelectSelectionValueCode(valueAttributeCode, defaultValueAttributeCode)
+        : (valueAttributeCode ?? defaultValueAttributeCode),
   };
 }
 
@@ -1686,8 +1735,8 @@ function collectTextareaValueParts(
 
 function collectOptionSelectedAttributePart(
   node: Extract<JsxNodeIr, { kind: "element" }>,
-  selectedValueCode: string | undefined,
 ): string | undefined {
+  const selectedValueCode = currentSelectedValueCode;
   if (selectedValueCode === undefined || node.tagName !== "option") {
     return undefined;
   }
@@ -1697,7 +1746,44 @@ function collectOptionSelectedAttributePart(
     return undefined;
   }
 
-  return `(() => { const _selected = (${selectedValueCode}); return _selected == null ? "" : String(_selected) === String(${optionValueCode}) ? ${stringLiteral(' selected=""')} : ""; })()`;
+  return emitOptionSelectedAttributeCode(
+    selectedValueCode,
+    optionValueCode,
+    emitOwnSelectedFallbackCode(node),
+  );
+}
+
+/**
+ * `<option selected>` only decides the selection when the enclosing `<select>`
+ * has none, so its attribute is dropped from the normal attribute list (see
+ * `isSuppressedOptionSelectedAttribute`) and re-emitted here as the fallback
+ * branch. Without that, a stale `selected` would survive next to the match.
+ */
+function emitOwnSelectedFallbackCode(node: Extract<JsxNodeIr, { kind: "element" }>): string {
+  const selectedAttr = node.attributes.find(
+    (attr) => attr.kind !== "spread-attr" && attr.name === "selected",
+  );
+  if (selectedAttr === undefined || selectedAttr.kind === "spread-attr") {
+    return '""';
+  }
+  if (selectedAttr.kind === "static-attr") {
+    return stringLiteral(' selected=""');
+  }
+  if (selectedAttr.kind !== "dynamic-attr") {
+    return '""';
+  }
+
+  return `((_own) => _own == null || _own === false ? "" : ${stringLiteral(' selected=""')})(${selectedAttr.code})`;
+}
+
+/**
+ * True while an `<option>`'s own `selected` attribute is folded into the
+ * selection expression emitted by `collectOptionSelectedAttributePart`.
+ */
+function isSuppressedOptionSelectedAttribute(tagName: string, attributeName: string): boolean {
+  return (
+    tagName === "option" && attributeName === "selected" && currentSelectedValueCode !== undefined
+  );
 }
 
 function findOptionValueCode(node: Extract<JsxNodeIr, { kind: "element" }>): string | undefined {

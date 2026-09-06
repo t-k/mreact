@@ -17,6 +17,8 @@ import {
 } from "./emit-boundary-lowering.js";
 import { escapeHtmlAttribute as escapeHtml } from "@reckona/mreact-shared/html-escape";
 import {
+  emitOptionSelectedAttributeCode,
+  emitSelectSelectionValueCode,
   htmlAttributeName,
   isBooleanishStringAttribute,
   isDangerousHtmlAttribute,
@@ -2201,7 +2203,8 @@ function collectElementAttributeParts(
       ((attr.name === "defaultValue" && attributeScan.hasExplicitInputValue) ||
         (attr.name === "defaultChecked" && attributeScan.hasExplicitInputChecked))) ||
       ((tagName === "textarea" || tagName === "select") &&
-        (attr.name === "value" || attr.name === "defaultValue")))
+        (attr.name === "value" || attr.name === "defaultValue")) ||
+      isSuppressedOptionSelectedAttribute(tagName, attr.name, state))
       ? []
       : collectHtmlAttributeParts(
           tagName,
@@ -2307,7 +2310,10 @@ function scanElementAttributes(
   return {
     hasExplicitInputValue,
     hasExplicitInputChecked,
-    formValueAttributeCode: valueAttributeCode ?? defaultValueAttributeCode,
+    formValueAttributeCode:
+      tagName === "select"
+        ? emitSelectSelectionValueCode(valueAttributeCode, defaultValueAttributeCode)
+        : (valueAttributeCode ?? defaultValueAttributeCode),
   };
 }
 
@@ -2484,8 +2490,49 @@ function collectOptionSelectedAttributePart(
 
   return {
     kind: "raw-dynamic",
-    code: `(() => { const _selected = (${selectedValueCode}); return _selected == null ? "" : String(_selected) === String(${optionValueCode}) ? ${stringLiteral(' selected=""')} : ""; })()`,
+    code: emitOptionSelectedAttributeCode(
+      selectedValueCode,
+      optionValueCode,
+      emitOwnSelectedFallbackCode(node),
+    ),
   };
+}
+
+/**
+ * `<option selected>` only decides the selection when the enclosing `<select>`
+ * has none, so its attribute is dropped from the normal attribute list (see
+ * `isSuppressedOptionSelectedAttribute`) and re-emitted here as the fallback
+ * branch. Without that, a stale `selected` would survive next to the match.
+ */
+function emitOwnSelectedFallbackCode(node: Extract<JsxNodeIr, { kind: "element" }>): string {
+  const selectedAttr = node.attributes.find(
+    (attr) => attr.kind !== "spread-attr" && attr.name === "selected",
+  );
+  if (selectedAttr === undefined || selectedAttr.kind === "spread-attr") {
+    return '""';
+  }
+  if (selectedAttr.kind === "static-attr") {
+    return stringLiteral(' selected=""');
+  }
+  if (selectedAttr.kind !== "dynamic-attr") {
+    return '""';
+  }
+
+  return `((_own) => _own == null || _own === false ? "" : ${stringLiteral(' selected=""')})(${selectedAttr.code})`;
+}
+
+/**
+ * True while an `<option>`'s own `selected` attribute is folded into the
+ * selection expression emitted by `collectOptionSelectedAttributePart`.
+ */
+function isSuppressedOptionSelectedAttribute(
+  tagName: string,
+  attributeName: string,
+  state: CollectHtmlState,
+): boolean {
+  return (
+    tagName === "option" && attributeName === "selected" && state.selectedValueCode !== undefined
+  );
 }
 
 function findOptionValueCode(node: Extract<JsxNodeIr, { kind: "element" }>): string | undefined {

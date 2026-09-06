@@ -154,26 +154,11 @@ function renderElementToString(
       return renderSelectToString(element, runtime, path);
     }
 
-    const attributes =
-      element.type === "input"
-        ? renderInputAttributesToString(element.props)
-        : renderAttributesToString(element.props);
-    if (isVoidHtmlElement(element.type)) {
-      return `<${element.type}${attributes}/>`;
+    if (element.type === "option" && currentSelectSelection != null) {
+      return renderOptionToString(element, element.type, runtime, path);
     }
 
-    if (Object.prototype.hasOwnProperty.call(element.props, "dangerouslySetInnerHTML")) {
-      return `<${element.type}${attributes}>${readDangerousHtmlOptIn(element.props.dangerouslySetInnerHTML) ?? ""}</${element.type}>`;
-    }
-
-    // Primitive children dominate real markup; serializing them inline skips
-    // one recursive call and one child-path allocation per text leaf.
-    const children = element.props.children;
-    if (typeof children === "string" || typeof children === "number") {
-      return `<${element.type}${attributes}>${escapeHtml(children)}</${element.type}>`;
-    }
-
-    return `<${element.type}${attributes}>${renderNodeToString(children, runtime, `${path}.children`)}</${element.type}>`;
+    return renderIntrinsicElementToString(element.type, element.props, runtime, path);
   }
 
   if (element.type === Fragment) {
@@ -257,6 +242,32 @@ function renderElementToString(
   return "";
 }
 
+function renderIntrinsicElementToString(
+  tagName: string,
+  props: Record<string, unknown>,
+  runtime: RootRuntime,
+  path: string,
+): string {
+  const attributes =
+    tagName === "input" ? renderInputAttributesToString(props) : renderAttributesToString(props);
+  if (isVoidHtmlElement(tagName)) {
+    return `<${tagName}${attributes}/>`;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(props, "dangerouslySetInnerHTML")) {
+    return `<${tagName}${attributes}>${readDangerousHtmlOptIn(props.dangerouslySetInnerHTML) ?? ""}</${tagName}>`;
+  }
+
+  // Primitive children dominate real markup; serializing them inline skips
+  // one recursive call and one child-path allocation per text leaf.
+  const children = props.children;
+  if (typeof children === "string" || typeof children === "number") {
+    return `<${tagName}${attributes}>${escapeHtml(children)}</${tagName}>`;
+  }
+
+  return `<${tagName}${attributes}>${renderNodeToString(children as ReactCompatNode, runtime, `${path}.children`)}</${tagName}>`;
+}
+
 function renderAttributesToString(props: Record<string, unknown>): string {
   const skipUnsafeMetaRefreshContent = hasUnsafeMetaRefreshProps(props);
 
@@ -307,49 +318,78 @@ function renderTextareaToString(
   return `<textarea${attributes}>${renderNodeToString(value as ReactCompatNode, runtime, `${path}.textarea`)}</textarea>`;
 }
 
+/**
+ * Selection of the `<select>` currently being serialized, or `null`/`undefined`
+ * outside one (and for an uncontrolled select, which leaves each option's own
+ * `selected` in charge).
+ *
+ * Server rendering here is a single synchronous tree walk — the same reason
+ * `renderWithContextProvider` can keep provider values on a module-level stack —
+ * so a saved-and-restored module variable is scoped to exactly one select
+ * subtree. It cannot bleed into a sibling select, and because nothing yields,
+ * concurrent requests cannot interleave inside a walk. Threading it as a
+ * parameter instead would miss the point: options reached through arrays,
+ * fragments, `optgroup`s and child components all funnel back through
+ * `renderNodeToString`, and only an ambient value survives every one of those
+ * hops the way React's `formatContext.selectedValue` does.
+ */
+let currentSelectSelection: unknown;
+
+function withSelectSelection<T>(selection: unknown, render: () => T): T {
+  const previous = currentSelectSelection;
+  currentSelectSelection = selection;
+  try {
+    return render();
+  } finally {
+    currentSelectSelection = previous;
+  }
+}
+
 function renderSelectToString(
   element: ReactCompatElement,
   runtime: RootRuntime,
   path: string,
 ): string {
-  const selectedValue =
-    (element.props as { value?: unknown; defaultValue?: unknown }).value ??
-    (element.props as { value?: unknown; defaultValue?: unknown }).defaultValue;
+  const props = element.props as { value?: unknown; defaultValue?: unknown };
+  const selectedValue = props.value ?? props.defaultValue;
   const attributes = Object.entries(element.props)
     .filter(([name]) => name !== "value" && name !== "defaultValue")
     .map(([name, child]) => renderHtmlAttribute(name, child))
     .filter((attribute) => attribute !== "")
     .join("");
 
-  return `<select${attributes}>${renderSelectChildrenToString(
-    element.props.children,
-    selectedValue,
-    runtime,
-    `${path}.select`,
+  return `<select${attributes}>${withSelectSelection(selectedValue, () =>
+    renderNodeToString(element.props.children, runtime, `${path}.select`),
   )}</select>`;
 }
 
-function renderSelectChildrenToString(
-  children: ReactCompatNode,
-  selectedValue: unknown,
+/**
+ * Applies the enclosing `<select>`'s selection to one `<option>`.
+ *
+ * `value` wins, then `defaultValue`, then the option's own `selected`: once the
+ * select declares a selection it fully replaces `selected`, so a stale one on a
+ * non-matching option cannot survive. Comparison is by `String()`, so `2` matches
+ * `"2"`; an array selection (`<select multiple>`) matches any of its entries.
+ */
+function renderOptionToString(
+  element: ReactCompatElement,
+  tagName: string,
   runtime: RootRuntime,
   path: string,
 ): string {
-  const childArray = Array.isArray(children) ? children : [children];
+  const selection = currentSelectSelection;
+  const optionValue = (element.props as { value?: unknown }).value ?? element.props.children;
+  const optionText = String(optionValue ?? "");
+  const selected = Array.isArray(selection)
+    ? selection.some((candidate) => candidate != null && String(candidate) === optionText)
+    : String(selection) === optionText;
+  const props = { ...element.props, selected };
 
-  return childArray
-    .map((child, index) => {
-      if (!isReactCompatElement(child) || child.type !== "option") {
-        return renderNodeToString(child, runtime, `${path}.${index}`);
-      }
-
-      const optionValue = (child.props as { value?: unknown }).value ?? child.props.children;
-      const selected = selectedValue !== undefined && String(optionValue) === String(selectedValue);
-      const props = selected ? { ...child.props, selected: true } : child.props;
-
-      return renderElementToString({ ...child, props }, runtime, `${path}.${index}`);
-    })
-    .join("");
+  // An <option> cannot contain another option, and a nested <select> installs
+  // its own selection, so the subtree never needs this one.
+  return withSelectSelection(undefined, () =>
+    renderIntrinsicElementToString(tagName, props, runtime, path),
+  );
 }
 
 function renderInputAttributesToString(props: Record<string, unknown>): string {

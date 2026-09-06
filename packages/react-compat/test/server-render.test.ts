@@ -3,6 +3,7 @@ import {
   cloneElement,
   Component,
   createElement,
+  Fragment,
   renderToString,
   useEffect,
   useMemo,
@@ -315,5 +316,238 @@ describe("react-compat server render", () => {
     expect(html).not.toMatch(/javascript:/i);
     expect(__serverRenderAttributeCacheForTesting.missCount()).toBe(4);
     expect(__serverRenderAttributeCacheForTesting.size()).toBe(4);
+  });
+
+  describe("select value", () => {
+    const STATUSES = ["open", "in_progress", "done"];
+
+    function options(): unknown[] {
+      return STATUSES.map((status) =>
+        createElement("option", { key: status, value: status }, status),
+      );
+    }
+
+    test("marks the matching option when the options come from a map", () => {
+      expect(
+        renderToString(() => createElement("select", { value: "in_progress" }, options())),
+      ).toBe(
+        '<select><option value="open">open</option>' +
+          '<option value="in_progress" selected="">in_progress</option>' +
+          '<option value="done">done</option></select>',
+      );
+    });
+
+    test("keeps the selection across nested arrays, fragments, optgroups and child components", () => {
+      function StatusOption({ status }: { status: string }) {
+        return createElement("option", { value: status }, status);
+      }
+
+      const html = renderToString(() =>
+        createElement(
+          "select",
+          { value: "done" },
+          [[createElement("option", { key: "open", value: "open" }, "open")]],
+          createElement(
+            Fragment,
+            null,
+            createElement("option", { value: "in_progress" }, "in_progress"),
+          ),
+          createElement(
+            "optgroup",
+            { label: "closed" },
+            createElement(StatusOption, { status: "done" }),
+          ),
+        ),
+      );
+
+      expect(html).toBe(
+        '<select><option value="open">open</option>' +
+          '<option value="in_progress">in_progress</option>' +
+          '<optgroup label="closed"><option value="done" selected="">done</option></optgroup></select>',
+      );
+    });
+
+    test("prefers value over defaultValue and replaces a stale option selected", () => {
+      expect(
+        renderToString(() =>
+          createElement(
+            "select",
+            { value: "done", defaultValue: "open" },
+            createElement("option", { value: "open", selected: true }, "open"),
+            createElement("option", { value: "done" }, "done"),
+          ),
+        ),
+      ).toBe(
+        '<select><option value="open">open</option>' +
+          '<option value="done" selected="">done</option></select>',
+      );
+    });
+
+    test("falls back to defaultValue and then to the option's own selected", () => {
+      expect(
+        renderToString(() =>
+          createElement(
+            "select",
+            { value: undefined, defaultValue: "done" },
+            createElement("option", { value: "open" }, "open"),
+            createElement("option", { value: "done" }, "done"),
+          ),
+        ),
+      ).toBe(
+        '<select><option value="open">open</option>' +
+          '<option value="done" selected="">done</option></select>',
+      );
+
+      expect(
+        renderToString(() =>
+          createElement(
+            "select",
+            null,
+            createElement("option", { value: "open" }, "open"),
+            createElement("option", { value: "done", selected: true }, "done"),
+          ),
+        ),
+      ).toBe(
+        '<select><option value="open">open</option>' +
+          '<option value="done" selected="">done</option></select>',
+      );
+    });
+
+    test("compares option values as strings and reads text content when value is absent", () => {
+      expect(
+        renderToString(() =>
+          createElement(
+            "select",
+            { value: 2 },
+            createElement("option", { value: 1 }, "one"),
+            createElement("option", { value: 2 }, "two"),
+          ),
+        ),
+      ).toBe('<select><option value="1">one</option><option value="2" selected="">two</option></select>');
+
+      expect(
+        renderToString(() =>
+          createElement(
+            "select",
+            { value: "done" },
+            createElement("option", null, "open"),
+            createElement("option", null, "done"),
+          ),
+        ),
+      ).toBe("<select><option>open</option><option selected=\"\">done</option></select>");
+
+      expect(
+        renderToString(() =>
+          createElement(
+            "select",
+            { value: "" },
+            createElement("option", { value: "" }, "none"),
+            createElement("option", { value: "open" }, "open"),
+          ),
+        ),
+      ).toBe('<select><option value="" selected="">none</option><option value="open">open</option></select>');
+    });
+
+    test("marks nothing for null, undefined and non-matching values", () => {
+      for (const value of [null, undefined, "missing"]) {
+        expect(renderToString(() => createElement("select", { value }, options()))).not.toContain(
+          "selected",
+        );
+      }
+    });
+
+    test("marks every option that matches a multiple select array value", () => {
+      expect(
+        renderToString(() =>
+          createElement("select", { multiple: true, value: ["done", "open"] }, options()),
+        ),
+      ).toBe(
+        '<select multiple=""><option value="open" selected="">open</option>' +
+          '<option value="in_progress">in_progress</option>' +
+          '<option value="done" selected="">done</option></select>',
+      );
+
+      expect(
+        renderToString(() => createElement("select", { multiple: true, value: [] }, options())),
+      ).not.toContain("selected");
+
+      // A one-element array must not be string-joined into a scalar comparison.
+      expect(
+        renderToString(() =>
+          createElement("select", { multiple: true, value: ["in_progress"] }, options()),
+        ),
+      ).toBe(
+        '<select multiple=""><option value="open">open</option>' +
+          '<option value="in_progress" selected="">in_progress</option>' +
+          '<option value="done">done</option></select>',
+      );
+    });
+
+    test("keeps sibling selects and options outside any select independent", () => {
+      expect(
+        renderToString(() =>
+          createElement(
+            "form",
+            null,
+            createElement("select", { key: "l", name: "left", value: "open" }, options()),
+            createElement("select", { key: "r", name: "right", value: "done" }, options()),
+            createElement("select", { key: "p", name: "plain" }, options()),
+            createElement("option", { key: "o", value: "open" }, "outside"),
+          ),
+        ),
+      ).toBe(
+        "<form>" +
+          '<select name="left"><option value="open" selected="">open</option>' +
+          '<option value="in_progress">in_progress</option><option value="done">done</option></select>' +
+          '<select name="right"><option value="open">open</option>' +
+          '<option value="in_progress">in_progress</option><option value="done" selected="">done</option></select>' +
+          '<select name="plain"><option value="open">open</option>' +
+          '<option value="in_progress">in_progress</option><option value="done">done</option></select>' +
+          '<option value="open">outside</option>' +
+          "</form>",
+      );
+    });
+
+    test("escapes selected option values and labels", () => {
+      expect(
+        renderToString(() =>
+          createElement(
+            "select",
+            { value: '<script>"&' },
+            createElement("option", { value: '<script>"&' }, '<script>"&'),
+            createElement("option", { value: "safe" }, "safe"),
+          ),
+        ),
+      ).toBe(
+        '<select><option value="&lt;script&gt;&quot;&amp;" selected="">&lt;script&gt;&quot;&amp;</option>' +
+          '<option value="safe">safe</option></select>',
+      );
+    });
+
+    test("restores the enclosing selection after a nested select", () => {
+      expect(
+        renderToString(() =>
+          createElement(
+            "select",
+            { value: "done" },
+            createElement(
+              "optgroup",
+              { label: "nested" },
+              createElement(
+                "select",
+                { value: "open" },
+                createElement("option", { value: "open" }, "open"),
+                createElement("option", { value: "done" }, "done"),
+              ),
+            ),
+            createElement("option", { value: "done" }, "done"),
+          ),
+        ),
+      ).toBe(
+        '<select><optgroup label="nested">' +
+          '<select><option value="open" selected="">open</option><option value="done">done</option></select>' +
+          '</optgroup><option value="done" selected="">done</option></select>',
+      );
+    });
   });
 });

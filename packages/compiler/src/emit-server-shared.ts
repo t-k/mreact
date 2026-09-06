@@ -324,6 +324,57 @@ export function isBooleanishStringAttribute(name: string): boolean {
   return isSharedBooleanishStringAttribute(htmlAttributeName(name));
 }
 
+const SELECTED_MARKER_LITERAL = '" selected=\\"\\""';
+
+/**
+ * Combines a `<select>` element's `value` and `defaultValue` expressions into the
+ * single selection expression its descendant `<option>` elements compare against.
+ *
+ * `value` wins whenever it evaluates to something other than `null`/`undefined`,
+ * matching React's `props.value != null ? props.value : props.defaultValue`.
+ * Returning `undefined` means the select is uncontrolled, which leaves each
+ * option's own `selected` attribute in charge.
+ */
+export function emitSelectSelectionValueCode(
+  valueCode: string | undefined,
+  defaultValueCode: string | undefined,
+): string | undefined {
+  if (valueCode === undefined) {
+    return defaultValueCode;
+  }
+  if (defaultValueCode === undefined) {
+    return valueCode;
+  }
+  return `(${valueCode} ?? ${defaultValueCode})`;
+}
+
+/**
+ * Emits the ` selected=""` attribute fragment for one `<option>` rendered inside a
+ * `<select>` that declares a selection.
+ *
+ * Shared by the string and the stream server emitters so both agree on value
+ * normalization (`String()` comparison, so `2` matches `"2"`), on array values
+ * (`<select multiple>`), and on precedence: a live selection replaces the
+ * option's own `selected`, and only an absent selection falls back to it.
+ */
+export function emitOptionSelectedAttributeCode(
+  selectedValueCode: string,
+  optionValueCode: string,
+  ownSelectedFallbackCode: string,
+): string {
+  return (
+    `(() => { const _selected = (${selectedValueCode}); ` +
+    `if (_selected == null) return ${ownSelectedFallbackCode}; ` +
+    `const _optionValue = String(${optionValueCode}); ` +
+    `if (Array.isArray(_selected)) { ` +
+    `for (let _i = 0; _i < _selected.length; _i++) { ` +
+    `const _candidate = _selected[_i]; ` +
+    `if (_candidate != null && String(_candidate) === _optionValue) return ${SELECTED_MARKER_LITERAL}; ` +
+    `} return ""; } ` +
+    `return String(_selected) === _optionValue ? ${SELECTED_MARKER_LITERAL} : ""; })()`
+  );
+}
+
 function unwrapParenthesized(code: string): string {
   let current = code;
 
