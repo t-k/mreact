@@ -75,6 +75,7 @@ let currentServerRenderAttributeValueName: string = "_serverRenderAttributeValue
 let currentOptionSelectedLocalNames: OptionSelectedLocalNames = {
   selected: "_selected",
   optionValue: "_optionValue",
+  textValue: "_optionText",
   index: "_i",
   candidate: "_candidate",
 };
@@ -141,6 +142,7 @@ export function emitServerStream(
   currentOptionSelectedLocalNames = {
     selected: allocateNestedBindingSafeName(ir, "_selected"),
     optionValue: allocateNestedBindingSafeName(ir, "_optionValue"),
+    textValue: allocateNestedBindingSafeName(ir, "_optionText"),
     index: allocateNestedBindingSafeName(ir, "_i"),
     candidate: allocateNestedBindingSafeName(ir, "_candidate"),
   };
@@ -647,12 +649,13 @@ function emitSpreadAttributesHelper(
     `  }`,
     `  return _style;`,
     `}`,
-    `function ${name}(tagName, props) {`,
+    `function ${name}(tagName, props, omitSelected) {`,
     `  if (props == null || props === false) return "";`,
     `  let _out = "";`,
     `  for (const _rawName of Object.keys(props)) {`,
     `    if (_rawName === "key" || _rawName === "ref" || _rawName === "domRef" || _rawName === "children" || _rawName === "dangerouslySetInnerHTML") continue;`,
     `    if (/^on/i.test(_rawName)) continue;`,
+    `    if (omitSelected && tagName === "option" && _rawName === "selected") continue;`,
     `    if (tagName === "select" && (_rawName === "value" || _rawName === "defaultValue")) continue;`,
     `    let _value = props[_rawName];`,
     `    if (_value == null) continue;`,
@@ -1938,6 +1941,7 @@ function collectHtmlParts(
     node,
     state.selectedValueCode,
     state.selectedMultipleCode,
+    node.attributes.some((attr) => attr.kind === "spread-attr"),
   );
   if (
     state.dynamicAttributes === "emit" &&
@@ -1968,6 +1972,7 @@ function collectHtmlParts(
         node.tagName,
         node.attributes,
         attributeScan,
+        state.selectedValueCode,
         selectedAttributePart,
         fallbackParts,
         escapeHelperName,
@@ -2072,11 +2077,16 @@ function emitMergedSpreadElementPart(
   tagName: string,
   attrs: readonly AttributeIr[],
   attributeScan: ElementAttributeScan,
+  selectedValueCode: string | undefined,
   selectedAttributePart: HtmlSyncPart | undefined,
   fallbackParts: HtmlPart[],
   escapeHelperName: string,
 ): HtmlPart {
   const propsName = currentSpreadPropsName;
+  const omitSelectedCode =
+    tagName === "option" && selectedValueCode !== undefined
+      ? `(${selectedValueCode}) != null`
+      : "false";
   const selectedValueDeclaration =
     tagName === "select"
       ? `const ${currentSpreadSelectedValueName} = ${emitSelectSelectionValueCode(`${propsName}.value`, `${propsName}.defaultValue`) ?? "undefined"};`
@@ -2092,7 +2102,7 @@ function emitMergedSpreadElementPart(
     selectedAttributePart === undefined
       ? undefined
       : tryEmitPartAsStringExpression(selectedAttributePart, currentCompatRenderToStringHelperName);
-  const opening = `${stringLiteral(`<${tagName}`)} + ${currentSpreadAttributesHelperName}(${stringLiteral(tagName)}, ${propsName})${selectedExpression === undefined ? "" : ` + (${selectedExpression})`} + ">"`;
+  const opening = `${stringLiteral(`<${tagName}`)} + ${currentSpreadAttributesHelperName}(${stringLiteral(tagName)}, ${propsName}, ${omitSelectedCode})${selectedExpression === undefined ? "" : ` + (${selectedExpression})`} + ">"`;
   const closing = stringLiteral(`</${tagName}>`);
   const fallbackExpressions = fallbackParts.map((part) =>
     isHtmlSyncPart(part)
@@ -2589,18 +2599,25 @@ function collectOptionSelectedAttributePart(
   node: Extract<JsxNodeIr, { kind: "element" }>,
   selectedValueCode: string | undefined,
   selectedMultipleCode: string | undefined,
+  useMergedSpreadFallback = false,
 ): HtmlSyncPart | undefined {
   if (selectedValueCode === undefined || node.tagName !== "option") {
     return undefined;
   }
 
-  const optionValueCode = findOptionValueCode(node);
+  const optionValueCode = findOptionValueCode(
+    node,
+    currentOptionSelectedLocalNames.textValue,
+    node.attributes.some((attr) => attr.kind === "spread-attr")
+      ? currentSpreadPropsName
+      : undefined,
+  );
   return {
     kind: "raw-dynamic",
     code: emitOptionSelectedAttributeCode(
       selectedValueCode,
       optionValueCode,
-      emitOwnSelectedFallbackCode(node),
+      useMergedSpreadFallback ? '""' : emitOwnSelectedFallbackCode(node),
       currentOptionSelectedLocalNames,
       selectedMultipleCode,
     ),
@@ -2644,7 +2661,18 @@ function isSuppressedOptionSelectedAttribute(
   );
 }
 
-function findOptionValueCode(node: Extract<JsxNodeIr, { kind: "element" }>): string | undefined {
+function findOptionValueCode(
+  node: Extract<JsxNodeIr, { kind: "element" }>,
+  textValueName: string,
+  mergedPropsName?: string,
+): string | undefined {
+  const textValueCode = findOptionTextValueCode(node, textValueName);
+  if (mergedPropsName !== undefined) {
+    return textValueCode === undefined
+      ? `${mergedPropsName}.value`
+      : `(${mergedPropsName}.value ?? ${textValueCode})`;
+  }
+
   const valueAttr = node.attributes.find(
     (attr) => attr.kind !== "spread-attr" && attr.name === "value",
   );
@@ -2654,9 +2682,38 @@ function findOptionValueCode(node: Extract<JsxNodeIr, { kind: "element" }>): str
       : `(${valueAttr.code})`;
   }
 
-  return node.children.every((child) => child.kind === "text")
-    ? stringLiteral(node.children.map((child) => child.value).join(""))
-    : undefined;
+  return textValueCode;
+}
+
+function findOptionTextValueCode(
+  node: Extract<JsxNodeIr, { kind: "element" }>,
+  textValueName: string,
+): string | undefined {
+  const textParts = node.children.map((child) => {
+    if (child.kind === "text") {
+      return stringLiteral(child.value);
+    }
+    if (
+      child.kind === "expr" &&
+      (child.renderMode === undefined ||
+        child.renderMode === "dynamic" ||
+        child.renderMode === "compiler-keyed-initial-text" ||
+        child.renderMode === "compiler-keyed-cell-text" ||
+        child.renderMode === "compiler-keyed-text")
+    ) {
+      return `String((${child.code}) ?? "")`;
+    }
+    return undefined;
+  });
+
+  if (textParts.some((part) => part === undefined)) {
+    return undefined;
+  }
+
+  const parts = textParts as string[];
+  return parts.length === 0
+    ? stringLiteral("")
+    : `(() => { const ${textValueName} = ${parts.join(" + ")}; return ${textValueName}; })()`;
 }
 
 function htmlAttributeNameForElement(tagName: string, name: string): string {

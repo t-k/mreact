@@ -738,6 +738,56 @@ export function App(props) {
     );
   });
 
+  test("string and stream emitters suppress stale selected props from option spreads", async () => {
+    await expectServerPairHtml(
+      `export function App() {
+  return <select value="done">
+    <option {...{ value: "open", selected: true }}>open</option>
+    <option {...{ value: "done", selected: false }}>done</option>
+  </select>;
+}`,
+      '<select><option value="open">open</option><option value="done" selected="">done</option></select>',
+    );
+  });
+
+  test("string and stream emitters use the final option value from a spread", async () => {
+    await expectServerPairHtml(
+      `export function App() {
+  return <select value="done">
+    <option {...{ value: "open", selected: false }}>first</option>
+    <option {...{ value: "done", selected: true }}>second</option>
+  </select>;
+}`,
+      '<select><option value="open">first</option><option value="done" selected="">second</option></select>',
+    );
+  });
+
+  test("string and stream emitters preserve option spread selection for a nullish select value", async () => {
+    await expectServerPairHtml(
+      `export function App(props) {
+  return <select value={props.value}>
+    <option {...{ value: "open", selected: true }}>open</option>
+    <option {...{ value: "done", selected: false }}>done</option>
+  </select>;
+}`,
+      '<select><option value="open" selected="">open</option><option value="done">done</option></select>',
+      { value: undefined },
+    );
+  });
+
+  test("string and stream emitters select options whose text value is dynamic", async () => {
+    await expectServerPairHtml(
+      `const STATUSES = ["open", "done"];
+export function App(props) {
+  return <select value={props.status}>
+    {STATUSES.map((status) => <option>{status}</option>)}
+  </select>;
+}`,
+      '<select><option>open</option><option selected="">done</option></select>',
+      { status: "done" },
+    );
+  });
+
   test("string and stream emitters keep select spread precedence and omit form values", async () => {
     await expectServerPairHtml(
       `const OPTIONS = ["open", "done"];

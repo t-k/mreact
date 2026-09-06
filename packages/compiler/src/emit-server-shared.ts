@@ -329,6 +329,7 @@ const SELECTED_MARKER_LITERAL = '" selected=\\"\\""';
 export interface OptionSelectedLocalNames {
   selected: string;
   optionValue: string;
+  textValue: string;
   index: string;
   candidate: string;
 }
@@ -336,6 +337,7 @@ export interface OptionSelectedLocalNames {
 const DEFAULT_OPTION_SELECTED_LOCAL_NAMES: OptionSelectedLocalNames = {
   selected: "_selected",
   optionValue: "_optionValue",
+  textValue: "_optionText",
   index: "_i",
   candidate: "_candidate",
 };
