@@ -3241,13 +3241,16 @@ __mreactGlobal.__mreactRouteCell = (nativeCell, initial) => {
   const stateCell = nativeCell(record.value);
   const setStateCell = stateCell.set;
 
-  stateCell.set = (next) => {
+  const setRouteStateCell = (next) => {
     setStateCell((previous) => {
       const resolved = typeof next === "function" ? next(previous) : next;
       record.value = resolved;
       return resolved;
     });
   };
+  stateCell.set = setRouteStateCell;
+  stateCell.setValue = setRouteStateCell;
+  stateCell.update = setRouteStateCell;
 
   __mreactActiveCellRecords.set(cellKey, record);
   return stateCell;

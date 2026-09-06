@@ -6048,6 +6048,45 @@ export default function Page() {
     expect(resumedButton?.textContent).toBe("count: 2");
   });
 
+  test("preserves route cell state written through setValue and update", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cell-write-apis-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+
+export default function Page() {
+  const count = cell(0);
+  return <main><button id="set" type="button" onClick={() => count.setValue(1)}>set {count.get()}</button><button id="update" type="button" onClick={() => count.update(value => value + 1)}>update {count.get()}</button></main>;
+}`;
+    await writeFile(file, code);
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><main><button id="set" type="button">set 0</button><button id="update" type="button">update 0</button></main></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+    const routeModule = (await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#route-cell-write-apis`
+    )) as { __mreactHydrateRoute: () => void };
+
+    document.querySelector<HTMLButtonElement>("#set")?.click();
+    await Promise.resolve();
+    expect(document.querySelector("#set")?.textContent).toBe("set 1");
+
+    routeModule.__mreactHydrateRoute();
+    expect(document.querySelector("#set")?.textContent).toBe("set 1");
+
+    document.querySelector<HTMLButtonElement>("#update")?.click();
+    await Promise.resolve();
+    expect(document.querySelector("#update")?.textContent).toBe("update 2");
+
+    routeModule.__mreactHydrateRoute();
+    expect(document.querySelector("#update")?.textContent).toBe("update 2");
+  });
+
   test("preserves route cell state across fresh hot module imports", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-hot-fresh-runtime-"));
     const file = join(appDir, "page.mreact.tsx");
