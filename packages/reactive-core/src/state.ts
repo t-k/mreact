@@ -14,7 +14,7 @@ export interface Source {
   onFirstSubscriber?: (() => void) | undefined;
   onNoSubscribers?: (() => void) | undefined;
   /** Returns false when a dormant source has stale dormant dependencies. */
-  isCurrent?: ((context: CurrentCheckContext) => boolean) | undefined;
+  isCurrent?: ((context?: CurrentCheckContext) => boolean) | undefined;
   trackedBy?: ReactiveComputation | undefined;
   trackedVersion?: number | undefined;
   debugWriters?: Map<number, string> | undefined;
@@ -89,11 +89,15 @@ export function createCurrentCheckContext(): CurrentCheckContext {
 
 export function untrackedDependencyIsCurrent(
   dependency: UntrackedDependency,
-  context: CurrentCheckContext,
+  context?: CurrentCheckContext,
 ): boolean {
   const source = dependency.ref.deref();
   if (source === undefined) {
     return false;
+  }
+
+  if (context === undefined) {
+    return sourceVersion(source) === dependency.version && source.isCurrent?.() !== false;
   }
 
   const sourceResults = context.results.get(source);

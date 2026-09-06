@@ -42,11 +42,17 @@ export function computed<T>(
   const resource = registerReactiveDevtoolsResource("computed");
 
   const source: Source = {
-    isCurrent: (context: CurrentCheckContext) =>
-      !dirty &&
-      untrackedDependencies.every((dependency) =>
-        untrackedDependencyIsCurrent(dependency, context),
-      ),
+    isCurrent: (context?: CurrentCheckContext) => {
+      const currentCheckContext =
+        context ?? (untrackedDependencies.length > 1 ? createCurrentCheckContext() : undefined);
+
+      return (
+        !dirty &&
+        untrackedDependencies.every((dependency) =>
+          untrackedDependencyIsCurrent(dependency, currentCheckContext),
+        )
+      );
+    },
     onFirstSubscriber: () => attachUntrackedDependencies(),
     // Reattaching a cached computed can briefly remove its last direct
     // subscriber while a sibling reader is still restoring the same graph.
@@ -249,12 +255,10 @@ export function computed<T>(
     get(): T {
       const wasDormant = untrackedDependencies.length > 0;
       const currentCheckContext =
-        untrackedDependencies.length === 0 ? undefined : createCurrentCheckContext();
-      const dependenciesChanged =
-        currentCheckContext !== undefined &&
-        untrackedDependencies.some(
-          (dependency) => !untrackedDependencyIsCurrent(dependency, currentCheckContext),
-        );
+        untrackedDependencies.length > 1 ? createCurrentCheckContext() : undefined;
+      const dependenciesChanged = untrackedDependencies.some(
+        (dependency) => !untrackedDependencyIsCurrent(dependency, currentCheckContext),
+      );
       if (dependenciesChanged) {
         dirty = true;
         restoreUntrackedDependencies();

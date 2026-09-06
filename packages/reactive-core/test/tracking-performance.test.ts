@@ -5,6 +5,7 @@ import {
   createCurrentCheckContext,
   untrackedDependencyIsCurrent,
 } from "../src/state.js";
+import type { CurrentCheckContext, Source } from "../src/state.js";
 
 describe("reactive-core tracking hot path", () => {
   test("checks the ordered dependency fast path before same-pass duplicate tracking", async () => {
@@ -77,6 +78,24 @@ describe("reactive-core tracking hot path", () => {
       ),
     ).toBe(true);
     expect(currentChecks).toBe(1);
+  });
+
+  test("checks a linear dormant dependency without a shared context", () => {
+    let receivedContext: CurrentCheckContext | undefined;
+    const source: Source = {
+      subscribers: null,
+      isCurrent: (context) => {
+        receivedContext = context;
+        return true;
+      },
+    };
+    const check = untrackedDependencyIsCurrent as unknown as (
+      dependency: { ref: WeakRef<Source>; version: number },
+      context?: CurrentCheckContext,
+    ) => boolean;
+
+    expect(check({ ref: new WeakRef(source), version: 0 })).toBe(true);
+    expect(receivedContext).toBeUndefined();
   });
 
   test("validates shared dormant diamonds within a linear traversal bound", () => {
