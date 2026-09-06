@@ -1997,6 +1997,60 @@ export default function Page() {
   }
 });
 
+test("select SSR selection marks the saved option before hydration", async ({ browser }) => {
+  const { close, url } = await startFixtureServer({
+    "page.tsx": `const STATUSES = ["open", "in_progress", "done"];
+
+export default function Page() {
+  const status = "in_progress";
+  return (
+    <main>
+      <h1>Ticket</h1>
+      <select data-testid="status" value={status}>
+        {STATUSES.map((value) => <option key={value} value={value}>{value}</option>)}
+      </select>
+    </main>
+  );
+}`,
+  });
+
+  try {
+    const response = await fetch(url);
+    const html = await response.text();
+    const optionTags = html.match(/<option\b[^>]*>/g) ?? [];
+    const selectedTags = optionTags.filter((tag) => /\bselected\b/.test(tag));
+
+    expect(response.status).toBe(200);
+    expect(optionTags).toHaveLength(3);
+    expect(selectedTags).toHaveLength(1);
+    expect(selectedTags[0]).toContain('value="in_progress"');
+
+    const scriptless = await browser.newContext({ javaScriptEnabled: false });
+
+    try {
+      const scriptlessPage = await scriptless.newPage();
+      await scriptlessPage.goto(url);
+      await expect(scriptlessPage.getByTestId("status")).toHaveValue("in_progress");
+    } finally {
+      await scriptless.close();
+    }
+
+    const hydrated = await browser.newPage();
+
+    try {
+      await hydrated.goto(url);
+      await expect(hydrated.getByRole("heading", { name: "Ticket" })).toBeVisible();
+      await expect(hydrated.getByTestId("status")).toHaveValue("in_progress");
+      await hydrated.getByTestId("status").selectOption("done");
+      await expect(hydrated.getByTestId("status")).toHaveValue("done");
+    } finally {
+      await hydrated.close();
+    }
+  } finally {
+    await close();
+  }
+});
+
 test("reactive Link href follows a cell update and navigates to the updated url", async ({
   page,
 }) => {
