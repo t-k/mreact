@@ -82,14 +82,12 @@ export interface FieldBindingOptions<TValue, TBoundValue = TValue> {
 /** Exposes state, binding, blur, and value update controls for one field. */
 export interface FieldApi<TValues extends FormValues, Name extends FieldName<TValues>> {
   readonly state: ReadonlyCell<FieldState<TValues[Name]>>;
-  bind(
-    options?: FieldBindingOptions<TValues[Name], TValues[Name]>,
-  ): FieldBinding<TValues[Name]>;
   bind<TBoundValue>(
     options: FieldBindingOptions<TValues[Name], TBoundValue> & {
       format: (value: TValues[Name]) => TBoundValue;
     },
   ): FieldBinding<TBoundValue>;
+  bind(options?: FieldBindingOptions<TValues[Name], TValues[Name]>): FieldBinding<TValues[Name]>;
   blur(): Promise<void>;
   setValue(value: TValues[Name]): Promise<void>;
 }
@@ -602,14 +600,14 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
       };
     },
     field<Name extends FieldName<TValues>>(name: Name): FieldApi<TValues, Name> {
-      function bind(
-        bindingOptions?: FieldBindingOptions<TValues[Name], TValues[Name]>,
-      ): FieldBinding<TValues[Name]>;
       function bind<TBoundValue>(
         bindingOptions: FieldBindingOptions<TValues[Name], TBoundValue> & {
           format: (value: TValues[Name]) => TBoundValue;
         },
       ): FieldBinding<TBoundValue>;
+      function bind(
+        bindingOptions?: FieldBindingOptions<TValues[Name], TValues[Name]>,
+      ): FieldBinding<TValues[Name]>;
       function bind<TBoundValue>(
         bindingOptions: FieldBindingOptions<TValues[Name], TBoundValue> = {},
       ): FieldBinding<TBoundValue> {

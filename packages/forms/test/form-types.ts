@@ -64,6 +64,15 @@ const numberBinding = arrayForm.field("title").bind({
 const formattedLength: number = numberBinding.value;
 void formattedLength;
 
+const nullableTextForm = createForm({
+  initialValues: { value: null as string | null },
+});
+const nullableTextBinding = nullableTextForm.field("value").bind({
+  format: (value) => value ?? "",
+});
+const formattedNullableText: string = nullableTextBinding.value;
+void formattedNullableText;
+
 // @ts-expect-error A different binding output type requires a formatter.
 arrayForm.field("title").bind<number>();
 
