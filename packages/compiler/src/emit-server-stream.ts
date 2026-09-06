@@ -76,6 +76,7 @@ let currentOptionSelectedLocalNames: OptionSelectedLocalNames = {
   selected: "_selected",
   optionValue: "_optionValue",
   textValue: "_optionText",
+  attributes: "_optionAttributes",
   index: "_i",
   candidate: "_candidate",
 };
@@ -143,6 +144,7 @@ export function emitServerStream(
     selected: allocateNestedBindingSafeName(ir, "_selected"),
     optionValue: allocateNestedBindingSafeName(ir, "_optionValue"),
     textValue: allocateNestedBindingSafeName(ir, "_optionText"),
+    attributes: allocateNestedBindingSafeName(ir, "_optionAttributes"),
     index: allocateNestedBindingSafeName(ir, "_i"),
     candidate: allocateNestedBindingSafeName(ir, "_candidate"),
   };
@@ -1186,7 +1188,7 @@ function tryEmitPartAsStringExpression(
     return emitListPartAsStringExpression(part, compatRenderToStringHelperName);
   }
   if (part.kind === "component" && part.runtime === "compat") {
-    const rendered = `${compatRenderToStringHelperName}(${part.name}, ${emitCompatRuntimePropsObject(part.props, part.children)})`;
+    const rendered = `${compatRenderToStringHelperName}(${part.name}, ${emitCompatRuntimePropsObject(part.props, part.children, part.selectedValueCode, part.selectedMultipleCode)})`;
     if (part.hydrationId === undefined) {
       return rendered;
     }
@@ -1294,7 +1296,7 @@ function emitCompatComponentAppendStatements(
   compatRenderToStringHelperName: string,
   indent: string,
 ): string {
-  const rendered = `${compatRenderToStringHelperName}(${part.name}, ${emitCompatRuntimePropsObject(part.props, part.children)})`;
+  const rendered = `${compatRenderToStringHelperName}(${part.name}, ${emitCompatRuntimePropsObject(part.props, part.children, part.selectedValueCode, part.selectedMultipleCode)})`;
   const statements =
     part.hydrationId === undefined
       ? [`${sinkName}.append(${rendered});`]
@@ -1943,11 +1945,32 @@ function collectHtmlParts(
     state.selectedMultipleCode,
     node.attributes.some((attr) => attr.kind === "spread-attr"),
   );
+  const capturedOptionPart = emitCapturedOptionPart(node, escapeHelperName, state, attributeScan);
+  if (capturedOptionPart !== undefined) {
+    return [capturedOptionPart];
+  }
   if (
     state.dynamicAttributes === "emit" &&
     !isVoidHtmlElement(node.tagName) &&
     node.attributes.some((attr) => attr.kind === "spread-attr")
   ) {
+    const capturedOptionText =
+      state.selectedValueCode === undefined ||
+      node.attributes.some(
+        (attr) => attr.kind !== "spread-attr" && attr.name === "dangerouslySetInnerHTML",
+      )
+        ? undefined
+        : findCapturedOptionText(node);
+    const spreadSelectedAttributePart =
+      capturedOptionText === undefined
+        ? selectedAttributePart
+        : collectOptionSelectedAttributePart(
+            node,
+            state.selectedValueCode,
+            state.selectedMultipleCode,
+            true,
+            capturedOptionText.valueCode,
+          );
     const fallbackParts =
       (childSelectedValueCode === undefined
         ? collectTextSeparatedSimpleChildrenParts(
@@ -1973,9 +1996,10 @@ function collectHtmlParts(
         node.attributes,
         attributeScan,
         state.selectedValueCode,
-        selectedAttributePart,
+        spreadSelectedAttributePart,
         fallbackParts,
         escapeHelperName,
+        capturedOptionText,
       ),
     ];
   }
@@ -2081,6 +2105,7 @@ function emitMergedSpreadElementPart(
   selectedAttributePart: HtmlSyncPart | undefined,
   fallbackParts: HtmlPart[],
   escapeHelperName: string,
+  capturedOptionText?: { name: string; parts: string[]; valueCode: string },
 ): HtmlPart {
   const propsName = currentSpreadPropsName;
   const omitSelectedCode =
@@ -2109,6 +2134,16 @@ function emitMergedSpreadElementPart(
       ? tryEmitPartAsStringExpression(part, currentCompatRenderToStringHelperName)
       : undefined,
   );
+  const optionTextDeclaration =
+    capturedOptionText === undefined
+      ? ""
+      : ` let ${capturedOptionText.name};`;
+  if (capturedOptionText !== undefined) {
+    return {
+      kind: "raw-dynamic",
+      code: `(() => { const ${propsName} = {}; ${assignments.join(" ")} ${selectedValueDeclaration}${optionTextDeclaration} return ${opening} + ${escapeHelperName}(${capturedOptionText.valueCode}) + ${closing}; })()`,
+    };
+  }
   if (fallbackExpressions.every((expression) => expression !== undefined)) {
     const fallback =
       fallbackExpressions.length === 0 ? '""' : (fallbackExpressions as string[]).join(" + ");
@@ -2600,6 +2635,7 @@ function collectOptionSelectedAttributePart(
   selectedValueCode: string | undefined,
   selectedMultipleCode: string | undefined,
   useMergedSpreadFallback = false,
+  textValueCodeOverride?: string,
 ): HtmlSyncPart | undefined {
   if (selectedValueCode === undefined || node.tagName !== "option") {
     return undefined;
@@ -2611,6 +2647,7 @@ function collectOptionSelectedAttributePart(
     node.attributes.some((attr) => attr.kind === "spread-attr")
       ? currentSpreadPropsName
       : undefined,
+    textValueCodeOverride,
   );
   return {
     kind: "raw-dynamic",
@@ -2621,6 +2658,114 @@ function collectOptionSelectedAttributePart(
       currentOptionSelectedLocalNames,
       selectedMultipleCode,
     ),
+  };
+}
+
+function emitCapturedOptionPart(
+  node: Extract<JsxNodeIr, { kind: "element" }>,
+  escapeHelperName: string,
+  state: CollectHtmlState,
+  attributeScan: ElementAttributeScan,
+): HtmlPart | undefined {
+  if (
+    state.selectedValueCode === undefined ||
+    node.tagName !== "option" ||
+    node.attributes.some((attr) => attr.kind === "spread-attr") ||
+    node.attributes.some(
+      (attr) => attr.kind !== "spread-attr" && attr.name === "dangerouslySetInnerHTML",
+    )
+  ) {
+    return undefined;
+  }
+
+  const capturedOptionText = findCapturedOptionText(node);
+  if (capturedOptionText === undefined) {
+    return undefined;
+  }
+
+  const textValueName = capturedOptionText.name;
+  const attributes = collectElementAttributeParts(
+    node.tagName,
+    node.attributes,
+    escapeHelperName,
+    state,
+    attributeScan,
+  );
+  const attributeExpressions = attributes.map((part) =>
+    tryEmitPartAsStringExpression(part, currentCompatRenderToStringHelperName),
+  );
+  if (attributeExpressions.some((expression) => expression === undefined)) {
+    return undefined;
+  }
+  const attributesCode =
+    attributeExpressions.length === 0 ? '""' : (attributeExpressions as string[]).join(" + ");
+  const optionValueCode = findOptionValueCode(
+    node,
+    textValueName,
+    undefined,
+    capturedOptionText.valueCode,
+  );
+  const selectedAttribute = emitOptionSelectedAttributeCode(
+    state.selectedValueCode,
+    optionValueCode,
+    emitOwnSelectedFallbackCode(node),
+    currentOptionSelectedLocalNames,
+    state.selectedMultipleCode,
+  );
+
+  return {
+    kind: "raw-dynamic",
+    code: `(() => { const ${currentOptionSelectedLocalNames.attributes} = ${attributesCode}; let ${textValueName}; return ${stringLiteral("<option")} + ${currentOptionSelectedLocalNames.attributes} + (${selectedAttribute}) + ">" + ${escapeHelperName}(${capturedOptionText.valueCode}) + ${stringLiteral("</option>")}; })()`,
+  };
+}
+
+type CapturableOptionTextChild = Extract<JsxNodeIr, { kind: "text" | "expr" }>;
+
+function findCapturableOptionTextChildren(
+  node: Extract<JsxNodeIr, { kind: "element" }>,
+): CapturableOptionTextChild[] | undefined {
+  let hasDynamicText = false;
+
+  for (const child of node.children) {
+    if (child.kind === "text") {
+      continue;
+    }
+
+    if (
+      child.kind === "expr" &&
+      (child.renderMode === undefined ||
+        child.renderMode === "dynamic" ||
+        child.renderMode === "compiler-keyed-initial-text" ||
+        child.renderMode === "compiler-keyed-cell-text" ||
+        child.renderMode === "compiler-keyed-text") &&
+      !isChildrenExpressionCode(child.code)
+    ) {
+      hasDynamicText = true;
+      continue;
+    }
+
+    return undefined;
+  }
+
+  return hasDynamicText ? (node.children as CapturableOptionTextChild[]) : undefined;
+}
+
+function findCapturedOptionText(
+  node: Extract<JsxNodeIr, { kind: "element" }>,
+): { name: string; parts: string[]; valueCode: string } | undefined {
+  const children = findCapturableOptionTextChildren(node);
+  if (children === undefined) {
+    return undefined;
+  }
+
+  const name = currentOptionSelectedLocalNames.textValue;
+  const parts = children.map((child) =>
+    child.kind === "text" ? stringLiteral(child.value) : `String((${child.code}) ?? "")`,
+  );
+  return {
+    name,
+    parts,
+    valueCode: `(${name} ??= ${parts.join(" + ")})`,
   };
 }
 
@@ -2665,8 +2810,9 @@ function findOptionValueCode(
   node: Extract<JsxNodeIr, { kind: "element" }>,
   textValueName: string,
   mergedPropsName?: string,
+  textValueCodeOverride?: string,
 ): string | undefined {
-  const textValueCode = findOptionTextValueCode(node, textValueName);
+  const textValueCode = textValueCodeOverride ?? findOptionTextValueCode(node, textValueName);
   if (mergedPropsName !== undefined) {
     return textValueCode === undefined
       ? `${mergedPropsName}.value`
@@ -2679,7 +2825,9 @@ function findOptionValueCode(
   if (valueAttr !== undefined && valueAttr.kind !== "event" && valueAttr.kind !== "spread-attr") {
     return valueAttr.kind === "static-attr"
       ? stringLiteral(valueAttr.value)
-      : `(${valueAttr.code})`;
+      : textValueCode === undefined
+        ? `(${valueAttr.code})`
+        : `((${valueAttr.code}) ?? ${textValueCode})`;
   }
 
   return textValueCode;
@@ -3628,6 +3776,8 @@ function needsLazyServerChildren(node: JsxNodeIr): boolean {
 function emitCompatRuntimePropsObject(
   props: ComponentPropIr[],
   children: JsxNodeIr[] = [],
+  selectedValueCode?: string,
+  selectedMultipleCode?: string,
 ): string {
   const entries = props.map((prop) => {
     if (prop.kind === "spread-prop") {
@@ -3645,7 +3795,10 @@ function emitCompatRuntimePropsObject(
     entries.push(`children: ${emitOxcCompatObjectChildren(children)}`);
   }
 
-  return `{ ${entries.join(", ")} }`;
+  const object = `{ ${entries.join(", ")} }`;
+  return selectedValueCode === undefined
+    ? object
+    : `Object.defineProperty(Object.defineProperty(${object}, Symbol.for(${JSON.stringify(serverSelectionContextKey)}), { value: ${selectedValueCode} }), Symbol.for(${JSON.stringify(serverSelectionMultipleContextKey)}), { value: ${selectedMultipleCode} })`;
 }
 
 function emitPropName(name: string): string {

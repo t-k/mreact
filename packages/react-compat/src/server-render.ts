@@ -35,6 +35,9 @@ import {
 import { escapeHtmlAttribute as escapeHtml } from "@reckona/mreact-shared/html-escape";
 import { isEventLikePropName, isVoidHtmlElement } from "@reckona/mreact-shared";
 
+const serverSelectionContextKey = Symbol.for("mreact.server.selected-value");
+const serverSelectionMultipleContextKey = Symbol.for("mreact.server.select-multiple");
+
 /** Renders a React-compatible component to an HTML string. */
 export function renderToString<TProps>(
   component:
@@ -47,8 +50,11 @@ export function renderToString<TProps>(
     ...options,
     idMode: "server",
   });
+  const internalProps = props as unknown as Record<symbol, unknown> | undefined;
+  const selectedValue = internalProps?.[serverSelectionContextKey];
+  const selectedMultiple = internalProps?.[serverSelectionMultipleContextKey];
 
-  return withSelectSelection(false, undefined, () =>
+  return withSelectSelection(Boolean(selectedMultiple), selectedValue, () =>
     runWithCacheScope(createCacheScope(), () => {
       try {
         const rendered = renderWithRootRuntime(runtime, "0", () => {

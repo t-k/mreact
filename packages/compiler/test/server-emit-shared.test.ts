@@ -788,6 +788,46 @@ export function App(props) {
     );
   });
 
+  test("string and stream emitters evaluate dynamic option text once", async () => {
+    await expectServerPairHtml(
+      `let reads = 0;
+function readStatus() {
+  reads += 1;
+  return reads === 1 ? "done" : "open";
+}
+export function App() {
+  return <select value="done"><option>{readStatus()}</option></select>;
+}`,
+      '<select><option selected="">done</option></select>',
+    );
+  });
+
+  test("string and stream emitters evaluate spread option text once", async () => {
+    await expectServerPairHtml(
+      `let reads = 0;
+function readStatus() {
+  reads += 1;
+  return reads === 1 ? "done" : "open";
+}
+export function App() {
+  return <select value="done"><option {...{ value: undefined }}>{readStatus()}</option></select>;
+}`,
+      '<select><option selected="">done</option></select>',
+    );
+  });
+
+  test("string and stream emitters fall back to option text for nullish explicit values", async () => {
+    await expectServerPairHtml(
+      `export function App() {
+  return <select value="done">
+    <option value={undefined}>done</option>
+    <option value={null}>open</option>
+  </select>;
+}`,
+      '<select><option selected="">done</option><option>open</option></select>',
+    );
+  });
+
   test("string and stream emitters keep select spread precedence and omit form values", async () => {
     await expectServerPairHtml(
       `const OPTIONS = ["open", "done"];

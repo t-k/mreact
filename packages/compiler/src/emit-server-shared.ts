@@ -330,6 +330,7 @@ export interface OptionSelectedLocalNames {
   selected: string;
   optionValue: string;
   textValue: string;
+  attributes: string;
   index: string;
   candidate: string;
 }
@@ -338,6 +339,7 @@ const DEFAULT_OPTION_SELECTED_LOCAL_NAMES: OptionSelectedLocalNames = {
   selected: "_selected",
   optionValue: "_optionValue",
   textValue: "_optionText",
+  attributes: "_optionAttributes",
   index: "_i",
   candidate: "_candidate",
 };

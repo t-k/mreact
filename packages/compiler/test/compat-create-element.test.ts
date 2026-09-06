@@ -1,7 +1,11 @@
 import { describe, expect, test } from "vitest";
 import { createElement, renderChildToString, renderToString } from "@reckona/mreact-compat";
 import { transform } from "../src/index.js";
-import { runServerComponent, runServerStreamComponent } from "./helpers.js";
+import {
+  runCompatServerComponent,
+  runServerComponent,
+  runServerStreamComponent,
+} from "./helpers.js";
 
 // Runs compiled output whose emitted imports include the compat child
 // helper; plain runServerComponent strips imports, so the helper binding is
@@ -45,6 +49,7 @@ function runCompiledWithCompatHelpers(code: string, exportName = "App"): string 
 function compile(
   code: string,
   serverOutput: "string" | "stream" = "string",
+  mode: "reactive" | "compat" = "reactive",
 ): { code: string; diagnostics: unknown[] } {
   const output = transform({
     code,
@@ -52,11 +57,35 @@ function compile(
     target: "server",
     dev: false,
     serverOutput,
+    mode,
   });
   return { code: output.code, diagnostics: output.diagnostics };
 }
 
 describe("compat createElement server lowering", () => {
+  test("keeps select context while rendering compat class option components", async () => {
+    const source = `import { Component, createElement } from "@reckona/mreact-compat";
+class StatusOption extends Component {
+  render() {
+    return createElement("option", { value: this.props.value }, this.props.label);
+  }
+}
+export function App() {
+  return <select value="done"><StatusOption value="done" label="done" /></select>;
+}`;
+    const stringOutput = compile(source, "string", "compat");
+    const streamOutput = compile(source, "stream", "compat");
+
+    expect(stringOutput.diagnostics).toEqual([]);
+    expect(streamOutput.diagnostics).toEqual([]);
+    expect(runCompatServerComponent(stringOutput.code)).toBe(
+      '<select><option value="done" selected="">done</option></select>',
+    );
+    await expect(runServerStreamComponent(streamOutput.code)).resolves.toBe(
+      '<select><option value="done" selected="">done</option></select>',
+    );
+  });
+
   test("compiles a host-only createElement tree to string appends", () => {
     const source = `import { createElement } from "@reckona/mreact-compat";
 export function App() {
