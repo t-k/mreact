@@ -21,21 +21,41 @@ schemaForm.submit((values) => values.count.toFixed());
 const arrayForm = createForm({
   initialValues: {
     items: [{ id: "a" }],
+    nullableFieldItems: [] as Array<{ id: string }> | null,
     nullableItems: [] as Array<{ id: string } | null> | undefined,
+    nullishFieldItems: [] as Array<{ id: string }> | null | undefined,
     optionalItems: [] as { id: string }[] | undefined,
+    nullOnly: null as null,
+    undefinedOnly: undefined as undefined,
+    nullishOnly: null as null | undefined,
+    arrayOrScalar: [] as string[] | string,
     readonlyItems: ["a"] as readonly string[],
     title: "Mreact",
   },
 });
 
 arrayForm.fieldArray("items").append({ id: "b" });
+arrayForm.fieldArray("nullableFieldItems").append({ id: "b" });
 arrayForm.fieldArray("nullableItems").append(null);
 arrayForm.fieldArray("nullableItems").append({ id: "b" });
+arrayForm.fieldArray("nullishFieldItems").append({ id: "b" });
 arrayForm.fieldArray("optionalItems").append({ id: "b" });
 arrayForm.fieldArray("readonlyItems").append("b");
 
 // @ts-expect-error Scalar fields cannot be used with fieldArray.
 arrayForm.fieldArray("title");
+
+// @ts-expect-error Null-only fields cannot be used with fieldArray.
+arrayForm.fieldArray("nullOnly");
+
+// @ts-expect-error Undefined-only fields cannot be used with fieldArray.
+arrayForm.fieldArray("undefinedOnly");
+
+// @ts-expect-error Nullish-only fields cannot be used with fieldArray.
+arrayForm.fieldArray("nullishOnly");
+
+// @ts-expect-error Array/scalar unions cannot be used with fieldArray.
+arrayForm.fieldArray("arrayOrScalar");
 
 const numberBinding = arrayForm.field("title").bind({
   format: (value) => value.length,
