@@ -2,11 +2,23 @@
 export function applySelectValue(element: HTMLSelectElement, value: unknown): void {
   if (value == null) return;
 
-  const values = new Set(
-    element.multiple && Array.isArray(value) ? value.map(String) : [String(value)],
-  );
+  if (element.multiple && Array.isArray(value)) {
+    const values = new Set<string>();
+    for (const item of value) {
+      if (item != null) values.add(String(item));
+    }
 
+    for (const option of Array.from(element.options)) {
+      option.selected = values.has(option.value);
+    }
+    return;
+  }
+
+  const nextValue = String(value);
+  let matched = false;
   for (const option of Array.from(element.options)) {
-    option.selected = values.has(option.value);
+    const optionMatches: boolean = !matched && option.value === nextValue;
+    option.selected = optionMatches;
+    matched ||= optionMatches;
   }
 }

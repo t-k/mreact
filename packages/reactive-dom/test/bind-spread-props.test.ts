@@ -277,6 +277,49 @@ describe("bindSpreadProps", () => {
     dispose();
   });
 
+  test("ignores nullish entries in a multiple select value array", async () => {
+    const props = cell<Record<string, unknown>>({
+      multiple: true,
+      value: [null, "done", undefined],
+    });
+    const select = document.createElement("select");
+    for (const value of ["null", "done", "undefined"]) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = value;
+      select.append(option);
+    }
+    const dispose = bindSpreadProps(select, () => props.get());
+
+    await flushEffects();
+
+    expect(
+      Array.from(select.options)
+        .filter((option) => option.selected)
+        .map((option) => option.value),
+    ).toEqual(["done"]);
+
+    dispose();
+  });
+
+  test("selects the first duplicate option for a single select value", async () => {
+    const props = cell<Record<string, unknown>>({ value: "done" });
+    const select = document.createElement("select");
+    for (const label of ["first", "second"]) {
+      const option = document.createElement("option");
+      option.value = "done";
+      option.textContent = label;
+      select.append(option);
+    }
+    const dispose = bindSpreadProps(select, () => props.get());
+
+    await flushEffects();
+
+    expect(Array.from(select.options, (option) => option.selected)).toEqual([true, false]);
+
+    dispose();
+  });
+
   test("does not rewrite unchanged spread props on reactive re-runs", async () => {
     const trigger = cell(0);
     const props = cell<Record<string, unknown>>({

@@ -791,6 +791,45 @@ describe("react-compat render", () => {
     ).toEqual(["a,b"]);
   });
 
+  test("ignores nullish entries in a multiple select value array", () => {
+    const container = document.createElement("div");
+
+    render(
+      createElement(
+        "select",
+        { multiple: true, value: [null, "done", undefined] },
+        createElement("option", { value: "null" }, "null"),
+        createElement("option", { value: "done" }, "done"),
+        createElement("option", { value: "undefined" }, "undefined"),
+      ),
+      container,
+    );
+
+    const select = container.querySelector<HTMLSelectElement>("select")!;
+    expect(
+      Array.from(select.options)
+        .filter((option) => option.selected)
+        .map((option) => option.value),
+    ).toEqual(["done"]);
+  });
+
+  test("selects the first duplicate option for a single select value", () => {
+    const container = document.createElement("div");
+
+    render(
+      createElement(
+        "select",
+        { value: "done" },
+        createElement("option", { value: "done" }, "first"),
+        createElement("option", { value: "done" }, "second"),
+      ),
+      container,
+    );
+
+    const select = container.querySelector<HTMLSelectElement>("select")!;
+    expect(Array.from(select.options, (option) => option.selected)).toEqual([true, false]);
+  });
+
   test("applies array defaultValue to an uncontrolled multiple select", () => {
     const container = document.createElement("div");
 
