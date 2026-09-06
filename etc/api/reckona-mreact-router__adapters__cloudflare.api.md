@@ -373,6 +373,8 @@ export interface ClientRouteManifestEntry {
     // (undocumented)
     kind: AppRoute["kind"];
     // (undocumented)
+    modulePreloads?: readonly string[];
+    // (undocumented)
     navigation?: boolean;
     // (undocumented)
     navigationScript?: string;

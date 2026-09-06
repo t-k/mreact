@@ -1479,6 +1479,8 @@ export interface RenderAppRequestOptions {
     // (undocumented)
     clientRouteInferenceCache?: ClientRouteInferenceCache | undefined;
     // (undocumented)
+    clientScriptPreloads?: ReadonlyMap<string, readonly string[]>;
+    // (undocumented)
     clientScripts?: ReadonlyMap<string, string>;
     // (undocumented)
     clientStyles?: ReadonlyMap<string, readonly string[]>;

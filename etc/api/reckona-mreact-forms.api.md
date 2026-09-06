@@ -8,11 +8,11 @@ import { ReadonlyCell } from '@reckona/mreact-reactive-core';
 
 // @public
 export type ArrayFieldName<TValues extends FormValues> = {
-    [Name in FieldName<TValues>]: NonNullable<TValues[Name]> extends readonly unknown[] ? Name : never;
+    [Name in FieldName<TValues>]: [NonNullable<TValues[Name]>] extends [never] ? never : NonNullable<TValues[Name]> extends readonly unknown[] ? Name : never;
 }[FieldName<TValues>];
 
 // @public
-export type ArrayFieldValue<TValues extends FormValues, Name extends FieldName<TValues>> = TValues[Name] extends readonly (infer Item)[] ? Item : never;
+export type ArrayFieldValue<TValues extends FormValues, Name extends FieldName<TValues>> = [NonNullable<TValues[Name]>] extends [never] ? never : NonNullable<TValues[Name]> extends readonly (infer Item)[] ? Item : never;
 
 // @public
 export interface BaseCreateFormOptions<TValues extends FormValues> {
@@ -50,7 +50,11 @@ export interface CreateFormOptionsWithSchema<TValues extends FormValues, TSubmit
 // @public
 export interface FieldApi<TValues extends FormValues, Name extends FieldName<TValues>> {
     // (undocumented)
-    bind<TBoundValue = TValues[Name]>(options?: FieldBindingOptions<TValues[Name], TBoundValue>): FieldBinding<TBoundValue>;
+    bind<TBoundValue>(options: FieldBindingOptions<TValues[Name], TBoundValue> & {
+        format: (value: TValues[Name]) => TBoundValue;
+    }): FieldBinding<TBoundValue>;
+    // (undocumented)
+    bind(options?: FieldBindingOptions<TValues[Name], TValues[Name]>): FieldBinding<TValues[Name]>;
     // (undocumented)
     blur(): Promise<void>;
     // (undocumented)
