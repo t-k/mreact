@@ -1082,6 +1082,12 @@ export function middleware(request: Request) {
             bytes: 128,
             client: true,
             kind: "page",
+            modulePreloads: [
+              "assets/chunks/boot.client.abc123.js",
+              "assets/chunks/boot.client.abc123.js",
+              "../escape.js",
+              "https://evil.example/remote.js",
+            ],
             path: "/users/:id",
             script: "assets/routes/users-id.abc123.js",
           },
@@ -1138,6 +1144,14 @@ export function middleware(request: Request) {
     expect(html).toContain(
       '<link rel="modulepreload" href="/_mreact/client/assets/routes/users-id.abc123.js">',
     );
+    expect(html).toContain(
+      '<link rel="modulepreload" href="/_mreact/client/assets/chunks/boot.client.abc123.js">',
+    );
+    expect(
+      html.match(
+        /<link rel="modulepreload" href="\/_mreact\/client\/assets\/chunks\/boot\.client\.abc123\.js">/g,
+      ),
+    ).toHaveLength(1);
     expect(html).toContain("<main>ada:ada:cloudflare:true:true</main>");
   });
 
@@ -3640,6 +3654,7 @@ export default function Page() {
             client: true,
             css: ["assets/routes/shared.f810e3ef.e0edde13.css"],
             kind: "page",
+            modulePreloads: ["assets/chunks/BrandLogo.def456.js"],
             path: "/",
             script: "assets/routes/index.abc123.js",
             sourceMap: "assets/routes/index.abc123.js.map",

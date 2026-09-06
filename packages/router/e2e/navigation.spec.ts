@@ -72,13 +72,93 @@ test("intent prefetch adds modulepreload for client route scripts", async ({ pag
   const appDir = join(rootDir, "app");
   const outDir = join(rootDir, ".mreact");
   await mkdir(join(appDir, "about"), { recursive: true });
+  await mkdir(join(appDir, "lib"), { recursive: true });
+  await writeFile(
+    join(appDir, "lib", "shared.ts"),
+    `export function sharedLabel(value: string) {
+  return value;
+}
+`,
+  );
+  await writeFile(
+    join(appDir, "page.tsx"),
+    `import { cell } from "@reckona/mreact-reactive-core";
+import { sharedLabel } from "./lib/shared";
+
+export default function Page() {
+  const count = cell(0);
+  return <main><h1>{sharedLabel("Home")}</h1><a href="/about">About</a><button type="button" onClick={() => count.set(value => value + 1)}>count: {count.get()}</button></main>;
+}`,
+  );
+  await writeFile(
+    join(appDir, "about", "page.tsx"),
+    `import { cell } from "@reckona/mreact-reactive-core";
+import { sharedLabel } from "../lib/shared";
+
+export default function About() {
+  const count = cell(0);
+  return <main><h1>{sharedLabel("About")}</h1><button type="button" onClick={() => count.set(value => value + 1)}>about count: {count.get()}</button></main>;
+}`,
+  );
+
+  await buildApp({ appDir, outDir });
+  const server = await startServer({ outDir, port: 0 });
+
+  try {
+    const navigationRequests: string[] = [];
+    page.on("request", (request) => {
+      if (request.headers()["x-mreact-navigation"] === "1") {
+        navigationRequests.push(new URL(request.url()).pathname);
+      }
+    });
+    await page.goto(server.url);
+    const aboutManifest = await page.locator("#mreact-route-prefetch-manifest").evaluate((element) => {
+      const routes = JSON.parse(element.textContent ?? "[]") as Array<{
+        modulePreloads?: string[];
+        path: string;
+      }>;
+      return routes.find((route) => route.path === "/about");
+    });
+    expect(aboutManifest?.modulePreloads?.length).toBeGreaterThan(0);
+
+    const navigationHtml = page.waitForResponse((response) => {
+      const request = response.request();
+      return new URL(response.url()).pathname === "/about" &&
+        request.headers()["x-mreact-navigation"] === "1";
+    });
+    await page.getByRole("link", { name: "About" }).hover();
+    await navigationHtml;
+    await expect(
+      page.locator('link[rel="modulepreload"][href*="/_mreact/client/assets/routes/about."]'),
+    ).toHaveCount(1);
+    for (const modulePreload of aboutManifest?.modulePreloads ?? []) {
+      await expect(
+        page.locator(`link[rel="modulepreload"][href*="${modulePreload}"]`),
+      ).toHaveCount(1);
+    }
+    expect(navigationRequests).toEqual(["/about"]);
+
+    await page.getByRole("link", { name: "About" }).click();
+    await expect(page.getByRole("heading", { name: "About" })).toBeVisible();
+    expect(navigationRequests).toEqual(["/about"]);
+  } finally {
+    await server.close();
+    await rm(rootDir, { force: true, recursive: true });
+  }
+});
+
+test("viewport client prefetch keeps HTML cold until intent", async ({ page }) => {
+  const rootDir = await mkdtemp(join(tmpdir(), "mreact-router-viewport-prefetch-e2e-"));
+  const appDir = join(rootDir, "app");
+  const outDir = join(rootDir, ".mreact");
+  await mkdir(join(appDir, "about"), { recursive: true });
   await writeFile(
     join(appDir, "page.tsx"),
     `import { cell } from "@reckona/mreact-reactive-core";
 
 export default function Page() {
   const count = cell(0);
-  return <main><h1>Home</h1><a href="/about">About</a><button type="button" onClick={() => count.set(value => value + 1)}>count: {count.get()}</button></main>;
+  return <main><h1>Home</h1><a href="/about" data-mreact-prefetch="viewport">Viewport</a><a href="/about" data-mreact-prefetch="intent">Intent</a><button type="button" onClick={() => count.set(value => value + 1)}>home: {count.get()}</button></main>;
 }`,
   );
   await writeFile(
@@ -87,7 +167,7 @@ export default function Page() {
 
 export default function About() {
   const count = cell(0);
-  return <main><h1>About</h1><button type="button" onClick={() => count.set(value => value + 1)}>about count: {count.get()}</button></main>;
+  return <main><h1>About</h1><button type="button" onClick={() => count.set(value => value + 1)}>about: {count.get()}</button></main>;
 }`,
   );
 
@@ -95,11 +175,27 @@ export default function About() {
   const server = await startServer({ outDir, port: 0 });
 
   try {
+    const navigationRequests: string[] = [];
+    page.on("request", (request) => {
+      if (request.headers()["x-mreact-navigation"] === "1") {
+        navigationRequests.push(new URL(request.url()).pathname);
+      }
+    });
     await page.goto(server.url);
-    await page.getByRole("link", { name: "About" }).hover();
     await expect(
       page.locator('link[rel="modulepreload"][href*="/_mreact/client/assets/routes/about."]'),
     ).toHaveCount(1);
+    await page.waitForTimeout(100);
+    expect(navigationRequests).toEqual([]);
+
+    const navigationHtml = page.waitForResponse((response) => {
+      const request = response.request();
+      return new URL(response.url()).pathname === "/about" &&
+        request.headers()["x-mreact-navigation"] === "1";
+    });
+    await page.getByRole("link", { name: "Intent" }).hover();
+    await navigationHtml;
+    expect(navigationRequests).toEqual(["/about"]);
   } finally {
     await server.close();
     await rm(rootDir, { force: true, recursive: true });

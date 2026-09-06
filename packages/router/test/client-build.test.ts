@@ -6587,7 +6587,7 @@ export default function Page() {
     expect(oldSpan?.textContent).toBe("1");
   });
 
-  test("prefetches client route scripts without fetching navigation HTML", async () => {
+  test("prefetches client route scripts and navigation HTML for intent", async () => {
     const { routeModule } = await importRouteRuntime("prefetch-script");
     let fetchCalls = 0;
     globalThis.fetch = async () => {
@@ -6602,6 +6602,10 @@ export default function Page() {
     };
     installRoutePrefetchManifest([
       {
+        modulePreloads: [
+          "/_mreact/client/assets/chunks/shared.12345678.js",
+          "/_mreact/client/assets/chunks/types.12345678.js",
+        ],
         path: "/about",
         script: "/_mreact/client/assets/routes/about.12345678.js",
       },
@@ -6609,12 +6613,239 @@ export default function Page() {
 
     await expect(routeModule.__mreactPrefetch("/about")).resolves.toBe(true);
 
-    expect(fetchCalls).toBe(0);
+    expect(fetchCalls).toBe(1);
     expect(
       document.head.querySelector<HTMLLinkElement>(
         'link[rel="modulepreload"][href="http://localhost:3000/_mreact/client/assets/routes/about.12345678.js"]',
       ),
     ).not.toBeNull();
+    expect(
+      document.head.querySelector<HTMLLinkElement>(
+        'link[rel="modulepreload"][href="http://localhost:3000/_mreact/client/assets/chunks/shared.12345678.js"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      document.head.querySelector<HTMLLinkElement>(
+        'link[rel="modulepreload"][href="http://localhost:3000/_mreact/client/assets/chunks/types.12345678.js"]',
+      ),
+    ).not.toBeNull();
+  });
+
+  test("deduplicates route entry and dependency modulepreloads", async () => {
+    const { routeModule } = await importRouteRuntime("prefetch-script-dependencies");
+    globalThis.fetch = async () => new Response("<!DOCTYPE html><main>About</main>");
+    installRoutePrefetchManifest([
+      {
+        modulePreloads: [
+          "/_mreact/client/assets/chunks/shared.12345678.js",
+          "/_mreact/client/assets/chunks/shared.12345678.js",
+        ],
+        path: "/about",
+        script: "/_mreact/client/assets/routes/about.12345678.js",
+      },
+    ]);
+
+    await expect(routeModule.__mreactPrefetch("/about")).resolves.toBe(true);
+
+    expect(document.head.querySelectorAll('link[rel="modulepreload"]')).toHaveLength(2);
+  });
+
+  test("ignores malformed optional modulepreload URLs", async () => {
+    const { routeModule } = await importRouteRuntime("prefetch-script-invalid-dependencies");
+    globalThis.fetch = async () => new Response("<!DOCTYPE html><main>About</main>");
+    document.head.insertAdjacentHTML(
+      "beforeend",
+      '<script type="application/json" id="mreact-route-prefetch-manifest">' +
+        JSON.stringify([
+          {
+            modulePreloads: [
+              "javascript:alert(1)",
+              42,
+              "https://cdn.example.test/shared.12345678.js",
+            ],
+            path: "/about",
+            script: "/_mreact/client/assets/routes/about.12345678.js",
+          },
+        ]) +
+        "</script>",
+    );
+
+    await expect(routeModule.__mreactPrefetch("/about")).resolves.toBe(true);
+
+    expect(document.head.querySelectorAll('link[rel="modulepreload"]')).toHaveLength(1);
+  });
+
+  test("allows dependency modulepreloads from the route script origin", async () => {
+    const { routeModule } = await importRouteRuntime("prefetch-script-cdn-dependencies");
+    globalThis.fetch = async () => new Response("<!DOCTYPE html><main>About</main>");
+    installRoutePrefetchManifest([
+      {
+        modulePreloads: ["https://cdn.example.test/chunks/shared.12345678.js"],
+        path: "/about",
+        script: "https://cdn.example.test/routes/about.12345678.js",
+      },
+    ]);
+
+    await expect(routeModule.__mreactPrefetch("/about")).resolves.toBe(true);
+
+    expect(document.head.querySelectorAll('link[rel="modulepreload"]')).toHaveLength(2);
+    expect(
+      document.head.querySelector<HTMLLinkElement>(
+        'link[rel="modulepreload"][href="https://cdn.example.test/chunks/shared.12345678.js"]',
+      ),
+    ).not.toBeNull();
+  });
+
+  test("does not apply redirected HTML to the requested route", async () => {
+    const { routeModule } = await importRouteRuntime("prefetch-redirected-html");
+    let fetchCalls = 0;
+    let redirectedTextCalls = 0;
+    globalThis.fetch = async () => {
+      fetchCalls += 1;
+
+      if (fetchCalls <= 2) {
+        return {
+          body: { cancel: () => Promise.resolve() },
+          headers: new Headers(),
+          ok: true,
+          redirected: true,
+          status: 200,
+          text: () => {
+            redirectedTextCalls += 1;
+            return Promise.resolve(
+              '<!DOCTYPE html><div data-mreact-route-id="login"><main>Login</main></div>',
+            );
+          },
+        } as unknown as Response;
+      }
+
+      return new Response(
+        '<!DOCTYPE html><div data-mreact-route-id="account"><main>Account</main></div>',
+      );
+    };
+
+    await expect(routeModule.__mreactPrefetch("/account")).resolves.toBe(false);
+    await expect(routeModule.__mreactNavigate("/account")).resolves.toBe(false);
+    await expect(routeModule.__mreactNavigate("/account")).resolves.toBe(true);
+
+    expect(fetchCalls).toBe(3);
+    expect(redirectedTextCalls).toBe(0);
+    expect(document.querySelector("main")?.textContent).toBe("Account");
+  });
+
+  test("does not reuse prefetched HTML after the auth session context changes", async () => {
+    const { routeModule } = await importRouteRuntime("prefetch-auth-session-context");
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      '<script type="application/json" id="__mreact_auth_session">{"user":"ada"}</script>',
+    );
+    let fetchCalls = 0;
+    globalThis.fetch = async () => {
+      fetchCalls += 1;
+      const user = fetchCalls === 1 ? "ada" : "grace";
+      return new Response(
+        [
+          '<!DOCTYPE html><div data-mreact-route-id="account"><main>',
+          user,
+          "</main></div>",
+          `<script type="application/json" id="__mreact_auth_session">{"user":"${user}"}</script>`,
+        ].join(""),
+      );
+    };
+
+    await expect(routeModule.__mreactPrefetch("/account")).resolves.toBe(true);
+    document.getElementById("__mreact_auth_session")!.textContent = '{"user":"grace"}';
+    await expect(routeModule.__mreactNavigate("/account")).resolves.toBe(true);
+
+    expect(fetchCalls).toBe(2);
+    expect(document.querySelector("main")?.textContent).toBe("grace");
+  });
+
+  test("reuses an in-flight client route HTML prefetch for navigation", async () => {
+    const { routeModule } = await importRouteRuntime("prefetch-client-html-in-flight");
+    const requests: string[] = [];
+    let resolveFetch: ((response: Response) => void) | undefined;
+    globalThis.fetch = async (url) => {
+      requests.push(String(url));
+      return new Promise<Response>((resolve) => {
+        resolveFetch = resolve;
+      });
+    };
+    installRoutePrefetchManifest([
+      {
+        path: "/about",
+        script: "/_mreact/client/assets/routes/about.12345678.js",
+      },
+    ]);
+
+    const prefetch = routeModule.__mreactPrefetch("/about");
+    await Promise.resolve();
+    const navigation = routeModule.__mreactNavigate("/about");
+    await Promise.resolve();
+
+    expect(requests).toEqual(["http://localhost:3000/about"]);
+    resolveFetch?.(
+      new Response(
+        [
+          "<!DOCTYPE html>",
+          '<div data-mreact-route-id="about"><main>About</main></div>',
+          '<script type="application/json" id="mreact-props-about">{}</script>',
+        ].join(""),
+      ),
+    );
+
+    await expect(prefetch).resolves.toBe(true);
+    await expect(navigation).resolves.toBe(true);
+    expect(document.querySelector("[data-mreact-route-id='about']")?.textContent).toBe("About");
+  });
+
+  test("keeps client viewport prefetch script-only until intent upgrades it to HTML", async () => {
+    const observed: Element[] = [];
+    let intersectionCallback: IntersectionObserverCallback | undefined;
+    const observer: IntersectionObserver = {
+      root: null,
+      rootMargin: "",
+      scrollMargin: "",
+      thresholds: [],
+      disconnect(): void {},
+      observe(target: Element): void {
+        observed.push(target);
+      },
+      takeRecords(): IntersectionObserverEntry[] {
+        return [];
+      },
+      unobserve(): void {},
+    };
+    globalThis.IntersectionObserver = function (callback: IntersectionObserverCallback) {
+      intersectionCallback = callback;
+      return observer;
+    } as unknown as typeof IntersectionObserver;
+    const { routeModule } = await importRouteRuntime(
+      "prefetch-client-viewport-then-intent",
+      '<a href="/about" data-mreact-prefetch="viewport">About</a>',
+    );
+    installRoutePrefetchManifest([
+      {
+        path: "/about",
+        script: "/_mreact/client/assets/routes/about.12345678.js",
+      },
+    ]);
+    const requests: string[] = [];
+    globalThis.fetch = async (url) => {
+      requests.push(String(url));
+      return new Response("<!DOCTYPE html><main>About</main>");
+    };
+
+    expect(observed).toHaveLength(1);
+    intersectionCallback?.(
+      [{ isIntersecting: true, target: observed[0] } as IntersectionObserverEntry],
+      observer,
+    );
+    await flushRouterMicrotasks();
+
+    expect(requests).toEqual([]);
+    await routeModule.__mreactPrefetch("/about");
+    expect(requests).toEqual(["http://localhost:3000/about"]);
   });
 
   test("prefetches server route navigation HTML when no client route script matches", async () => {
@@ -6749,6 +6980,29 @@ export default function Page() {
     expect(cache?.has(`${location.origin}/server-69`)).toBe(true);
   });
 
+  test("expires navigation HTML at the TTL without renewing it on cache hits", async () => {
+    const { routeModule } = await importRouteRuntime("prefetch-html-cache-ttl");
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000);
+    let fetchCalls = 0;
+    globalThis.fetch = async () => {
+      fetchCalls += 1;
+      return new Response(`<!DOCTYPE html><main>Response ${fetchCalls}</main>`);
+    };
+
+    try {
+      await expect(routeModule.__mreactPrefetch("/ttl")).resolves.toBe(true);
+      now.mockReturnValue(30_999);
+      await expect(routeModule.__mreactPrefetch("/ttl")).resolves.toBe(true);
+      expect(fetchCalls).toBe(1);
+
+      now.mockReturnValue(31_000);
+      await expect(routeModule.__mreactPrefetch("/ttl")).resolves.toBe(true);
+      expect(fetchCalls).toBe(2);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   test("refetches navigation HTML after prefetched URL history eviction", async () => {
     const { routeModule } = await importRouteRuntime("prefetch-url-history-bound");
     const requests: string[] = [];
@@ -6832,6 +7086,65 @@ export default function Page() {
     expect(document.querySelector("[data-mreact-route-id='stale']")?.textContent).toBe(
       "Fresh Stale",
     );
+  });
+
+  test("retries speculative HTML after a no-store response instead of reusing it", async () => {
+    const { routeModule } = await importRouteRuntime("prefetch-html-no-store");
+    let fetchCalls = 0;
+    globalThis.fetch = async () => {
+      fetchCalls += 1;
+      return fetchCalls === 1
+        ? new Response(
+            '<!DOCTYPE html><div data-mreact-route-id="private"><main>Private preview</main></div>',
+            {
+              headers: { "cache-control": "no-store" },
+            },
+          )
+        : new Response(
+            '<!DOCTYPE html><div data-mreact-route-id="private"><main>Fresh page</main></div>',
+          );
+    };
+
+    await expect(routeModule.__mreactPrefetch("/private")).resolves.toBe(false);
+    await expect(routeModule.__mreactNavigate("/private")).resolves.toBe(true);
+
+    expect(fetchCalls).toBe(2);
+    expect(document.querySelector("main")?.textContent).toBe("Fresh page");
+  });
+
+  test("does not apply an invalidated in-flight HTML response to navigation", async () => {
+    const { routeModule } = await importRouteRuntime("prefetch-html-invalidation-race");
+    const requests: string[] = [];
+    const resolvers: Array<(response: Response) => void> = [];
+    globalThis.fetch = async (url) => {
+      requests.push(String(url));
+      return new Promise<Response>((resolve) => {
+        resolvers.push(resolve);
+      });
+    };
+
+    const prefetch = routeModule.__mreactPrefetch("/race");
+    await Promise.resolve();
+    const navigation = routeModule.__mreactNavigate("/race");
+    await Promise.resolve();
+    routeModule.__mreactInvalidateNavigationCache("/race");
+
+    resolvers.shift()?.(
+      new Response(
+        '<!DOCTYPE html><div data-mreact-route-id="race"><main>Old response</main></div>',
+      ),
+    );
+    await flushRouterMicrotasks();
+    expect(requests).toEqual(["http://localhost:3000/race", "http://localhost:3000/race"]);
+
+    resolvers.shift()?.(
+      new Response(
+        '<!DOCTYPE html><div data-mreact-route-id="race"><main>Fresh response</main></div>',
+      ),
+    );
+    await expect(prefetch).resolves.toBe(true);
+    await expect(navigation).resolves.toBe(true);
+    expect(document.querySelector("main")?.textContent).toBe("Fresh response");
   });
 
   test("bounds prefetched route script history entries", async () => {
@@ -8131,7 +8444,9 @@ function setDocumentBodyFromHtml(html: string): void {
   );
 }
 
-function installRoutePrefetchManifest(routes: Array<{ path: string; script: string }>): void {
+function installRoutePrefetchManifest(
+  routes: Array<{ modulePreloads?: string[]; path: string; script: string }>,
+): void {
   document.head.insertAdjacentHTML(
     "beforeend",
     `<script type="application/json" id="mreact-route-prefetch-manifest">${JSON.stringify(routes)}</script>`,
@@ -8149,6 +8464,7 @@ async function importRouteRuntime(
   bodyHtml?: string,
 ): Promise<{
   routeModule: {
+    __mreactInvalidateNavigationCache: (path: string) => void;
     __mreactNavigate: (url: string) => Promise<boolean>;
     __mreactNavigateToHtml: (html: string, url: string) => boolean;
     __mreactPrefetch: (url: string) => Promise<boolean>;

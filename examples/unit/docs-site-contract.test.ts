@@ -947,6 +947,9 @@ describe("docs-site example contract", () => {
     expect(linkGuide).toContain('prefetch="intent"');
     expect(linkGuide).toContain('prefetch="viewport"');
     expect(linkGuide).toContain('prefetch="none"');
+    expect(linkGuide).toContain("intent prefetch warms both the route's navigation HTML");
+    expect(linkGuide).toContain("Viewport prefetch keeps client-route work to script");
+    expect(linkGuide).toContain("up to 30 seconds");
     expect(linkGuide).toContain("## Scroll and document reloads");
     expect(linkGuide).toContain('scroll="preserve"');
     expect(linkGuide).toContain("reload");
@@ -1025,7 +1028,7 @@ describe("docs-site example contract", () => {
     expect(cssAssets).toContain("## CDN base URLs");
     expect(cssAssets).toContain("assetBaseUrl");
     expect(cssAssets).toContain("publicAssetBaseUrl");
-    expect(cssAssets).toContain("route scripts, modulepreload links, dynamic import preload helpers, and route stylesheet assets");
+    expect(cssAssets).toContain("statically reachable JavaScript dependency modulepreload links");
     expect(cssAssets).toContain("## CSP and external styles");
     expect(cssAssets).toContain("style-src");
     expect(cssAssets).toContain("## Related pages");

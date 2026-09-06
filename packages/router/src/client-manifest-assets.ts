@@ -1,6 +1,7 @@
 export interface ClientManifestAssetRoute {
   css?: readonly string[] | undefined;
   imports?: readonly string[] | undefined;
+  modulePreloads?: readonly string[] | undefined;
   navigationScript?: string | undefined;
   script?: string | undefined;
   sourceMap?: string | undefined;
@@ -28,6 +29,7 @@ export function clientManifestAssetPaths(
       route.navigationScript,
       ...(route.css ?? []),
       ...(route.imports ?? []),
+      ...(route.modulePreloads ?? []),
     ]) {
       const path = safeClientManifestAssetPath(asset);
 
@@ -66,7 +68,7 @@ function normalizeClientManifestAssetPrefix(prefix: string): string {
   return withLeadingSlash.endsWith("/") ? withLeadingSlash : `${withLeadingSlash}/`;
 }
 
-function safeClientManifestAssetPath(asset: string | undefined): string | undefined {
+export function safeClientManifestAssetPath(asset: string | undefined): string | undefined {
   if (asset === undefined || asset === "" || asset.startsWith("/") || asset.includes("\\")) {
     return undefined;
   }

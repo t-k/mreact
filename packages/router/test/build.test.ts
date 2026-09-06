@@ -60,6 +60,7 @@ async function assertBuiltClientAssetClosure(
     routes: Array<{
       css?: string[];
       imports?: string[];
+      modulePreloads?: string[];
       navigationScript?: string;
       script?: string;
       sourceMap?: string;
@@ -74,6 +75,7 @@ async function assertBuiltClientAssetClosure(
       route.navigationScript,
       ...(route.css ?? []),
       ...(route.imports ?? []),
+      ...(route.modulePreloads ?? []),
     ]) {
       if (asset !== undefined) assets.add(asset);
     }
@@ -1842,6 +1844,7 @@ export default function Page() {
     const outDir = join(rootDir, ".mreact");
     const pagesOutDir = join(rootDir, ".pages");
     await mkdir(join(appDir, "login"), { recursive: true });
+    await mkdir(join(appDir, "signup"), { recursive: true });
     await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
     await writeFile(
       join(appDir, "layout.tsx"),
@@ -1850,9 +1853,16 @@ export default function Page() {
 }`,
     );
     await writeFile(
+      join(appDir, "shared.tsx"),
+      `export function SharedLabel() {
+  return <span>shared client chunk</span>;
+}`,
+    );
+    await writeFile(
       join(appDir, "login", "page.tsx"),
       `"use client";
 import { cell } from "@reckona/mreact-reactive-core";
+import { SharedLabel } from "../shared";
 
 export function loader() {
   return { intent: "login" };
@@ -1860,7 +1870,16 @@ export function loader() {
 
 export default function Login(props: { data: { intent: string } }) {
   const clicks = cell(0);
-  return <main><h1>{props.data.intent}</h1><button type="button" onClick={() => clicks.set((value) => value + 1)}>clicks: {clicks}</button></main>;
+  return <main><h1>{props.data.intent}</h1><SharedLabel /><button type="button" onClick={() => clicks.set((value) => value + 1)}>clicks: {clicks}</button></main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "signup", "page.tsx"),
+      `"use client";
+import { SharedLabel } from "../shared";
+
+export default function Signup() {
+  return <main><h1>signup</h1><SharedLabel /></main>;
 }`,
     );
 
@@ -1873,8 +1892,15 @@ export default function Login(props: { data: { intent: string } }) {
     });
     const clientManifest = JSON.parse(
       await readFile(join(outDir, "client", "manifest.json"), "utf8"),
-    ) as { routes: Array<{ path: string; script?: string }> };
-    const loginScript = clientManifest.routes.find((route) => route.path === "/login")?.script;
+    ) as {
+      routes: Array<{ modulePreloads?: string[]; path: string; script?: string }>;
+    };
+    const login = clientManifest.routes.find((route) => route.path === "/login");
+    const signup = clientManifest.routes.find((route) => route.path === "/signup");
+    const loginScript = login?.script;
+    const sharedPreload = login?.modulePreloads?.find((file) =>
+      signup?.modulePreloads?.includes(file),
+    );
     await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
     const worker = (await import(pathToFileURL(join(pagesOutDir, "_worker.js")).href)) as {
       default: {
@@ -1891,12 +1917,16 @@ export default function Login(props: { data: { intent: string } }) {
 
     expect(response.status).toBe(200);
     expect(loginScript).toMatch(/^assets\/routes\/login\.[a-f0-9]{8}\.js$/);
+    expect(sharedPreload).toMatch(/^assets\/chunks\/.*\.js$/);
+    expect(login?.modulePreloads).not.toContain(loginScript);
+    expect(login?.modulePreloads).toContain(sharedPreload);
     expect(html).toContain('data-mreact-route-id="login"');
     expect(html).toContain('<script type="application/json" id="mreact-props-login">');
     expect(html).toContain(`"url":"/login"`);
     expect(html).not.toContain("app.example");
     expect(html).toContain(`"intent":"login"`);
     expect(html).toContain(`<link rel="modulepreload" href="/_mreact/client/${loginScript}">`);
+    expect(html).toContain(`<link rel="modulepreload" href="/_mreact/client/${sharedPreload}">`);
     expect(html).toContain(`<script type="module" src="/_mreact/client/${loginScript}"></script>`);
   });
 
@@ -5681,7 +5711,12 @@ export default function MfaChallenge() {
     const clientManifest = JSON.parse(
       await readFile(join(outDir, "client", "manifest.json"), "utf8"),
     ) as {
-      routes: Array<{ imports?: string[]; path: string; script?: string }>;
+      routes: Array<{
+        imports?: string[];
+        modulePreloads?: string[];
+        path: string;
+        script?: string;
+      }>;
     };
     const login = clientManifest.routes.find((route) => route.path === "/login");
     const challenge = clientManifest.routes.find((route) => route.path === "/mfa-challenge");
@@ -5690,6 +5725,12 @@ export default function MfaChallenge() {
     expect(login?.script).toMatch(/^assets\/routes\/login\.[a-f0-9]{8}\.js$/);
     expect(challenge?.script).toMatch(/^assets\/routes\/mfa-challenge\.[a-f0-9]{8}\.js$/);
     expect(sharedImports).toHaveLength(1);
+    expect(login?.modulePreloads).toEqual([...(login?.modulePreloads ?? [])].sort());
+    expect(challenge?.modulePreloads).toEqual([...(challenge?.modulePreloads ?? [])].sort());
+    expect(login?.modulePreloads).toContain(sharedImports?.[0]);
+    expect(challenge?.modulePreloads).toContain(sharedImports?.[0]);
+    expect(login?.modulePreloads).not.toContain(login?.script);
+    expect(challenge?.modulePreloads).not.toContain(challenge?.script);
 
     const sharedCode = await readFile(join(outDir, "client", sharedImports?.[0] ?? ""), "utf8");
     const loginCode = await readFile(join(outDir, "client", login?.script ?? ""), "utf8");
@@ -5698,6 +5739,15 @@ export default function MfaChallenge() {
     expect(sharedCode).toContain("__mfa_pending_store_marker__");
     expect(loginCode).not.toContain("let pending");
     expect(challengeCode).not.toContain("let pending");
+
+    const loginResponse = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/login"),
+    });
+    const loginHtml = await loginResponse.text();
+    for (const file of [login?.script, ...(login?.modulePreloads ?? [])]) {
+      expect(loginHtml).toContain(`<link rel="modulepreload" href="/_mreact/client/${file}">`);
+    }
   });
 
   test("uses the client asset base for built dynamic import chunks", async () => {
@@ -6110,17 +6160,20 @@ export default function Page() {
     });
     const clientManifest = JSON.parse(
       await readFile(join(outDir, "client", "manifest.json"), "utf8"),
-    ) as { routes: Array<{ script?: string }> };
+    ) as { routes: Array<{ modulePreloads?: string[]; script?: string }> };
     const script = clientManifest.routes[0]?.script;
+    const modulePreloads = [script, ...(clientManifest.routes[0]?.modulePreloads ?? [])];
     const response = await renderBuiltAppRequest({
       outDir,
       request: new Request("http://local.test/"),
     });
     const html = await response.text();
 
-    expect(html).toContain(
-      `<link rel="modulepreload" href="https://cdn.example.com/mreact-client/${script}">`,
-    );
+    for (const file of modulePreloads) {
+      expect(html).toContain(
+        `<link rel="modulepreload" href="https://cdn.example.com/mreact-client/${file}">`,
+      );
+    }
     expect(html).toContain(
       `<script type="module" src="https://cdn.example.com/mreact-client/${script}"></script>`,
     );

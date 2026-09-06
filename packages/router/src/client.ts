@@ -61,6 +61,7 @@ export interface ClientRouteManifestEntry {
   clientReferenceManifest?: readonly ClientReferenceMetadata[] | undefined;
   devScript?: string;
   imports?: readonly string[];
+  modulePreloads?: readonly string[];
   navigation?: boolean;
   navigationScript?: string;
   routeId?: string;
@@ -3013,6 +3014,7 @@ export async function buildClientRouteEntrySource(
   const navigationStateDeclaration = inlineClientNavigation
     ? `const __mreactNavigationState = __mreactGlobal.__mreactNavigationState ??= {
   cache: new Map(),
+  cacheTokens: new Map(),
   current: {
     from: null,
     pending: false,
@@ -3029,7 +3031,8 @@ export async function buildClientRouteEntrySource(
   routePrefetchManifestText: undefined,
   viewportAnchors: new WeakSet(),
   viewportObserver: undefined,
-};`
+};
+__mreactNavigationState.cacheTokens ??= new Map();`
     : "";
   const deferredNavigationRuntime = deferredClientNavigation
     ? `
@@ -3192,10 +3195,10 @@ export async function __mreactNavigate(url, options = {}) {
     : false;
 }
 
-export async function __mreactPrefetch(url) {
+export async function __mreactPrefetch(url, options = {}) {
   const runtime = await __mreactLoadNavigationRuntime();
   return typeof runtime?.__mreactPrefetch === "function"
-    ? runtime.__mreactPrefetch(url)
+    ? runtime.__mreactPrefetch(url, options)
     : false;
 }
 
@@ -3677,7 +3680,7 @@ function __mreactRouteAnnouncementElement() {
   return announcement;
 }
 
-export async function __mreactPrefetch(url) {
+export async function __mreactPrefetch(url, options = {}) {
   if (!__mreactCanPrefetch()) {
     return false;
   }
@@ -3696,10 +3699,6 @@ export async function __mreactPrefetch(url) {
     return false;
   }
 
-  if (__mreactNavigationState.prefetchedUrls.has(href)) {
-    return true;
-  }
-
   __mreactRememberPrefetchedUrl(href);
 
   const script = __mreactRouteScriptForNavigationUrl(href);
@@ -3708,21 +3707,30 @@ export async function __mreactPrefetch(url) {
     return __mreactPrefetchNavigationHtml(href);
   }
 
-  return __mreactPrefetchRouteScript(script);
+  const scriptPrefetched = __mreactPrefetchRouteScript(script);
+
+  if (options?.trigger === "viewport") {
+    return scriptPrefetched;
+  }
+
+  return Promise.resolve(__mreactPrefetchNavigationHtml(href))
+    .then(() => scriptPrefetched)
+    .catch(() => scriptPrefetched);
 }
 
 function __mreactPrefetchNavigationHtml(href) {
-  if (__mreactNavigationState.cache.has(href)) {
+  if (__mreactCachedNavigationHtml(href) !== undefined) {
     return true;
   }
 
-  return __mreactFetchNavigationHtmlOnce(href)
-    .then((html) => typeof html === "string")
+  return __mreactFetchNavigationHtmlOnce(href, { speculative: true })
+    .then((result) => result.cacheable && typeof result.html === "string")
     .catch(() => false);
 }
 
 const __mreactNavigationHtmlCacheMaxEntries = 64;
 const __mreactNavigationPrefetchHistoryMaxEntries = 64;
+const __mreactNavigationHtmlCacheTtlMs = 30_000;
 
 function __mreactRememberPrefetchedUrl(href) {
   __mreactRememberPrefetchHistory(__mreactNavigationState.prefetchedUrls, href);
@@ -3751,23 +3759,49 @@ function __mreactRememberPrefetchHistory(history, href) {
 }
 
 function __mreactCachedNavigationHtml(href) {
-  const html = __mreactNavigationState.cache.get(href);
+  const entry = __mreactNavigationState.cache.get(href);
 
-  if (html === undefined) {
+  if (entry === undefined) {
+    return undefined;
+  }
+
+  if (
+    entry.token !== __mreactNavigationState.cacheTokens.get(href) ||
+    entry.token.valid !== true ||
+    entry.cacheContext !== __mreactNavigationCacheContext() ||
+    Date.now() - entry.fetchedAt >= __mreactNavigationHtmlCacheTtlMs
+  ) {
+    __mreactNavigationState.cache.delete(href);
+    __mreactNavigationState.prefetchedUrls.delete(href);
+    __mreactReleaseNavigationCacheToken(href, entry.token);
     return undefined;
   }
 
   __mreactNavigationState.cache.delete(href);
-  __mreactNavigationState.cache.set(href, html);
-  return html;
+  __mreactNavigationState.cache.set(href, entry);
+  return entry.html;
 }
 
-function __mreactRememberNavigationHtml(href, html) {
+function __mreactRememberNavigationHtml(href, html, token, cacheContext) {
+  if (
+    token === undefined ||
+    token.valid !== true ||
+    __mreactNavigationState.cacheTokens.get(href) !== token ||
+    cacheContext !== __mreactNavigationCacheContext()
+  ) {
+    return;
+  }
+
   if (__mreactNavigationState.cache.has(href)) {
     __mreactNavigationState.cache.delete(href);
   }
 
-  __mreactNavigationState.cache.set(href, html);
+  __mreactNavigationState.cache.set(href, {
+    cacheContext,
+    fetchedAt: Date.now(),
+    html,
+    token,
+  });
 
   while (__mreactNavigationState.cache.size > __mreactNavigationHtmlCacheMaxEntries) {
     const oldestHref = __mreactNavigationState.cache.keys().next().value;
@@ -3778,37 +3812,98 @@ function __mreactRememberNavigationHtml(href, html) {
 
     __mreactNavigationState.cache.delete(oldestHref);
     __mreactNavigationState.prefetchedUrls.delete(oldestHref);
+    __mreactReleaseNavigationCacheToken(oldestHref);
   }
 }
 
-function __mreactPrefetchRouteScript(script) {
+function __mreactNavigationCacheContext() {
+  const authSession = typeof document === "undefined"
+    ? undefined
+    : document.getElementById("__mreact_auth_session")?.textContent ?? undefined;
+  const cookies = typeof document === "undefined" ? "" : document.cookie;
+
+  return JSON.stringify([authSession, cookies]);
+}
+
+function __mreactNavigationResponseCacheContext(html) {
+  let authSession;
+
+  if (typeof document !== "undefined") {
+    const template = document.createElement("template");
+    template.innerHTML = html;
+    authSession = template.content.querySelector("#__mreact_auth_session")?.textContent ?? undefined;
+  }
+
+  const cookies = typeof document === "undefined" ? "" : document.cookie;
+
+  return JSON.stringify([authSession, cookies]);
+}
+
+function __mreactReleaseNavigationCacheToken(href, token) {
+  if (
+    __mreactNavigationState.cache.get(href) === undefined &&
+    __mreactNavigationState.pendingHtmlFetches.get(href) === undefined &&
+    (token === undefined || __mreactNavigationState.cacheTokens.get(href) === token)
+  ) {
+    __mreactNavigationState.cacheTokens.delete(href);
+  }
+}
+
+function __mreactNavigationCacheToken(href) {
+  const existing = __mreactNavigationState.cacheTokens.get(href);
+
+  if (existing !== undefined) {
+    return existing;
+  }
+
+  const token = { valid: true };
+  __mreactNavigationState.cacheTokens.set(href, token);
+  return token;
+}
+
+function __mreactPrefetchRouteScript(route) {
   if (typeof document === "undefined") {
     return false;
   }
 
-  const href = __mreactNormalizeAssetUrl(script);
+  const files = [route.script, ...(route.modulePreloads ?? [])];
+  let valid = true;
 
-  if (href === undefined) {
-    return false;
-  }
+  for (const file of files) {
+    const href = __mreactNormalizeAssetUrl(file);
 
-  if (__mreactNavigationState.prefetchedScripts.has(href)) {
-    return true;
-  }
-
-  for (const link of Array.from(document.querySelectorAll('link[rel="modulepreload"][href]'))) {
-    if (link.href === href) {
-      __mreactRememberPrefetchedScript(href);
-      return true;
+    if (
+      href === undefined ||
+      !__mreactIsSupportedModulePreloadUrl(file) ||
+      !__mreactModulePreloadMatchesRouteScript(file, route.script)
+    ) {
+      valid = false;
+      continue;
     }
+
+    if (__mreactNavigationState.prefetchedScripts.has(href)) {
+      continue;
+    }
+
+    let found = false;
+    for (const link of Array.from(document.querySelectorAll('link[rel="modulepreload"][href]'))) {
+      if (link.href === href) {
+        found = true;
+        break;
+      }
+    }
+
+    if (!found) {
+      const link = document.createElement("link");
+      link.rel = "modulepreload";
+      link.href = href;
+      document.head.appendChild(link);
+    }
+
+    __mreactRememberPrefetchedScript(href);
   }
 
-  const link = document.createElement("link");
-  link.rel = "modulepreload";
-  link.href = href;
-  document.head.appendChild(link);
-  __mreactRememberPrefetchedScript(href);
-  return true;
+  return valid;
 }
 
 export async function __mreactNavigate(url, options = {}) {
@@ -3821,19 +3916,46 @@ export async function __mreactNavigate(url, options = {}) {
   __mreactSetNavigationState(__mreactPendingNavigationState(href, options.type ?? "push"));
 
   try {
-    const cachedHtml = __mreactCachedNavigationHtml(href);
-    const script = __mreactRouteScriptForNavigationUrl(href);
-    if (script !== undefined) {
-      void __mreactPrefetchRouteScript(script);
-    }
-    const html = cachedHtml ?? await __mreactFetchNavigationHtmlOnce(href);
+    let forceReload = __mreactNavigationState.reloadNextNavigationFetch === true;
 
-    if (typeof html !== "string") {
-      return false;
-    }
+    for (;;) {
+      const cachedHtml = forceReload ? undefined : __mreactCachedNavigationHtml(href);
+      const script = __mreactRouteScriptForNavigationUrl(href);
+      if (script !== undefined) {
+        void __mreactPrefetchRouteScript(script);
+      }
+      const result = cachedHtml === undefined
+        ? await __mreactFetchNavigationHtmlOnce(href, { force: forceReload })
+        : {
+            cacheable: true,
+            cacheContext: __mreactNavigationCacheContext(),
+            cacheContextMatches: true,
+            html: cachedHtml,
+            reusable: true,
+            speculative: false,
+            token: undefined,
+          };
 
-    __mreactRememberNavigationHtml(href, html);
-    return await __mreactApplyNavigationHtmlWithOptionalTransition(html, href, options);
+      if (result.token !== undefined && result.token.valid !== true) {
+        forceReload = __mreactNavigationState.reloadNextNavigationFetch === true;
+        continue;
+      }
+
+      if (result.speculative === true && result.cacheable !== true) {
+        forceReload = true;
+        continue;
+      }
+
+      if (result.reusable === true && result.cacheContextMatches !== true) {
+        return false;
+      }
+
+      if (typeof result.html !== "string") {
+        return false;
+      }
+
+      return await __mreactApplyNavigationHtmlWithOptionalTransition(result.html, href, options);
+    }
   } finally {
     __mreactSetNavigationState(__mreactIdleNavigationState());
   }
@@ -3982,50 +4104,86 @@ export function __mreactInvalidateNavigationCache(path) {
 
   for (const href of hrefs) {
     if (__mreactNormalizeNavigationPath(href) === normalizedPath) {
+      const token = __mreactNavigationState.cacheTokens.get(href);
+      if (token !== undefined) {
+        token.valid = false;
+      }
       __mreactNavigationState.cache.delete(href);
       __mreactNavigationState.prefetchedUrls.delete(href);
       __mreactNavigationState.pendingHtmlFetches.delete(href);
+      __mreactNavigationState.cacheTokens.delete(href);
     }
   }
 }
 
 function __mreactInvalidateAllNavigationCache() {
+  for (const entry of __mreactNavigationState.cache.values()) {
+    entry.token.valid = false;
+  }
+  for (const request of __mreactNavigationState.pendingHtmlFetches.values()) {
+    request.token.valid = false;
+  }
   __mreactNavigationState.cache.clear();
+  __mreactNavigationState.cacheTokens.clear();
   __mreactNavigationState.prefetchedUrls.clear();
   __mreactNavigationState.pendingHtmlFetches.clear();
 }
 
-function __mreactFetchNavigationHtmlOnce(href) {
+function __mreactFetchNavigationHtmlOnce(href, options = {}) {
   const pending = __mreactNavigationState.pendingHtmlFetches.get(href);
 
-  if (pending !== undefined) {
-    return pending;
+  if (pending !== undefined && options.force !== true) {
+    return pending.promise;
   }
 
-  const request = __mreactFetchNavigationHtml(href)
-    .then((html) => {
+  if (pending !== undefined) {
+    pending.token.valid = false;
+    __mreactNavigationState.pendingHtmlFetches.delete(href);
+    __mreactNavigationState.cacheTokens.delete(href);
+  }
+
+  const token = __mreactNavigationCacheToken(href);
+  const pendingRequest = {
+    promise: undefined,
+    token,
+  };
+  const request = __mreactFetchNavigationHtml(href, options)
+    .then((result) => {
+      const enriched = {
+        ...result,
+        speculative: options.speculative === true,
+        token,
+      };
       if (
-        typeof html === "string" &&
-        __mreactNavigationState.pendingHtmlFetches.get(href) === request
+        enriched.cacheable === true &&
+        typeof enriched.html === "string" &&
+        __mreactNavigationState.pendingHtmlFetches.get(href) === pendingRequest &&
+        token.valid === true &&
+        __mreactNavigationState.cacheTokens.get(href) === token
       ) {
-        __mreactRememberNavigationHtml(href, html);
+        __mreactRememberNavigationHtml(href, enriched.html, token, enriched.cacheContext);
       }
 
-      return html;
+      return enriched;
     })
     .finally(() => {
-      if (__mreactNavigationState.pendingHtmlFetches.get(href) === request) {
+      if (__mreactNavigationState.pendingHtmlFetches.get(href) === pendingRequest) {
         __mreactNavigationState.pendingHtmlFetches.delete(href);
+        __mreactReleaseNavigationCacheToken(href, token);
       }
     });
 
-  __mreactNavigationState.pendingHtmlFetches.set(href, request);
+  pendingRequest.promise = request;
+  __mreactNavigationState.pendingHtmlFetches.set(href, pendingRequest);
   return request;
 }
 
-function __mreactFetchNavigationHtml(href) {
-  const reloadRouteCache = __mreactNavigationState.reloadNextNavigationFetch === true;
-  __mreactNavigationState.reloadNextNavigationFetch = false;
+function __mreactFetchNavigationHtml(href, options = {}) {
+  const speculative = options.speculative === true;
+  const reloadRouteCache = !speculative && __mreactNavigationState.reloadNextNavigationFetch === true;
+  if (!speculative) {
+    __mreactNavigationState.reloadNextNavigationFetch = false;
+  }
   const headers = reloadRouteCache
     ? { "x-mreact-navigation": "1", "x-mreact-navigation-cache": "reload" }
     : { "x-mreact-navigation": "1" };
@@ -4034,12 +4192,50 @@ function __mreactFetchNavigationHtml(href) {
     headers,
   }).then((response) => {
     __mreactApplyRevalidationHeader(response);
-    if (__mreactNavigationResponseRequiresDocumentReload(response)) {
-      return undefined;
+    const requiresDocumentReload = __mreactNavigationResponseRequiresDocumentReload(response);
+    const responseIsSuccessful =
+      response.ok === true ||
+      (response.ok === undefined && response.status >= 200 && response.status < 300);
+    const responseIsRedirected = response.redirected === true;
+    const cacheControl = (response.headers.get("cache-control") ?? "").toLowerCase();
+    const responseDisallowsCache = /(?:^|,)\\s*(?:no-store|no-cache)(?:\\s*=|\\s*(?:,|$))/.test(
+      cacheControl,
+    );
+    const reusable =
+      !requiresDocumentReload &&
+      responseIsSuccessful &&
+      !responseIsRedirected &&
+      !responseDisallowsCache;
+
+    if (requiresDocumentReload || responseIsRedirected || speculative && !reusable) {
+      __mreactDiscardNavigationResponse(response);
+      return { cacheable: false, html: undefined };
     }
 
-    return response.text();
+    return response.text().then((html) => {
+      const cacheContext = __mreactNavigationResponseCacheContext(html);
+      const cacheContextMatches = cacheContext === __mreactNavigationCacheContext();
+
+      return {
+        cacheContext,
+        cacheContextMatches,
+        cacheable: reusable && cacheContextMatches,
+        html,
+        reusable,
+      };
+    });
   });
+}
+
+function __mreactDiscardNavigationResponse(response) {
+  try {
+    const result = response?.body?.cancel?.();
+    if (result !== undefined && typeof result.catch === "function") {
+      void result.catch(() => {});
+    }
+  } catch {
+    // Ignore body cancellation failures while falling back to a document navigation.
+  }
 }
 
 function __mreactStaticNavigationRequestHref(href) {
@@ -4113,7 +4309,7 @@ export function __mreactRestoreHistoryState(state) {
 
   const html = typeof state.html === "string"
     ? state.html
-    : typeof state.url === "string" ? __mreactNavigationState.cache.get(state.url) : undefined;
+    : typeof state.url === "string" ? __mreactCachedNavigationHtml(state.url) : undefined;
 
   if (typeof html !== "string") {
     return false;
@@ -4489,7 +4685,7 @@ function __mreactRouteScriptForNavigationUrl(url) {
 
   for (const route of __mreactClientRoutePrefetchManifest()) {
     if (__mreactRoutePathMatches(route.path, nextUrl.pathname)) {
-      return route.script;
+      return route;
     }
   }
 
@@ -4519,18 +4715,57 @@ function __mreactClientRoutePrefetchManifest() {
   try {
     const parsed = JSON.parse(text);
     __mreactNavigationState.routePrefetchManifest = Array.isArray(parsed)
-      ? parsed.filter((route) =>
-          route !== null &&
-          typeof route === "object" &&
-          typeof route.path === "string" &&
-          typeof route.script === "string"
-        )
+      ? parsed.flatMap((route) => {
+          if (
+            route === null ||
+            typeof route !== "object" ||
+            typeof route.path !== "string" ||
+            typeof route.script !== "string" ||
+            !__mreactIsSupportedModulePreloadUrl(route.script)
+          ) {
+            return [];
+          }
+
+          const modulePreloads = Array.isArray(route.modulePreloads)
+            ? route.modulePreloads.filter(
+                (file) =>
+                  typeof file === "string" &&
+                  __mreactIsSupportedModulePreloadUrl(file) &&
+                  __mreactModulePreloadMatchesRouteScript(file, route.script),
+              )
+            : [];
+
+          return [{ ...route, modulePreloads }];
+        })
       : [];
   } catch {
     __mreactNavigationState.routePrefetchManifest = [];
   }
 
   return __mreactNavigationState.routePrefetchManifest;
+}
+
+function __mreactIsSupportedModulePreloadUrl(value) {
+  if (typeof value !== "string" || value === "" || value.startsWith("javascript:")) {
+    return false;
+  }
+
+  try {
+    const resolved = new URL(value, typeof location === "undefined" ? undefined : location.href);
+    return resolved.protocol === "http:" || resolved.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function __mreactModulePreloadMatchesRouteScript(value, script) {
+  try {
+    const scriptUrl = new URL(__mreactNormalizeAssetUrl(script), location.href);
+    const dependencyUrl = new URL(__mreactNormalizeAssetUrl(value), location.href);
+    return scriptUrl.origin === dependencyUrl.origin;
+  } catch {
+    return false;
+  }
 }
 
 function __mreactRoutePathMatches(routePath, pathname) {
@@ -4904,7 +5139,7 @@ function __mreactObserveViewportPrefetchAnchors(root) {
         }
 
         __mreactNavigationState.viewportObserver?.unobserve(entry.target);
-        void __mreactPrefetch(entry.target.href);
+        void __mreactPrefetch(entry.target.href, { trigger: "viewport" });
       }
     });
   }

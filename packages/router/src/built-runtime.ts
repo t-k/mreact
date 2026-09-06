@@ -20,6 +20,7 @@ export interface BuiltRuntime extends BuiltServerModuleArtifactRuntime {
   assetBaseUrl?: string | undefined;
   clientAssetPaths: ReadonlySet<string>;
   clientScripts: ReadonlyMap<string, string>;
+  clientScriptPreloads: ReadonlyMap<string, readonly string[]>;
   clientStylesByFile: ReadonlyMap<string, readonly string[]>;
   clientStyles: ReadonlyMap<string, readonly string[]>;
   dehydrateOptions?: DehydrateOptions | undefined;
@@ -47,7 +48,9 @@ export interface BuiltRuntime extends BuiltServerModuleArtifactRuntime {
       start: number;
     }[]
   >;
-  serverActionManifest?: readonly { moduleId: string; exportName: string; inferred?: boolean }[] | undefined;
+  serverActionManifest?:
+    | readonly { moduleId: string; exportName: string; inferred?: boolean }[]
+    | undefined;
   serverModuleCacheVersion: string;
 }
 
@@ -128,6 +131,13 @@ export async function materializeBuiltRuntime(options: {
       route.client && route.script !== undefined ? [[route.path, route.script]] : [],
     ),
   );
+  const clientScriptPreloads = new Map(
+    clientManifest.routes.flatMap((route) =>
+      route.client && route.script !== undefined && route.modulePreloads !== undefined
+        ? [[route.path, route.modulePreloads] as const]
+        : [],
+    ),
+  );
   const clientStyles = new Map(
     clientManifest.routes.flatMap((route) =>
       route.css !== undefined && route.css.length > 0 ? [[route.path, route.css]] : [],
@@ -168,7 +178,11 @@ export async function materializeBuiltRuntime(options: {
     serverManifest.dehydratePolicyModule === undefined
       ? undefined
       : await loadBuiltDehydratePolicy(
-          join(options.outDir, "server", safeManifestFilePath(serverManifest.dehydratePolicyModule)),
+          join(
+            options.outDir,
+            "server",
+            safeManifestFilePath(serverManifest.dehydratePolicyModule),
+          ),
           serverManifest.dehydratePolicyModule,
         );
 
@@ -180,6 +194,7 @@ export async function materializeBuiltRuntime(options: {
       : { assetBaseUrl: serverManifest.assetBaseUrl }),
     clientAssetPaths: builtClientAssetPaths(clientManifest),
     clientScripts,
+    clientScriptPreloads,
     clientStylesByFile,
     clientStyles,
     ...(dehydrateOptions === undefined ? {} : { dehydrateOptions }),
@@ -220,10 +235,7 @@ async function loadBuiltDehydratePolicy(
   } catch (error) {
     throw builtArtifactReadError("built app dehydration policy", policyPath, error);
   }
-  return dehydrateOptionsFromModule(
-    policyModule,
-    `Built dehydration policy ${manifestPath}`,
-  );
+  return dehydrateOptionsFromModule(policyModule, `Built dehydration policy ${manifestPath}`);
 }
 
 export async function readBuiltImportPolicyText(outDir: string): Promise<string | undefined> {

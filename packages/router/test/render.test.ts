@@ -32,6 +32,52 @@ describe("mreact app request rendering", () => {
     expect(await response.text()).toContain("<main><h1>Hello app router</h1></main>");
   });
 
+  test("emits transitive client modulepreloads in the SSR head", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-render-modulepreloads-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      '"use client"; export default function Page() { return <main>Client page</main>; }',
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      clientScripts: new Map([["/", "routes/index.js"]]),
+      clientScriptPreloads: new Map([["/", ["chunks/shared.js", "routes/index.js"]]]),
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain('<link rel="modulepreload" href="/_mreact/client/routes/index.js">');
+    expect(html).toContain('<link rel="modulepreload" href="/_mreact/client/chunks/shared.js">');
+    expect(
+      html.match(/<link rel="modulepreload" href="\/_mreact\/client\/routes\/index\.js">/g),
+    ).toHaveLength(1);
+  });
+
+  test("emits transitive client modulepreloads in streamed HTML", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-modulepreloads-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `"use client";
+export const stream = true;
+export default function Page() {
+  return <main>Streamed client page</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      clientScripts: new Map([["/", "routes/index.js"]]),
+      clientScriptPreloads: new Map([["/", ["chunks/shared.js"]]]),
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(html).toContain('<link rel="modulepreload" href="/_mreact/client/routes/index.js">');
+    expect(html).toContain('<link rel="modulepreload" href="/_mreact/client/chunks/shared.js">');
+  });
+
   test("does not allocate an extra Headers object for default HTML responses", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-default-headers-"));
     await writeFile(

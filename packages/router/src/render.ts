@@ -205,6 +205,7 @@ export interface RenderAppRequestOptions {
   assetBaseUrl?: string | undefined;
   clientRouteInferenceCache?: ClientRouteInferenceCache | undefined;
   clientScripts?: ReadonlyMap<string, string>;
+  clientScriptPreloads?: ReadonlyMap<string, readonly string[]>;
   clientStylesByFile?: ReadonlyMap<string, readonly string[]>;
   clientStyles?: ReadonlyMap<string, readonly string[]>;
   define?: UserConfig["define"] | undefined;
@@ -977,6 +978,7 @@ async function renderAppRequestInternal(
       routePath: url.pathname,
       routeFile: notFoundFile,
       routeScripts: options.clientScripts,
+      routeScriptPreloads: options.clientScriptPreloads,
       serverModules: options.serverModules,
       serverModuleCacheVersion: options.serverModuleCacheVersion,
       serverSourceFiles: options.serverSourceFiles,
@@ -1363,8 +1365,10 @@ async function renderAppRequestInternal(
                     assetBaseUrl: options.assetBaseUrl,
                     currentStyleSheets: clientStyleSheets,
                     currentScript: clientRoute ? clientScript : undefined,
+                    currentScriptPreloads: options.clientScriptPreloads?.get(matched.route.path),
                     currentNavigationScript: navigationScript,
                     routeScripts: options.clientScripts,
+                    routeScriptPreloads: options.clientScriptPreloads,
                   })}${html}`,
                   preparedActions.htmlReplacements,
                 ),
@@ -1448,6 +1452,7 @@ async function renderAppRequestInternal(
               trackedRequest,
               routePath: matched.route.path,
               routeScripts: options.clientScripts,
+              routeScriptPreloads: options.clientScriptPreloads,
               serverModules: options.serverModules,
               serverModuleCacheVersion: options.serverModuleCacheVersion,
               serverSourceFiles: options.serverSourceFiles,
@@ -1498,6 +1503,7 @@ async function renderAppRequestInternal(
             requestUrl: url.href,
             routePath: matched.route.path,
             routeScripts: options.clientScripts,
+            routeScriptPreloads: options.clientScriptPreloads,
             serverModules: options.serverModules,
             serverModuleCacheVersion: options.serverModuleCacheVersion,
             serverSourceFiles: options.serverSourceFiles,
@@ -1682,8 +1688,10 @@ async function renderAppRequestInternal(
                 assetBaseUrl: options.assetBaseUrl,
                 currentStyleSheets: clientStyleSheets,
                 currentScript: clientRoute ? clientScript : undefined,
+                currentScriptPreloads: options.clientScriptPreloads?.get(matched.route.path),
                 currentNavigationScript: navigationScript,
                 routeScripts: options.clientScripts,
+                routeScriptPreloads: options.clientScriptPreloads,
               })}${html}`,
               preparedActions.htmlReplacements,
             ),
@@ -1749,6 +1757,7 @@ async function renderAppRequestInternal(
             routePath: matched.route.path,
             routeFile: notFoundFile,
             routeScripts: options.clientScripts,
+            routeScriptPreloads: options.clientScriptPreloads,
             serverModules: options.serverModules,
             serverModuleCacheVersion: options.serverModuleCacheVersion,
             serverSourceFiles: options.serverSourceFiles,
@@ -1777,6 +1786,7 @@ async function renderAppRequestInternal(
           routePath: matched.route.path,
           routeFile: errorFile,
           routeScripts: options.clientScripts,
+          routeScriptPreloads: options.clientScriptPreloads,
           serverModules: options.serverModules,
           serverModuleCacheVersion: options.serverModuleCacheVersion,
           serverSourceFiles: options.serverSourceFiles,
@@ -1928,12 +1938,32 @@ function applyActionHtmlReplacements(
   return next;
 }
 
-function modulePreloadTags(script: string | undefined, assetBaseUrl: string | undefined): string {
-  return script === undefined
-    ? ""
-    : `<link rel="modulepreload" href="${escapeHtmlAttribute(
-        assetPath(script, assetBaseUrl ?? "/_mreact/client/"),
-      )}">`;
+function modulePreloadTags(
+  script: string | undefined,
+  dependencies: readonly string[] | undefined,
+  assetBaseUrl: string | undefined,
+): string {
+  if (script === undefined) {
+    return "";
+  }
+
+  const seen = new Set<string>();
+  return [script, ...(dependencies ?? [])]
+    .filter((file) => {
+      if (seen.has(file)) {
+        return false;
+      }
+
+      seen.add(file);
+      return true;
+    })
+    .map(
+      (file) =>
+        `<link rel="modulepreload" href="${escapeHtmlAttribute(
+          assetPath(file, assetBaseUrl ?? "/_mreact/client/"),
+        )}">`,
+    )
+    .join("");
 }
 
 function clientNavigationHeadTags(options: {
@@ -1941,13 +1971,19 @@ function clientNavigationHeadTags(options: {
   currentStyleSheets?: readonly string[] | undefined;
   currentNavigationScript?: string | undefined;
   currentScript: string | undefined;
+  currentScriptPreloads?: readonly string[] | undefined;
   routeScripts: ReadonlyMap<string, string> | undefined;
+  routeScriptPreloads?: ReadonlyMap<string, readonly string[]> | undefined;
 }): string {
   return [
     styleSheetTags(options.currentStyleSheets, options.assetBaseUrl),
-    modulePreloadTags(options.currentScript, options.assetBaseUrl),
+    modulePreloadTags(options.currentScript, options.currentScriptPreloads, options.assetBaseUrl),
     navigationRuntimeScriptTag(options.currentNavigationScript, options.assetBaseUrl),
-    routePrefetchManifestScript(options.routeScripts, options.assetBaseUrl),
+    routePrefetchManifestScript(
+      options.routeScripts,
+      options.routeScriptPreloads,
+      options.assetBaseUrl,
+    ),
   ].join("");
 }
 
@@ -2011,6 +2047,7 @@ function navigationRuntimeScriptTag(
 
 function routePrefetchManifestScript(
   routeScripts: ReadonlyMap<string, string> | undefined,
+  routeScriptPreloads: ReadonlyMap<string, readonly string[]> | undefined,
   assetBaseUrl: string | undefined,
 ): string {
   if (routeScripts === undefined || routeScripts.size === 0) {
@@ -2020,6 +2057,13 @@ function routePrefetchManifestScript(
   const routes = Array.from(routeScripts.entries(), ([path, script]) => ({
     path,
     script: assetPath(script, assetBaseUrl ?? "/_mreact/client/"),
+    ...(routeScriptPreloads?.get(path) === undefined || routeScriptPreloads.get(path)?.length === 0
+      ? {}
+      : {
+          modulePreloads: routeScriptPreloads
+            .get(path)
+            ?.map((file) => assetPath(file, assetBaseUrl ?? "/_mreact/client/")),
+        }),
   }));
   const json = JSON.stringify(routes).replaceAll("<", "\\u003c");
 
@@ -2233,6 +2277,7 @@ async function renderSpecialRoute(options: {
   routePath?: string | undefined;
   routeFile: string;
   routeScripts?: ReadonlyMap<string, string> | undefined;
+  routeScriptPreloads?: ReadonlyMap<string, readonly string[]> | undefined;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
@@ -2294,7 +2339,11 @@ async function renderSpecialRoute(options: {
       currentStyleSheets: options.currentStyleSheets,
       currentScript:
         options.navigation?.clientRoute === true ? options.navigation.script : undefined,
+      currentScriptPreloads: options.routeScriptPreloads?.get(
+        options.navigation?.routePath ?? options.routePath ?? "",
+      ),
       routeScripts: options.routeScripts,
+      routeScriptPreloads: options.routeScriptPreloads,
     })}${html}`,
     {
       headers: { "content-type": "text/html; charset=utf-8" },
@@ -3518,6 +3567,7 @@ function runServerStreamModule(
     requestUrl: string;
     routePath: string;
     routeScripts?: ReadonlyMap<string, string> | undefined;
+    routeScriptPreloads?: ReadonlyMap<string, readonly string[]> | undefined;
     clientRoute: boolean;
     clientReferenceManifest?: readonly ClientReferenceMetadata[] | undefined;
     define?: UserConfig["define"] | undefined;
@@ -3577,7 +3627,9 @@ function runServerStreamModule(
       clientNavigationHeadTags({
         assetBaseUrl: options.assetBaseUrl,
         currentScript: options.clientRoute ? options.script : undefined,
+        currentScriptPreloads: options.routeScriptPreloads?.get(options.routePath),
         routeScripts: options.routeScripts,
+        routeScriptPreloads: options.routeScriptPreloads,
       }),
     );
 
@@ -3801,6 +3853,7 @@ async function runServerStreamModuleWithLoading(
     trackedRequest?: TrackedHeaderRequest | undefined;
     routePath: string;
     routeScripts?: ReadonlyMap<string, string> | undefined;
+    routeScriptPreloads?: ReadonlyMap<string, readonly string[]> | undefined;
     serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
     serverModuleCacheVersion?: string | undefined;
     serverSourceFiles?: ReadonlyMap<string, string> | undefined;
@@ -3874,7 +3927,9 @@ async function runServerStreamModuleWithLoading(
       clientNavigationHeadTags({
         assetBaseUrl: options.assetBaseUrl,
         currentScript: options.clientRoute ? options.script : undefined,
+        currentScriptPreloads: options.routeScriptPreloads?.get(options.routePath),
         routeScripts: options.routeScripts,
+        routeScriptPreloads: options.routeScriptPreloads,
       }),
     );
 

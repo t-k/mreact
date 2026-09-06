@@ -110,6 +110,7 @@ import {
 import { collectRouteCssFilesFromSources, collectSpecialBoundaryFiles } from "./route-styles.js";
 import { existingRouteShellCandidates } from "./route-shells.js";
 import { sourceModuleCandidates } from "./source-modules.js";
+import { collectStaticModulePreloadDependencies } from "./module-preload-graph.js";
 import { collectBuildInferredServerActions } from "./server-action-inference.js";
 import {
   isVisitorDependentResponse,
@@ -2982,6 +2983,13 @@ async function prerenderStaticRoutes(options: {
       route.client && route.script !== undefined ? [[route.path, route.script]] : [],
     ),
   );
+  const clientScriptPreloads = new Map(
+    options.clientRoutes.flatMap((route) =>
+      route.client && route.script !== undefined && route.modulePreloads !== undefined
+        ? [[route.path, route.modulePreloads] as const]
+        : [],
+    ),
+  );
   const clientStyles = new Map(
     options.clientRoutes.flatMap((route) =>
       route.css !== undefined && route.css.length > 0 ? [[route.path, route.css]] : [],
@@ -3033,6 +3041,7 @@ async function prerenderStaticRoutes(options: {
           appDir: options.appDir,
           assetBaseUrl: options.assetBaseUrl,
           clientScripts,
+          clientScriptPreloads,
           clientStyles,
           define: options.define,
           dehydrateOptions: options.dehydrateOptions,
@@ -5910,10 +5919,42 @@ function cloudflareRouteHeadTags(manifest, routePath) {
     .map((styleSheet) => \`<link rel="stylesheet" href="/_mreact/client/\${escapeHtmlAttribute(styleSheet)}">\`)
     .join("");
   const script = route?.script;
-  const preload = script === undefined
-    ? ""
-    : \`<link rel="modulepreload" href="/_mreact/client/\${escapeHtmlAttribute(script)}">\`;
+  const files = script === undefined ? [] : [script, ...(route?.modulePreloads ?? [])];
+  const seen = new Set();
+  const preload = files
+    .filter((file) => {
+      if (!safeCloudflareClientAssetPath(file)) {
+        return false;
+      }
+
+      if (seen.has(file)) {
+        return false;
+      }
+      seen.add(file);
+      return true;
+    })
+    .map((file) => \`<link rel="modulepreload" href="/_mreact/client/\${escapeHtmlAttribute(file)}">\`)
+    .join("");
   return styles + preload;
+}
+
+function safeCloudflareClientAssetPath(asset) {
+  if (typeof asset !== "string" || asset === "" || asset.startsWith("/") || asset.includes("\\\\")) {
+    return false;
+  }
+
+  return asset.split("/").every((segment) => {
+    if (segment === "" || segment === "." || segment === "..") {
+      return false;
+    }
+
+    try {
+      const decoded = decodeURIComponent(segment);
+      return decoded !== "." && decoded !== ".." && !decoded.includes("/") && !decoded.includes("\\\\");
+    } catch {
+      return false;
+    }
+  });
 }
 
 function escapeHtmlAttribute(value) {
@@ -6823,6 +6864,7 @@ async function writeClientRouteBundles(options: {
   }
 
   const routeOutputs = new Map(output.routes.map((route) => [route.routePath, route]));
+  const clientChunks = new Map(output.chunks.map((chunk) => [chunk.fileName, chunk]));
   const mapAssets = new Map(
     output.chunks.flatMap((chunk) =>
       chunk.map === undefined ? [] : [[`${chunk.fileName}.map`, chunk.map] as const],
@@ -6888,6 +6930,10 @@ async function writeClientRouteBundles(options: {
       sourceMaps: options.sourceMaps,
     });
     const navigation = entry.navigation === true || entry.build.clientNavigation !== false;
+    const modulePreloads = collectStaticModulePreloadDependencies(
+      routeOutput.chunk.fileName,
+      clientChunks,
+    );
 
     return {
       bytes: Buffer.byteLength(code),
@@ -6903,6 +6949,7 @@ async function writeClientRouteBundles(options: {
         ? {}
         : { dynamicImports: routeOutput.chunk.dynamicImports }),
       ...(routeOutput.chunk.imports.length === 0 ? {} : { imports: routeOutput.chunk.imports }),
+      ...(modulePreloads.length === 0 ? {} : { modulePreloads }),
       ...(navigation ? { navigation } : {}),
       routeId,
       script: routeOutput.chunk.fileName,

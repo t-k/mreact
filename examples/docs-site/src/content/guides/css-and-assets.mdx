@@ -10,7 +10,7 @@ Mreact uses Vite for CSS and asset transforms, then records the route assets tha
 The build output separates three asset groups:
 
 - Route stylesheet assets imported by route files.
-- Client route scripts, modulepreload links, and dynamic import preload helpers.
+- Client route scripts, their statically reachable JavaScript dependency modulepreload links, and dynamic import preload helpers.
 - Copied public assets from `public/`.
 
 CSS `url()` references are handled by Vite and become part of the hashed client asset closure. The copied public assets keep their URL paths.

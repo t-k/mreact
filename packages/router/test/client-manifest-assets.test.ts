@@ -36,6 +36,7 @@ describe("client manifest asset paths", () => {
             navigationScript: "routes/index.nav.js",
             css: ["routes/index.css"],
             imports: ["chunks/shared.js", "bad//chunk.js"],
+            modulePreloads: ["chunks/shared.js", "chunks/preload.js", "bad//preload.js"],
           },
         ],
       },
@@ -46,6 +47,7 @@ describe("client manifest asset paths", () => {
     );
 
     expect([...paths].sort()).toEqual([
+      "/_mreact/client/chunks/preload.js",
       "/_mreact/client/chunks/shared.js",
       "/_mreact/client/extra/runtime.js",
       "/_mreact/client/manifest.json",

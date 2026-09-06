@@ -1,6 +1,9 @@
 import type { BuiltPrerenderedRoute, BuiltServerManifest } from "../build.js";
 import type { ClientRouteManifestEntry } from "../client.js";
-import { clientManifestAssetPaths } from "../client-manifest-assets.js";
+import {
+  clientManifestAssetPaths,
+  safeClientManifestAssetPath,
+} from "../client-manifest-assets.js";
 import type { AppRouterResponseHook } from "../render.js";
 import {
   __MREACT_QUERY_STATE_SCRIPT_ID,
@@ -1736,11 +1739,25 @@ async function loadCloudflareRouteModule<Env>(
 }
 
 function cloudflareModulePreloadTag(manifest: CloudflareClientManifest, routePath: string): string {
-  const script = manifest.routes.find((route) => route.path === routePath)?.script;
+  const route = manifest.routes.find((candidate) => candidate.path === routePath);
+  const files = route?.script === undefined ? [] : [route.script, ...(route.modulePreloads ?? [])];
+  const seen = new Set<string>();
 
-  return script === undefined
-    ? ""
-    : `<link rel="modulepreload" href="/_mreact/client/${escapeHtmlAttribute(script)}">`;
+  return files
+    .filter((file) => {
+      if (safeClientManifestAssetPath(file) === undefined) {
+        return false;
+      }
+
+      if (seen.has(file)) {
+        return false;
+      }
+
+      seen.add(file);
+      return true;
+    })
+    .map((file) => `<link rel="modulepreload" href="/_mreact/client/${escapeHtmlAttribute(file)}">`)
+    .join("");
 }
 
 async function resolveCloudflareRouteMetadata<Data, Env>(
