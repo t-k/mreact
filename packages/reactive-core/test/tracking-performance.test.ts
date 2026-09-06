@@ -1,5 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
+import { cell, computed } from "../src/index.js";
+import {
+  createCurrentCheckContext,
+  untrackedDependencyIsCurrent,
+} from "../src/state.js";
 
 describe("reactive-core tracking hot path", () => {
   test("checks the ordered dependency fast path before same-pass duplicate tracking", async () => {
@@ -46,5 +51,98 @@ describe("reactive-core tracking hot path", () => {
 
     expect(singletonBranch).toBeGreaterThanOrEqual(0);
     expect(genericLoop).toBeGreaterThan(singletonBranch);
+  });
+
+  test("does not reuse a shared dependency result across snapshot versions", () => {
+    let currentChecks = 0;
+    const source = {
+      subscribers: null,
+      isCurrent: () => {
+        currentChecks += 1;
+        return true;
+      },
+    };
+    const context = createCurrentCheckContext();
+
+    expect(
+      untrackedDependencyIsCurrent(
+        { ref: new WeakRef(source), version: 1 },
+        context,
+      ),
+    ).toBe(false);
+    expect(
+      untrackedDependencyIsCurrent(
+        { ref: new WeakRef(source), version: 0 },
+        context,
+      ),
+    ).toBe(true);
+    expect(currentChecks).toBe(1);
+  });
+
+  test("validates shared dormant diamonds within a linear traversal bound", () => {
+    const originalWeakRef = globalThis.WeakRef;
+    let derefCount = 0;
+
+    class CountingWeakRef<T extends object> {
+      readonly ref: WeakRef<T>;
+
+      constructor(value: T) {
+        this.ref = new originalWeakRef(value);
+      }
+
+      deref(): T | undefined {
+        derefCount += 1;
+        return this.ref.deref();
+      }
+    }
+
+    Object.defineProperty(globalThis, "WeakRef", {
+      configurable: true,
+      value: CountingWeakRef,
+      writable: true,
+    });
+
+    try {
+      for (const depth of [8, 12, 16, 18]) {
+        let recomputations = 0;
+        const source = cell(1);
+        let current = computed(() => {
+          recomputations += 1;
+          return source.get();
+        });
+
+        for (let level = 0; level < depth; level += 1) {
+          const previous = current;
+          const left = computed(() => {
+            recomputations += 1;
+            return previous.get() + 1;
+          });
+          const right = computed(() => {
+            recomputations += 1;
+            return previous.get() + 2;
+          });
+          current = computed(() => {
+            recomputations += 1;
+            return left.get() + right.get();
+          });
+        }
+
+        current.get();
+        recomputations = 0;
+        derefCount = 0;
+        current.get();
+
+        expect(recomputations, `depth ${depth} recomputations`).toBe(0);
+        expect(derefCount, `depth ${depth} WeakRef dereferences`).toBeLessThanOrEqual(
+          (depth + 1) * 8,
+        );
+      }
+    } finally {
+      Object.defineProperty(globalThis, "WeakRef", {
+        configurable: true,
+        value: originalWeakRef,
+        writable: true,
+      });
+    }
   });
 });

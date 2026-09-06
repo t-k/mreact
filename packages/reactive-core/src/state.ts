@@ -14,7 +14,7 @@ export interface Source {
   onFirstSubscriber?: (() => void) | undefined;
   onNoSubscribers?: (() => void) | undefined;
   /** Returns false when a dormant source has stale dormant dependencies. */
-  isCurrent?: (() => boolean) | undefined;
+  isCurrent?: ((context: CurrentCheckContext) => boolean) | undefined;
   trackedBy?: ReactiveComputation | undefined;
   trackedVersion?: number | undefined;
   debugWriters?: Map<number, string> | undefined;
@@ -41,6 +41,10 @@ export interface ReactiveComputation {
 interface UntrackedDependency {
   ref: WeakRef<Source>;
   version: number;
+}
+
+export interface CurrentCheckContext {
+  readonly results: WeakMap<Source, Map<number, boolean>>;
 }
 
 export type Tracker = ReactiveComputation | null;
@@ -79,11 +83,31 @@ export function createUntrackedDependency(source: Source): UntrackedDependency |
     : undefined;
 }
 
-export function untrackedDependencyIsCurrent(dependency: UntrackedDependency): boolean {
+export function createCurrentCheckContext(): CurrentCheckContext {
+  return { results: new WeakMap() };
+}
+
+export function untrackedDependencyIsCurrent(
+  dependency: UntrackedDependency,
+  context: CurrentCheckContext,
+): boolean {
   const source = dependency.ref.deref();
-  return (
-    source !== undefined &&
-    sourceVersion(source) === dependency.version &&
-    source.isCurrent?.() !== false
-  );
+  if (source === undefined) {
+    return false;
+  }
+
+  const sourceResults = context.results.get(source);
+  const cachedResult = sourceResults?.get(dependency.version);
+  if (cachedResult !== undefined || sourceResults?.has(dependency.version) === true) {
+    return cachedResult as boolean;
+  }
+
+  const current =
+    sourceVersion(source) === dependency.version && source.isCurrent?.(context) !== false;
+  if (sourceResults === undefined) {
+    context.results.set(source, new Map([[dependency.version, current]]));
+  } else {
+    sourceResults.set(dependency.version, current);
+  }
+  return current;
 }

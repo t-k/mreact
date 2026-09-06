@@ -1,7 +1,8 @@
-import type { ReactiveComputation, Source } from "./state.js";
+import type { CurrentCheckContext, ReactiveComputation, Source } from "./state.js";
 import { schedulePendingFlush } from "./scheduler.js";
 import {
   bumpSourceVersion,
+  createCurrentCheckContext,
   createUntrackedDependency,
   runtimeState,
   untrackedDependencyIsCurrent,
@@ -41,9 +42,11 @@ export function computed<T>(
   const resource = registerReactiveDevtoolsResource("computed");
 
   const source: Source = {
-    isCurrent: () =>
+    isCurrent: (context: CurrentCheckContext) =>
       !dirty &&
-      untrackedDependencies.every((dependency) => untrackedDependencyIsCurrent(dependency)),
+      untrackedDependencies.every((dependency) =>
+        untrackedDependencyIsCurrent(dependency, context),
+      ),
     onFirstSubscriber: () => attachUntrackedDependencies(),
     // Reattaching a cached computed can briefly remove its last direct
     // subscriber while a sibling reader is still restoring the same graph.
@@ -245,9 +248,13 @@ export function computed<T>(
   return {
     get(): T {
       const wasDormant = untrackedDependencies.length > 0;
-      const dependenciesChanged = untrackedDependencies.some(
-        (dependency) => !untrackedDependencyIsCurrent(dependency),
-      );
+      const currentCheckContext =
+        untrackedDependencies.length === 0 ? undefined : createCurrentCheckContext();
+      const dependenciesChanged =
+        currentCheckContext !== undefined &&
+        untrackedDependencies.some(
+          (dependency) => !untrackedDependencyIsCurrent(dependency, currentCheckContext),
+        );
       if (dependenciesChanged) {
         dirty = true;
         restoreUntrackedDependencies();
