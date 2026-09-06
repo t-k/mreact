@@ -1,0 +1,19 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "inlineSources": false,
+    "sourceMap": false,
+    "types": ["node"],
+    "paths": {
+      "@reckona/mreact-reactive-core": ["../../reactive-core/src/index.ts"],
+      "@reckona/mreact-reactive-core/*": ["../../reactive-core/src/*.ts"]
+    }
+  },
+  "include": ["form-types.ts", "strict-form-types.ts"]
+}

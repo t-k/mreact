@@ -60,6 +60,7 @@
     "test:quality:quick": "vitest run packages/shared/test/html-escape.test.ts packages/shared/test/url-safety.property.test.ts packages/router/test/csp.property.test.ts packages/router/test/cookies.property.test.ts packages/router/test/client-manifest-assets.property.test.ts packages/virtual/test/virtual-range.test.ts packages/react-compat/test/scheduler-heap.property.test.ts && pnpm --filter @reckona/mreact-router-native test:quality:quick",
     "test:watch": "vitest",
     "typecheck": "pnpm typecheck:tests",
+    "typecheck:forms:strict": "tsc --noEmit -p packages/forms/test/tsconfig.strict.json",
     "typecheck:examples": "pnpm --filter './examples/*' typecheck",
     "typecheck:tests": "pnpm build && node scripts/typecheck-package-tests.mjs",
     "lint": "oxlint . --ignore-pattern docs/api/**",

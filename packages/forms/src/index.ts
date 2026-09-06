@@ -10,9 +10,11 @@ export type FieldName<TValues extends FormValues> = Extract<keyof TValues, strin
 
 /** Extracts field names whose current value is an initialized or optional readonly array. */
 export type ArrayFieldName<TValues extends FormValues> = {
-  [Name in FieldName<TValues>]: NonNullable<TValues[Name]> extends readonly unknown[]
-    ? Name
-    : never;
+  [Name in FieldName<TValues>]: [NonNullable<TValues[Name]>] extends [never]
+    ? never
+    : NonNullable<TValues[Name]> extends readonly unknown[]
+      ? Name
+      : never;
 }[FieldName<TValues>];
 
 /** Maps field names and the root form key to validation error messages. */
@@ -80,8 +82,13 @@ export interface FieldBindingOptions<TValue, TBoundValue = TValue> {
 /** Exposes state, binding, blur, and value update controls for one field. */
 export interface FieldApi<TValues extends FormValues, Name extends FieldName<TValues>> {
   readonly state: ReadonlyCell<FieldState<TValues[Name]>>;
-  bind<TBoundValue = TValues[Name]>(
-    options?: FieldBindingOptions<TValues[Name], TBoundValue>,
+  bind(
+    options?: FieldBindingOptions<TValues[Name], TValues[Name]>,
+  ): FieldBinding<TValues[Name]>;
+  bind<TBoundValue>(
+    options: FieldBindingOptions<TValues[Name], TBoundValue> & {
+      format: (value: TValues[Name]) => TBoundValue;
+    },
   ): FieldBinding<TBoundValue>;
   blur(): Promise<void>;
   setValue(value: TValues[Name]): Promise<void>;
@@ -91,7 +98,11 @@ export interface FieldApi<TValues extends FormValues, Name extends FieldName<TVa
 export type ArrayFieldValue<
   TValues extends FormValues,
   Name extends FieldName<TValues>,
-> = TValues[Name] extends readonly (infer Item)[] ? Item : never;
+> = [NonNullable<TValues[Name]>] extends [never]
+  ? never
+  : NonNullable<TValues[Name]> extends readonly (infer Item)[]
+    ? Item
+    : never;
 
 /** Describes one rendered row in a form array field. */
 export interface FieldArrayRow<TValue> {
@@ -591,49 +602,59 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
       };
     },
     field<Name extends FieldName<TValues>>(name: Name): FieldApi<TValues, Name> {
+      function bind(
+        bindingOptions?: FieldBindingOptions<TValues[Name], TValues[Name]>,
+      ): FieldBinding<TValues[Name]>;
+      function bind<TBoundValue>(
+        bindingOptions: FieldBindingOptions<TValues[Name], TBoundValue> & {
+          format: (value: TValues[Name]) => TBoundValue;
+        },
+      ): FieldBinding<TBoundValue>;
+      function bind<TBoundValue>(
+        bindingOptions: FieldBindingOptions<TValues[Name], TBoundValue> = {},
+      ): FieldBinding<TBoundValue> {
+        const bindingEvent = bindingOptions.event ?? "input";
+        const updateValue = async (inputEvent: Event) => {
+          const currentValue = state.get().values[name];
+          const rawValue = eventValue(inputEvent, currentValue);
+          const parsedValue =
+            bindingOptions.parse === undefined
+              ? rawValue
+              : bindingOptions.parse(rawValue, inputEvent);
+          await setValue(
+            name,
+            validateBoundValue(parsedValue, currentValue, bindingOptions.parse !== undefined),
+          );
+        };
+
+        return {
+          onBlur: async () => {
+            await blurField(name);
+          },
+          onChange: async (event) => {
+            if (bindingEvent === "change") {
+              await updateValue(event);
+            }
+          },
+          onInput: async (event) => {
+            if (bindingEvent === "input") {
+              await updateValue(event);
+            }
+          },
+          get value() {
+            const currentValue = state.get().values[name];
+            return (
+              bindingOptions.format === undefined
+                ? currentValue
+                : bindingOptions.format(currentValue)
+            ) as TBoundValue;
+          },
+        };
+      }
+
       return {
         state: fieldStateCell(name),
-        bind<TBoundValue = TValues[Name]>(
-          bindingOptions: FieldBindingOptions<TValues[Name], TBoundValue> = {},
-        ): FieldBinding<TBoundValue> {
-          const bindingEvent = bindingOptions.event ?? "input";
-          const updateValue = async (inputEvent: Event) => {
-            const currentValue = state.get().values[name];
-            const rawValue = eventValue(inputEvent, currentValue);
-            const parsedValue =
-              bindingOptions.parse === undefined
-                ? rawValue
-                : bindingOptions.parse(rawValue, inputEvent);
-            await setValue(
-              name,
-              validateBoundValue(parsedValue, currentValue, bindingOptions.parse !== undefined),
-            );
-          };
-
-          return {
-            onBlur: async () => {
-              await blurField(name);
-            },
-            onChange: async (event) => {
-              if (bindingEvent === "change") {
-                await updateValue(event);
-              }
-            },
-            onInput: async (event) => {
-              if (bindingEvent === "input") {
-                await updateValue(event);
-              }
-            },
-            get value() {
-              const currentValue = state.get().values[name];
-              return (
-                bindingOptions.format === undefined
-                  ? currentValue
-                  : bindingOptions.format(currentValue)
-              ) as TBoundValue;
-            },
-          };
-        },
+        bind,
         async blur() {
           await blurField(name);
         },

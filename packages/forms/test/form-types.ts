@@ -21,6 +21,7 @@ schemaForm.submit((values) => values.count.toFixed());
 const arrayForm = createForm({
   initialValues: {
     items: [{ id: "a" }],
+    nullableItems: [] as Array<{ id: string } | null> | undefined,
     optionalItems: [] as { id: string }[] | undefined,
     readonlyItems: ["a"] as readonly string[],
     title: "Mreact",
@@ -28,6 +29,8 @@ const arrayForm = createForm({
 });
 
 arrayForm.fieldArray("items").append({ id: "b" });
+arrayForm.fieldArray("nullableItems").append(null);
+arrayForm.fieldArray("nullableItems").append({ id: "b" });
 arrayForm.fieldArray("optionalItems").append({ id: "b" });
 arrayForm.fieldArray("readonlyItems").append("b");
 
@@ -40,6 +43,12 @@ const numberBinding = arrayForm.field("title").bind({
 });
 const formattedLength: number = numberBinding.value;
 void formattedLength;
+
+// @ts-expect-error A different binding output type requires a formatter.
+arrayForm.field("title").bind<number>();
+
+// @ts-expect-error A different binding output type requires a formatter.
+arrayForm.field("title").bind<number>({ parse: (value) => Number(value) });
 
 // @ts-expect-error A parser must return the field's model type.
 arrayForm.field("title").bind({ parse: () => 123 });
