@@ -775,6 +775,49 @@ export function App(props) {
     );
   });
 
+  test("string and stream emitters evaluate a select value once", async () => {
+    await expectServerPairHtml(
+      `let reads = 0;
+function readStatus() {
+  reads += 1;
+  return reads === 1 ? "done" : "open";
+}
+export function App() {
+  return <select value={readStatus()}><option value="done">done</option><option value="open">open</option></select>;
+}`,
+      '<select><option value="done" selected="">done</option><option value="open">open</option></select>',
+    );
+  });
+
+  test("string and stream emitters evaluate a dynamic option value once", async () => {
+    await expectServerPairHtml(
+      `let reads = 0;
+function readValue() {
+  reads += 1;
+  return reads === 1 ? "open" : "done";
+}
+export function App() {
+  return <select value="done"><option value={readValue()}>done</option></select>;
+}`,
+      '<select><option value="open">done</option></select>',
+    );
+  });
+
+  test("string and stream emitters keep bound select and option values local to list rows", async () => {
+    await expectServerPairHtml(
+      `let selectReads = 0;
+function readStatus(status) {
+  selectReads += 1;
+  return status;
+}
+const STATUSES = ["open", "done"];
+export function App() {
+  return <div>{STATUSES.map((status) => <select value={readStatus(status)}><option value={status}>{status}</option></select>)}</div>;
+}`,
+      '<div><select><option value="open" selected="">open</option></select><select><option value="done" selected="">done</option></select></div>',
+    );
+  });
+
   test("string and stream emitters select options whose text value is dynamic", async () => {
     await expectServerPairHtml(
       `const STATUSES = ["open", "done"];

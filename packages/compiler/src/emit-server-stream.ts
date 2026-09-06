@@ -75,10 +75,12 @@ let currentServerRenderAttributeValueName: string = "_serverRenderAttributeValue
 let currentOptionSelectedLocalNames: OptionSelectedLocalNames = {
   selected: "_selected",
   optionValue: "_optionValue",
+  boundOptionValue: "_boundOptionValue",
   textValue: "_optionText",
   textParts: "_optionTextParts",
   textBody: "_optionTextBody",
   textHasValue: "_optionTextHasValue",
+  selectValue: "_selectValue",
   attributes: "_optionAttributes",
   index: "_i",
   candidate: "_candidate",
@@ -146,10 +148,12 @@ export function emitServerStream(
   currentOptionSelectedLocalNames = {
     selected: allocateNestedBindingSafeName(ir, "_selected"),
     optionValue: allocateNestedBindingSafeName(ir, "_optionValue"),
+    boundOptionValue: allocateNestedBindingSafeName(ir, "_boundOptionValue"),
     textValue: allocateNestedBindingSafeName(ir, "_optionText"),
     textParts: allocateNestedBindingSafeName(ir, "_optionTextParts"),
     textBody: allocateNestedBindingSafeName(ir, "_optionTextBody"),
     textHasValue: allocateNestedBindingSafeName(ir, "_optionTextHasValue"),
+    selectValue: allocateNestedBindingSafeName(ir, "_selectValue"),
     attributes: allocateNestedBindingSafeName(ir, "_optionAttributes"),
     index: allocateNestedBindingSafeName(ir, "_i"),
     candidate: allocateNestedBindingSafeName(ir, "_candidate"),
@@ -1925,6 +1929,20 @@ function collectHtmlParts(
     ];
   }
   const attributeScan = scanElementAttributes(node.tagName, node.attributes);
+  if (hasDynamicSelectSelectionAttribute(node)) {
+    return [
+      emitBoundSelectPart(
+        node,
+        escapeHelperName,
+        asyncBoundaryHelperName,
+        outOfOrderBoundaryHelperName,
+        reactSuspenseBoundaryHelperName,
+        reactSuspenseOutOfOrderBoundaryHelperName,
+        state,
+        attributeScan,
+      ),
+    ];
+  }
   const childSelectedValueCode =
     node.tagName === "select"
       ? node.attributes.some((attr) => attr.kind === "spread-attr")
@@ -1951,6 +1969,22 @@ function collectHtmlParts(
     state.selectedMultipleCode,
     node.attributes.some((attr) => attr.kind === "spread-attr"),
   );
+  const dynamicOptionValueAttribute = findDynamicOptionValueAttribute(node);
+  if (dynamicOptionValueAttribute !== undefined && state.selectedValueCode !== undefined) {
+    return [
+      emitBoundOptionValuePart(
+        node,
+        escapeHelperName,
+        asyncBoundaryHelperName,
+        outOfOrderBoundaryHelperName,
+        reactSuspenseBoundaryHelperName,
+        reactSuspenseOutOfOrderBoundaryHelperName,
+        state,
+        attributeScan,
+        dynamicOptionValueAttribute,
+      ),
+    ];
+  }
   const capturedOptionPart = emitCapturedOptionPart(node, escapeHelperName, state, attributeScan);
   if (capturedOptionPart !== undefined) {
     return [capturedOptionPart];
@@ -2051,6 +2085,216 @@ function collectHtmlParts(
     ...childrenParts,
     ...(isVoidHtmlElement(node.tagName) ? [] : [{ kind: "static" as const, value: closeTag }]),
   ];
+}
+
+function hasDynamicSelectSelectionAttribute(
+  node: Extract<JsxNodeIr, { kind: "element" }>,
+): boolean {
+  return (
+    node.tagName === "select" &&
+    !node.attributes.some((attr) => attr.kind === "spread-attr") &&
+    node.attributes.some(
+      (attr) =>
+        attr.kind === "dynamic-attr" && (attr.name === "value" || attr.name === "defaultValue"),
+    )
+  );
+}
+
+function findDynamicOptionValueAttribute(
+  node: Extract<JsxNodeIr, { kind: "element" }>,
+): Extract<AttributeIr, { kind: "dynamic-attr" }> | undefined {
+  const valueAttribute = node.attributes.find(
+    (attr) => attr.kind !== "spread-attr" && attr.name === "value",
+  );
+  return valueAttribute?.kind === "dynamic-attr" ? valueAttribute : undefined;
+}
+
+function emitBoundSelectPart(
+  node: Extract<JsxNodeIr, { kind: "element" }>,
+  escapeHelperName: string,
+  asyncBoundaryHelperName: string,
+  outOfOrderBoundaryHelperName: string,
+  reactSuspenseBoundaryHelperName: string,
+  reactSuspenseOutOfOrderBoundaryHelperName: string,
+  state: CollectHtmlState,
+  attributeScan: ElementAttributeScan,
+): HtmlPart {
+  const selectionCode = attributeScan.formValueAttributeCode;
+  if (selectionCode === undefined) {
+    return { kind: "static", value: "" };
+  }
+
+  const attributes = collectElementAttributeParts(
+    node.tagName,
+    node.attributes,
+    escapeHelperName,
+    state,
+    attributeScan,
+  );
+  const attributeExpressions = attributes.map((part) =>
+    tryEmitPartAsStringExpression(part, currentCompatRenderToStringHelperName),
+  );
+  const attributesCode =
+    attributeExpressions.length === 0 ? '""' : (attributeExpressions as string[]).join(" + ");
+  const selectedMultipleCode = attributeScan.multipleAttributeCode;
+  const childState: CollectHtmlState = {
+    ...state,
+    selectedValueCode: currentOptionSelectedLocalNames.selectValue,
+    selectedMultipleCode,
+  };
+  const dangerousInnerHtml = emitDangerouslySetInnerHtmlPart(
+    node.attributes,
+    node.children,
+    escapeHelperName,
+  );
+  const childrenParts: HtmlPart[] =
+    dangerousInnerHtml !== undefined
+      ? [dangerousInnerHtml]
+      : node.children.flatMap((child) =>
+          collectHtmlParts(
+            child,
+            escapeHelperName,
+            asyncBoundaryHelperName,
+            outOfOrderBoundaryHelperName,
+            reactSuspenseBoundaryHelperName,
+            reactSuspenseOutOfOrderBoundaryHelperName,
+            childState,
+          ),
+        );
+  const childExpressions = childrenParts.map((part) =>
+    isHtmlSyncPart(part)
+      ? tryEmitPartAsStringExpression(part, currentCompatRenderToStringHelperName)
+      : undefined,
+  );
+  const innerHtml =
+    childExpressions.length === 0 ? '""' : (childExpressions as string[]).join(" + ");
+  const selectValueName = currentOptionSelectedLocalNames.selectValue;
+  const attributesName = currentOptionSelectedLocalNames.attributes;
+  const opening = `${stringLiteral("<select")} + ${attributesName} + ">"`;
+  const closing = stringLiteral("</select>");
+  const prefix = `const ${attributesName} = ${attributesCode}; const ${selectValueName} = (${selectionCode});`;
+
+  if (childExpressions.every((expression) => expression !== undefined)) {
+    return {
+      kind: "raw-dynamic",
+      code: `(() => { ${prefix} return ${opening} + (${innerHtml}) + ${closing}; })()`,
+    };
+  }
+
+  const nestedStatements = emitNestedStreamAppendStatements(
+    childrenParts,
+    "$sink",
+    currentCompatRenderToStringHelperName,
+  );
+  return {
+    kind: "stream-node",
+    code: `async ($sink) => { ${prefix} $sink.append(${opening});\n${nestedStatements}\n$sink.append(${closing}); }`,
+    escapeHelperName,
+  };
+}
+
+function emitBoundOptionValuePart(
+  node: Extract<JsxNodeIr, { kind: "element" }>,
+  escapeHelperName: string,
+  asyncBoundaryHelperName: string,
+  outOfOrderBoundaryHelperName: string,
+  reactSuspenseBoundaryHelperName: string,
+  reactSuspenseOutOfOrderBoundaryHelperName: string,
+  state: CollectHtmlState,
+  attributeScan: ElementAttributeScan,
+  valueAttribute: Extract<AttributeIr, { kind: "dynamic-attr" }>,
+): HtmlPart {
+  const boundValueName = currentOptionSelectedLocalNames.boundOptionValue;
+  const capturedOptionText = node.attributes.some(
+    (attr) => attr.kind !== "spread-attr" && attr.name === "dangerouslySetInnerHTML",
+  )
+    ? undefined
+    : findCapturedOptionText(node, escapeHelperName);
+  const attributes = collectElementAttributeParts(
+    node.tagName,
+    node.attributes,
+    escapeHelperName,
+    state,
+    attributeScan,
+    valueAttribute,
+    `(${boundValueName} = (${valueAttribute.code}))`,
+  );
+  const attributeExpressions = attributes.map((part) =>
+    tryEmitPartAsStringExpression(part, currentCompatRenderToStringHelperName),
+  );
+  const attributesCode =
+    attributeExpressions.length === 0 ? '""' : (attributeExpressions as string[]).join(" + ");
+  const boundValueInitialization =
+    state.dynamicAttributes === "drop" ? `${boundValueName} = (${valueAttribute.code});` : "";
+  const selectedPart = collectOptionSelectedAttributePart(
+    node,
+    state.selectedValueCode,
+    state.selectedMultipleCode,
+    false,
+    capturedOptionText?.valueCode,
+    boundValueName,
+  ) ?? { kind: "raw-dynamic" as const, code: '""' };
+  const selectedExpression = tryEmitPartAsStringExpression(
+    selectedPart,
+    currentCompatRenderToStringHelperName,
+  );
+  const optionTextDeclaration = capturedOptionText?.declaration ?? "";
+  const prefix = `let ${boundValueName}; const ${currentOptionSelectedLocalNames.attributes} = ${attributesCode}; ${boundValueInitialization} ${optionTextDeclaration}`;
+  if (capturedOptionText !== undefined) {
+    return {
+      kind: "raw-dynamic",
+      code: `(() => { ${prefix} return ${stringLiteral("<option")} + ${currentOptionSelectedLocalNames.attributes} + (${selectedExpression ?? '""'}) + ">" + ${capturedOptionText.bodyCode} + ${stringLiteral("</option>")}; })()`,
+    };
+  }
+
+  const dangerousInnerHtml = emitDangerouslySetInnerHtmlPart(
+    node.attributes,
+    node.children,
+    escapeHelperName,
+  );
+  const childrenParts: HtmlPart[] =
+    dangerousInnerHtml !== undefined
+      ? [dangerousInnerHtml]
+      : (collectTextSeparatedSimpleChildrenParts(
+          node.children,
+          escapeHelperName,
+          state.escapeBatchHelperName,
+        ) ??
+        node.children.flatMap((child) =>
+          collectHtmlParts(
+            child,
+            escapeHelperName,
+            asyncBoundaryHelperName,
+            outOfOrderBoundaryHelperName,
+            reactSuspenseBoundaryHelperName,
+            reactSuspenseOutOfOrderBoundaryHelperName,
+            state,
+          ),
+        ));
+  const childExpressions = childrenParts.map((part) =>
+    isHtmlSyncPart(part)
+      ? tryEmitPartAsStringExpression(part, currentCompatRenderToStringHelperName)
+      : undefined,
+  );
+  if (childExpressions.every((expression) => expression !== undefined)) {
+    const innerHtml =
+      childExpressions.length === 0 ? '""' : (childExpressions as string[]).join(" + ");
+    return {
+      kind: "raw-dynamic",
+      code: `(() => { ${prefix} return ${stringLiteral("<option")} + ${currentOptionSelectedLocalNames.attributes} + (${selectedExpression ?? '""'}) + ">" + (${innerHtml}) + ${stringLiteral("</option>")}; })()`,
+    };
+  }
+
+  const nestedStatements = emitNestedStreamAppendStatements(
+    childrenParts,
+    "$sink",
+    currentCompatRenderToStringHelperName,
+  );
+  return {
+    kind: "stream-node",
+    code: `async ($sink) => { ${prefix} $sink.append(${stringLiteral("<option")} + ${currentOptionSelectedLocalNames.attributes} + (${selectedExpression ?? '""'}) + ">");\n${nestedStatements}\n$sink.append(${stringLiteral("</option>")}); }`,
+    escapeHelperName,
+  };
 }
 
 function emitDangerouslySetInnerHtmlPart(
@@ -2202,6 +2446,7 @@ function collectHtmlAttributeParts(
   escapeHelperName: string,
   escapeBatchHelperName: string | undefined,
   dynamicAttributes: "drop" | "emit",
+  valueCodeOverride?: string,
 ): HtmlSyncPart[] {
   if (attr.kind === "dom-ref") {
     return [];
@@ -2243,13 +2488,15 @@ function collectHtmlAttributeParts(
     return [];
   }
 
+  const valueCode = valueCodeOverride ?? attr.code;
+
   if (attr.name === "style") {
     if (attr.serialization !== "compat" && attr.omitServerRenderValue === true) {
       return [
         {
           kind: "raw-dynamic",
           code: emitDynamicStyleAttributeExpression(
-            attr.code,
+            valueCode,
             escapeHelperName,
             escapeBatchHelperName,
             currentContainsServerRenderValueHelperName,
@@ -2260,17 +2507,20 @@ function collectHtmlAttributeParts(
     return [
       {
         kind: "raw-dynamic",
-        code: emitDynamicAttributeWithServerRenderValueOmission(attr, (code) =>
-          attr.serialization === "compat"
-            ? emitCompatDynamicStyleAttributeExpression(code, escapeHelperName)
-            : emitDynamicStyleAttributeExpression(
-                code,
-                escapeHelperName,
-                escapeBatchHelperName,
-                attr.omitServerRenderValue === true
-                  ? currentContainsServerRenderValueHelperName
-                  : undefined,
-              ),
+        code: emitDynamicAttributeWithServerRenderValueOmission(
+          attr,
+          (code) =>
+            attr.serialization === "compat"
+              ? emitCompatDynamicStyleAttributeExpression(code, escapeHelperName)
+              : emitDynamicStyleAttributeExpression(
+                  code,
+                  escapeHelperName,
+                  escapeBatchHelperName,
+                  attr.omitServerRenderValue === true
+                    ? currentContainsServerRenderValueHelperName
+                    : undefined,
+                ),
+          valueCode,
         ),
       },
     ];
@@ -2285,6 +2535,7 @@ function collectHtmlAttributeParts(
           attr,
           (code) =>
             `(() => { const _value = (${code}); if (typeof _value !== "object" || _value === null) return ""; try { const _descriptor = Object.getOwnPropertyDescriptor(_value, "__html"); if (_descriptor !== undefined && "value" in _descriptor && typeof _descriptor.value === "string") return ${stringLiteral(` ${dynamicHtmlName}="`)} + ${escapeHelperName}(_descriptor.value) + ${stringLiteral('"')}; return ""; } catch { return ""; } })()`,
+          valueCode,
         ),
       },
     ];
@@ -2293,10 +2544,13 @@ function collectHtmlAttributeParts(
   return [
     {
       kind: "raw-dynamic",
-      code: emitDynamicAttributeWithServerRenderValueOmission(attr, (code) =>
-        attr.serialization === "compat" && !isUrlAttribute(dynamicHtmlName)
-          ? emitCompatDynamicAttributeExpression(dynamicHtmlName, code, escapeHelperName)
-          : emitDynamicAttributeExpression(dynamicHtmlName, code, escapeHelperName),
+      code: emitDynamicAttributeWithServerRenderValueOmission(
+        attr,
+        (code) =>
+          attr.serialization === "compat" && !isUrlAttribute(dynamicHtmlName)
+            ? emitCompatDynamicAttributeExpression(dynamicHtmlName, code, escapeHelperName)
+            : emitDynamicAttributeExpression(dynamicHtmlName, code, escapeHelperName),
+        valueCode,
       ),
     },
   ];
@@ -2305,17 +2559,19 @@ function collectHtmlAttributeParts(
 function emitDynamicAttributeWithServerRenderValueOmission(
   attr: Extract<AttributeIr, { kind: "dynamic-attr" }>,
   emit: (code: string) => string,
+  valueCodeOverride?: string,
 ): string {
+  const valueCode = valueCodeOverride ?? attr.code;
   if (attr.omitServerRenderValue !== true) {
-    return emit(attr.code);
+    return emit(valueCode);
   }
 
-  if (simpleSideEffectFreeExpression(attr.code)) {
-    return `${currentContainsServerRenderValueHelperName}(${attr.code}) ? "" : (${emit(attr.code)})`;
+  if (simpleSideEffectFreeExpression(valueCode)) {
+    return `${currentContainsServerRenderValueHelperName}(${valueCode}) ? "" : (${emit(valueCode)})`;
   }
 
   const valueName = currentServerRenderAttributeValueName;
-  return `(() => { const ${valueName} = (${attr.code}); return ${currentContainsServerRenderValueHelperName}(${valueName}) ? "" : (${emit(valueName)}); })()`;
+  return `(() => { const ${valueName} = (${valueCode}); return ${currentContainsServerRenderValueHelperName}(${valueName}) ? "" : (${emit(valueName)}); })()`;
 }
 
 function collectElementAttributeParts(
@@ -2324,6 +2580,8 @@ function collectElementAttributeParts(
   escapeHelperName: string,
   state: CollectHtmlState,
   attributeScan = scanElementAttributes(tagName, attrs),
+  optionValueAttribute?: Extract<AttributeIr, { kind: "dynamic-attr" }>,
+  optionValueCodeOverride?: string,
 ): HtmlSyncPart[] {
   const escapeBatchHelperName = state.escapeBatchHelperName;
 
@@ -2336,23 +2594,28 @@ function collectElementAttributeParts(
     ];
   }
 
-  return attrs.flatMap((attr) =>
-    attr.kind !== "spread-attr" &&
-    ((tagName === "input" &&
-      ((attr.name === "defaultValue" && attributeScan.hasExplicitInputValue) ||
-        (attr.name === "defaultChecked" && attributeScan.hasExplicitInputChecked))) ||
-      ((tagName === "textarea" || tagName === "select") &&
-        (attr.name === "value" || attr.name === "defaultValue")) ||
-      isSuppressedOptionSelectedAttribute(tagName, attr.name, state))
-      ? []
-      : collectHtmlAttributeParts(
-          tagName,
-          attr,
-          escapeHelperName,
-          escapeBatchHelperName,
-          state.dynamicAttributes,
-        ),
-  );
+  return attrs.flatMap((attr) => {
+    if (
+      attr.kind !== "spread-attr" &&
+      ((tagName === "input" &&
+        ((attr.name === "defaultValue" && attributeScan.hasExplicitInputValue) ||
+          (attr.name === "defaultChecked" && attributeScan.hasExplicitInputChecked))) ||
+        ((tagName === "textarea" || tagName === "select") &&
+          (attr.name === "value" || attr.name === "defaultValue")) ||
+        isSuppressedOptionSelectedAttribute(tagName, attr.name, state))
+    ) {
+      return [];
+    }
+
+    return collectHtmlAttributeParts(
+      tagName,
+      attr,
+      escapeHelperName,
+      escapeBatchHelperName,
+      state.dynamicAttributes,
+      attr === optionValueAttribute ? optionValueCodeOverride : undefined,
+    );
+  });
 }
 
 function emitMergedSpreadAttributeExpression(
@@ -2640,6 +2903,7 @@ function collectOptionSelectedAttributePart(
   selectedMultipleCode: string | undefined,
   useMergedSpreadFallback = false,
   textValueCodeOverride?: string,
+  optionValueCodeOverride?: string,
 ): HtmlSyncPart | undefined {
   if (selectedValueCode === undefined || node.tagName !== "option") {
     return undefined;
@@ -2652,6 +2916,7 @@ function collectOptionSelectedAttributePart(
       ? currentSpreadPropsName
       : undefined,
     textValueCodeOverride,
+    optionValueCodeOverride,
   );
   return {
     kind: "raw-dynamic",
@@ -2829,6 +3094,7 @@ function findOptionValueCode(
   textValueName: string,
   mergedPropsName?: string,
   textValueCodeOverride?: string,
+  optionValueCodeOverride?: string,
 ): string | undefined {
   const textValueCode = textValueCodeOverride ?? findOptionTextValueCode(node, textValueName);
   if (mergedPropsName !== undefined) {
@@ -2844,8 +3110,8 @@ function findOptionValueCode(
     return valueAttr.kind === "static-attr"
       ? stringLiteral(valueAttr.value)
       : textValueCode === undefined
-        ? `(${valueAttr.code})`
-        : `((${valueAttr.code}) ?? ${textValueCode})`;
+        ? `(${optionValueCodeOverride ?? valueAttr.code})`
+        : `((${optionValueCodeOverride ?? valueAttr.code}) ?? ${textValueCode})`;
   }
 
   return textValueCode;

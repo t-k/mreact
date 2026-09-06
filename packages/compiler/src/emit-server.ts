@@ -51,10 +51,12 @@ let currentRenderServerChildHelperName: string = "_renderServerChild";
 let currentOptionSelectedLocalNames: OptionSelectedLocalNames = {
   selected: "_selected",
   optionValue: "_optionValue",
+  boundOptionValue: "_boundOptionValue",
   textValue: "_optionText",
   textParts: "_optionTextParts",
   textBody: "_optionTextBody",
   textHasValue: "_optionTextHasValue",
+  selectValue: "_selectValue",
   attributes: "_optionAttributes",
   index: "_i",
   candidate: "_candidate",
@@ -149,10 +151,12 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
   currentOptionSelectedLocalNames = {
     selected: allocateNestedBindingSafeName(ir, "_selected"),
     optionValue: allocateNestedBindingSafeName(ir, "_optionValue"),
+    boundOptionValue: allocateNestedBindingSafeName(ir, "_boundOptionValue"),
     textValue: allocateNestedBindingSafeName(ir, "_optionText"),
     textParts: allocateNestedBindingSafeName(ir, "_optionTextParts"),
     textBody: allocateNestedBindingSafeName(ir, "_optionTextBody"),
     textHasValue: allocateNestedBindingSafeName(ir, "_optionTextHasValue"),
+    selectValue: allocateNestedBindingSafeName(ir, "_selectValue"),
     attributes: allocateNestedBindingSafeName(ir, "_optionAttributes"),
     index: allocateNestedBindingSafeName(ir, "_i"),
     candidate: allocateNestedBindingSafeName(ir, "_candidate"),
@@ -862,6 +866,21 @@ function collectHtmlStatements(
   }
 
   const attributeScan = scanElementAttributes(node.tagName, node.attributes);
+  if (hasDynamicSelectSelectionAttribute(node)) {
+    return [
+      `${outVar} += ${emitBoundSelectExpression(
+        node,
+        escapeHelperName,
+        escapeBatchHelperName,
+        asyncComponentNames,
+        dynamicAttributes,
+        contextProviderHelperName,
+        contextConsumerHelperName,
+        reactNodeRenderHelperName,
+        attributeScan,
+      )};`,
+    ];
+  }
   if (
     dynamicAttributes === "emit" &&
     !isVoidHtmlElement(node.tagName) &&
@@ -907,6 +926,24 @@ function collectHtmlStatements(
       )};`,
     );
     return statements;
+  }
+
+  const dynamicOptionValueAttribute = findDynamicOptionValueAttribute(node);
+  if (dynamicOptionValueAttribute !== undefined && currentSelectedValueCode !== undefined) {
+    return [
+      `${outVar} += ${emitBoundOptionValueExpression(
+        node,
+        escapeHelperName,
+        escapeBatchHelperName,
+        asyncComponentNames,
+        dynamicAttributes,
+        contextProviderHelperName,
+        contextConsumerHelperName,
+        reactNodeRenderHelperName,
+        attributeScan,
+        dynamicOptionValueAttribute,
+      )};`,
+    ];
   }
 
   const capturedOptionExpression = emitCapturedOptionExpression(
@@ -999,6 +1036,144 @@ function collectHtmlStatements(
   statements.push(`${outVar} += ${stringLiteral(`</${node.tagName}>`)};`);
 
   return statements;
+}
+
+function hasDynamicSelectSelectionAttribute(
+  node: Extract<JsxNodeIr, { kind: "element" }>,
+): boolean {
+  return (
+    node.tagName === "select" &&
+    !node.attributes.some((attr) => attr.kind === "spread-attr") &&
+    node.attributes.some(
+      (attr) =>
+        attr.kind === "dynamic-attr" && (attr.name === "value" || attr.name === "defaultValue"),
+    )
+  );
+}
+
+function findDynamicOptionValueAttribute(
+  node: Extract<JsxNodeIr, { kind: "element" }>,
+): Extract<AttributeIr, { kind: "dynamic-attr" }> | undefined {
+  const valueAttribute = node.attributes.find(
+    (attr) => attr.kind !== "spread-attr" && attr.name === "value",
+  );
+  return valueAttribute?.kind === "dynamic-attr" ? valueAttribute : undefined;
+}
+
+function emitBoundSelectExpression(
+  node: Extract<JsxNodeIr, { kind: "element" }>,
+  escapeHelperName: string,
+  escapeBatchHelperName: string | undefined,
+  asyncComponentNames: ReadonlySet<string>,
+  dynamicAttributes: "drop" | "emit",
+  contextProviderHelperName: string | undefined,
+  contextConsumerHelperName: string | undefined,
+  reactNodeRenderHelperName: string | undefined,
+  attributeScan: ElementAttributeScan,
+): string {
+  const selectionCode = attributeScan.formValueAttributeCode;
+  if (selectionCode === undefined) {
+    return '""';
+  }
+
+  const selectValueName = currentOptionSelectedLocalNames.selectValue;
+  const attributes = collectElementAttributeParts(
+    node.tagName,
+    node.attributes,
+    escapeHelperName,
+    escapeBatchHelperName,
+    dynamicAttributes,
+    attributeScan,
+  );
+  const attributesCode = attributes.length === 0 ? '""' : attributes.join(" + ");
+  const selectedMultipleCode = selectedMultipleCodeForChildren(node, attributeScan);
+  const childrenHtml = withSelectedValueCode(selectValueName, selectedMultipleCode, () =>
+    emitHtmlExpressionFromChildren(
+      node.children,
+      escapeHelperName,
+      escapeBatchHelperName,
+      asyncComponentNames,
+      dynamicAttributes,
+      contextProviderHelperName,
+      contextConsumerHelperName,
+      reactNodeRenderHelperName,
+    ),
+  );
+  const innerHtml =
+    emitDangerouslySetInnerHtmlExpression(node.attributes, childrenHtml) ?? childrenHtml;
+  const invocation = `${containsAsyncServerOperationInChildren(node.children, asyncComponentNames) ? "(async () =>" : "(() =>"} { const ${currentOptionSelectedLocalNames.attributes} = ${attributesCode}; const ${selectValueName} = (${selectionCode}); return ${stringLiteral("<select")} + ${currentOptionSelectedLocalNames.attributes} + ">" + (${innerHtml}) + ${stringLiteral("</select>")}; })()`;
+  return containsAsyncServerOperationInChildren(node.children, asyncComponentNames)
+    ? `(await ${invocation})`
+    : invocation;
+}
+
+function emitBoundOptionValueExpression(
+  node: Extract<JsxNodeIr, { kind: "element" }>,
+  escapeHelperName: string,
+  escapeBatchHelperName: string | undefined,
+  asyncComponentNames: ReadonlySet<string>,
+  dynamicAttributes: "drop" | "emit",
+  contextProviderHelperName: string | undefined,
+  contextConsumerHelperName: string | undefined,
+  reactNodeRenderHelperName: string | undefined,
+  attributeScan: ElementAttributeScan,
+  valueAttribute: Extract<AttributeIr, { kind: "dynamic-attr" }>,
+): string {
+  const boundValueName = currentOptionSelectedLocalNames.boundOptionValue;
+  const capturedOptionText = node.attributes.some(
+    (attr) => attr.kind !== "spread-attr" && attr.name === "dangerouslySetInnerHTML",
+  )
+    ? undefined
+    : findCapturedOptionText(node, escapeHelperName);
+  const attributes = collectElementAttributeParts(
+    node.tagName,
+    node.attributes,
+    escapeHelperName,
+    escapeBatchHelperName,
+    dynamicAttributes,
+    attributeScan,
+    valueAttribute,
+    `(${boundValueName} = (${valueAttribute.code}))`,
+  );
+  const attributesCode = attributes.length === 0 ? '""' : attributes.join(" + ");
+  const boundValueInitialization =
+    dynamicAttributes === "drop" ? `${boundValueName} = (${valueAttribute.code});` : "";
+  const selectedAttribute =
+    collectOptionSelectedAttributePart(
+      node,
+      false,
+      capturedOptionText?.valueCode,
+      boundValueName,
+    ) ?? '""';
+  const innerHtml =
+    capturedOptionText?.bodyCode ??
+    emitDangerouslySetInnerHtmlExpression(
+      node.attributes,
+      emitHtmlExpressionFromChildren(
+        node.children,
+        escapeHelperName,
+        escapeBatchHelperName,
+        asyncComponentNames,
+        dynamicAttributes,
+        contextProviderHelperName,
+        contextConsumerHelperName,
+        reactNodeRenderHelperName,
+      ),
+    ) ??
+    emitHtmlExpressionFromChildren(
+      node.children,
+      escapeHelperName,
+      escapeBatchHelperName,
+      asyncComponentNames,
+      dynamicAttributes,
+      contextProviderHelperName,
+      contextConsumerHelperName,
+      reactNodeRenderHelperName,
+    );
+  const optionTextDeclaration = capturedOptionText?.declaration ?? "";
+  const isAsync = containsAsyncServerOperationInChildren(node.children, asyncComponentNames);
+  const invocation = `${isAsync ? "(async () =>" : "(() =>"} { let ${boundValueName}; const ${currentOptionSelectedLocalNames.attributes} = ${attributesCode}; ${boundValueInitialization} ${optionTextDeclaration} return ${stringLiteral("<option")} + ${currentOptionSelectedLocalNames.attributes} + (${selectedAttribute}) + ">" + (${innerHtml}) + ${stringLiteral("</option>")}; })()`;
+  return isAsync ? `(await ${invocation})` : invocation;
 }
 
 /**
@@ -1326,6 +1501,21 @@ function collectHtmlParts(
     escapeBatchHelperName,
   );
   const attributeScan = scanElementAttributes(node.tagName, node.attributes);
+  if (hasDynamicSelectSelectionAttribute(node)) {
+    return [
+      emitBoundSelectExpression(
+        node,
+        escapeHelperName,
+        escapeBatchHelperName,
+        asyncComponentNames,
+        dynamicAttributes,
+        contextProviderHelperName,
+        contextConsumerHelperName,
+        reactNodeRenderHelperName,
+        attributeScan,
+      ),
+    ];
+  }
   const childSelectedValueCode = selectedValueCodeForChildren(node, attributeScan);
   const childSelectedMultipleCode = selectedMultipleCodeForChildren(node, attributeScan);
   const forceChildWalk =
@@ -1370,6 +1560,23 @@ function collectHtmlParts(
         spreadSelectedAttributePart,
         containsAsyncServerOperationInChildren(node.children, asyncComponentNames),
         capturedOptionText,
+      ),
+    ];
+  }
+  const dynamicOptionValueAttribute = findDynamicOptionValueAttribute(node);
+  if (dynamicOptionValueAttribute !== undefined && currentSelectedValueCode !== undefined) {
+    return [
+      emitBoundOptionValueExpression(
+        node,
+        escapeHelperName,
+        escapeBatchHelperName,
+        asyncComponentNames,
+        dynamicAttributes,
+        contextProviderHelperName,
+        contextConsumerHelperName,
+        reactNodeRenderHelperName,
+        attributeScan,
+        dynamicOptionValueAttribute,
       ),
     ];
   }
@@ -1499,6 +1706,7 @@ function collectHtmlAttributeParts(
   escapeHelperName: string,
   escapeBatchHelperName: string | undefined,
   dynamicAttributes: "drop" | "emit",
+  valueCodeOverride?: string,
 ): string[] {
   if (attr.kind === "dom-ref") {
     return [];
@@ -1537,11 +1745,13 @@ function collectHtmlAttributeParts(
     return [];
   }
 
+  const valueCode = valueCodeOverride ?? attr.code;
+
   if (attr.name === "style") {
     if (attr.serialization !== "compat" && attr.omitServerRenderValue === true) {
       return [
         emitDynamicStyleAttributeExpression(
-          attr.code,
+          valueCode,
           escapeHelperName,
           escapeBatchHelperName,
           currentContainsServerRenderValueHelperName,
@@ -1549,17 +1759,20 @@ function collectHtmlAttributeParts(
       ];
     }
     return [
-      emitDynamicAttributeWithServerRenderValueOmission(attr, (code) =>
-        attr.serialization === "compat"
-          ? emitCompatDynamicStyleAttributeExpression(code, escapeHelperName)
-          : emitDynamicStyleAttributeExpression(
-              code,
-              escapeHelperName,
-              escapeBatchHelperName,
-              attr.omitServerRenderValue === true
-                ? currentContainsServerRenderValueHelperName
-                : undefined,
-            ),
+      emitDynamicAttributeWithServerRenderValueOmission(
+        attr,
+        (code) =>
+          attr.serialization === "compat"
+            ? emitCompatDynamicStyleAttributeExpression(code, escapeHelperName)
+            : emitDynamicStyleAttributeExpression(
+                code,
+                escapeHelperName,
+                escapeBatchHelperName,
+                attr.omitServerRenderValue === true
+                  ? currentContainsServerRenderValueHelperName
+                  : undefined,
+              ),
+        valueCode,
       ),
     ];
   }
@@ -1573,15 +1786,19 @@ function collectHtmlAttributeParts(
         attr,
         (code) =>
           `(() => { const _value = (${code}); if (typeof _value !== "object" || _value === null) return ""; try { const _descriptor = Object.getOwnPropertyDescriptor(_value, "__html"); if (_descriptor !== undefined && "value" in _descriptor && typeof _descriptor.value === "string") return ${stringLiteral(` ${htmlName}="`)} + ${escapeHelperName}(_descriptor.value) + ${stringLiteral('"')}; return ""; } catch { return ""; } })()`,
+        valueCode,
       ),
     ];
   }
 
   return [
-    emitDynamicAttributeWithServerRenderValueOmission(attr, (code) =>
-      attr.serialization === "compat" && !isUrlAttribute(htmlName)
-        ? emitCompatDynamicAttributeExpression(htmlName, code, escapeHelperName)
-        : emitDynamicAttributeExpression(htmlName, code, escapeHelperName),
+    emitDynamicAttributeWithServerRenderValueOmission(
+      attr,
+      (code) =>
+        attr.serialization === "compat" && !isUrlAttribute(htmlName)
+          ? emitCompatDynamicAttributeExpression(htmlName, code, escapeHelperName)
+          : emitDynamicAttributeExpression(htmlName, code, escapeHelperName),
+      valueCode,
     ),
   ];
 }
@@ -1589,17 +1806,19 @@ function collectHtmlAttributeParts(
 function emitDynamicAttributeWithServerRenderValueOmission(
   attr: Extract<AttributeIr, { kind: "dynamic-attr" }>,
   emit: (code: string) => string,
+  valueCodeOverride?: string,
 ): string {
+  const valueCode = valueCodeOverride ?? attr.code;
   if (attr.omitServerRenderValue !== true) {
-    return emit(attr.code);
+    return emit(valueCode);
   }
 
-  if (simpleSideEffectFreeExpression(attr.code)) {
-    return `${currentContainsServerRenderValueHelperName}(${attr.code}) ? "" : (${emit(attr.code)})`;
+  if (simpleSideEffectFreeExpression(valueCode)) {
+    return `${currentContainsServerRenderValueHelperName}(${valueCode}) ? "" : (${emit(valueCode)})`;
   }
 
   const valueName = currentServerRenderAttributeValueName;
-  return `(() => { const ${valueName} = (${attr.code}); return ${currentContainsServerRenderValueHelperName}(${valueName}) ? "" : (${emit(valueName)}); })()`;
+  return `(() => { const ${valueName} = (${valueCode}); return ${currentContainsServerRenderValueHelperName}(${valueName}) ? "" : (${emit(valueName)}); })()`;
 }
 
 function collectElementAttributeParts(
@@ -1609,28 +1828,35 @@ function collectElementAttributeParts(
   escapeBatchHelperName: string | undefined,
   dynamicAttributes: "drop" | "emit",
   attributeScan = scanElementAttributes(tagName, attrs),
+  optionValueAttribute?: Extract<AttributeIr, { kind: "dynamic-attr" }>,
+  optionValueCodeOverride?: string,
 ): string[] {
   if (dynamicAttributes === "emit" && attrs.some((attr) => attr.kind === "spread-attr")) {
     return [emitMergedSpreadAttributeExpression(tagName, attrs, attributeScan)];
   }
 
-  return attrs.flatMap((attr) =>
-    attr.kind !== "spread-attr" &&
-    ((tagName === "input" &&
-      ((attr.name === "defaultValue" && attributeScan.hasExplicitInputValue) ||
-        (attr.name === "defaultChecked" && attributeScan.hasExplicitInputChecked))) ||
-      ((tagName === "textarea" || tagName === "select") &&
-        (attr.name === "value" || attr.name === "defaultValue")) ||
-      isSuppressedOptionSelectedAttribute(tagName, attr.name))
-      ? []
-      : collectHtmlAttributeParts(
-          tagName,
-          attr,
-          escapeHelperName,
-          escapeBatchHelperName,
-          dynamicAttributes,
-        ),
-  );
+  return attrs.flatMap((attr) => {
+    if (
+      attr.kind !== "spread-attr" &&
+      ((tagName === "input" &&
+        ((attr.name === "defaultValue" && attributeScan.hasExplicitInputValue) ||
+          (attr.name === "defaultChecked" && attributeScan.hasExplicitInputChecked))) ||
+        ((tagName === "textarea" || tagName === "select") &&
+          (attr.name === "value" || attr.name === "defaultValue")) ||
+        isSuppressedOptionSelectedAttribute(tagName, attr.name))
+    ) {
+      return [];
+    }
+
+    return collectHtmlAttributeParts(
+      tagName,
+      attr,
+      escapeHelperName,
+      escapeBatchHelperName,
+      dynamicAttributes,
+      attr === optionValueAttribute ? optionValueCodeOverride : undefined,
+    );
+  });
 }
 
 function emitMergedSpreadAttributeExpression(
@@ -1936,6 +2162,7 @@ function collectOptionSelectedAttributePart(
   node: Extract<JsxNodeIr, { kind: "element" }>,
   useMergedSpreadFallback = false,
   textValueCodeOverride?: string,
+  optionValueCodeOverride?: string,
 ): string | undefined {
   const selectedValueCode = currentSelectedValueCode;
   if (selectedValueCode === undefined || node.tagName !== "option") {
@@ -1949,6 +2176,7 @@ function collectOptionSelectedAttributePart(
       ? currentSpreadPropsName
       : undefined,
     textValueCodeOverride,
+    optionValueCodeOverride,
   );
   return emitOptionSelectedAttributeCode(
     selectedValueCode,
@@ -2111,6 +2339,7 @@ function findOptionValueCode(
   textValueName: string,
   mergedPropsName?: string,
   textValueCodeOverride?: string,
+  optionValueCodeOverride?: string,
 ): string | undefined {
   const textValueCode = textValueCodeOverride ?? findOptionTextValueCode(node, textValueName);
   if (mergedPropsName !== undefined) {
@@ -2126,8 +2355,8 @@ function findOptionValueCode(
     return valueAttr.kind === "static-attr"
       ? stringLiteral(valueAttr.value)
       : textValueCode === undefined
-        ? `(${valueAttr.code})`
-        : `((${valueAttr.code}) ?? ${textValueCode})`;
+        ? `(${optionValueCodeOverride ?? valueAttr.code})`
+        : `((${optionValueCodeOverride ?? valueAttr.code}) ?? ${textValueCode})`;
   }
 
   return textValueCode;
