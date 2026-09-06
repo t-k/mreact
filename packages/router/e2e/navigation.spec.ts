@@ -658,6 +658,9 @@ export default function Page() {
 test("template remount, error boundary, and streaming loading boundary work in the browser", async ({
   page,
 }) => {
+  const streamState = globalThis as typeof globalThis & {
+    __mreactE2eReleaseStream?: () => void;
+  };
   const { close, url } = await startFixtureServer({
     "layout.tsx": `export default function Layout() {
   return <section><nav><a href="/">Home</a><a href="/profile">Profile</a><a href="/broken">Broken</a><a href="/stream">Stream</a></nav><Slot /></section>;
@@ -680,14 +683,18 @@ test("template remount, error boundary, and streaming loading boundary work in t
     "stream/loading.tsx": `export default function Loading() {
   return <p>Loading stream</p>;
 }`,
-    "stream/page.tsx": `export const stream = true;
+    "stream/page.tsx": `import { defer } from "@reckona/mreact-router";
 
-export async function loader() {
-  return await new Promise(resolve => setTimeout(() => resolve({ name: "Ada" }), 250));
+export const stream = true;
+
+export function loader() {
+  return defer({ name: new Promise(resolve => {
+    globalThis.__mreactE2eReleaseStream = () => resolve("Ada");
+  }) });
 }
 
 export default function StreamPage(props) {
-  return <main><h1>Stream</h1><strong>{props.data.name}</strong></main>;
+  return <main><h1>Stream</h1><Await value={props.data.name}>{name => <strong>{name}</strong>}</Await></main>;
 }`,
   });
 
@@ -703,13 +710,24 @@ export default function StreamPage(props) {
     await expect(page.getByRole("heading", { name: "Error" })).toBeVisible();
     await expect(page.getByText("route exploded")).toBeVisible();
 
-    await Promise.all([
-      page.waitForRequest((request) => request.url().endsWith("/stream")),
-      page.getByRole("link", { name: "Stream" }).click(),
-    ]);
-    await expect(page.getByText("Loading stream")).toBeVisible();
+    const streamingResponse = page.waitForResponse(
+      (response) => response.url().endsWith("/stream") && response.request().isNavigationRequest(),
+    );
+    await page.getByRole("link", { name: "Stream" }).click({ noWaitAfter: true });
+    const response = await streamingResponse;
+    expect(response.headers()["x-mreact-stream"]).toBe("1");
+    try {
+      await expect(page.getByText("Loading stream")).toBeVisible();
+      await expect(page.getByText("Ada")).toHaveCount(0);
+      expect(typeof streamState.__mreactE2eReleaseStream).toBe("function");
+    } finally {
+      streamState.__mreactE2eReleaseStream?.();
+    }
     await expect(page.getByText("Ada")).toBeVisible();
+    await expect(page.getByText("Loading stream")).toHaveCount(0);
   } finally {
+    streamState.__mreactE2eReleaseStream?.();
+    delete streamState.__mreactE2eReleaseStream;
     await close();
   }
 });
