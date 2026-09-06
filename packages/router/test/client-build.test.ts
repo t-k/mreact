@@ -6761,6 +6761,43 @@ export default function Page() {
     expect(document.querySelector("main")?.textContent).toBe("grace");
   });
 
+  test("does not reuse HTML when cookies change while prefetch is in flight", async () => {
+    const { routeModule } = await importRouteRuntime("prefetch-cookie-context-race");
+    document.cookie = "session=old; path=/";
+    let fetchCalls = 0;
+    let resolveOldResponse: ((response: Response) => void) | undefined;
+    globalThis.fetch = async () => {
+      fetchCalls += 1;
+
+      if (fetchCalls === 1) {
+        return new Promise<Response>((resolve) => {
+          resolveOldResponse = resolve;
+        });
+      }
+
+      return new Response(
+        '<!DOCTYPE html><div data-mreact-route-id="account"><main>new</main></div>',
+      );
+    };
+
+    try {
+      const prefetch = routeModule.__mreactPrefetch("/account");
+      await Promise.resolve();
+      document.cookie = "session=new; path=/";
+      resolveOldResponse?.(
+        new Response('<!DOCTYPE html><div data-mreact-route-id="account"><main>old</main></div>'),
+      );
+
+      await expect(prefetch).resolves.toBe(false);
+      await expect(routeModule.__mreactNavigate("/account")).resolves.toBe(true);
+
+      expect(fetchCalls).toBe(2);
+      expect(document.querySelector("main")?.textContent).toBe("new");
+    } finally {
+      document.cookie = "session=; Max-Age=0; path=/";
+    }
+  });
+
   test("reuses an in-flight client route HTML prefetch for navigation", async () => {
     const { routeModule } = await importRouteRuntime("prefetch-client-html-in-flight");
     const requests: string[] = [];
@@ -7420,6 +7457,59 @@ export default function Page() {
 
     const origin = location.origin;
     expect(fetchCalls).toEqual([`${origin}/stale`, `${origin}/refresh`, `${origin}/stale`]);
+  });
+
+  test("does not refetch forever when navigation HTML revalidates itself", async () => {
+    const { routeModule } = await importRouteRuntime("prefetch-self-revalidate");
+    let fetchCalls = 0;
+    globalThis.fetch = async () => {
+      fetchCalls += 1;
+      const headers = fetchCalls <= 3 ? { "x-mreact-revalidate": "/revalidate" } : undefined;
+      return new Response(
+        `<!DOCTYPE html><div data-mreact-route-id="revalidate"><main>response-${fetchCalls}</main></div>`,
+        { headers },
+      );
+    };
+
+    await expect(routeModule.__mreactNavigate("/revalidate")).resolves.toBe(true);
+
+    expect(fetchCalls).toBe(1);
+    expect(document.querySelector("main")?.textContent).toBe("response-1");
+  });
+
+  test("does not treat an ordinary fetch with the navigation header as internal", async () => {
+    const fetchCalls: Array<{ navigation: string | null; url: string }> = [];
+    globalThis.fetch = async (input, init) => {
+      const headers = new Headers(init?.headers);
+      const url = input instanceof Request ? input.url : String(input);
+      fetchCalls.push({ navigation: headers.get("x-mreact-navigation"), url });
+
+      if (url.endsWith("/api")) {
+        return new Response("ok", {
+          headers: { "x-mreact-revalidate": "/stale" },
+        });
+      }
+
+      return new Response(
+        '<!DOCTYPE html><div data-mreact-route-id="stale"><main>Stale</main></div>',
+      );
+    };
+    const { routeModule } = await importRouteRuntime("prefetch-navigation-header-provenance");
+    const origin = location.origin;
+
+    await routeModule.__mreactNavigate("/stale");
+    await fetch("/api", { headers: { "x-mreact-navigation": "1" } });
+    await fetch(new Request(`${origin}/api`, { headers: { "x-mreact-navigation": "1" } }), {
+      headers: { "x-mreact-navigation": "1" },
+    });
+    await routeModule.__mreactNavigate("/stale");
+
+    expect(fetchCalls).toEqual([
+      { navigation: "1", url: `${origin}/stale` },
+      { navigation: "1", url: "/api" },
+      { navigation: "1", url: `${origin}/api` },
+      { navigation: "1", url: `${origin}/stale` },
+    ]);
   });
 
   test("invalidates cached navigation entries after client-side mutations", async () => {
