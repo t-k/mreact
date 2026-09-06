@@ -1040,26 +1040,45 @@ function emitRenderValueExpression(
  * so the subscription, the DOM range, and the branch cleanup scope all live
  * with the branch instead of with the caller.
  */
-function emitComponentRenderValueExpression(
-  children: JsxNodeIr[],
-  state: EmitSetupState,
-): string {
-  if (!children.some(needsOwnedDynamicRenderValue)) {
-    return emitRenderValueExpression(children, state);
-  }
-
-  const parts = children.map((child) => {
-    const expression = emitNodeRenderValueExpression(child, state);
-
-    return needsOwnedDynamicRenderValue(child)
-      ? emitOwnedDynamicRenderValue(expression, state)
-      : expression;
-  });
+function emitComponentRenderValueExpression(children: JsxNodeIr[], state: EmitSetupState): string {
+  const parts = children.map((child) => emitComponentRenderValueNode(child, state));
 
   return parts.length === 1 ? (parts[0] as string) : `[${parts.join(", ")}]`;
 }
 
-function emitOwnedDynamicRenderValue(valueExpression: string, state: EmitSetupState): string {
+function emitComponentRenderValueNode(node: JsxNodeIr, state: EmitSetupState): string {
+  if (node.kind === "conditional" && needsOwnedDynamicRenderValue(node)) {
+    const expression = emitNodeRenderValueExpression(node, state);
+    return emitOwnedDynamicRenderValue(
+      expression,
+      state,
+      ownerScopedMemoInsertionHelper(node, state),
+    );
+  }
+
+  if (node.kind === "fragment") {
+    const valueExpression = emitComponentRenderValueExpression(node.children, state);
+
+    if (node.bodyStatements !== undefined && node.bodyStatements.length > 0) {
+      return [
+        "(() => {",
+        ...node.bodyStatements.map((statement) => `  ${statement}`),
+        `  return ${valueExpression};`,
+        "})()",
+      ].join("\n");
+    }
+
+    return valueExpression;
+  }
+
+  return emitNodeRenderValueExpression(node, state);
+}
+
+function emitOwnedDynamicRenderValue(
+  valueExpression: string,
+  state: EmitSetupState,
+  insertionHelper = state.helperNames.insertDynamic,
+): string {
   const fragmentName = state.allocateName("_ownedFragment");
   const markerName = state.allocateName("_ownedMarker");
 
@@ -1068,7 +1087,7 @@ function emitOwnedDynamicRenderValue(valueExpression: string, state: EmitSetupSt
     `  const ${fragmentName} = document.createDocumentFragment();`,
     `  const ${markerName} = document.createComment("");`,
     `  ${fragmentName}.append(${markerName});`,
-    `  ${state.helperNames.insertDynamic}(${fragmentName}, ${markerName}, () => ${valueExpression}${emitDynamicOptions(state.debugLabel)});`,
+    `  ${insertionHelper}(${fragmentName}, ${markerName}, () => ${valueExpression}${emitDynamicOptions(state.debugLabel)});`,
     `  return ${fragmentName};`,
     "})()",
   ].join("\n");

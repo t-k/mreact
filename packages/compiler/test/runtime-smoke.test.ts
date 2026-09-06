@@ -6,6 +6,79 @@ import { transform } from "../src/index.js";
 import { compileClientComponent, runClientComponent } from "./helpers.js";
 
 describe("compiler runtime smoke", () => {
+  test("component children mount and unmount a reactive memo conditional", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+import { memo } from "@reckona/mreact";
+
+const ticket = cell<number | null>(null);
+const Card = memo(function Card() { return <article data-card>Card</article>; });
+
+function Shell(props) {
+  return <section>{props.children}</section>;
+}
+
+export function App() {
+  return <main>
+    <button id="open" type="button" onClick={() => ticket.set(1)}>Open</button>
+    <button id="close" type="button" onClick={() => ticket.set(null)}>Close</button>
+    <Shell>{ticket.get() === null ? null : <Card />}</Shell>
+  </main>;
+}`,
+      filename: "component-children-memo-conditional.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+
+    expect(node.querySelector("[data-card]")).toBeNull();
+    node.querySelector<HTMLButtonElement>("#open")?.click();
+    await flushEffects();
+    expect(node.querySelector("[data-card]")?.textContent).toBe("Card");
+    expect(node.textContent).not.toContain("[object Object]");
+
+    node.querySelector<HTMLButtonElement>("#close")?.click();
+    await flushEffects();
+    expect(node.querySelector("[data-card]")).toBeNull();
+  });
+
+  test("component children mount and unmount a reactive conditional inside a fragment", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const ticket = cell<number | null>(null);
+
+function Shell(props) {
+  return <section>{props.children}</section>;
+}
+
+export function App() {
+  return <main>
+    <button id="open" type="button" onClick={() => ticket.set(1)}>Open</button>
+    <button id="close" type="button" onClick={() => ticket.set(null)}>Close</button>
+    <Shell><>{ticket.get() === null ? null : <aside data-panel>Panel</aside>}</></Shell>
+  </main>;
+}`,
+      filename: "component-children-fragment-conditional.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+
+    expect(node.querySelector("[data-panel]")).toBeNull();
+    node.querySelector<HTMLButtonElement>("#open")?.click();
+    await flushEffects();
+    expect(node.querySelector("[data-panel]")?.textContent).toBe("Panel");
+
+    node.querySelector<HTMLButtonElement>("#close")?.click();
+    await flushEffects();
+    expect(node.querySelector("[data-panel]")).toBeNull();
+  });
+
   test("client transform preserves component and fragment children inside an IIFE after a reactive update", async () => {
     const output = transform({
       code: `import { cell, computed } from "@reckona/mreact-reactive-core";
