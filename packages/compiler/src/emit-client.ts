@@ -1548,7 +1548,14 @@ function emitPropsObject(
     }
 
     if (prop.kind === "render-prop") {
-      return `${emitPropName(prop.name)}: ${emitRenderValueExpression(prop.children, state)}`;
+      const renderValue = emitRenderValueExpression(prop.children, state);
+
+      // A call expression prop is analyzed as a render value because it may return
+      // markup, but a plain reactive read inside it still has to stay lazy or the
+      // component receives a value frozen at its first render.
+      return reactiveGetters && shouldEmitReactiveRenderPropGetter(prop.children)
+        ? `get ${emitGetterPropName(prop.name)}() { return ${renderValue}; }`
+        : `${emitPropName(prop.name)}: ${renderValue}`;
     }
 
     if (reactiveGetters && shouldEmitReactiveComponentPropGetter(prop.code)) {
@@ -1579,6 +1586,16 @@ function shouldEmitReactiveComponentPropGetter(code: string): boolean {
   }
 
   return !/^\s*(?:async\s*)?(?:function\b|(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>)/.test(code);
+}
+
+function shouldEmitReactiveRenderPropGetter(children: readonly JsxNodeIr[]): boolean {
+  const child = children[0];
+
+  return (
+    children.length === 1 &&
+    child?.kind === "expr" &&
+    shouldEmitReactiveComponentPropGetter(child.code)
+  );
 }
 
 function createNameAllocator(reservedNames: readonly string[]): NameAllocator {

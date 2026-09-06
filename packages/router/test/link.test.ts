@@ -212,4 +212,37 @@ describe("router Link", () => {
       warn.mockRestore();
     }
   });
+
+  test("serializes a reactive href getter as the value read at request time", () => {
+    let requested = "/tickets/0";
+    const props = {
+      children: "Open detail page",
+      prefetch: "viewport" as const,
+      get href() {
+        return requested;
+      },
+    };
+    let sinkHtml = "";
+
+    const serverHtml = Link(props);
+    Link(
+      {
+        append(value) {
+          sinkHtml += value;
+        },
+      },
+      props as unknown as LinkSinkProps,
+    );
+
+    expect(serverHtml).toBe(
+      '<a href="/tickets/0" data-mreact-prefetch="viewport">Open detail page</a>',
+    );
+    expect(sinkHtml).toBe(serverHtml);
+
+    requested = "/tickets/1";
+
+    expect(Link(props)).toBe(
+      '<a href="/tickets/1" data-mreact-prefetch="viewport">Open detail page</a>',
+    );
+  });
 });

@@ -2837,4 +2837,76 @@ export function App() {
     expect(node.querySelector("span")?.textContent).toBe("A");
     expect(node.textContent).not.toContain("[object Object]");
   });
+
+  test("router Link href follows a reactive read exactly like the plain anchor beside it", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+import { Link } from "@reckona/mreact-router/link";
+
+const panelTicket = cell<number | null>(null);
+const ticketHref = (id: number) => \`/tickets/\${id}\`;
+
+export function App() {
+  return <nav>
+    <button type="button" onClick={() => panelTicket.set(1)}>Next</button>
+    <Link href={ticketHref(panelTicket.get() ?? 0)}>Open detail page</Link>
+    <a href={ticketHref(panelTicket.get() ?? 0)}>Open detail page</a>
+  </nav>;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("get href()");
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const [linkAnchor, plainAnchor] = Array.from(node.querySelectorAll("a"));
+
+    expect(linkAnchor?.getAttribute("href")).toBe("/tickets/0");
+    expect(plainAnchor?.getAttribute("href")).toBe("/tickets/0");
+
+    node.querySelector("button")?.click();
+    await flushEffects();
+
+    expect(linkAnchor?.getAttribute("href")).toBe("/tickets/1");
+    expect(plainAnchor?.getAttribute("href")).toBe("/tickets/1");
+    expect(node.querySelectorAll("a")[0]).toBe(linkAnchor);
+  });
+
+  test("router Link href follows a reactive read through a wrapper component and an import alias", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+import { Link as RouteLink } from "@reckona/mreact-router/link";
+
+const panelTicket = cell<number | null>(null);
+const ticketHref = (id: number) => \`/tickets/\${id}\`;
+
+function PanelHeader(props: { number: number }) {
+  return <RouteLink href={ticketHref(panelTicket.get() ?? props.number)}>Open detail page</RouteLink>;
+}
+
+export function App() {
+  return <nav>
+    <button type="button" onClick={() => panelTicket.set(2)}>Next</button>
+    <PanelHeader number={0} />
+  </nav>;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const anchor = node.querySelector("a");
+
+    expect(anchor?.getAttribute("href")).toBe("/tickets/0");
+
+    node.querySelector("button")?.click();
+    await flushEffects();
+
+    expect(anchor?.getAttribute("href")).toBe("/tickets/2");
+    expect(node.querySelector("a")).toBe(anchor);
+  });
 });

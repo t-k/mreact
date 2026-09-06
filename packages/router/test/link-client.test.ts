@@ -1,7 +1,10 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, test, vi } from "vitest";
-import { Link } from "../src/link.js";
+import { cell } from "@reckona/mreact-reactive-core";
+import { flushEffects } from "@reckona/mreact-reactive-core/testing";
+import { createRoot } from "@reckona/mreact-reactive-dom";
+import { Link, type LinkProps } from "../src/link.js";
 
 describe("Link client rendering", () => {
   test("drops unsafe client href values", () => {
@@ -111,5 +114,136 @@ describe("Link client rendering", () => {
 
     expect(anchor.hasAttribute("download")).toBe(false);
     expect(anchor.getAttribute("tabindex")).toBe("2");
+  });
+});
+
+const renderLinkElement = (props: Record<string, unknown>): HTMLAnchorElement =>
+  Link(props as unknown as LinkProps<string>) as unknown as HTMLAnchorElement;
+
+describe("Link reactive href", () => {
+  test("follows a reactive href on the same anchor and skips same-value updates", async () => {
+    const ticket = cell<number | null>(null);
+    const ticketHref = (id: number): string => `/tickets/${id}`;
+    const anchor = renderLinkElement({
+      children: "Open detail page",
+      get href() {
+        return ticketHref(ticket.get() ?? 0);
+      },
+    });
+    const firstChild = anchor.firstChild;
+
+    expect(anchor.getAttribute("href")).toBe("/tickets/0");
+
+    ticket.set(1);
+    await flushEffects();
+    expect(anchor.getAttribute("href")).toBe("/tickets/1");
+
+    ticket.set(2);
+    await flushEffects();
+    expect(anchor.getAttribute("href")).toBe("/tickets/2");
+
+    const observer = new MutationObserver(() => undefined);
+    observer.observe(anchor, { attributeFilter: ["href"], attributes: true });
+    ticket.set(2);
+    await flushEffects();
+    expect(observer.takeRecords()).toEqual([]);
+    observer.disconnect();
+
+    ticket.set(null);
+    await flushEffects();
+    expect(anchor.getAttribute("href")).toBe("/tickets/0");
+    expect(anchor.firstChild).toBe(firstChild);
+    expect(anchor.textContent).toBe("Open detail page");
+  });
+
+  test("removes the previous href when a reactive update produces an unsafe url", async () => {
+    const target = cell("/safe");
+    const anchor = renderLinkElement({
+      children: "profile",
+      get href() {
+        return target.get();
+      },
+    });
+
+    expect(anchor.getAttribute("href")).toBe("/safe");
+
+    target.set("javascript:alert(1)");
+    await flushEffects();
+    expect(anchor.getAttribute("href")).toBeNull();
+
+    target.set("/safe-again");
+    await flushEffects();
+    expect(anchor.getAttribute("href")).toBe("/safe-again");
+  });
+
+  test("keeps children, focus, refs, and click handlers across a reactive href update", async () => {
+    const target = cell("/first");
+    const refCalls: (HTMLAnchorElement | null)[] = [];
+    let clicks = 0;
+    const anchor = renderLinkElement({
+      children: "Open",
+      get href() {
+        return target.get();
+      },
+      onClick: () => {
+        clicks += 1;
+      },
+      ref: (element: HTMLAnchorElement | null) => {
+        refCalls.push(element);
+      },
+    });
+    document.body.append(anchor);
+    anchor.focus();
+
+    target.set("/second");
+    await flushEffects();
+
+    anchor.click();
+
+    expect(anchor.getAttribute("href")).toBe("/second");
+    expect(anchor.textContent).toBe("Open");
+    expect(document.activeElement).toBe(anchor);
+    expect(refCalls).toEqual([anchor]);
+    expect(clicks).toBe(1);
+
+    anchor.remove();
+  });
+
+  test("stops updating a disposed anchor and only updates the remounted one", async () => {
+    const target = cell("/first");
+    const container = document.createElement("div");
+    document.body.append(container);
+    const anchors: HTMLAnchorElement[] = [];
+    const renderReactiveLink = (): HTMLAnchorElement => {
+      const anchor = renderLinkElement({
+        children: "Open",
+        get href() {
+          return target.get();
+        },
+      });
+      anchors.push(anchor);
+      return anchor;
+    };
+
+    const disposeFirst = createRoot(container, renderReactiveLink);
+    disposeFirst();
+
+    createRoot(container, renderReactiveLink);
+
+    target.set("/second");
+    await flushEffects();
+
+    expect(anchors).toHaveLength(2);
+    expect(anchors[0]?.getAttribute("href")).toBe("/first");
+    expect(anchors[1]?.getAttribute("href")).toBe("/second");
+
+    container.remove();
+  });
+
+  test("leaves a plain string href without a reactive binding", () => {
+    const anchor = renderLinkElement({ children: "About", href: "/about" });
+
+    expect(anchor.getAttribute("href")).toBe("/about");
+    expect((anchor as { __mreactPropBindings?: unknown }).__mreactPropBindings).toBeUndefined();
   });
 });

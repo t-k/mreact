@@ -1,6 +1,7 @@
 import { escapeHtmlAttribute, escapeHtmlText } from "@reckona/mreact-shared/html-escape";
 import type { HtmlSink } from "@reckona/mreact-shared/compiler-contract";
 import type { ReactCompatElement, ReactCompatNode } from "@reckona/mreact-compat";
+import { bindProp } from "@reckona/mreact-reactive-dom";
 import { safeUrlAttributeValue } from "@reckona/mreact-shared/url-safety";
 import type { AppRouteLinkHref } from "./typed-routes.js";
 /** Re-exports typed route href helper types used by Link. */
@@ -201,10 +202,23 @@ function renderLink(props: LinkProps<string>): string | HTMLAnchorElement {
   };
 
   if (typeof document !== "undefined" && typeof document.createElement === "function") {
-    return createAnchorElement(propsWithLinkAttrs);
+    const anchor = createAnchorElement(propsWithLinkAttrs);
+
+    // Destructuring above reads a compiler-emitted reactive `href` getter once.
+    // Re-read it through a prop binding so the same anchor follows later updates
+    // instead of freezing the URL captured during the first render.
+    if (hasReactiveLinkHref(props)) {
+      bindProp(anchor, "href", () => props.href);
+    }
+
+    return anchor;
   }
 
   return renderAnchorString(propsWithLinkAttrs);
+}
+
+function hasReactiveLinkHref(props: LinkProps<string>): boolean {
+  return Object.getOwnPropertyDescriptor(props, "href")?.get !== undefined;
 }
 
 function renderLinkString(props: LinkSinkProps): string {

@@ -49,6 +49,7 @@ import {
   readServerRenderValue,
   registerServerRenderValue,
 } from "../../shared/src/server-render-value-internal.js";
+import { Link } from "../../router/src/link.js";
 import {
   createStringSink,
   renderAsyncBoundary,
@@ -109,6 +110,7 @@ export function compileClientModule(code: string): ComponentExports {
     ...extractClientRuntimeEntries(code),
     ...extractClientInternalRuntimeEntries(code),
     ...extractReactiveCoreRuntimeEntries(code),
+    ...extractRouterLinkRuntimeEntries(code),
   ];
 
   return new Function(
@@ -520,6 +522,35 @@ function extractClientInternalRuntimeEntries(
                                   ? bindCompilerKeyedText
                                   : bindCompilerKeyedSingleNodeList,
     };
+  });
+}
+
+function extractRouterLinkRuntimeEntries(code: string): { localName: string; value: unknown }[] {
+  const importMatches = Array.from(
+    code.matchAll(/^import \{ (?<specifiers>[^}]+) \} from "@reckona\/mreact-router\/link";/gm),
+  );
+
+  return importMatches.flatMap((importMatch) => {
+    const specifiers = importMatch.groups?.specifiers;
+
+    if (specifiers === undefined) {
+      return [];
+    }
+
+    return specifiers.split(", ").map((specifier) => {
+      const match = specifier.match(
+        /^(?<importedName>Link)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+      );
+
+      if (match?.groups === undefined) {
+        throw new Error(`Unsupported router link runtime import: ${specifier}`);
+      }
+
+      return {
+        localName: match.groups.localName ?? match.groups.importedName,
+        value: Link,
+      };
+    });
   });
 }
 
