@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { performance } from "node:perf_hooks";
 import { expect, test } from "@playwright/test";
 import { buildApp } from "../dist/build.js";
 import { buildClientRouteBundle } from "../dist/client.js";
@@ -142,6 +143,115 @@ export default function About() {
     await expect(page.getByRole("heading", { name: "About" })).toBeVisible();
     expect(navigationRequests).toEqual(["/about"]);
   } finally {
+    await server.close();
+    await rm(rootDir, { force: true, recursive: true });
+  }
+});
+
+test("starts modulepreload dependency chunks with the route script under delayed network", async ({
+  page,
+}) => {
+  const rootDir = await mkdtemp(join(tmpdir(), "mreact-router-modulepreload-network-e2e-"));
+  const appDir = join(rootDir, "app");
+  const outDir = join(rootDir, ".mreact");
+  await mkdir(join(appDir, "about"), { recursive: true });
+  await mkdir(join(appDir, "lib"), { recursive: true });
+  await writeFile(
+    join(appDir, "lib", "shared.ts"),
+    `export function sharedLabel(value: string) {
+  return value;
+}
+`,
+  );
+  await writeFile(
+    join(appDir, "page.tsx"),
+    `import { cell } from "@reckona/mreact-reactive-core";
+import { sharedLabel } from "./lib/shared";
+
+export default function Page() {
+  const count = cell(0);
+  return <main><h1>{sharedLabel("Home")}</h1><a href="/about">About</a><button type="button" onClick={() => count.set(value => value + 1)}>{count.get()}</button></main>;
+}`,
+  );
+  await writeFile(
+    join(appDir, "about", "page.tsx"),
+    `import { cell } from "@reckona/mreact-reactive-core";
+import { sharedLabel } from "../lib/shared";
+
+export default function About() {
+  const count = cell(0);
+  return <main><h1>{sharedLabel("About")}</h1><button type="button" onClick={() => count.set(value => value + 1)}>{count.get()}</button></main>;
+}`,
+  );
+
+  await buildApp({ appDir, outDir });
+  const server = await startServer({ outDir, port: 0 });
+
+  try {
+    const assetTimings = new Map<string, { requestedAt: number; respondedAt?: number }>();
+    page.on("request", (request) => {
+      const pathname = new URL(request.url()).pathname;
+      if (pathname.includes("/_mreact/client/assets/")) {
+        assetTimings.set(pathname, { requestedAt: performance.now() });
+      }
+    });
+    page.on("response", (response) => {
+      const pathname = new URL(response.url()).pathname;
+      const timing = assetTimings.get(pathname);
+      if (timing !== undefined) {
+        timing.respondedAt = performance.now();
+      }
+    });
+    await page.route("**/_mreact/client/assets/**", async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 240));
+      await route.continue();
+    });
+    await page.goto(server.url);
+    await page.waitForFunction(() => globalThis.__mreactNavigationState?.installed === true);
+    const aboutManifest = await page.locator("#mreact-route-prefetch-manifest").evaluate((element) => {
+      const routes = JSON.parse(element.textContent ?? "[]") as Array<{
+        modulePreloads?: string[];
+        path: string;
+        script: string;
+      }>;
+      return routes.find((route) => route.path === "/about");
+    });
+    expect(aboutManifest?.script).toBeDefined();
+    expect(aboutManifest?.modulePreloads?.length).toBeGreaterThan(0);
+
+    const assetPaths = [aboutManifest!.script, ...(aboutManifest!.modulePreloads ?? [])].map(
+      (file) => file.startsWith("/_mreact/")
+        ? file
+        : `/_mreact/client/${file.replace(/^\/+/, "")}`,
+    );
+
+    const routeScriptResponse = assetTimings.get(assetPaths[0])?.respondedAt !== undefined
+      ? Promise.resolve()
+      : page.waitForResponse(
+          (response) => new URL(response.url()).pathname === assetPaths[0],
+        );
+    const navigationHtml = page.waitForResponse((response) => {
+      const request = response.request();
+      return new URL(response.url()).pathname === "/about" &&
+        request.headers()["x-mreact-navigation"] === "1";
+    });
+    await page.getByRole("link", { name: "About" }).hover();
+    await Promise.all([navigationHtml, routeScriptResponse]);
+
+    expect(
+      [...assetTimings.keys()].filter((pathname) => assetPaths.includes(pathname)).sort(),
+    ).toEqual([...assetPaths].sort());
+    const routeRequestedAt = assetTimings.get(assetPaths[0])?.requestedAt;
+    expect(routeRequestedAt).toBeDefined();
+    for (const dependencyPath of assetPaths.slice(1)) {
+      const dependencyRequestedAt = assetTimings.get(dependencyPath)?.requestedAt;
+      const dependencyRespondedAt = assetTimings.get(dependencyPath)?.respondedAt;
+      expect(dependencyRequestedAt).toBeDefined();
+      expect(dependencyRespondedAt).toBeDefined();
+      expect(dependencyRequestedAt! - routeRequestedAt!).toBeLessThan(50);
+    }
+  } finally {
+    await page.unroute("**/_mreact/client/assets/**").catch(() => {});
     await server.close();
     await rm(rootDir, { force: true, recursive: true });
   }
