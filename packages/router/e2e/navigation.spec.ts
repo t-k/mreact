@@ -155,7 +155,15 @@ test("starts modulepreload dependency chunks with the route script under delayed
   const appDir = join(rootDir, "app");
   const outDir = join(rootDir, ".mreact");
   await mkdir(join(appDir, "about"), { recursive: true });
+  await mkdir(join(appDir, "peer"), { recursive: true });
   await mkdir(join(appDir, "lib"), { recursive: true });
+  await writeFile(
+    join(appDir, "lib", "home-only.ts"),
+    `export function homeLabel(value: string) {
+  return value;
+}
+`,
+  );
   await writeFile(
     join(appDir, "lib", "shared.ts"),
     `export function sharedLabel(value: string) {
@@ -166,11 +174,11 @@ test("starts modulepreload dependency chunks with the route script under delayed
   await writeFile(
     join(appDir, "page.tsx"),
     `import { cell } from "@reckona/mreact-reactive-core";
-import { sharedLabel } from "./lib/shared";
+import { homeLabel } from "./lib/home-only";
 
 export default function Page() {
   const count = cell(0);
-  return <main><h1>{sharedLabel("Home")}</h1><a href="/about">About</a><button type="button" onClick={() => count.set(value => value + 1)}>{count.get()}</button></main>;
+  return <main><h1>{homeLabel("Home")}</h1><a href="/about">About</a><button type="button" onClick={() => count.set(value => value + 1)}>{count.get()}</button></main>;
 }`,
   );
   await writeFile(
@@ -183,75 +191,143 @@ export default function About() {
   return <main><h1>{sharedLabel("About")}</h1><button type="button" onClick={() => count.set(value => value + 1)}>{count.get()}</button></main>;
 }`,
   );
+  await writeFile(
+    join(appDir, "peer", "page.tsx"),
+    `import { cell } from "@reckona/mreact-reactive-core";
+import { sharedLabel } from "../lib/shared";
+
+export default function Peer() {
+  const count = cell(0);
+  return <main><h1>{sharedLabel("Peer")}</h1><button type="button" onClick={() => count.set(value => value + 1)}>{count.get()}</button></main>;
+}`,
+  );
 
   await buildApp({ appDir, outDir });
   const server = await startServer({ outDir, port: 0 });
 
+  let releaseEntry: (() => void) | undefined;
+  let entryRoutePattern: string | undefined;
+
   try {
     const assetTimings = new Map<string, { requestedAt: number; respondedAt?: number }>();
+    const assetRequestCounts = new Map<string, number>();
+    let entryAssetPath: string | undefined;
+    let entryResponseSeen = false;
     page.on("request", (request) => {
       const pathname = new URL(request.url()).pathname;
       if (pathname.includes("/_mreact/client/assets/")) {
         assetTimings.set(pathname, { requestedAt: performance.now() });
+        assetRequestCounts.set(pathname, (assetRequestCounts.get(pathname) ?? 0) + 1);
       }
     });
     page.on("response", (response) => {
       const pathname = new URL(response.url()).pathname;
+      if (pathname === entryAssetPath) {
+        entryResponseSeen = true;
+      }
       const timing = assetTimings.get(pathname);
       if (timing !== undefined) {
         timing.respondedAt = performance.now();
       }
     });
-    await page.route("**/_mreact/client/assets/**", async (route) => {
-      await new Promise((resolve) => setTimeout(resolve, 240));
-      await route.continue();
-    });
     await page.goto(server.url);
     await page.waitForFunction(() => globalThis.__mreactNavigationState?.installed === true);
-    const aboutManifest = await page.locator("#mreact-route-prefetch-manifest").evaluate((element) => {
+    const manifests = await page.locator("#mreact-route-prefetch-manifest").evaluate((element) => {
       const routes = JSON.parse(element.textContent ?? "[]") as Array<{
         modulePreloads?: string[];
         path: string;
         script: string;
       }>;
-      return routes.find((route) => route.path === "/about");
+      return {
+        about: routes.find((route) => route.path === "/about"),
+        home: routes.find((route) => route.path === "/"),
+      };
     });
+    const aboutManifest = manifests.about;
+    const homeManifest = manifests.home;
     expect(aboutManifest?.script).toBeDefined();
     expect(aboutManifest?.modulePreloads?.length).toBeGreaterThan(0);
+    expect(homeManifest?.script).toBeDefined();
 
-    const assetPaths = [aboutManifest!.script, ...(aboutManifest!.modulePreloads ?? [])].map(
-      (file) => file.startsWith("/_mreact/")
-        ? file
-        : `/_mreact/client/${file.replace(/^\/+/, "")}`,
-    );
+    const normalizeAssetPath = (file: string) => file.startsWith("/_mreact/")
+      ? file
+      : `/_mreact/client/${file.replace(/^\/+/, "")}`;
+    const assetPaths = [aboutManifest!.script, ...(aboutManifest!.modulePreloads ?? [])]
+      .map(normalizeAssetPath);
+    const homeAssetPaths = new Set([
+      homeManifest!.script,
+      ...(homeManifest!.modulePreloads ?? []),
+    ].map(normalizeAssetPath));
+    expect(homeAssetPaths.has(normalizeAssetPath(aboutManifest!.script))).toBe(false);
 
-    const routeScriptResponse = assetTimings.get(assetPaths[0])?.respondedAt !== undefined
-      ? Promise.resolve()
-      : page.waitForResponse(
-          (response) => new URL(response.url()).pathname === assetPaths[0],
-        );
+    const targetAssetPaths = [...new Set(assetPaths)];
+    const dependencyPaths = targetAssetPaths.slice(1);
+    const coldDependencyPaths = dependencyPaths.filter((pathname) => !homeAssetPaths.has(pathname));
+    expect(coldDependencyPaths.length).toBeGreaterThan(0);
+    const entryPath = targetAssetPaths[0];
+    entryAssetPath = entryPath;
+
+    assetTimings.clear();
+    assetRequestCounts.clear();
+
+    let entryRequested = false;
+    let entryReleased = false;
+    let resolveEntry: (() => void) | undefined;
+    const entryGate = new Promise<void>((resolve) => {
+      resolveEntry = resolve;
+    });
+    releaseEntry = () => {
+      resolveEntry?.();
+    };
+    entryRoutePattern = `**${targetAssetPaths[0]}`;
+    await page.route(entryRoutePattern, async (route) => {
+      entryRequested = true;
+      await entryGate;
+      entryReleased = true;
+      await route.continue();
+    });
+
     const navigationHtml = page.waitForResponse((response) => {
       const request = response.request();
       return new URL(response.url()).pathname === "/about" &&
         request.headers()["x-mreact-navigation"] === "1";
     });
     await page.getByRole("link", { name: "About" }).hover();
-    await Promise.all([navigationHtml, routeScriptResponse]);
+    await expect.poll(
+      () => coldDependencyPaths.every((pathname) => assetRequestCounts.get(pathname) === 1),
+      { timeout: 5000 },
+    ).toBe(true);
+
+    expect(entryRequested).toBe(true);
+    expect(entryReleased).toBe(false);
+    expect(entryResponseSeen).toBe(false);
+
+    releaseEntry();
+    await navigationHtml;
+    await expect.poll(
+      () => assetTimings.get(targetAssetPaths[0])?.respondedAt !== undefined,
+      { timeout: 5000 },
+    ).toBe(true);
 
     expect(
-      [...assetTimings.keys()].filter((pathname) => assetPaths.includes(pathname)).sort(),
-    ).toEqual([...assetPaths].sort());
-    const routeRequestedAt = assetTimings.get(assetPaths[0])?.requestedAt;
-    expect(routeRequestedAt).toBeDefined();
-    for (const dependencyPath of assetPaths.slice(1)) {
+      [...assetTimings.keys()].filter((pathname) =>
+        pathname === entryAssetPath || coldDependencyPaths.includes(pathname),
+      ).sort(),
+    ).toEqual([entryPath, ...coldDependencyPaths].sort());
+    for (const targetAssetPath of [entryPath, ...coldDependencyPaths]) {
+      expect(assetRequestCounts.get(targetAssetPath)).toBe(1);
+    }
+    for (const dependencyPath of coldDependencyPaths) {
       const dependencyRequestedAt = assetTimings.get(dependencyPath)?.requestedAt;
       const dependencyRespondedAt = assetTimings.get(dependencyPath)?.respondedAt;
       expect(dependencyRequestedAt).toBeDefined();
       expect(dependencyRespondedAt).toBeDefined();
-      expect(dependencyRequestedAt! - routeRequestedAt!).toBeLessThan(50);
     }
   } finally {
-    await page.unroute("**/_mreact/client/assets/**").catch(() => {});
+    releaseEntry?.();
+    if (entryRoutePattern !== undefined) {
+      await page.unroute(entryRoutePattern).catch(() => {});
+    }
     await server.close();
     await rm(rootDir, { force: true, recursive: true });
   }
