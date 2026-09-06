@@ -39,6 +39,10 @@
       "types": "./dist/compat-normalize.d.ts",
       "default": "./dist/compat-normalize.js"
     },
+    "./form-state": {
+      "types": "./dist/form-state.d.ts",
+      "default": "./dist/form-state.js"
+    },
     "./internal": {
       "types": "./dist/internal.d.ts",
       "default": "./dist/internal.js"

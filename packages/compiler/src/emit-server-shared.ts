@@ -376,8 +376,10 @@ export function emitOptionSelectedAttributeCode(
   optionValueCode: string | undefined,
   ownSelectedFallbackCode: string,
   localNames: OptionSelectedLocalNames = DEFAULT_OPTION_SELECTED_LOCAL_NAMES,
+  multipleCode?: string,
 ): string {
   const { selected, optionValue, index, candidate } = localNames;
+  const multiple = multipleCode === undefined ? "false" : `Boolean(${multipleCode})`;
 
   if (optionValueCode === undefined) {
     return `(() => { const ${selected} = (${selectedValueCode}); if (${selected} == null) return ${ownSelectedFallbackCode}; return ""; })()`;
@@ -387,7 +389,7 @@ export function emitOptionSelectedAttributeCode(
     `(() => { const ${selected} = (${selectedValueCode}); ` +
     `if (${selected} == null) return ${ownSelectedFallbackCode}; ` +
     `const ${optionValue} = String(${optionValueCode}); ` +
-    `if (Array.isArray(${selected})) { ` +
+    `if (${multiple} && Array.isArray(${selected})) { ` +
     `for (let ${index} = 0; ${index} < ${selected}.length; ${index}++) { ` +
     `const ${candidate} = ${selected}[${index}]; ` +
     `if (${candidate} != null && String(${candidate}) === ${optionValue}) return ${SELECTED_MARKER_LITERAL}; ` +

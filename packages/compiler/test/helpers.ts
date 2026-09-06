@@ -69,6 +69,7 @@ import {
   createCompilerListBindingCache,
   createSvgTemplate,
   createSvgTemplateElement,
+  installMemoRenderValueNormalizer,
   markCompilerKeyedEventSlot,
   trackCompilerKeyedItem,
 } from "../../reactive-dom/src/internal.js";
@@ -129,9 +130,7 @@ export function runServerComponent(
   props?: Record<string, unknown>,
 ): string {
   const module = compileServerModule(code);
-  const component = module[exportName] as
-    | ((props?: Record<string, unknown>) => string)
-    | undefined;
+  const component = module[exportName] as ((props?: Record<string, unknown>) => string) | undefined;
 
   if (component === undefined) {
     throw new Error(`Server export '${exportName}' was not found.`);
@@ -484,7 +483,7 @@ function extractClientInternalRuntimeEntries(
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>bindCompilerKeyedCellText|bindCompilerKeyedPropertyText|bindCompilerKeyedSingleNodeList|bindCompilerKeyedText|bindListWithRenderArity|createCompilerListBindingCache|createListWithRenderArity|createMemo|createSvgTemplate|createSvgTemplateElement|insertMemo|insertMemoDynamic|markCompilerKeyedEventSlot|trackCompilerKeyedItem)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+      /^(?<importedName>bindCompilerKeyedCellText|bindCompilerKeyedPropertyText|bindCompilerKeyedSingleNodeList|bindCompilerKeyedText|bindListWithRenderArity|createCompilerListBindingCache|createListWithRenderArity|createMemo|createSvgTemplate|createSvgTemplateElement|insertMemo|insertMemoDynamic|installMemoRenderValueNormalizer|markCompilerKeyedEventSlot|trackCompilerKeyedItem)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
     );
 
     if (match?.groups === undefined) {
@@ -508,19 +507,21 @@ function extractClientInternalRuntimeEntries(
                     ? insertMemo
                     : match.groups.importedName === "insertMemoDynamic"
                       ? insertMemoDynamic
-                      : match.groups.importedName === "createMemo"
-                        ? createMemo
-                        : match.groups.importedName === "markCompilerKeyedEventSlot"
-                          ? markCompilerKeyedEventSlot
-                          : match.groups.importedName === "trackCompilerKeyedItem"
-                            ? trackCompilerKeyedItem
-                            : match.groups.importedName === "bindCompilerKeyedCellText"
-                              ? bindCompilerKeyedCellText
-                              : match.groups.importedName === "bindCompilerKeyedPropertyText"
-                                ? bindCompilerKeyedPropertyText
-                                : match.groups.importedName === "bindCompilerKeyedText"
-                                  ? bindCompilerKeyedText
-                                  : bindCompilerKeyedSingleNodeList,
+                      : match.groups.importedName === "installMemoRenderValueNormalizer"
+                        ? installMemoRenderValueNormalizer
+                        : match.groups.importedName === "createMemo"
+                          ? createMemo
+                          : match.groups.importedName === "markCompilerKeyedEventSlot"
+                            ? markCompilerKeyedEventSlot
+                            : match.groups.importedName === "trackCompilerKeyedItem"
+                              ? trackCompilerKeyedItem
+                              : match.groups.importedName === "bindCompilerKeyedCellText"
+                                ? bindCompilerKeyedCellText
+                                : match.groups.importedName === "bindCompilerKeyedPropertyText"
+                                  ? bindCompilerKeyedPropertyText
+                                  : match.groups.importedName === "bindCompilerKeyedText"
+                                    ? bindCompilerKeyedText
+                                    : bindCompilerKeyedSingleNodeList,
     };
   });
 }

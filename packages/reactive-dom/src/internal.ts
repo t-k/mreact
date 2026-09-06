@@ -14,7 +14,7 @@ export {
   trackCompilerKeyedItem,
 } from "./bind-list.js";
 export { insertMemo } from "./insert-memo.js";
-export { insertMemoDynamic } from "./insert-memo-dynamic.js";
+export { insertMemoDynamic, installMemoRenderValueNormalizer } from "./insert-memo-dynamic.js";
 export { setDomAttribute } from "./dom-prop-application.js";
 export { createSvgTemplate, createSvgTemplateElement } from "./template.js";
 export { MEMO_RENDER_VALUE, type MemoRenderValue } from "./types.js";

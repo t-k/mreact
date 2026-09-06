@@ -3030,8 +3030,9 @@ export async function buildClientRouteEntrySource(
   reloadNextNavigationFetch: false,
   routePrefetchManifest: undefined,
   routePrefetchManifestText: undefined,
-  viewportAnchors: new WeakSet(),
+  viewportAnchors: new WeakMap(),
   viewportObserver: undefined,
+  viewportMutationObserver: undefined,
 };
 __mreactNavigationState.cacheTokens ??= new Map();
 __mreactNavigationState.navigationFetchInits ??= new WeakSet();`
@@ -3913,7 +3914,7 @@ function __mreactPrefetchRouteScript(route) {
 export async function __mreactNavigate(url, options = {}) {
   const href = __mreactNormalizeNavigationUrl(url);
 
-  if (href === undefined) {
+  if (href === undefined || !__mreactIsSameOriginNavigationUrl(href)) {
     return false;
   }
 
@@ -4682,11 +4683,15 @@ function __mreactNormalizeNavigationUrl(url) {
 
 function __mreactIsSameOriginNavigationUrl(url) {
   if (typeof location === "undefined") {
-    return true;
+    return false;
   }
 
   try {
-    return new URL(url, location.href).origin === location.origin;
+    const parsed = new URL(url, location.href);
+    return (
+      (parsed.protocol === "http:" || parsed.protocol === "https:") &&
+      parsed.origin === location.origin
+    );
   } catch {
     return false;
   }
@@ -5181,20 +5186,117 @@ function __mreactObserveViewportPrefetchAnchors(root) {
           continue;
         }
 
-        __mreactNavigationState.viewportObserver?.unobserve(entry.target);
-        void __mreactPrefetch(entry.target.href, { trigger: "viewport" });
+        const anchor = entry.target;
+        if (
+          anchor.dataset.mreactPrefetch !== "viewport" ||
+          !anchor.hasAttribute("href") ||
+          !anchor.isConnected
+        ) {
+          __mreactForgetViewportPrefetchAnchor(anchor);
+          continue;
+        }
+
+        const href = __mreactNormalizeNavigationUrl(anchor.href);
+        if (href === undefined) {
+          __mreactForgetViewportPrefetchAnchor(anchor);
+          continue;
+        }
+
+        __mreactNavigationState.viewportAnchors.set(anchor, href);
+        __mreactNavigationState.viewportObserver?.unobserve(anchor);
+        void __mreactPrefetch(href, { trigger: "viewport" });
       }
     });
   }
 
+  if (
+    __mreactNavigationState.viewportMutationObserver === undefined &&
+    typeof MutationObserver !== "undefined"
+  ) {
+    __mreactNavigationState.viewportMutationObserver = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (mutation.type === "attributes" && mutation.target instanceof HTMLAnchorElement) {
+          __mreactRegisterViewportPrefetchAnchor(mutation.target);
+          continue;
+        }
+
+        if (mutation.type !== "childList") {
+          continue;
+        }
+
+        for (const node of mutation.addedNodes) {
+          if (node instanceof Element) {
+            if (node instanceof HTMLAnchorElement) {
+              __mreactRegisterViewportPrefetchAnchor(node);
+            }
+            for (const anchor of Array.from(node.querySelectorAll("a"))) {
+              if (anchor instanceof HTMLAnchorElement) {
+                __mreactRegisterViewportPrefetchAnchor(anchor);
+              }
+            }
+          }
+        }
+
+        for (const node of mutation.removedNodes) {
+          if (node instanceof Element) {
+            if (node instanceof HTMLAnchorElement) {
+              __mreactForgetViewportPrefetchAnchor(node);
+            }
+            for (const anchor of Array.from(node.querySelectorAll("a"))) {
+              if (anchor instanceof HTMLAnchorElement) {
+                __mreactForgetViewportPrefetchAnchor(anchor);
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  __mreactNavigationState.viewportMutationObserver?.observe(root, {
+    attributes: true,
+    attributeFilter: ["href", "data-mreact-prefetch"],
+    childList: true,
+    subtree: true,
+  });
+
   for (const anchor of Array.from(root.querySelectorAll('a[href][data-mreact-prefetch="viewport"]'))) {
-    if (!(anchor instanceof HTMLAnchorElement) || __mreactNavigationState.viewportAnchors.has(anchor)) {
+    if (!(anchor instanceof HTMLAnchorElement)) {
       continue;
     }
 
-    __mreactNavigationState.viewportAnchors.add(anchor);
-    __mreactNavigationState.viewportObserver.observe(anchor);
+    __mreactRegisterViewportPrefetchAnchor(anchor);
   }
+}
+
+function __mreactRegisterViewportPrefetchAnchor(anchor) {
+  if (
+    anchor.dataset.mreactPrefetch !== "viewport" ||
+    !anchor.hasAttribute("href") ||
+    !anchor.isConnected
+  ) {
+    __mreactForgetViewportPrefetchAnchor(anchor);
+    return;
+  }
+
+  const href = __mreactNormalizeNavigationUrl(anchor.href);
+  if (href === undefined) {
+    __mreactForgetViewportPrefetchAnchor(anchor);
+    return;
+  }
+
+  if (__mreactNavigationState.viewportAnchors.get(anchor) === href) {
+    return;
+  }
+
+  __mreactNavigationState.viewportObserver?.unobserve(anchor);
+  __mreactNavigationState.viewportAnchors.set(anchor, href);
+  __mreactNavigationState.viewportObserver?.observe(anchor);
+}
+
+function __mreactForgetViewportPrefetchAnchor(anchor) {
+  __mreactNavigationState.viewportObserver?.unobserve(anchor);
+  __mreactNavigationState.viewportAnchors.delete(anchor);
 }
 `
     : ""
@@ -5585,8 +5687,8 @@ function __mreactResumeNode(current, next) {
   __mreactSyncEventBindings(current, next);
   __mreactSyncDomRefBindings(current, next);
   __mreactSyncAttributes(current, next);
-  __mreactSyncPropBindings(current, next);
   __mreactResumeChildren(current, next);
+  __mreactSyncPropBindings(current, next);
 }
 
 function __mreactShouldReplaceNode(current, next) {

@@ -284,11 +284,10 @@ export function App() {
 
     expect(output.diagnostics).toEqual([]);
     // Component children are evaluated once at the call site, so the branch
-    // needs its own insertDynamic owner to subscribe and to own its cleanup
-    // scope. Without it the conditional collapses to a one-shot value.
-    expect(output.code).toMatch(/children: \[[\s\S]*insertDynamic\(/);
-    expect(output.code).toContain("document.createDocumentFragment()");
-    expect(output.code).toContain('document.createComment("")');
+    // needs a memo render value that the receiving component can own. The
+    // memo normalizer turns it into a dynamic insertion when the child is read.
+    expect(output.code).toMatch(/children: \[[\s\S]*createMemo\(null, null,/);
+    expect(output.code).toContain("installMemoRenderValueNormalizer();");
   });
 
   test("keeps non-reactive conditionals in component children as inline values", () => {

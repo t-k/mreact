@@ -8,6 +8,7 @@ import {
 import { isBooleanishStringAttribute, isEventLikePropName } from "@reckona/mreact-shared";
 import { registerDispose } from "./scope.js";
 import type { Dispose } from "./types.js";
+import { applySelectValue } from "./form-state.js";
 
 export interface PropBinding {
   dispose: Dispose;
@@ -74,6 +75,11 @@ export function applyDomProp(
 ): void {
   if (name === "dangerouslySetInnerHTML") {
     element.innerHTML = readDangerousHtmlOptIn(value) ?? "";
+    return;
+  }
+
+  if ((name === "value" || name === "defaultValue") && element instanceof HTMLSelectElement) {
+    applySelectValue(element, value);
     return;
   }
 
@@ -200,6 +206,10 @@ function isDomRenderValue(value: unknown): boolean {
 export function removeDomProp(element: Element, name: string): void {
   if (name === "dangerouslySetInnerHTML") {
     element.innerHTML = "";
+    return;
+  }
+  if ((name === "value" || name === "defaultValue") && element instanceof HTMLSelectElement) {
+    applySelectValue(element, undefined);
     return;
   }
   if (isEventLikePropName(name)) {

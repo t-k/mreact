@@ -4,6 +4,7 @@ import { isMemoRenderValue } from "./create-memo.js";
 import { bindList } from "./bind-list.js";
 import { isListRenderValue } from "./create-list.js";
 import { isDynamicHydrationEnabled, markDynamicNode, markDynamicNodes } from "./dynamic-node.js";
+import { registerRenderValueNormalizer } from "./normalize.js";
 import { createScopedRenderNodes } from "./render-scope.js";
 import { registerDispose } from "./scope.js";
 import {
@@ -18,12 +19,26 @@ type MemoDynamicValue = RenderValue | MemoRenderValue;
 type BindListWithRenderArity = (...args: [...Parameters<typeof bindList>, number]) => Dispose;
 
 /** Inserts a compiler-owned memo render value before a marker node. */
+let memoRenderValueNormalizerInstalled = false;
+
+export function installMemoRenderValueNormalizer(): void {
+  if (memoRenderValueNormalizerInstalled) {
+    return;
+  }
+
+  memoRenderValueNormalizerInstalled = true;
+  registerRenderValueNormalizer((value) =>
+    isMemoRenderValue(value) ? normalizeMemoRenderValue(value) : undefined,
+  );
+}
+
 export function insertMemoDynamic(
   parent: ParentNode,
   marker: ChildNode,
   value: () => MemoDynamicValue,
   options?: { debugLabel?: string },
 ): Dispose {
+  installMemoRenderValueNormalizer();
   void parent;
   const markForHydration = isDynamicHydrationEnabled();
 
@@ -271,4 +286,12 @@ interface BoundMemoDynamicList {
 
 function isSameNodeList(left: readonly Node[], right: readonly Node[]): boolean {
   return left.length === right.length && left.every((node, index) => node === right[index]);
+}
+
+function normalizeMemoRenderValue(value: MemoRenderValue): Node[] {
+  const fragment = document.createDocumentFragment();
+  const marker = document.createComment("");
+  fragment.append(marker);
+  insertMemoDynamic(fragment, marker, () => value);
+  return Array.from(fragment.childNodes);
 }

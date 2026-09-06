@@ -190,9 +190,11 @@ export function collectOxcCompilerOwnedReactiveAliases(
   statements: readonly unknown[],
   rootStatement: unknown,
   aliases: ReadonlyMap<string, string>,
+  compilerOwnedRenderValueBindings: ReadonlySet<string> = new Set(),
 ): Map<string, string> {
   const dependencies = new Map<string, Set<string>>();
   const unownedReferences = new Set<string>();
+  const compilerOwnedRenderValueReferences = new Set<string>();
 
   for (const statementValue of statements) {
     const statement = readObject(statementValue);
@@ -225,14 +227,24 @@ export function collectOxcCompilerOwnedReactiveAliases(
         continue;
       }
 
+      const referencesTargetCompilerOwnedRenderValue =
+        typeof id.name === "string" && compilerOwnedRenderValueBindings.has(id.name);
+
       for (const name of references) {
-        unownedReferences.add(name);
+        if (referencesTargetCompilerOwnedRenderValue) {
+          compilerOwnedRenderValueReferences.add(name);
+        } else {
+          unownedReferences.add(name);
+        }
       }
     }
   }
 
   const reachable = collectOxcReactiveAliasDependencyClosure(
-    collectOxcReactiveAliasReferenceNames(readObject(rootStatement), aliases),
+    new Set([
+      ...collectOxcReactiveAliasReferenceNames(readObject(rootStatement), aliases),
+      ...compilerOwnedRenderValueReferences,
+    ]),
     dependencies,
   );
   const disqualified = collectOxcReactiveAliasDependencyClosure(unownedReferences, dependencies);

@@ -17,6 +17,9 @@ export function emitClient(
   options: { dev?: boolean; filename?: string } = {},
 ): EmitResult {
   const imports = collectImports(ir);
+  const usesDeferredComponentRenderValues = ir.components.some((component) =>
+    treeUsesDeferredComponentRenderValues(component.root),
+  );
   const helperNames = allocateRuntimeHelperNames(
     ir,
     imports.flatMap((entry) => entry.specifiers),
@@ -26,6 +29,9 @@ export function emitClient(
     .map((entry) => emitRuntimeImportLine(entry, helperNames))
     .join("\n");
   const userImports = emitUserImports(ir);
+  const memoNormalizerSetup = usesDeferredComponentRenderValues
+    ? `${helperNames.installMemoRenderValueNormalizer}();`
+    : "";
   const moduleStatements = emitModuleStatements(ir);
   const moduleAllocator = createNameAllocator([]);
   const clientBoundaryHelperName = hasClientReferenceNodes(ir)
@@ -57,7 +63,9 @@ export function emitClient(
     .replaceAll(OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER, helperNames.untrack);
 
   return {
-    code: `${[importLines, userImports, moduleStatements, clientBoundaryHelper].filter(Boolean).join("\n")}\n\n${components}\n`,
+    code: `${[importLines, userImports, memoNormalizerSetup, moduleStatements, clientBoundaryHelper]
+      .filter(Boolean)
+      .join("\n")}\n\n${components}\n`,
     imports,
   };
 }
@@ -82,6 +90,7 @@ type RuntimeHelperName =
   | "insertRenderValue"
   | "insertMemo"
   | "insertMemoDynamic"
+  | "installMemoRenderValueNormalizer"
   | "bindCompilerKeyedCellText"
   | "bindCompilerKeyedSingleNodeList"
   | "bindCompilerKeyedPropertyText"
@@ -126,6 +135,7 @@ function allocateRuntimeHelperNames(
     insertRenderValue: "insertRenderValue",
     insertMemo: "insertMemo",
     insertMemoDynamic: "insertMemoDynamic",
+    installMemoRenderValueNormalizer: "installMemoRenderValueNormalizer",
     bindCompilerKeyedCellText: "bindCompilerKeyedCellText",
     bindCompilerKeyedSingleNodeList: "bindCompilerKeyedSingleNodeList",
     bindCompilerKeyedPropertyText: "bindCompilerKeyedPropertyText",
@@ -200,6 +210,7 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
 
   if (ir.components.some((component) => treeUsesDeferredComponentRenderValues(component.root))) {
     internalSpecifiers.add("createMemo");
+    internalSpecifiers.add("installMemoRenderValueNormalizer");
   }
 
   if (JSON.stringify(ir).includes(OXC_BIND_DOM_REF_PLACEHOLDER)) {
@@ -218,7 +229,9 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
     visitForClientImports(component.root, "setup", (node, context) => {
       if (node.kind === "expr") {
         if (isClientDynamicExpression(node)) {
-          specifiers.add(node.renderMode === "render-value" ? "insertRenderValue" : "insertDynamic");
+          specifiers.add(
+            node.renderMode === "render-value" ? "insertRenderValue" : "insertDynamic",
+          );
         } else if (node.renderMode === "compiler-keyed-cell-text") {
           internalSpecifiers.add("bindCompilerKeyedCellText");
         } else if (node.renderMode === "compiler-keyed-text") {
@@ -636,7 +649,12 @@ function emitDynamicOptions(debugLabel: string | undefined, memo = false): strin
   return entries.length === 0 ? "" : `, { ${entries.join(", ")} }`;
 }
 
-function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string {
+function emitSetup(
+  node: JsxNodeIr,
+  path: string,
+  state: EmitSetupState,
+  initialChildIndex = 0,
+): string {
   const lines: string[] = [];
 
   if (node.kind !== "element" && node.kind !== "fragment" && node.kind !== "component") {
@@ -673,12 +691,17 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
     lines.push(`  const ${currentPath} = ${path};`);
   }
 
+  const postChildBindingLines: string[] = [];
+
   if (node.kind === "element") {
     for (const attr of node.attributes) {
       if (attr.kind === "dynamic-attr") {
-        lines.push(
-          `  ${state.helperNames.bindProp}(${currentPath}, "${attr.name}", () => (${attr.code}));`,
-        );
+        const line = `  ${state.helperNames.bindProp}(${currentPath}, "${attr.name}", () => (${attr.code}));`;
+        if (shouldDeferSelectBinding(node, attr)) {
+          postChildBindingLines.push(line);
+        } else {
+          lines.push(line);
+        }
       }
 
       if (attr.kind === "dom-ref") {
@@ -686,7 +709,12 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
       }
 
       if (attr.kind === "spread-attr") {
-        lines.push(`  ${state.helperNames.bindSpreadProps}(${currentPath}, () => (${attr.code}));`);
+        const line = `  ${state.helperNames.bindSpreadProps}(${currentPath}, () => (${attr.code}));`;
+        if (shouldDeferSelectBinding(node, attr)) {
+          postChildBindingLines.push(line);
+        } else {
+          lines.push(line);
+        }
       }
 
       if (attr.kind === "event") {
@@ -719,7 +747,7 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
     needsCompilerKeyedLiveChildrenAlias(children)
       ? state.allocateName("_keyedChildren")
       : undefined;
-  let childIndex = 0;
+  let childIndex = initialChildIndex;
 
   if (stableChildrenName !== undefined) {
     lines.push(`  const ${stableChildrenName} = Array.from(${currentPath}.childNodes);`);
@@ -900,6 +928,15 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
       continue;
     }
 
+    if (child.kind === "fragment") {
+      const previousCompilerKeyedElementPath = state.compilerKeyedElementPath;
+      state.compilerKeyedElementPath = undefined;
+      lines.push(emitSetup(child, currentPath, state, childIndex));
+      state.compilerKeyedElementPath = previousCompilerKeyedElementPath;
+      childIndex += renderedChildNodeCount(child);
+      continue;
+    }
+
     const previousCompilerKeyedElementPath = state.compilerKeyedElementPath;
     state.compilerKeyedElementPath =
       state.compilerKeyedRowContext !== undefined && usesLiveChildPath ? childPath : undefined;
@@ -911,7 +948,27 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
     childIndex += 1;
   }
 
+  lines.push(...postChildBindingLines);
+
   return lines.filter(Boolean).join("\n");
+}
+
+function shouldDeferSelectBinding(
+  node: Extract<JsxNodeIr, { kind: "element" }>,
+  attribute: Extract<AttributeIr, { kind: "dynamic-attr" | "spread-attr" }>,
+): boolean {
+  return (
+    node.tagName === "select" &&
+    (attribute.kind === "spread-attr" ||
+      (attribute.kind === "dynamic-attr" &&
+        (attribute.name === "value" || attribute.name === "defaultValue")))
+  );
+}
+
+function renderedChildNodeCount(node: JsxNodeIr): number {
+  return node.kind === "fragment"
+    ? node.children.reduce((count, child) => count + renderedChildNodeCount(child), 0)
+    : 1;
 }
 
 function hasDirectDangerouslySetInnerHtml(node: Extract<JsxNodeIr, { kind: "element" }>): boolean {
@@ -1051,6 +1108,11 @@ function emitComponentRenderValueExpression(children: JsxNodeIr[], state: EmitSe
 }
 
 function emitComponentRenderValueNode(node: JsxNodeIr, state: EmitSetupState): string {
+  if (needsDeferredComponentRenderValue(node)) {
+    const expression = emitNodeRenderValueExpression(node, state);
+    return `${state.helperNames.createMemo}(null, null, () => ${expression}, () => false)`;
+  }
+
   if (shouldDeferComponentRenderValue(node)) {
     const expression = emitNodeRenderValueExpression(node, state);
     return `${state.helperNames.createMemo}(null, null, () => ${expression}, () => false)`;
@@ -1075,14 +1137,21 @@ function emitComponentRenderValueNode(node: JsxNodeIr, state: EmitSetupState): s
 }
 
 function shouldDeferComponentRenderValue(node: JsxNodeIr): boolean {
-  if (node.kind === "component" || node.kind === "element") {
+  if (node.kind === "conditional") {
+    return (
+      needsDeferredComponentRenderValue(node) ||
+      [...node.whenTrue, ...node.whenFalse].some(
+        (child) => child.kind === "list" || shouldDeferComponentRenderValue(child),
+      )
+    );
+  }
+
+  if (node.kind === "component") {
     return true;
   }
 
-  if (node.kind === "conditional") {
-    return [...node.whenTrue, ...node.whenFalse].some(
-      (child) => child.kind === "list" || shouldDeferComponentRenderValue(child),
-    );
+  if (node.kind === "element") {
+    return node.children.some(shouldDeferComponentRenderValue);
   }
 
   if (node.kind === "fragment") {
@@ -1092,12 +1161,54 @@ function shouldDeferComponentRenderValue(node: JsxNodeIr): boolean {
   return false;
 }
 
+function needsDeferredComponentRenderValue(node: JsxNodeIr): boolean {
+  return (
+    node.kind === "conditional" &&
+    (needsOwnedDynamicRenderValue(node) ||
+      [...node.whenTrue, ...node.whenFalse].some((child) => child.kind === "list"))
+  );
+}
+
+function needsOwnedDynamicRenderValue(node: JsxNodeIr): boolean {
+  return (
+    node.kind === "conditional" &&
+    readsReactiveSourceCode(node.conditionCode) &&
+    [...node.whenTrue, ...node.whenFalse].some(rendersDomNode)
+  );
+}
+
+function rendersDomNode(node: JsxNodeIr): boolean {
+  if (
+    node.kind === "element" ||
+    node.kind === "component" ||
+    node.kind === "list" ||
+    node.kind === "async-boundary"
+  ) {
+    return true;
+  }
+
+  if (node.kind === "fragment") {
+    return node.children.some(rendersDomNode);
+  }
+
+  if (node.kind === "conditional") {
+    return [...node.whenTrue, ...node.whenFalse].some(rendersDomNode);
+  }
+
+  return false;
+}
+
+function readsReactiveSourceCode(code: string): boolean {
+  return /\.\s*get\s*\(/.test(code);
+}
+
 function treeUsesDeferredComponentRenderValues(node: JsxNodeIr): boolean {
   if (node.kind === "component") {
     if (
       node.children.some(shouldDeferComponentRenderValue) ||
       node.props.some(
-        (prop) => prop.kind === "render-prop" && prop.children.some(shouldDeferComponentRenderValue),
+        (prop) =>
+          prop.kind === "render-prop" && prop.children.some(shouldDeferComponentRenderValue),
       )
     ) {
       return true;
@@ -1107,8 +1218,7 @@ function treeUsesDeferredComponentRenderValues(node: JsxNodeIr): boolean {
       node.children.some(treeUsesDeferredComponentRenderValues) ||
       node.props.some(
         (prop) =>
-          prop.kind === "render-prop" &&
-          prop.children.some(treeUsesDeferredComponentRenderValues),
+          prop.kind === "render-prop" && prop.children.some(treeUsesDeferredComponentRenderValues),
       )
     );
   }

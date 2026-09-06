@@ -424,7 +424,9 @@ describe("react-compat server render", () => {
             createElement("option", { value: 2 }, "two"),
           ),
         ),
-      ).toBe('<select><option value="1">one</option><option value="2" selected="">two</option></select>');
+      ).toBe(
+        '<select><option value="1">one</option><option value="2" selected="">two</option></select>',
+      );
 
       expect(
         renderToString(() =>
@@ -435,7 +437,7 @@ describe("react-compat server render", () => {
             createElement("option", null, "done"),
           ),
         ),
-      ).toBe("<select><option>open</option><option selected=\"\">done</option></select>");
+      ).toBe('<select><option>open</option><option selected="">done</option></select>');
 
       expect(
         renderToString(() =>
@@ -446,7 +448,9 @@ describe("react-compat server render", () => {
             createElement("option", { value: "open" }, "open"),
           ),
         ),
-      ).toBe('<select><option value="" selected="">none</option><option value="open">open</option></select>');
+      ).toBe(
+        '<select><option value="" selected="">none</option><option value="open">open</option></select>',
+      );
     });
 
     test("marks nothing for null, undefined and non-matching values", () => {
@@ -481,6 +485,23 @@ describe("react-compat server render", () => {
         '<select multiple=""><option value="open">open</option>' +
           '<option value="in_progress" selected="">in_progress</option>' +
           '<option value="done">done</option></select>',
+      );
+    });
+
+    test("treats an array as a scalar for a single select", () => {
+      expect(
+        renderToString(() =>
+          createElement(
+            "select",
+            { value: ["open", "done"] },
+            createElement("option", { value: "open" }, "open"),
+            createElement("option", { value: "done" }, "done"),
+            createElement("option", { value: "open,done" }, "joined"),
+          ),
+        ),
+      ).toBe(
+        '<select><option value="open">open</option><option value="done">done</option>' +
+          '<option value="open,done" selected="">joined</option></select>',
       );
     });
 

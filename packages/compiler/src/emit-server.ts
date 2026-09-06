@@ -54,6 +54,8 @@ let currentOptionSelectedLocalNames: OptionSelectedLocalNames = {
   index: "_i",
   candidate: "_candidate",
 };
+const serverSelectionContextKey = "mreact.server.selected-value";
+const serverSelectionMultipleContextKey = "mreact.server.select-multiple";
 /**
  * Selection expression of the nearest enclosing `<select>`, or `undefined` outside
  * one. Emit-time only (this walker is a synchronous tree walk, and nothing here
@@ -64,19 +66,28 @@ let currentOptionSelectedLocalNames: OptionSelectedLocalNames = {
  * same value on its `CollectHtmlState`.
  */
 let currentSelectedValueCode: string | undefined;
+let currentSelectedMultipleCode: string | undefined;
 
-function withSelectedValueCode<T>(selectedValueCode: string | undefined, emit: () => T): T {
+function withSelectedValueCode<T>(
+  selectedValueCode: string | undefined,
+  selectedMultipleCode: string | undefined,
+  emit: () => T,
+): T {
   const previous = currentSelectedValueCode;
+  const previousMultiple = currentSelectedMultipleCode;
   currentSelectedValueCode = selectedValueCode;
+  currentSelectedMultipleCode = selectedMultipleCode;
   try {
     return emit();
   } finally {
     currentSelectedValueCode = previous;
+    currentSelectedMultipleCode = previousMultiple;
   }
 }
 
 export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitResult {
   currentSelectedValueCode = undefined;
+  currentSelectedMultipleCode = undefined;
   const escapeHelperName = allocateEscapeHelperName(ir);
   const escapeBatchHelperName =
     options.escape === undefined ? undefined : allocateHelperName(ir, "_escapeHtmlBatch");
@@ -99,10 +110,7 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
     ? allocateHelperName(ir, "_renderCompatChild")
     : undefined;
   const spreadAttributesHelperName = allocateHelperName(ir, "_renderSpreadAttributes");
-  const spreadPropsName = allocateNestedBindingSafeName(
-    ir,
-    `${spreadAttributesHelperName}$props`,
-  );
+  const spreadPropsName = allocateNestedBindingSafeName(ir, `${spreadAttributesHelperName}$props`);
   const spreadSelectedValueName = allocateNestedBindingSafeName(
     ir,
     `${spreadAttributesHelperName}$selected`,
@@ -113,7 +121,10 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
   );
   const renderServerValueHelperName = allocateNestedBindingSafeName(ir, "_renderServerValue");
   const isServerRenderValueHelperName = allocateNestedBindingSafeName(ir, "_isServerRenderValue");
-  const readServerRenderValueHelperName = allocateNestedBindingSafeName(ir, "_readServerRenderValue");
+  const readServerRenderValueHelperName = allocateNestedBindingSafeName(
+    ir,
+    "_readServerRenderValue",
+  );
   const containsServerRenderValueHelperName = allocateNestedBindingSafeName(
     ir,
     "_containsServerRenderValue",
@@ -123,9 +134,13 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
     "_serverRenderAttributeValue",
   );
   const renderServerChildHelperName = allocateNestedBindingSafeName(ir, "_renderServerChild");
-  const selectionParameterName = containsSelectElement(ir)
+  const selectionParameterName = containsServerSelectionContext(ir)
     ? allocateNestedBindingSafeName(ir, "_selectedValue")
     : undefined;
+  const selectionMultipleParameterName =
+    selectionParameterName === undefined
+      ? undefined
+      : allocateNestedBindingSafeName(ir, "_selectedMultiple");
   currentOptionSelectedLocalNames = {
     selected: allocateNestedBindingSafeName(ir, "_selected"),
     optionValue: allocateNestedBindingSafeName(ir, "_optionValue"),
@@ -192,6 +207,7 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
         contextConsumerHelperName,
         reactNodeRenderHelperName,
         selectionParameterName,
+        selectionMultipleParameterName,
       );
       return component.serverRenderValuePlaceholder === undefined
         ? emitted
@@ -375,15 +391,20 @@ function emitComponent(
   contextConsumerHelperName?: string,
   reactNodeRenderHelperName?: string,
   selectionParameterName?: string,
+  selectionMultipleParameterName?: string,
 ): string {
   const body = component.bodyStatements.map(
     (statement) =>
       `  ${replaceOxcServerStringReactNodeRenderHelper(statement, reactNodeRenderHelperName)}`,
   );
-  const parameters = [
-    ...component.parameters,
-    ...(selectionParameterName === undefined ? [] : [selectionParameterName]),
-  ].join(", ");
+  const parameters = component.parameters.join(", ");
+  const selectionContextDeclaration =
+    selectionParameterName === undefined
+      ? []
+      : [
+          `  const ${selectionParameterName} = arguments[0]?.[Symbol.for(${JSON.stringify(serverSelectionContextKey)})];`,
+          `  const ${selectionMultipleParameterName} = arguments[0]?.[Symbol.for(${JSON.stringify(serverSelectionMultipleContextKey)})];`,
+        ];
   const collect = () =>
     collectHtmlStatements(
       component.root,
@@ -399,7 +420,7 @@ function emitComponent(
   const htmlStatements =
     selectionParameterName === undefined
       ? collect()
-      : withSelectedValueCode(selectionParameterName, collect);
+      : withSelectedValueCode(selectionParameterName, selectionMultipleParameterName, collect);
 
   const markerStart = stringLiteral(`<!--mreact-h:start:${encodeURIComponent(component.name)}-->`);
   const markerEnd = stringLiteral(`<!--mreact-h:end:${encodeURIComponent(component.name)}-->`);
@@ -415,6 +436,7 @@ function emitComponent(
 
   return [
     `${functionKeyword} ${component.name}(${parameters}) {`,
+    ...selectionContextDeclaration,
     ...body,
     `  let ${outAccumulatorName} = "";`,
     ...hydrationOpenStatements,
@@ -839,17 +861,20 @@ function collectHtmlStatements(
         node.tagName,
         node.attributes,
         attributeScan,
-        withSelectedValueCode(selectedValueCodeForChildren(node, attributeScan), () =>
-          emitHtmlExpressionFromChildren(
-            node.children,
-            escapeHelperName,
-            escapeBatchHelperName,
-            asyncComponentNames,
-            dynamicAttributes,
-            contextProviderHelperName,
-            contextConsumerHelperName,
-            reactNodeRenderHelperName,
-          ),
+        withSelectedValueCode(
+          selectedValueCodeForChildren(node, attributeScan),
+          selectedMultipleCodeForChildren(node, attributeScan),
+          () =>
+            emitHtmlExpressionFromChildren(
+              node.children,
+              escapeHelperName,
+              escapeBatchHelperName,
+              asyncComponentNames,
+              dynamicAttributes,
+              contextProviderHelperName,
+              contextConsumerHelperName,
+              reactNodeRenderHelperName,
+            ),
         ),
         selectedAttributePart,
         containsAsyncServerOperationInChildren(node.children, asyncComponentNames),
@@ -882,6 +907,7 @@ function collectHtmlStatements(
   }
 
   const childSelectedValueCode = selectedValueCodeForChildren(node, attributeScan);
+  const childSelectedMultipleCode = selectedMultipleCodeForChildren(node, attributeScan);
 
   const dangerousInnerHtml = emitDangerouslySetInnerHtmlExpression(
     node.attributes,
@@ -914,7 +940,7 @@ function collectHtmlStatements(
   ) {
     statements.push(`${outVar} += ${childrenExpression};`);
   } else {
-    withSelectedValueCode(childSelectedValueCode, () => {
+    withSelectedValueCode(childSelectedValueCode, childSelectedMultipleCode, () => {
       for (const child of node.children) {
         statements.push(
           ...collectHtmlStatements(
@@ -955,6 +981,19 @@ function selectedValueCodeForChildren(
   return node.attributes.some((attr) => attr.kind === "spread-attr")
     ? currentSpreadSelectedValueName
     : attributeScan.formValueAttributeCode;
+}
+
+function selectedMultipleCodeForChildren(
+  node: Extract<JsxNodeIr, { kind: "element" }>,
+  attributeScan: ElementAttributeScan,
+): string | undefined {
+  if (node.tagName !== "select") {
+    return currentSelectedMultipleCode;
+  }
+
+  return node.attributes.some((attr) => attr.kind === "spread-attr")
+    ? `${currentSpreadPropsName}.multiple`
+    : attributeScan.multipleAttributeCode;
 }
 
 function collectHtmlParts(
@@ -1249,6 +1288,7 @@ function collectHtmlParts(
   );
   const attributeScan = scanElementAttributes(node.tagName, node.attributes);
   const childSelectedValueCode = selectedValueCodeForChildren(node, attributeScan);
+  const childSelectedMultipleCode = selectedMultipleCodeForChildren(node, attributeScan);
   const forceChildWalk =
     node.tagName === "select" && attributeScan.formValueAttributeCode !== undefined;
   const selectedAttributePart = collectOptionSelectedAttributePart(node);
@@ -1262,7 +1302,7 @@ function collectHtmlParts(
         node.tagName,
         node.attributes,
         attributeScan,
-        withSelectedValueCode(childSelectedValueCode, () =>
+        withSelectedValueCode(childSelectedValueCode, childSelectedMultipleCode, () =>
           emitHtmlExpressionFromChildren(
             node.children,
             escapeHelperName,
@@ -1297,7 +1337,7 @@ function collectHtmlParts(
     : dangerousInnerHtml !== undefined
       ? [dangerousInnerHtml]
       : childrenExpression === undefined || forceChildWalk
-        ? withSelectedValueCode(childSelectedValueCode, () =>
+        ? withSelectedValueCode(childSelectedValueCode, childSelectedMultipleCode, () =>
             node.children.flatMap((child) =>
               collectHtmlParts(
                 child,
@@ -1552,8 +1592,7 @@ function emitMergedSpreadPropsAssignments(
       ((tagName === "input" &&
         ((attr.name === "defaultValue" && attributeScan.hasExplicitInputValue) ||
           (attr.name === "defaultChecked" && attributeScan.hasExplicitInputChecked))) ||
-        (tagName === "textarea" &&
-          (attr.name === "value" || attr.name === "defaultValue")))
+        (tagName === "textarea" && (attr.name === "value" || attr.name === "defaultValue")))
     ) {
       return [];
     }
@@ -1582,6 +1621,7 @@ interface ElementAttributeScan {
   hasExplicitInputValue: boolean;
   hasExplicitInputChecked: boolean;
   formValueAttributeCode: string | undefined;
+  multipleAttributeCode: string | undefined;
 }
 
 function scanElementAttributes(
@@ -1592,6 +1632,7 @@ function scanElementAttributes(
   let hasExplicitInputChecked = false;
   let valueAttributeCode: string | undefined;
   let defaultValueAttributeCode: string | undefined;
+  let multipleAttributeCode: string | undefined;
 
   for (const attr of attrs) {
     if (attr.kind === "spread-attr") {
@@ -1611,6 +1652,10 @@ function scanElementAttributes(
     } else if ((tagName === "textarea" || tagName === "select") && attr.name === "defaultValue") {
       defaultValueAttributeCode = readFormValueAttributeCode(attr);
     }
+
+    if (tagName === "select" && attr.name === "multiple") {
+      multipleAttributeCode = readBooleanAttributeCode(attr);
+    }
   }
 
   return {
@@ -1620,6 +1665,7 @@ function scanElementAttributes(
       tagName === "select"
         ? emitSelectSelectionValueCode(valueAttributeCode, defaultValueAttributeCode)
         : (valueAttributeCode ?? defaultValueAttributeCode),
+    multipleAttributeCode,
   };
 }
 
@@ -1631,6 +1677,20 @@ function readFormValueAttributeCode(
   }
 
   return attr.kind === "static-attr" ? stringLiteral(attr.value) : `(${attr.code})`;
+}
+
+function readBooleanAttributeCode(
+  attr: Exclude<AttributeIr, { kind: "spread-attr" }>,
+): string | undefined {
+  if (attr.kind === "event") {
+    return undefined;
+  }
+
+  return attr.kind === "static-attr"
+    ? attr.value === ""
+      ? "true"
+      : stringLiteral(attr.value)
+    : `(${attr.code})`;
 }
 
 function emitDynamicAttributeExpression(
@@ -1815,6 +1875,7 @@ function collectOptionSelectedAttributePart(
     optionValueCode,
     emitOwnSelectedFallbackCode(node),
     currentOptionSelectedLocalNames,
+    currentSelectedMultipleCode,
   );
 }
 
@@ -2115,7 +2176,10 @@ function emitPropsObject(
     );
   }
 
-  return `{ ${entries.join(", ")} }`;
+  const object = `{ ${entries.join(", ")} }`;
+  return currentSelectedValueCode === undefined
+    ? object
+    : `Object.defineProperty(Object.defineProperty(${object}, Symbol.for(${JSON.stringify(serverSelectionContextKey)}), { value: ${currentSelectedValueCode} }), Symbol.for(${JSON.stringify(serverSelectionMultipleContextKey)}), { value: ${currentSelectedMultipleCode} })`;
 }
 
 function isRouterLinkComponentName(name: string | undefined): name is string {
@@ -2223,9 +2287,7 @@ function emitComponentCallExpression(
   propsCode: string,
   asyncComponentNames: ReadonlySet<string>,
 ): string {
-  const selectionArgument =
-    currentSelectedValueCode === undefined ? "" : `, ${currentSelectedValueCode}`;
-  const call = `${name}(${propsCode}${selectionArgument})`;
+  const call = `${name}(${propsCode})`;
   return emitRenderableHtmlExpression(asyncComponentNames.has(name) ? `(await ${call})` : call);
 }
 
@@ -2313,34 +2375,39 @@ function containsAsyncServerOperation(
   return false;
 }
 
-function containsSelectElement(ir: ModuleIr): boolean {
-  return ir.components.some((component) => containsSelectElementInNode(component.root));
+function containsServerSelectionContext(ir: ModuleIr): boolean {
+  return ir.components.some((component) => containsServerSelectionContextInNode(component.root));
 }
 
-function containsSelectElementInNode(node: JsxNodeIr): boolean {
+function containsServerSelectionContextInNode(node: JsxNodeIr): boolean {
+  if (node.kind === "expr") {
+    return isChildrenExpressionCode(node.code);
+  }
+
   if (node.kind === "element") {
     return (
       node.tagName === "select" ||
-      node.children.some(containsSelectElementInNode)
+      node.tagName === "option" ||
+      node.children.some(containsServerSelectionContextInNode)
     );
   }
 
   if (node.kind === "component") {
     return (
-      node.children.some(containsSelectElementInNode) ||
+      node.children.some(containsServerSelectionContextInNode) ||
       node.props.some(
         (prop) =>
-          prop.kind === "render-prop" && prop.children.some(containsSelectElementInNode),
+          prop.kind === "render-prop" && prop.children.some(containsServerSelectionContextInNode),
       )
     );
   }
 
   if (node.kind === "conditional") {
-    return [...node.whenTrue, ...node.whenFalse].some(containsSelectElementInNode);
+    return [...node.whenTrue, ...node.whenFalse].some(containsServerSelectionContextInNode);
   }
 
   if (node.kind === "list" || node.kind === "fragment") {
-    return node.children.some(containsSelectElementInNode);
+    return node.children.some(containsServerSelectionContextInNode);
   }
 
   if (node.kind === "async-boundary") {
@@ -2348,7 +2415,7 @@ function containsSelectElementInNode(node: JsxNodeIr): boolean {
       ...node.children,
       ...(node.placeholderChildren ?? []),
       ...(node.catchChildren ?? []),
-    ].some(containsSelectElementInNode);
+    ].some(containsServerSelectionContextInNode);
   }
 
   return false;
@@ -2416,9 +2483,9 @@ function allocateHelperFamilyName(
     if (
       names.every(
         (name) =>
-          !new RegExp(
-            `(?<![A-Za-z0-9_$])${name.replaceAll("$", "\\$")}(?![A-Za-z0-9_$])`,
-          ).test(serializedIr),
+          !new RegExp(`(?<![A-Za-z0-9_$])${name.replaceAll("$", "\\$")}(?![A-Za-z0-9_$])`).test(
+            serializedIr,
+          ),
       )
     ) {
       return candidate;

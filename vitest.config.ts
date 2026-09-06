@@ -120,6 +120,10 @@ export default defineConfig({
           .pathname,
       },
       {
+        find: "@reckona/mreact-reactive-dom/form-state",
+        replacement: new URL("./packages/reactive-dom/src/form-state.ts", import.meta.url).pathname,
+      },
+      {
         find: "@reckona/mreact-reactive-dom/internal",
         replacement: new URL("./packages/reactive-dom/src/internal.ts", import.meta.url).pathname,
       },

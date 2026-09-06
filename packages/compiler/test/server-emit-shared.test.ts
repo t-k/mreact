@@ -968,6 +968,23 @@ export function App(props) {
     );
   });
 
+  test("string and stream emitters treat an array as a scalar for a single select", async () => {
+    const source = `export function App() {
+  return (
+    <select value={["open", "done"]}>
+      <option value="open">open</option>
+      <option value="done">done</option>
+      <option value="open,done">joined</option>
+    </select>
+  );
+}`;
+
+    await expectServerPairHtml(
+      source,
+      '<select><option value="open">open</option><option value="done">done</option><option value="open,done" selected="">joined</option></select>',
+    );
+  });
+
   test("string and stream emitters keep sibling selects and duplicate option values independent", async () => {
     await expectServerPairHtml(
       `const STATUSES = ["open", "done"];
@@ -987,7 +1004,7 @@ export function App(props) {
     </form>
   );
 }`,
-      '<form>' +
+      "<form>" +
         '<select name="left"><option value="open" selected="">open</option><option value="done">done</option></select>' +
         '<select name="right"><option value="open">open</option><option value="done" selected="">done</option></select>' +
         '<select name="plain"><option value="open">open</option><option value="done">done</option></select>' +
@@ -1009,7 +1026,7 @@ export function App(props) {
 }`,
       '<select><option value="&lt;script&gt;&quot;&amp;\'" selected="">&lt;script&gt;&quot;&amp;\'</option>' +
         '<option value="safe">safe</option></select>',
-      { status: '<script>"&\'' },
+      { status: "<script>\"&'" },
     );
   });
 

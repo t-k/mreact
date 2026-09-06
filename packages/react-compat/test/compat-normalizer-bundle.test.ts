@@ -10,9 +10,9 @@ import { describe, expect, test } from "vitest";
 import { build as viteBuild, type Rollup } from "vite";
 
 const packedCompatConsumerSizeBudgets = {
-  root: { gzipBytes: 12_750, rawBytes: 46_100 },
-  "jsx-runtime": { gzipBytes: 12_750, rawBytes: 46_200 },
-  "jsx-dev-runtime": { gzipBytes: 12_800, rawBytes: 46_300 },
+  root: { gzipBytes: 12_750, rawBytes: 46_200 },
+  "jsx-runtime": { gzipBytes: 12_750, rawBytes: 46_300 },
+  "jsx-dev-runtime": { gzipBytes: 12_800, rawBytes: 46_400 },
   native: { gzipBytes: 9_800, rawBytes: 36_300 },
 } as const;
 
@@ -60,6 +60,10 @@ describe("react-compat production bundle", () => {
             {
               find: "@reckona/mreact-reactive-dom/compat-normalize",
               replacement: join(process.cwd(), "packages/reactive-dom/src/compat-normalize.ts"),
+            },
+            {
+              find: "@reckona/mreact-reactive-dom/form-state",
+              replacement: join(process.cwd(), "packages/reactive-dom/src/form-state.ts"),
             },
             {
               find: "@reckona/mreact-reactive-dom/internal",
@@ -297,6 +301,22 @@ export function mount(parent, marker) {
   return insertMemo(parent, marker, () => createMemo(component, props, render));
 }`,
       );
+      const mixed = await bundlePackedScenario(
+        root,
+        "mixed-normalizers",
+        `import { jsx } from "@reckona/mreact-compat/jsx-runtime";
+import { createMemo, installMemoRenderValueNormalizer } from "@reckona/mreact-reactive-dom/internal";
+import { insertDynamic } from "@reckona/mreact-reactive-dom";
+export function mount(parent) {
+  const marker = document.createComment("");
+  parent.append(marker);
+  installMemoRenderValueNormalizer();
+  insertDynamic(parent, marker, () => createMemo("Card", {}, () => jsx("main", { children: "mixed" })));
+}`,
+      );
+      const mixedResult = executePackedBundle(root, "mixed-normalizers", mixed.code);
+      expect(mixedResult.tagName).toBe("MAIN");
+      expect(mixedResult.text).toBe("mixed");
       expect(Object.keys(native.modules)).not.toEqual(
         expect.arrayContaining([expect.stringContaining("@reckona/mreact-compat")]),
       );
@@ -373,6 +393,10 @@ export function mount(container: Element) {
             {
               find: "@reckona/mreact-reactive-dom/compat-normalize",
               replacement: join(process.cwd(), "packages/reactive-dom/src/compat-normalize.ts"),
+            },
+            {
+              find: "@reckona/mreact-reactive-dom/form-state",
+              replacement: join(process.cwd(), "packages/reactive-dom/src/form-state.ts"),
             },
             {
               find: "@reckona/mreact-reactive-dom/internal",

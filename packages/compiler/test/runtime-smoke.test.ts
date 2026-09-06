@@ -6,6 +6,51 @@ import { transform } from "../src/index.js";
 import { compileClientComponent, runClientComponent } from "./helpers.js";
 
 describe("compiler runtime smoke", () => {
+  test("does not evaluate conditional children while the receiving wrapper is closed", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const showChild = cell(false);
+
+function ClosedPanel(props) {
+  return <section data-panel>{props.open ? props.children : null}</section>;
+}
+
+function Child() {
+  globalThis.__conditionalChildRenders = (globalThis.__conditionalChildRenders ?? 0) + 1;
+  return <span data-child>Child</span>;
+}
+
+export function App() {
+  return <main>
+    <button type="button" onClick={() => showChild.set(true)}>Render child</button>
+    <ClosedPanel open={false}>{showChild.get() ? <Child /> : null}</ClosedPanel>
+  </main>;
+}`,
+      filename: "closed-conditional-children.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+
+    expect(node.querySelector("[data-child]")).toBeNull();
+    expect(
+      (globalThis as typeof globalThis & { __conditionalChildRenders?: number })
+        .__conditionalChildRenders,
+    ).toBeUndefined();
+
+    node.querySelector("button")?.click();
+    await flushEffects();
+
+    expect(node.querySelector("[data-child]")).toBeNull();
+    expect(
+      (globalThis as typeof globalThis & { __conditionalChildRenders?: number })
+        .__conditionalChildRenders,
+    ).toBeUndefined();
+  });
+
   test("component children mount and unmount a reactive memo conditional", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";
@@ -1846,12 +1891,104 @@ export function App() {
     });
 
     expect(output.diagnostics).toEqual([]);
+    expect(output.code).toMatch(/const value = .*untrack\(/);
     const node = (await runClientComponent(output.code)) as HTMLElement;
 
     expect(node.querySelector("[data-state='closed']")).not.toBeNull();
     node.querySelector("button")?.click();
     await flushEffects();
     expect(node.querySelector("[data-state='open']")?.textContent).toBe("Open");
+  });
+
+  test("client transform applies select values after component option children mount", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const selected = cell(["done"]);
+
+function StatusOption(props) {
+  return <option value={props.value}>{props.value}</option>;
+}
+
+export function App() {
+  return <main>
+    <button type="button" onClick={() => selected.set(["open", "done"])}>Change</button>
+    <select id="explicit" multiple value={selected.get()}>
+      <StatusOption value="open" />
+      <StatusOption value="done" />
+    </select>
+    <select id="spread" {...{ value: selected.get(), multiple: true }}>
+      <StatusOption value="open" />
+      <StatusOption value="done" />
+    </select>
+  </main>;
+}`,
+      filename: "select-component-children.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const selectedValues = (id: string) =>
+      Array.from(node.querySelector<HTMLSelectElement>(id)?.options ?? [])
+        .filter((option) => option.selected)
+        .map((option) => option.value);
+
+    expect(selectedValues("#explicit")).toEqual(["done"]);
+    expect(selectedValues("#spread")).toEqual(["done"]);
+
+    node.querySelector("button")?.click();
+    await flushEffects();
+
+    expect(selectedValues("#explicit")).toEqual(["open", "done"]);
+    expect(selectedValues("#spread")).toEqual(["open", "done"]);
+  });
+
+  test("client transform applies select defaultValue after option children mount", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const initialStatus = cell("done");
+
+export function App() {
+  return <select defaultValue={initialStatus.get()}>
+    <option value="open">Open</option>
+    <option value="done">Done</option>
+  </select>;
+}`,
+      filename: "select-default-value.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLSelectElement;
+
+    expect(node.value).toBe("done");
+  });
+
+  test("client transform preserves an option selected when select defaultValue is undefined", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const initialStatus = cell<string | undefined>(undefined);
+
+export function App() {
+  return <select defaultValue={initialStatus.get()}>
+    <option value="open" selected>Open</option>
+    <option value="done">Done</option>
+  </select>;
+}`,
+      filename: "select-default-value-undefined.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLSelectElement;
+
+    expect(node.value).toBe("open");
   });
 
   test("client transform defers component children into the branch owner", async () => {

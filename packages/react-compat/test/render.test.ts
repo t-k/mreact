@@ -768,6 +768,29 @@ describe("react-compat render", () => {
     expect(selectedValues()).toEqual([]);
   });
 
+  test("treats an array value as a scalar for a single select", () => {
+    const container = document.createElement("div");
+
+    render(
+      createElement(
+        "select",
+        { value: ["a", "b"] },
+        createElement("option", { value: "a" }, "A"),
+        createElement("option", { value: "b" }, "B"),
+        createElement("option", { value: "a,b" }, "A,B"),
+      ),
+      container,
+    );
+
+    const select = container.querySelector<HTMLSelectElement>("select")!;
+    expect(select.value).toBe("a,b");
+    expect(
+      Array.from(select.options)
+        .filter((option) => option.selected)
+        .map((option) => option.value),
+    ).toEqual(["a,b"]);
+  });
+
   test("applies array defaultValue to an uncontrolled multiple select", () => {
     const container = document.createElement("div");
 

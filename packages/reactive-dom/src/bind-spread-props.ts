@@ -49,11 +49,38 @@ function applySpreadProps(
   eventDisposers: Map<string, Dispose>,
 ): void {
   const nextNames = new Set<string>();
+  const isSelect = element instanceof HTMLSelectElement;
+  const selectValueStates = new Map<
+    "defaultValue" | "value",
+    { changed: boolean; present: boolean; value: unknown }
+  >();
+  let selectMultipleChanged = false;
 
   if (nextProps !== null && nextProps !== undefined) {
     for (const [name, value] of Object.entries(nextProps)) {
-      if (shouldSkipSpreadProp(name, value)) {
+      if (shouldSkipSpreadProp(element, name, value)) {
         continue;
+      }
+
+      if (isSelect && (name === "value" || name === "defaultValue")) {
+        const previousValue = previousProps.get(name);
+        selectValueStates.set(name, {
+          changed: !previousProps.has(name) || !Object.is(previousValue, value),
+          present: value !== null && value !== undefined,
+          value,
+        });
+        if (value !== null && value !== undefined) {
+          nextNames.add(name);
+        }
+        continue;
+      }
+
+      if (
+        isSelect &&
+        name === "multiple" &&
+        (!previousProps.has(name) || !Object.is(previousProps.get(name), value))
+      ) {
+        selectMultipleChanged = true;
       }
 
       nextNames.add(name);
@@ -95,6 +122,15 @@ function applySpreadProps(
 
   for (const name of previousProps.keys()) {
     if (!nextNames.has(name)) {
+      if (isSelect && (name === "value" || name === "defaultValue")) {
+        selectValueStates.set(name, { changed: true, present: false, value: undefined });
+        continue;
+      }
+
+      if (isSelect && name === "multiple") {
+        selectMultipleChanged = true;
+      }
+
       const disposeEvent = eventDisposers.get(name);
       if (disposeEvent !== undefined) {
         disposeEvent();
@@ -103,6 +139,31 @@ function applySpreadProps(
         removeDomProp(element, name);
       }
       previousProps.delete(name);
+    }
+  }
+
+  if (isSelect && selectValueStates.size > 0) {
+    const valueState = selectValueStates.get("value");
+    const defaultValueState = selectValueStates.get("defaultValue");
+    const selectedState = valueState?.present === true ? valueState : defaultValueState;
+    const previousSelectionPresent =
+      previousProps.has("value") || previousProps.has("defaultValue");
+    const selectionChanged = [...selectValueStates.values()].some((state) => state.changed);
+
+    if (selectedState?.present === true) {
+      if (!previousSelectionPresent || selectionChanged || selectMultipleChanged) {
+        applyDomProp(element, "value", selectedState.value, false);
+      }
+    } else if (previousSelectionPresent) {
+      removeDomProp(element, "value");
+    }
+
+    for (const [name, state] of selectValueStates) {
+      if (state.present) {
+        previousProps.set(name, state.value);
+      } else {
+        previousProps.delete(name);
+      }
     }
   }
 }
@@ -125,17 +186,17 @@ function clearSpreadProps(
   previousProps.clear();
 }
 
-function shouldSkipSpreadProp(name: string, value: unknown): boolean {
+function shouldSkipSpreadProp(element: Element, name: string, value: unknown): boolean {
   return (
     name === "children" ||
     name === "checked" ||
     name === "defaultChecked" ||
-    name === "defaultValue" ||
+    (name === "defaultValue" && !(element instanceof HTMLSelectElement)) ||
     name === "key" ||
     name === "ref" ||
     name === "domRef" ||
     name === "suppressHydrationWarning" ||
-    name === "value" ||
+    (name === "value" && !(element instanceof HTMLSelectElement)) ||
     (isEventLikePropName(name) && typeof value !== "function")
   );
 }

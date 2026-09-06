@@ -48,29 +48,33 @@ export function renderToString<TProps>(
     idMode: "server",
   });
 
-  return withSelectSelection(undefined, () => runWithCacheScope(createCacheScope(), () => {
-    try {
-      const rendered = renderWithRootRuntime(runtime, "0", () => {
-        if (isClassComponentType(component)) {
-          const instance = new component(props as Record<string, unknown>);
-          return instance.render();
+  return withSelectSelection(false, undefined, () =>
+    runWithCacheScope(createCacheScope(), () => {
+      try {
+        const rendered = renderWithRootRuntime(runtime, "0", () => {
+          if (isClassComponentType(component)) {
+            const instance = new component(props as Record<string, unknown>);
+            return instance.render();
+          }
+
+          return (component as (props: TProps) => ReactCompatNode)(props as TProps);
+        });
+        return typeof rendered === "string"
+          ? rendered
+          : renderNodeToString(rendered, runtime, "0.0");
+      } catch (error) {
+        if (isThenable(error)) {
+          throw new Error(
+            "renderToString does not support Suspense. Use a streaming server renderer for components that suspend.",
+          );
         }
 
-        return (component as (props: TProps) => ReactCompatNode)(props as TProps);
-      });
-      return typeof rendered === "string" ? rendered : renderNodeToString(rendered, runtime, "0.0");
-    } catch (error) {
-      if (isThenable(error)) {
-        throw new Error(
-          "renderToString does not support Suspense. Use a streaming server renderer for components that suspend.",
-        );
+        throw error;
+      } finally {
+        runtime.dispose();
       }
-
-      throw error;
-    } finally {
-      runtime.dispose();
-    }
-  }));
+    }),
+  );
 }
 
 // Renders a single child value the way the interpreter renders expression
@@ -333,14 +337,18 @@ function renderTextareaToString(
  * `renderNodeToString`, and only an ambient value survives every one of those
  * hops the way React's `formatContext.selectedValue` does.
  */
+let currentSelectMultiple = false;
 let currentSelectSelection: unknown;
 
-function withSelectSelection<T>(selection: unknown, render: () => T): T {
+function withSelectSelection<T>(multiple: boolean, selection: unknown, render: () => T): T {
+  const previousMultiple = currentSelectMultiple;
   const previous = currentSelectSelection;
+  currentSelectMultiple = multiple;
   currentSelectSelection = selection;
   try {
     return render();
   } finally {
+    currentSelectMultiple = previousMultiple;
     currentSelectSelection = previous;
   }
 }
@@ -352,13 +360,14 @@ function renderSelectToString(
 ): string {
   const props = element.props as { value?: unknown; defaultValue?: unknown };
   const selectedValue = props.value ?? props.defaultValue;
+  const multiple = Boolean((element.props as { multiple?: unknown }).multiple);
   const attributes = Object.entries(element.props)
     .filter(([name]) => name !== "value" && name !== "defaultValue")
     .map(([name, child]) => renderHtmlAttribute(name, child))
     .filter((attribute) => attribute !== "")
     .join("");
 
-  return `<select${attributes}>${withSelectSelection(selectedValue, () =>
+  return `<select${attributes}>${withSelectSelection(multiple, selectedValue, () =>
     renderNodeToString(element.props.children, runtime, `${path}.select`),
   )}</select>`;
 }
@@ -369,7 +378,7 @@ function renderSelectToString(
  * `value` wins, then `defaultValue`, then the option's own `selected`: once the
  * select declares a selection it fully replaces `selected`, so a stale one on a
  * non-matching option cannot survive. Comparison is by `String()`, so `2` matches
- * `"2"`; an array selection (`<select multiple>`) matches any of its entries.
+ * `"2"`; an array selection matches any of its entries only for `<select multiple>`.
  */
 function renderOptionToString(
   element: ReactCompatElement,
@@ -380,14 +389,15 @@ function renderOptionToString(
   const selection = currentSelectSelection;
   const optionValue = (element.props as { value?: unknown }).value ?? element.props.children;
   const optionText = String(optionValue ?? "");
-  const selected = Array.isArray(selection)
-    ? selection.some((candidate) => candidate != null && String(candidate) === optionText)
-    : String(selection) === optionText;
+  const selected =
+    currentSelectMultiple && Array.isArray(selection)
+      ? selection.some((candidate) => candidate != null && String(candidate) === optionText)
+      : String(selection) === optionText;
   const props = { ...element.props, selected };
 
   // An <option> cannot contain another option, and a nested <select> installs
   // its own selection, so the subtree never needs this one.
-  return withSelectSelection(undefined, () =>
+  return withSelectSelection(false, undefined, () =>
     renderIntrinsicElementToString(tagName, props, runtime, path),
   );
 }

@@ -1,25 +1,24 @@
 import type { RenderValue } from "./types.js";
-import { isMemoRenderValue } from "./create-memo.js";
 
 const maxRenderValueDepth = 256;
 const renderValueNormalizerGlobalKey = Symbol.for("mreact.reactiveDom.renderValueNormalizer");
 const renderValueNormalizerGlobal = globalThis as typeof globalThis & Record<symbol, unknown>;
 
-export type RenderValueNormalizer = (
-  value: unknown,
-  depth: number,
-) => Node[] | undefined;
+export type RenderValueNormalizer = (value: unknown, depth: number) => Node[] | undefined;
 
 let customRenderValueNormalizer: RenderValueNormalizer | undefined =
   typeof renderValueNormalizerGlobal[renderValueNormalizerGlobalKey] === "function"
     ? (renderValueNormalizerGlobal[renderValueNormalizerGlobalKey] as RenderValueNormalizer)
     : undefined;
 
-export function registerRenderValueNormalizer(
-  normalizer: RenderValueNormalizer,
-): void {
-  customRenderValueNormalizer = normalizer;
-  renderValueNormalizerGlobal[renderValueNormalizerGlobalKey] = normalizer;
+export function registerRenderValueNormalizer(normalizer: RenderValueNormalizer): void {
+  const previous = customRenderValueNormalizer;
+  const combined =
+    previous === undefined
+      ? normalizer
+      : (value: unknown, depth: number) => normalizer(value, depth) ?? previous(value, depth);
+  customRenderValueNormalizer = combined;
+  renderValueNormalizerGlobal[renderValueNormalizerGlobalKey] = combined;
 }
 
 export function normalizeRenderValue(value: RenderValue, depth = 0): Node[] {
@@ -41,10 +40,6 @@ export function normalizeRenderValue(value: RenderValue, depth = 0): Node[] {
 
   if (value instanceof Node) {
     return [value];
-  }
-
-  if (isMemoRenderValue(value)) {
-    return normalizeRenderValue(value.render(value.props), depth + 1);
   }
 
   const normalizer =

@@ -192,6 +192,91 @@ describe("bindSpreadProps", () => {
     dispose();
   });
 
+  test("applies controlled values to select elements from spread props", async () => {
+    const props = cell<Record<string, unknown>>({
+      multiple: true,
+      value: ["done"],
+    });
+    const select = document.createElement("select");
+    for (const [label, value] of [
+      ["Open", "open"],
+      ["Done", "done"],
+      ["Closed", "closed"],
+    ]) {
+      const option = document.createElement("option");
+      option.textContent = label;
+      option.value = value;
+      select.append(option);
+    }
+    const dispose = bindSpreadProps(select, () => props.get());
+
+    await flushEffects();
+
+    const selectedValues = () =>
+      Array.from(select.options)
+        .filter((option) => option.selected)
+        .map((option) => option.value);
+    expect(selectedValues()).toEqual(["done"]);
+
+    props.set({ multiple: true, value: ["open", "done"] });
+    await flushEffects();
+
+    expect(selectedValues()).toEqual(["open", "done"]);
+
+    dispose();
+  });
+
+  test("applies select defaultValue from spread props after option children mount", async () => {
+    const props = cell<Record<string, unknown>>({ defaultValue: "done" });
+    const select = document.createElement("select");
+    for (const value of ["open", "done"]) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = value;
+      select.append(option);
+    }
+    const dispose = bindSpreadProps(select, () => props.get());
+
+    await flushEffects();
+    expect(select.value).toBe("done");
+
+    props.set({ defaultValue: "open" });
+    await flushEffects();
+    expect(select.value).toBe("open");
+
+    dispose();
+  });
+
+  test("applies select multiple before an array value regardless of spread order", async () => {
+    const props = cell<Record<string, unknown>>({
+      value: ["open", "done"],
+      multiple: true,
+    });
+    const select = document.createElement("select");
+    for (const value of ["open", "done", "open,done"]) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = value;
+      select.append(option);
+    }
+    const dispose = bindSpreadProps(select, () => props.get());
+
+    await flushEffects();
+
+    const selectedValues = () =>
+      Array.from(select.options)
+        .filter((option) => option.selected)
+        .map((option) => option.value);
+    expect(selectedValues()).toEqual(["open", "done"]);
+
+    props.set({ value: ["open", "done"] });
+    await flushEffects();
+
+    expect(selectedValues()).toEqual(["open,done"]);
+
+    dispose();
+  });
+
   test("does not rewrite unchanged spread props on reactive re-runs", async () => {
     const trigger = cell(0);
     const props = cell<Record<string, unknown>>({

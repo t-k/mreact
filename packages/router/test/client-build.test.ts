@@ -7118,7 +7118,7 @@ export default function Page() {
 
     expect(observed).toHaveLength(1);
     intersectionCallback?.(
-      [{ isIntersecting: true, target: observed[0] } as IntersectionObserverEntry],
+      [{ isIntersecting: true, target: observed[0] } as unknown as IntersectionObserverEntry],
       observer,
     );
     await flushRouterMicrotasks();
@@ -7126,6 +7126,72 @@ export default function Page() {
     expect(requests).toEqual([]);
     await routeModule.__mreactPrefetch("/about");
     expect(requests).toEqual(["http://localhost:3000/about"]);
+  });
+
+  test("re-registers viewport prefetch after the same anchor changes href", async () => {
+    const observed: Element[] = [];
+    const unobserved: Element[] = [];
+    let intersectionCallback: IntersectionObserverCallback | undefined;
+    const observer: IntersectionObserver = {
+      root: null,
+      rootMargin: "",
+      scrollMargin: "",
+      thresholds: [],
+      disconnect(): void {},
+      observe(target: Element): void {
+        observed.push(target);
+      },
+      takeRecords(): IntersectionObserverEntry[] {
+        return [];
+      },
+      unobserve(target: Element): void {
+        unobserved.push(target);
+      },
+    };
+    globalThis.IntersectionObserver = function (callback: IntersectionObserverCallback) {
+      intersectionCallback = callback;
+      return observer;
+    } as unknown as typeof IntersectionObserver;
+    const { routeModule } = await importRouteRuntime(
+      "prefetch-client-viewport-href-change",
+      '<a href="/about" data-mreact-prefetch="viewport">About</a>',
+    );
+    installRoutePrefetchManifest([
+      {
+        path: "/about",
+        script: "/_mreact/client/assets/routes/about.12345678.js",
+      },
+      {
+        path: "/next",
+        script: "/_mreact/client/assets/routes/next.12345678.js",
+      },
+    ]);
+
+    const anchor = document.querySelector("a");
+    expect(anchor).toBeInstanceOf(HTMLAnchorElement);
+    expect(observed).toEqual([anchor]);
+
+    intersectionCallback?.(
+      [{ isIntersecting: true, target: anchor } as unknown as IntersectionObserverEntry],
+      observer,
+    );
+    await flushRouterMicrotasks();
+    expect(document.querySelector('link[href*="routes/about."]')).not.toBeNull();
+
+    anchor?.setAttribute("href", "/next");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(observed).toHaveLength(2);
+    expect(observed[1]).toBe(anchor);
+    expect(unobserved).toContain(anchor);
+
+    intersectionCallback?.(
+      [{ isIntersecting: true, target: anchor } as unknown as IntersectionObserverEntry],
+      observer,
+    );
+    await flushRouterMicrotasks();
+    expect(document.querySelector('link[href*="routes/next."]')).not.toBeNull();
+    expect(document.querySelectorAll("a")).toHaveLength(1);
+    expect(await routeModule.__mreactPrefetch("/next")).toBe(true);
   });
 
   test("prefetches server route navigation HTML when no client route script matches", async () => {
@@ -7471,6 +7537,45 @@ export default function Page() {
     expect(requests).toEqual([]);
   });
 
+  test("skips unsupported-scheme navigation HTML prefetches", async () => {
+    const { routeModule } = await importRouteRuntime("prefetch-unsupported-scheme-html");
+    const requests: string[] = [];
+    globalThis.fetch = async (url) => {
+      requests.push(String(url));
+      return new Response("<!DOCTYPE html><main>Unsupported</main>");
+    };
+
+    for (const url of [
+      "blob:http://localhost:3000/4f3f67d0-7c15-4cc7-9ae2-1a8a7c5a2f0a",
+      "data:text/html,<main>Unsupported</main>",
+      "javascript:alert(1)",
+    ]) {
+      await expect(routeModule.__mreactPrefetch(url)).resolves.toBe(false);
+    }
+
+    expect(requests).toEqual([]);
+  });
+
+  test("skips unsupported-scheme navigation fetches", async () => {
+    const { routeModule } = await importRouteRuntime("navigate-unsupported-scheme-html");
+    const requests: string[] = [];
+    globalThis.fetch = async (url) => {
+      requests.push(String(url));
+      return new Response("<main>Unsupported</main>");
+    };
+
+    for (const url of [
+      "blob:http://localhost:3000/4f3f67d0-7c15-4cc7-9ae2-1a8a7c5a2f0a",
+      "data:text/html,<main>Unsupported</main>",
+      "javascript:alert(1)",
+      "https://example.com/account",
+    ]) {
+      await expect(routeModule.__mreactNavigate(url)).resolves.toBe(false);
+    }
+
+    expect(requests).toEqual([]);
+  });
+
   test("skips prefetch and navigation for the current route", async () => {
     const { routeModule } = await importRouteRuntime("current-route-noop");
     const requests: string[] = [];
@@ -7755,11 +7860,7 @@ export default function Page() {
     await expect(routeModule.__mreactNavigate("/undefined")).resolves.toBe(true);
 
     const origin = location.origin;
-    expect(fetchCalls).toEqual([
-      `${origin}/undefined`,
-      "/api",
-      `${origin}/undefined`,
-    ]);
+    expect(fetchCalls).toEqual([`${origin}/undefined`, "/api", `${origin}/undefined`]);
   });
 
   test("does not let an old same-path response invalidate a newer pending variant", async () => {
@@ -7781,10 +7882,9 @@ export default function Page() {
 
     expect(resolvers).toHaveLength(2);
     resolvers[0]?.(
-      new Response(
-        '<!DOCTYPE html><div data-mreact-route-id="items"><main>Old</main></div>',
-        { headers: { "x-mreact-revalidate": "/items" } },
-      ),
+      new Response('<!DOCTYPE html><div data-mreact-route-id="items"><main>Old</main></div>', {
+        headers: { "x-mreact-revalidate": "/items" },
+      }),
     );
     await flushRouterMicrotasks();
 

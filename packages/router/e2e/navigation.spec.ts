@@ -10,9 +10,7 @@ import { buildClientRouteBundle } from "../dist/client.js";
 import { startDevServer } from "../dist/dev-server.js";
 import { startServer } from "../dist/serve.js";
 
-test("client navigation preserves layouts and restores history snapshots", async ({
-  page,
-}) => {
+test("client navigation preserves layouts and restores history snapshots", async ({ page }) => {
   const rootDir = await mkdtemp(join(tmpdir(), "mreact-router-e2e-"));
   const appDir = join(rootDir, "app");
   const outDir = join(rootDir, ".mreact");
@@ -114,19 +112,23 @@ export default function About() {
       }
     });
     await page.goto(server.url);
-    const aboutManifest = await page.locator("#mreact-route-prefetch-manifest").evaluate((element) => {
-      const routes = JSON.parse(element.textContent ?? "[]") as Array<{
-        modulePreloads?: string[];
-        path: string;
-      }>;
-      return routes.find((route) => route.path === "/about");
-    });
+    const aboutManifest = await page
+      .locator("#mreact-route-prefetch-manifest")
+      .evaluate((element) => {
+        const routes = JSON.parse(element.textContent ?? "[]") as Array<{
+          modulePreloads?: string[];
+          path: string;
+        }>;
+        return routes.find((route) => route.path === "/about");
+      });
     expect(aboutManifest?.modulePreloads?.length).toBeGreaterThan(0);
 
     const navigationHtml = page.waitForResponse((response) => {
       const request = response.request();
-      return new URL(response.url()).pathname === "/about" &&
-        request.headers()["x-mreact-navigation"] === "1";
+      return (
+        new URL(response.url()).pathname === "/about" &&
+        request.headers()["x-mreact-navigation"] === "1"
+      );
     });
     await page.getByRole("link", { name: "About" }).hover();
     await navigationHtml;
@@ -134,9 +136,9 @@ export default function About() {
       page.locator('link[rel="modulepreload"][href*="/_mreact/client/assets/routes/about."]'),
     ).toHaveCount(1);
     for (const modulePreload of aboutManifest?.modulePreloads ?? []) {
-      await expect(
-        page.locator(`link[rel="modulepreload"][href*="${modulePreload}"]`),
-      ).toHaveCount(1);
+      await expect(page.locator(`link[rel="modulepreload"][href*="${modulePreload}"]`)).toHaveCount(
+        1,
+      );
     }
     expect(navigationRequests).toEqual(["/about"]);
 
@@ -250,15 +252,14 @@ export default function Peer() {
     expect(aboutManifest?.modulePreloads?.length).toBeGreaterThan(0);
     expect(homeManifest?.script).toBeDefined();
 
-    const normalizeAssetPath = (file: string) => file.startsWith("/_mreact/")
-      ? file
-      : `/_mreact/client/${file.replace(/^\/+/, "")}`;
-    const assetPaths = [aboutManifest!.script, ...(aboutManifest!.modulePreloads ?? [])]
-      .map(normalizeAssetPath);
-    const homeAssetPaths = new Set([
-      homeManifest!.script,
-      ...(homeManifest!.modulePreloads ?? []),
-    ].map(normalizeAssetPath));
+    const normalizeAssetPath = (file: string) =>
+      file.startsWith("/_mreact/") ? file : `/_mreact/client/${file.replace(/^\/+/, "")}`;
+    const assetPaths = [aboutManifest!.script, ...(aboutManifest!.modulePreloads ?? [])].map(
+      normalizeAssetPath,
+    );
+    const homeAssetPaths = new Set(
+      [homeManifest!.script, ...(homeManifest!.modulePreloads ?? [])].map(normalizeAssetPath),
+    );
     expect(homeAssetPaths.has(normalizeAssetPath(aboutManifest!.script))).toBe(false);
 
     const targetAssetPaths = [...new Set(assetPaths)];
@@ -290,14 +291,17 @@ export default function Peer() {
 
     const navigationHtml = page.waitForResponse((response) => {
       const request = response.request();
-      return new URL(response.url()).pathname === "/about" &&
-        request.headers()["x-mreact-navigation"] === "1";
+      return (
+        new URL(response.url()).pathname === "/about" &&
+        request.headers()["x-mreact-navigation"] === "1"
+      );
     });
     await page.getByRole("link", { name: "About" }).hover();
-    await expect.poll(
-      () => coldDependencyPaths.every((pathname) => assetRequestCounts.get(pathname) === 1),
-      { timeout: 5000 },
-    ).toBe(true);
+    await expect
+      .poll(() => coldDependencyPaths.every((pathname) => assetRequestCounts.get(pathname) === 1), {
+        timeout: 5000,
+      })
+      .toBe(true);
 
     expect(entryRequested).toBe(true);
     expect(entryReleased).toBe(false);
@@ -305,15 +309,16 @@ export default function Peer() {
 
     releaseEntry();
     await navigationHtml;
-    await expect.poll(
-      () => assetTimings.get(targetAssetPaths[0])?.respondedAt !== undefined,
-      { timeout: 5000 },
-    ).toBe(true);
+    await expect
+      .poll(() => assetTimings.get(targetAssetPaths[0])?.respondedAt !== undefined, {
+        timeout: 5000,
+      })
+      .toBe(true);
 
     expect(
-      [...assetTimings.keys()].filter((pathname) =>
-        pathname === entryAssetPath || coldDependencyPaths.includes(pathname),
-      ).sort(),
+      [...assetTimings.keys()]
+        .filter((pathname) => pathname === entryAssetPath || coldDependencyPaths.includes(pathname))
+        .sort(),
     ).toEqual([entryPath, ...coldDependencyPaths].sort());
     for (const targetAssetPath of [entryPath, ...coldDependencyPaths]) {
       expect(assetRequestCounts.get(targetAssetPath)).toBe(1);
@@ -377,8 +382,10 @@ export default function About() {
 
     const navigationHtml = page.waitForResponse((response) => {
       const request = response.request();
-      return new URL(response.url()).pathname === "/about" &&
-        request.headers()["x-mreact-navigation"] === "1";
+      return (
+        new URL(response.url()).pathname === "/about" &&
+        request.headers()["x-mreact-navigation"] === "1"
+      );
     });
     await page.getByRole("link", { name: "Intent" }).hover();
     await navigationHtml;
@@ -386,6 +393,57 @@ export default function About() {
   } finally {
     await server.close();
     await rm(rootDir, { force: true, recursive: true });
+  }
+});
+
+test("viewport prefetch re-registers the same anchor after its href changes", async ({ page }) => {
+  const { close, url } = await startFixtureServer({
+    "page.tsx": `import { cell } from "@reckona/mreact-reactive-core";
+
+export default function Page() {
+  const next = cell(false);
+  return (
+    <main>
+      <a data-testid="target" href={next.get() ? "/next" : "/about"} data-mreact-prefetch="viewport">Open</a>
+      <button type="button" data-testid="change" onClick={() => next.set(true)}>change</button>
+    </main>
+  );
+}`,
+    "about/page.tsx": `"use client";
+
+import { cell } from "@reckona/mreact-reactive-core";
+
+export default function About() {
+  const count = cell(0);
+  return <main><h1>About</h1><button type="button" onClick={() => count.set(1)}>{count.get()}</button></main>;
+}`,
+    "next/page.tsx": `"use client";
+
+import { cell } from "@reckona/mreact-reactive-core";
+
+export default function Next() {
+  const count = cell(0);
+  return <main><h1>Next</h1><button type="button" onClick={() => count.set(1)}>{count.get()}</button></main>;
+}`,
+  });
+  const navigationRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.headers()["x-mreact-navigation"] === "1") {
+      navigationRequests.push(new URL(request.url()).pathname);
+    }
+  });
+
+  try {
+    await page.goto(url);
+    await expect(page.locator('link[rel="modulepreload"][href*="/routes/about."]')).toHaveCount(1);
+    await expect(page.getByTestId("target")).toHaveAttribute("href", "/about");
+
+    await page.getByTestId("change").click();
+    await expect(page.getByTestId("target")).toHaveAttribute("href", "/next");
+    await expect(page.locator('link[rel="modulepreload"][href*="/routes/next."]')).toHaveCount(1);
+    expect(navigationRequests).toEqual([]);
+  } finally {
+    await close();
   }
 });
 
@@ -447,11 +505,7 @@ export default function Page() {
           return state.__domRefEvents ?? [];
         }),
       )
-      .toEqual([
-        "attach:sentinel-a:true",
-        "cleanup:sentinel-a:true",
-        "attach:sentinel-b:true",
-      ]);
+      .toEqual(["attach:sentinel-a:true", "cleanup:sentinel-a:true", "attach:sentinel-b:true"]);
 
     await page.getByRole("link", { name: "About" }).click();
     await expect(page.getByRole("heading", { name: "About" })).toBeVisible();
@@ -513,9 +567,7 @@ export default function MfaChallenge() {
   }
 });
 
-test("server action form submit revalidates cached pages in the browser", async ({
-  page,
-}) => {
+test("server action form submit revalidates cached pages in the browser", async ({ page }) => {
   const { close, url } = await startFixtureServer({
     "actions.ts": `"use server";
 
@@ -543,7 +595,11 @@ export default function Page(props) {
   });
 
   try {
-    const formRequests: Array<{ method: string; pathname: string; singleFlight: string | undefined }> = [];
+    const formRequests: Array<{
+      method: string;
+      pathname: string;
+      singleFlight: string | undefined;
+    }> = [];
     page.on("request", (request) => {
       const requestUrl = new URL(request.url());
 
@@ -570,9 +626,7 @@ export default function Page(props) {
   }
 });
 
-test("server action form submit rejects tampered CSRF tokens in the browser", async ({
-  page,
-}) => {
+test("server action form submit rejects tampered CSRF tokens in the browser", async ({ page }) => {
   const { close, url } = await startFixtureServer({
     "actions.ts": `"use server";
 
@@ -609,9 +663,7 @@ export default function Page(props) {
   }
 });
 
-test("file input onChange fires after Playwright setInputFiles", async ({
-  page,
-}) => {
+test("file input onChange fires after Playwright setInputFiles", async ({ page }) => {
   const rootDir = await mkdtemp(join(tmpdir(), "mreact-router-file-input-e2e-"));
   const routeFile = join(rootDir, "route-fixture.txt");
   const boundaryFile = join(rootDir, "boundary-fixture.txt");
@@ -733,9 +785,7 @@ export default function StreamPage(props) {
   }
 });
 
-test("named slot と dynamic route と API route がブラウザ上で連携する", async ({
-  page,
-}) => {
+test("named slot と dynamic route と API route がブラウザ上で連携する", async ({ page }) => {
   const { close, url } = await startFixtureServer({
     "layout.tsx": `export default function Layout() {
   return <section><header><Slot name="header" data-test-id="header-slot" /></header><main><Slot /></main></section>;
@@ -766,9 +816,7 @@ export default function UserPage(props) {
     await page.goto(url);
     await page.getByRole("link", { name: "Ada" }).click();
     await expect(page.getByRole("heading", { name: "User ada" })).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: "User header: ada" }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: "User header: ada" })).toBeVisible();
     await expect(page.getByText("Upper ADA")).toBeVisible();
 
     const apiResult = await page.evaluate(async () => {
@@ -1050,9 +1098,7 @@ export default function Page(props) {
   }
 });
 
-test("dev server hydrates compat client boundaries imported by route pages", async ({
-  page,
-}) => {
+test("dev server hydrates compat client boundaries imported by route pages", async ({ page }) => {
   const { close, url } = await startDevFixtureServer({
     "components/Counter.compat.tsx": `import { useState } from "@reckona/mreact-compat";
 
@@ -1509,6 +1555,76 @@ export default function LegalPage() {
   }
 });
 
+test("fragment child hydration keeps element markers valid", async ({ page }) => {
+  const { close, url } = await startFixtureServer({
+    "page.mreact.tsx": `"use client";
+
+import { cell } from "@reckona/mreact-reactive-core";
+
+const visible = cell(false);
+
+export default function Page() {
+  return (
+    <main>
+      <div data-testid="fragment-host">
+        <span data-testid="outside-before">OutsideBefore</span>
+        <>
+          <span data-testid="before">Before</span>
+          <><span data-testid="nested">Nested</span></>
+          {visible.get() ? <span data-testid="panel">Panel</span> : null}
+          <span data-testid="after">After</span>
+        </>
+        <span data-testid="outside-after">OutsideAfter</span>
+      </div>
+      <button type="button" onClick={() => visible.set(true)}>Open</button>
+      <button type="button" onClick={() => visible.set(false)}>Close</button>
+    </main>
+  );
+}`,
+  });
+  const pageErrors: Error[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error));
+
+  try {
+    await page.goto(url);
+    await expect(page.locator("[data-testid='fragment-host']")).toHaveText(
+      "OutsideBeforeBeforeNestedAfterOutsideAfter",
+    );
+    await expect(page.locator("[data-testid='panel']")).toHaveCount(0);
+    await page.evaluate(() => {
+      (globalThis as typeof globalThis & { __fragmentSiblings?: Element[] }).__fragmentSiblings = [
+        document.querySelector("[data-testid='before']"),
+        document.querySelector("[data-testid='nested']"),
+        document.querySelector("[data-testid='after']"),
+      ].filter((node): node is Element => node !== null);
+    });
+    await page.getByRole("button", { name: "Open" }).click();
+    await expect(page.locator("[data-testid='panel']")).toHaveText("Panel");
+    await expect(page.locator("[data-testid='fragment-host']")).toHaveText(
+      "OutsideBeforeBeforeNestedPanelAfterOutsideAfter",
+    );
+    await page.getByRole("button", { name: "Close" }).click();
+    await expect(page.locator("[data-testid='panel']")).toHaveCount(0);
+    await expect(page.locator("[data-testid='fragment-host']")).toHaveText(
+      "OutsideBeforeBeforeNestedAfterOutsideAfter",
+    );
+    await expect(
+      page.evaluate(() => {
+        const siblings = (globalThis as typeof globalThis & { __fragmentSiblings?: Element[] })
+          .__fragmentSiblings;
+        return siblings?.every(
+          (node) => node.isConnected && node.parentElement?.dataset.testid === "fragment-host",
+        );
+      }),
+    ).resolves.toBe(true);
+    await page.getByRole("button", { name: "Open" }).click();
+    await expect(page.locator("[data-testid='panel']")).toHaveText("Panel");
+    expect(pageErrors).toEqual([]);
+  } finally {
+    await close();
+  }
+});
+
 test("native boundary wrappers never duplicate during hydration", async ({ page }) => {
   const { close, url } = await startFixtureServer({
     "Shell.tsx": `export function Shell(props) {
@@ -1690,7 +1806,9 @@ export default function Page() {
   }
 });
 
-test("hydrates a nested client boundary restored from an outer children archive", async ({ page }) => {
+test("hydrates a nested client boundary restored from an outer children archive", async ({
+  page,
+}) => {
   const appDir = await mkdtemp(join(tmpdir(), "mreact-nested-boundary-browser-"));
   const file = join(appDir, "page.mreact.tsx");
   const code = `import { cell } from "@reckona/mreact-reactive-core";
@@ -1713,7 +1831,8 @@ export default function Page() {
     filename: file,
     routePath: "/",
   });
-  const nestedBoundary = '<template data-mreact-client-boundary="Counter"></template><button type="button" data-counter>count: 0</button><script type="application/json" data-mreact-client-boundary-props="Counter">{}</script>';
+  const nestedBoundary =
+    '<template data-mreact-client-boundary="Counter"></template><button type="button" data-counter>count: 0</button><script type="application/json" data-mreact-client-boundary-props="Counter">{}</script>';
   const html = [
     "<!doctype html><html><body>",
     `<div data-mreact-route-id="index"><template data-mreact-client-boundary="Shell" data-mreact-client-boundary-fallback="component"></template><main data-shell="outer">${nestedBoundary}</main><template data-mreact-client-boundary-children="Shell"><!--mreact-client-boundary-children-start-->${nestedBoundary}<!--mreact-client-boundary-children-end--></template><script type="application/json" data-mreact-client-boundary-props="Shell">{}</script></div>`,
@@ -2046,6 +2165,142 @@ export default function Page() {
     } finally {
       await hydrated.close();
     }
+  } finally {
+    await close();
+  }
+});
+
+test("select component and spread values survive SSR and hydration", async ({ page }) => {
+  const { close, url } = await startFixtureServer({
+    "page.tsx": `"use client";
+
+import { cell } from "@reckona/mreact-reactive-core";
+
+const selectedStatuses = cell(["done"]);
+
+function StatusOption(props) {
+  return <option value={props.value}>{props.value}</option>;
+}
+
+export default function Page() {
+  return (
+    <main>
+      <button type="button" data-testid="change" onClick={() => selectedStatuses.set(["open", "done"])}>Change</button>
+      <select data-testid="status" {...{ value: selectedStatuses.get(), multiple: true }}>
+        <StatusOption value="open" />
+        <StatusOption value="done" />
+      </select>
+    </main>
+  );
+}`,
+  });
+  const pageErrors: Error[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error));
+
+  try {
+    const response = await fetch(url);
+    const html = await response.text();
+    const selectTag = html.match(/<select\b[^>]*>/)?.[0] ?? "";
+    const optionTags = html.match(/<option\b[^>]*>/g) ?? [];
+
+    expect(response.status).toBe(200);
+    expect(selectTag).not.toContain(" value=");
+    expect(optionTags.filter((tag) => /\bselected\b/.test(tag))).toHaveLength(1);
+    expect(optionTags.find((tag) => tag.includes('value="done"'))).toContain("selected");
+
+    await page.goto(url);
+    await expect(page.getByTestId("status")).toHaveValues(["done"]);
+    await page.getByTestId("change").click();
+    await expect(page.getByTestId("status")).toHaveValues(["open", "done"]);
+    expect(pageErrors).toEqual([]);
+  } finally {
+    await close();
+  }
+});
+
+test("select values cross an imported option component boundary", async ({ page }) => {
+  const { close, url } = await startFixtureServer({
+    "status-option.tsx": `export function StatusOption(props) {
+  return <option value={props.value}>{props.value}</option>;
+}`,
+    "page.tsx": `"use client";
+
+import { cell } from "@reckona/mreact-reactive-core";
+import { StatusOption } from "./status-option";
+
+const selectedStatuses = cell(["done"]);
+
+export default function Page() {
+  return (
+    <main>
+      <button type="button" data-testid="change-imported" onClick={() => selectedStatuses.set(["open", "done"])}>Change</button>
+      <select data-testid="imported-status" value={selectedStatuses.get()} multiple>
+        <StatusOption value="open" />
+        <StatusOption value="done" />
+      </select>
+    </main>
+  );
+}`,
+  });
+  const pageErrors: Error[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error));
+
+  try {
+    const response = await fetch(url);
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain('<option value="done" selected="">done</option>');
+
+    await page.goto(url);
+    await expect(page.getByTestId("imported-status")).toHaveValues(["done"]);
+    await page.getByTestId("change-imported").click();
+    await expect(page.getByTestId("imported-status")).toHaveValues(["open", "done"]);
+    expect(pageErrors).toEqual([]);
+  } finally {
+    await close();
+  }
+});
+
+test("reactive local aliases update destructured and JSX route conditionals", async ({ page }) => {
+  const { close, url } = await startFixtureServer({
+    "page.tsx": `"use client";
+
+import { cell } from "@reckona/mreact-reactive-core";
+
+const state = cell({ open: false });
+
+export default function Page() {
+  const { open } = state.get();
+  const value = state.get();
+  const node = value.open ? <p data-testid="jsx-open">Open</p> : <p data-testid="jsx-closed">Closed</p>;
+
+  return (
+    <main>
+      <button type="button" data-testid="open" onClick={() => state.set({ open: true })}>Open</button>
+      <button type="button" data-testid="close" onClick={() => state.set({ open: false })}>Close</button>
+      {open ? <span data-testid="destructured-open">Open</span> : <span data-testid="destructured-closed">Closed</span>}
+      {node}
+    </main>
+  );
+}`,
+  });
+  const pageErrors: Error[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error));
+
+  try {
+    await page.goto(url);
+    await expect(page.getByTestId("destructured-closed")).toHaveText("Closed");
+    await expect(page.getByTestId("jsx-closed")).toHaveText("Closed");
+
+    await page.getByTestId("open").click();
+    await expect(page.getByTestId("destructured-open")).toHaveText("Open");
+    await expect(page.getByTestId("jsx-open")).toHaveText("Open");
+
+    await page.getByTestId("close").click();
+    await expect(page.getByTestId("destructured-closed")).toHaveText("Closed");
+    await expect(page.getByTestId("jsx-closed")).toHaveText("Closed");
+    expect(pageErrors).toEqual([]);
   } finally {
     await close();
   }

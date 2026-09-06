@@ -1,27 +1,8 @@
-export function applySelectValue(element: HTMLSelectElement, value: unknown): void {
-  if (element.multiple) {
-    const values = Array.isArray(value)
-      ? new Set(value.map((item) => String(item)))
-      : value === null || value === undefined
-        ? new Set<string>()
-        : new Set([String(value)]);
+import { applySelectValue as applyReactiveSelectValue } from "@reckona/mreact-reactive-dom/form-state";
 
-    for (const option of Array.from(element.options)) {
-      option.selected = values.has(option.value);
-    }
-    return;
-  }
+export { applyReactiveSelectValue as applySelectValue };
 
-  const nextValue = value === null || value === undefined ? undefined : String(value);
-  for (const option of Array.from(element.options)) {
-    option.selected = nextValue !== undefined && option.value === nextValue;
-  }
-}
-
-export function restoreControlledFormState(
-  element: Element,
-  props: Record<string, unknown>,
-): void {
+export function restoreControlledFormState(element: Element, props: Record<string, unknown>): void {
   if (element instanceof HTMLInputElement) {
     if (hasOwnProp(props, "value")) {
       element.value = props.value === null || props.value === undefined ? "" : String(props.value);
@@ -39,7 +20,7 @@ export function restoreControlledFormState(
   }
 
   if (element instanceof HTMLSelectElement && hasOwnProp(props, "value")) {
-    applySelectValue(element, props.value);
+    applyReactiveSelectValue(element, props.value);
   }
 }
 

@@ -1864,10 +1864,6 @@ function analyzeOxcFunctionLikeComponent(
     body,
     reactiveDerivedFunctionNames,
   );
-  const compilerOwnedReactiveAliasBindings =
-    earlyIfRootReturn === undefined
-      ? collectOxcCompilerOwnedReactiveAliases(body, rootStatement, reactiveAliasBindings)
-      : new Map<string, string>();
   const componentBodyStatements = body.filter(
     (bodyStatement) =>
       bodyStatement !== rootStatement &&
@@ -1883,6 +1879,15 @@ function analyzeOxcFunctionLikeComponent(
     target === "client"
       ? collectOxcReactiveJsxBindingNames(componentBodyStatements, reactiveAliasBindings)
       : new Set<string>();
+  const compilerOwnedReactiveAliasBindings =
+    earlyIfRootReturn === undefined
+      ? collectOxcCompilerOwnedReactiveAliases(
+          body,
+          rootStatement,
+          reactiveAliasBindings,
+          lazyRenderValueBindings,
+        )
+      : new Map<string, string>();
   const serverRenderValuePlaceholder =
     target === "server" && bodyStatementJsx === "server-string"
       ? allocateOxcServerRenderValuePlaceholder(code, functionLike)
