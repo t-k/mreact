@@ -4094,7 +4094,7 @@ function __mreactViewTransitionsAllowed(transition) {
   }
 }
 
-export function __mreactInvalidateNavigationCache(path) {
+export function __mreactInvalidateNavigationCache(path, excludedRequest) {
   const normalizedPath = __mreactNormalizeNavigationPath(path);
 
   if (normalizedPath === undefined) {
@@ -4109,6 +4109,13 @@ export function __mreactInvalidateNavigationCache(path) {
   for (const href of hrefs) {
     if (__mreactNormalizeNavigationPath(href) === normalizedPath) {
       const token = __mreactNavigationState.cacheTokens.get(href);
+      if (
+        excludedRequest?.href === href &&
+        excludedRequest.token === token &&
+        token?.valid === true
+      ) {
+        continue;
+      }
       if (token !== undefined) {
         token.valid = false;
       }
@@ -4151,7 +4158,7 @@ function __mreactFetchNavigationHtmlOnce(href, options = {}) {
     promise: undefined,
     token,
   };
-  const request = __mreactFetchNavigationHtml(href, options)
+  const request = __mreactFetchNavigationHtml(href, options, pendingRequest)
     .then((result) => {
       const enriched = {
         ...result,
@@ -4182,7 +4189,7 @@ function __mreactFetchNavigationHtmlOnce(href, options = {}) {
   return request;
 }
 
-function __mreactFetchNavigationHtml(href, options = {}) {
+function __mreactFetchNavigationHtml(href, options = {}, pendingRequest) {
   const speculative = options.speculative === true;
   const reloadRouteCache = !speculative && __mreactNavigationState.reloadNextNavigationFetch === true;
   if (!speculative) {
@@ -4197,7 +4204,16 @@ function __mreactFetchNavigationHtml(href, options = {}) {
   __mreactNavigationState.navigationFetchInits.add(navigationRequestInit);
 
   return fetch(__mreactStaticNavigationRequestHref(href), navigationRequestInit).then((response) => {
-    __mreactApplyRevalidationHeader(response, href);
+    const currentRequest =
+      pendingRequest !== undefined &&
+      __mreactNavigationState.pendingHtmlFetches.get(href) === pendingRequest &&
+      __mreactNavigationState.cacheTokens.get(href) === pendingRequest.token &&
+      pendingRequest.token.valid === true
+        ? { href, token: pendingRequest.token }
+        : undefined;
+    if (pendingRequest === undefined || currentRequest !== undefined) {
+      __mreactApplyRevalidationHeader(response, currentRequest);
+    }
     const requiresDocumentReload = __mreactNavigationResponseRequiresDocumentReload(response);
     const responseIsSuccessful =
       response.ok === true ||
@@ -4281,7 +4297,7 @@ function __mreactNavigationResponseRequiresDocumentReload(response) {
   return response.status === 204 || response.headers.get("x-mreact-navigation") === "reload";
 }
 
-function __mreactApplyRevalidationHeader(response, currentHref) {
+function __mreactApplyRevalidationHeader(response, currentRequest) {
   const header = typeof response?.headers?.get === "function"
     ? response.headers.get("x-mreact-revalidate")
     : null;
@@ -4290,13 +4306,14 @@ function __mreactApplyRevalidationHeader(response, currentHref) {
     return;
   }
 
-  const currentPath = __mreactNormalizeNavigationPath(currentHref);
+  const currentPath = __mreactNormalizeNavigationPath(currentRequest?.href);
 
   for (const path of header.split(",")) {
-    const normalizedPath = __mreactNormalizeNavigationPath(path.trim());
-    if (normalizedPath !== currentPath) {
-      __mreactInvalidateNavigationCache(path.trim());
-    }
+    const trimmedPath = path.trim();
+    const normalizedPath = __mreactNormalizeNavigationPath(trimmedPath);
+    const excludedRequest =
+      currentRequest !== undefined && normalizedPath === currentPath ? currentRequest : undefined;
+    __mreactInvalidateNavigationCache(trimmedPath, excludedRequest);
   }
 }
 
@@ -4305,12 +4322,18 @@ function __mreactIsNavigationFetchRequest(_input, init) {
 }
 
 function __mreactNormalizeNavigationPath(path) {
+  if (typeof path !== "string" || path.trim() === "") {
+    return undefined;
+  }
+
+  const normalizedInput = path.trim();
+
   if (typeof location === "undefined") {
-    return typeof path === "string" && path.length > 0 ? path : undefined;
+    return normalizedInput;
   }
 
   try {
-    const url = new URL(path, location.href);
+    const url = new URL(normalizedInput, location.href);
     const pathname = url.pathname.replace(/\\/+$/, "");
 
     return pathname === "" ? "/" : pathname;

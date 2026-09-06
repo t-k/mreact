@@ -7459,6 +7459,109 @@ export default function Page() {
     expect(fetchCalls).toEqual([`${origin}/stale`, `${origin}/refresh`, `${origin}/stale`]);
   });
 
+  test("invalidates cached query variants when a same-path navigation revalidates itself", async () => {
+    const { routeModule } = await importRouteRuntime("prefetch-revalidate-query-variants");
+    const fetchCalls: string[] = [];
+    let itemRequests = 0;
+    globalThis.fetch = async (input) => {
+      const url = new URL(String(input));
+      const href = `${url.pathname}${url.search}`;
+      fetchCalls.push(href);
+
+      if (href === "/items?q=b") {
+        return new Response(
+          '<!DOCTYPE html><div data-mreact-route-id="items"><main>/items?q=b:version-1</main></div>',
+          { headers: { "x-mreact-revalidate": "/items" } },
+        );
+      }
+
+      itemRequests += 1;
+      return new Response(
+        `<!DOCTYPE html><div data-mreact-route-id="items"><main>/items?q=a:version-${itemRequests === 1 ? 0 : 1}</main></div>`,
+      );
+    };
+
+    await expect(routeModule.__mreactPrefetch("/items?q=a")).resolves.toBe(true);
+    await expect(routeModule.__mreactNavigate("/items?q=b")).resolves.toBe(true);
+    await expect(routeModule.__mreactNavigate("/items?q=a")).resolves.toBe(true);
+
+    expect(fetchCalls).toEqual(["/items?q=a", "/items?q=b", "/items?q=a"]);
+    expect(document.querySelector("main")?.textContent).toBe("/items?q=a:version-1");
+  });
+
+  test("applies external revalidation to a literal undefined path", async () => {
+    const fetchCalls: string[] = [];
+    globalThis.fetch = async (input) => {
+      const url = String(input);
+      fetchCalls.push(url);
+
+      if (url.endsWith("/api")) {
+        return new Response("ok", {
+          headers: { "x-mreact-revalidate": "/undefined" },
+        });
+      }
+
+      return new Response(
+        '<!DOCTYPE html><div data-mreact-route-id="undefined"><main>Undefined route</main></div>',
+      );
+    };
+    const { routeModule } = await importRouteRuntime("prefetch-revalidate-undefined-path");
+
+    await expect(routeModule.__mreactNavigate("/undefined")).resolves.toBe(true);
+    await fetch("/api");
+    await expect(routeModule.__mreactNavigate("/undefined")).resolves.toBe(true);
+
+    const origin = location.origin;
+    expect(fetchCalls).toEqual([
+      `${origin}/undefined`,
+      "/api",
+      `${origin}/undefined`,
+    ]);
+  });
+
+  test("does not let an old same-path response invalidate a newer pending variant", async () => {
+    const { routeModule } = await importRouteRuntime("prefetch-revalidate-old-response");
+    const requests: string[] = [];
+    const resolvers: Array<(response: Response) => void> = [];
+    globalThis.fetch = async (input) => {
+      requests.push(String(input));
+      return new Promise<Response>((resolve) => {
+        resolvers.push(resolve);
+      });
+    };
+
+    const stalePrefetch = routeModule.__mreactPrefetch("/items?q=a");
+    await Promise.resolve();
+    routeModule.__mreactInvalidateNavigationCache("/items");
+    const navigation = routeModule.__mreactNavigate("/items?q=a");
+    await Promise.resolve();
+
+    expect(resolvers).toHaveLength(2);
+    resolvers[0]?.(
+      new Response(
+        '<!DOCTYPE html><div data-mreact-route-id="items"><main>Old</main></div>',
+        { headers: { "x-mreact-revalidate": "/items" } },
+      ),
+    );
+    await flushRouterMicrotasks();
+
+    const pendingHref = `${location.origin}/items?q=a`;
+    const navigationState = (
+      globalThis as {
+        __mreactNavigationState?: { pendingHtmlFetches?: Map<string, unknown> };
+      }
+    ).__mreactNavigationState;
+    expect(navigationState?.pendingHtmlFetches?.has(pendingHref)).toBe(true);
+
+    resolvers[1]?.(
+      new Response('<!DOCTYPE html><div data-mreact-route-id="items"><main>Fresh</main></div>'),
+    );
+    await expect(stalePrefetch).resolves.toBe(true);
+    await expect(navigation).resolves.toBe(true);
+    expect(document.querySelector("main")?.textContent).toBe("Fresh");
+    expect(requests).toEqual([pendingHref, pendingHref]);
+  });
+
   test("does not refetch forever when navigation HTML revalidates itself", async () => {
     const { routeModule } = await importRouteRuntime("prefetch-self-revalidate");
     let fetchCalls = 0;
