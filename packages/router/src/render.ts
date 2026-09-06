@@ -1978,7 +1978,11 @@ function clientNavigationHeadTags(options: {
   return [
     styleSheetTags(options.currentStyleSheets, options.assetBaseUrl),
     modulePreloadTags(options.currentScript, options.currentScriptPreloads, options.assetBaseUrl),
-    navigationRuntimeScriptTag(options.currentNavigationScript, options.assetBaseUrl),
+    navigationRuntimeScriptTag(
+      options.currentNavigationScript,
+      options.assetBaseUrl,
+      options.currentScript === undefined,
+    ),
     routePrefetchManifestScript(
       options.routeScripts,
       options.routeScriptPreloads,
@@ -2033,6 +2037,7 @@ function hasUrlScheme(value: string): boolean {
 function navigationRuntimeScriptTag(
   script: string | undefined,
   assetBaseUrl: string | undefined,
+  execute: boolean,
 ): string {
   if (script === undefined) {
     return "";
@@ -2042,7 +2047,11 @@ function navigationRuntimeScriptTag(
     script: assetPath(script, assetBaseUrl ?? "/_mreact/client/"),
   }).replaceAll("<", "\\u003c");
 
-  return `<script type="application/json" id="mreact-navigation-runtime">${json}</script>`;
+  const descriptor = `<script type="application/json" id="mreact-navigation-runtime">${json}</script>`;
+  // Server-only routes have no client entry to load the navigation runtime.
+  return execute
+    ? `${descriptor}<script type="module" src="${escapeHtmlAttribute(assetPath(script, assetBaseUrl ?? "/_mreact/client/"))}"></script>`
+    : descriptor;
 }
 
 function routePrefetchManifestScript(

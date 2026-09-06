@@ -6422,7 +6422,7 @@ export default function Page() {
     await expect(
       access(join(outDir, "client", home?.navigationScript ?? "")),
     ).resolves.toBeUndefined();
-    expect(html).not.toContain(
+    expect(html).toContain(
       `<script type="module" src="/_mreact/client/${home?.navigationScript}"></script>`,
     );
     expect(html).not.toContain("mreact-props-index");
@@ -6491,6 +6491,9 @@ export default function Page() {
     expect(home?.navigationScript).toMatch(/^assets\/navigation\.[a-f0-9]{8}\.js$/);
     expect(html).toContain('<script type="application/json" id="mreact-navigation-runtime">');
     expect(html).toContain(`"/_mreact/client/${home?.navigationScript}"`);
+    expect(html).not.toContain(
+      `<script type="module" src="/_mreact/client/${home?.navigationScript}"></script>`,
+    );
   });
 
   test("omits navigation runtime for interactive routes with no Link and no explicit clientNavigation flag", async () => {
@@ -6551,12 +6554,12 @@ export default function Page() {
     expect(serverManifest.prerenderedRoutes?.["/"]?.html).toContain(
       'data-mreact-prefetch="viewport"',
     );
-    expect(serverManifest.prerenderedRoutes?.["/"]?.html).not.toContain(
+    expect(serverManifest.prerenderedRoutes?.["/"]?.html).toContain(
       `<script type="module" src="/_mreact/client/${home?.navigationScript}"></script>`,
     );
 
     await expect(exportStaticApp({ exportDir, outDir })).resolves.toEqual({ routes: ["/"] });
-    expect(await readFile(join(exportDir, "index.html"), "utf8")).not.toContain(
+    expect(await readFile(join(exportDir, "index.html"), "utf8")).toContain(
       `<script type="module" src="/_mreact/client/${home?.navigationScript}"></script>`,
     );
   });
