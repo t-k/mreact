@@ -4,6 +4,7 @@ import {
   Component,
   createElement,
   Fragment,
+  type ReactCompatNode,
   renderToString,
   useEffect,
   useMemo,
@@ -321,7 +322,7 @@ describe("react-compat server render", () => {
   describe("select value", () => {
     const STATUSES = ["open", "in_progress", "done"];
 
-    function options(): unknown[] {
+    function options(): ReactCompatNode[] {
       return STATUSES.map((status) =>
         createElement("option", { key: status, value: status }, status),
       );
