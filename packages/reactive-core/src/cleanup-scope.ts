@@ -18,7 +18,6 @@ export function createCleanupScope(): CleanupScope {
     previous: CleanupEntry | undefined;
   }
 
-  let head: CleanupEntry | undefined;
   let tail: CleanupEntry | undefined;
   let disposed = false;
 
@@ -28,9 +27,7 @@ export function createCleanupScope(): CleanupScope {
     }
 
     entry.active = false;
-    if (entry.previous === undefined) {
-      head = entry.next;
-    } else {
+    if (entry.previous !== undefined) {
       entry.previous.next = entry.next;
     }
     if (entry.next === undefined) {
@@ -56,9 +53,7 @@ export function createCleanupScope(): CleanupScope {
       next: undefined,
       previous: tail,
     };
-    if (tail === undefined) {
-      head = entry;
-    } else {
+    if (tail !== undefined) {
       tail.next = entry;
     }
     tail = entry;
