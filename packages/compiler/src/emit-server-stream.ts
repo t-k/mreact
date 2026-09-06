@@ -76,6 +76,9 @@ let currentOptionSelectedLocalNames: OptionSelectedLocalNames = {
   selected: "_selected",
   optionValue: "_optionValue",
   textValue: "_optionText",
+  textParts: "_optionTextParts",
+  textBody: "_optionTextBody",
+  textHasValue: "_optionTextHasValue",
   attributes: "_optionAttributes",
   index: "_i",
   candidate: "_candidate",
@@ -144,6 +147,9 @@ export function emitServerStream(
     selected: allocateNestedBindingSafeName(ir, "_selected"),
     optionValue: allocateNestedBindingSafeName(ir, "_optionValue"),
     textValue: allocateNestedBindingSafeName(ir, "_optionText"),
+    textParts: allocateNestedBindingSafeName(ir, "_optionTextParts"),
+    textBody: allocateNestedBindingSafeName(ir, "_optionTextBody"),
+    textHasValue: allocateNestedBindingSafeName(ir, "_optionTextHasValue"),
     attributes: allocateNestedBindingSafeName(ir, "_optionAttributes"),
     index: allocateNestedBindingSafeName(ir, "_i"),
     candidate: allocateNestedBindingSafeName(ir, "_candidate"),
@@ -1960,7 +1966,7 @@ function collectHtmlParts(
         (attr) => attr.kind !== "spread-attr" && attr.name === "dangerouslySetInnerHTML",
       )
         ? undefined
-        : findCapturedOptionText(node);
+        : findCapturedOptionText(node, escapeHelperName);
     const spreadSelectedAttributePart =
       capturedOptionText === undefined
         ? selectedAttributePart
@@ -2105,7 +2111,7 @@ function emitMergedSpreadElementPart(
   selectedAttributePart: HtmlSyncPart | undefined,
   fallbackParts: HtmlPart[],
   escapeHelperName: string,
-  capturedOptionText?: { name: string; parts: string[]; valueCode: string },
+  capturedOptionText?: CapturedOptionText,
 ): HtmlPart {
   const propsName = currentSpreadPropsName;
   const omitSelectedCode =
@@ -2135,13 +2141,11 @@ function emitMergedSpreadElementPart(
       : undefined,
   );
   const optionTextDeclaration =
-    capturedOptionText === undefined
-      ? ""
-      : ` let ${capturedOptionText.name};`;
+    capturedOptionText === undefined ? "" : capturedOptionText.declaration;
   if (capturedOptionText !== undefined) {
     return {
       kind: "raw-dynamic",
-      code: `(() => { const ${propsName} = {}; ${assignments.join(" ")} ${selectedValueDeclaration}${optionTextDeclaration} return ${opening} + ${escapeHelperName}(${capturedOptionText.valueCode}) + ${closing}; })()`,
+      code: `(() => { const ${propsName} = {}; ${assignments.join(" ")} ${selectedValueDeclaration}${optionTextDeclaration} return ${opening} + ${capturedOptionText.bodyCode} + ${closing}; })()`,
     };
   }
   if (fallbackExpressions.every((expression) => expression !== undefined)) {
@@ -2678,7 +2682,7 @@ function emitCapturedOptionPart(
     return undefined;
   }
 
-  const capturedOptionText = findCapturedOptionText(node);
+  const capturedOptionText = findCapturedOptionText(node, escapeHelperName);
   if (capturedOptionText === undefined) {
     return undefined;
   }
@@ -2715,11 +2719,18 @@ function emitCapturedOptionPart(
 
   return {
     kind: "raw-dynamic",
-    code: `(() => { const ${currentOptionSelectedLocalNames.attributes} = ${attributesCode}; let ${textValueName}; return ${stringLiteral("<option")} + ${currentOptionSelectedLocalNames.attributes} + (${selectedAttribute}) + ">" + ${escapeHelperName}(${capturedOptionText.valueCode}) + ${stringLiteral("</option>")}; })()`,
+    code: `(() => { const ${currentOptionSelectedLocalNames.attributes} = ${attributesCode}; ${capturedOptionText.declaration} return ${stringLiteral("<option")} + ${currentOptionSelectedLocalNames.attributes} + (${selectedAttribute}) + ">" + ${capturedOptionText.bodyCode} + ${stringLiteral("</option>")}; })()`,
   };
 }
 
 type CapturableOptionTextChild = Extract<JsxNodeIr, { kind: "text" | "expr" }>;
+
+type CapturedOptionText = {
+  name: string;
+  valueCode: string;
+  bodyCode: string;
+  declaration: string;
+};
 
 function findCapturableOptionTextChildren(
   node: Extract<JsxNodeIr, { kind: "element" }>,
@@ -2752,20 +2763,27 @@ function findCapturableOptionTextChildren(
 
 function findCapturedOptionText(
   node: Extract<JsxNodeIr, { kind: "element" }>,
-): { name: string; parts: string[]; valueCode: string } | undefined {
+  escapeHelperName: string,
+): CapturedOptionText | undefined {
   const children = findCapturableOptionTextChildren(node);
   if (children === undefined) {
     return undefined;
   }
 
   const name = currentOptionSelectedLocalNames.textValue;
+  const partsName = currentOptionSelectedLocalNames.textParts;
+  const bodyName = currentOptionSelectedLocalNames.textBody;
+  const hasTextName = currentOptionSelectedLocalNames.textHasValue;
+  const indexName = currentOptionSelectedLocalNames.index;
   const parts = children.map((child) =>
     child.kind === "text" ? stringLiteral(child.value) : `String((${child.code}) ?? "")`,
   );
+  const partsCode = `(${partsName} ??= [${parts.join(", ")}])`;
   return {
     name,
-    parts,
-    valueCode: `(${name} ??= ${parts.join(" + ")})`,
+    valueCode: `(${name} ??= ${partsCode}.join(""))`,
+    bodyCode: `(() => { let ${bodyName} = ""; let ${hasTextName} = false; for (const ${indexName} of ${partsCode}) { if (${indexName} !== "") { if (${hasTextName}) ${bodyName} += "<!-- -->"; ${bodyName} += ${escapeHelperName}(${indexName}); ${hasTextName} = true; } } return ${bodyName}; })()`,
+    declaration: `let ${partsName}; let ${name};`,
   };
 }
 

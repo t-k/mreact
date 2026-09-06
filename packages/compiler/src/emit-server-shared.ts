@@ -330,6 +330,9 @@ export interface OptionSelectedLocalNames {
   selected: string;
   optionValue: string;
   textValue: string;
+  textParts: string;
+  textBody: string;
+  textHasValue: string;
   attributes: string;
   index: string;
   candidate: string;
@@ -339,6 +342,9 @@ const DEFAULT_OPTION_SELECTED_LOCAL_NAMES: OptionSelectedLocalNames = {
   selected: "_selected",
   optionValue: "_optionValue",
   textValue: "_optionText",
+  textParts: "_optionTextParts",
+  textBody: "_optionTextBody",
+  textHasValue: "_optionTextHasValue",
   attributes: "_optionAttributes",
   index: "_i",
   candidate: "_candidate",

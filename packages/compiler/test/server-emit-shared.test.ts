@@ -802,6 +802,29 @@ export function App() {
     );
   });
 
+  test("string and stream emitters preserve separators between dynamic option text", async () => {
+    await expectServerPairHtml(
+      `export function App() {
+  return <select value="done"><option>{"do"}{"ne"}</option></select>;
+}`,
+      '<select><option selected="">do<!-- -->ne</option></select>',
+    );
+
+    await expectServerPairHtml(
+      `export function App() {
+  return <select value="predonepost"><option>pre{"done"}{""}{"post"}</option></select>;
+}`,
+      '<select><option selected="">pre<!-- -->done<!-- -->post</option></select>',
+    );
+
+    await expectServerPairHtml(
+      `export function App() {
+  return <select value="done"><option {...{ value: undefined }}>{"do"}{"ne"}</option></select>;
+}`,
+      '<select><option selected="">do<!-- -->ne</option></select>',
+    );
+  });
+
   test("string and stream emitters evaluate spread option text once", async () => {
     await expectServerPairHtml(
       `let reads = 0;
