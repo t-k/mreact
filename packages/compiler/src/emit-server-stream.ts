@@ -56,6 +56,8 @@ let currentUrlSafeHelperName: string = "_urlAttrSafe";
 let currentClientBoundaryHelperName: string | undefined;
 let currentClientBoundaryFallbackSinkName: string = "_clientBoundaryFallbackSink";
 let currentSpreadAttributesHelperName: string = "_renderSpreadAttributes";
+let currentSpreadPropsName: string = "_renderSpreadAttributes$props";
+let currentSpreadSelectedValueName: string = "_renderSpreadAttributes$selected";
 let currentStreamNodeHelperName: string = "_renderStreamNode";
 let currentAsyncBoundaryHelperName: string = "_renderAsyncBoundary";
 let currentOutOfOrderBoundaryHelperName: string = "_renderOutOfOrderBoundary";
@@ -110,6 +112,14 @@ export function emitServerStream(
     "_clientBoundaryFallbackSink",
   );
   const spreadAttributesHelperName = allocateHelperName(ir, "_renderSpreadAttributes");
+  const spreadPropsName = allocateNestedBindingSafeName(
+    ir,
+    `${spreadAttributesHelperName}$props`,
+  );
+  const spreadSelectedValueName = allocateNestedBindingSafeName(
+    ir,
+    `${spreadAttributesHelperName}$selected`,
+  );
   const markServerRenderValueHelperName = allocateNestedBindingSafeName(
     ir,
     "_registerServerRenderValue",
@@ -132,12 +142,15 @@ export function emitServerStream(
     index: allocateNestedBindingSafeName(ir, "_i"),
     candidate: allocateNestedBindingSafeName(ir, "_candidate"),
   };
+  const selectionParameterName = allocateNestedBindingSafeName(ir, "_selectedValue");
   const urlSafeHelperName = allocateHelperName(ir, "_urlAttrSafe");
   currentUrlSafeHelperName = urlSafeHelperName;
   setOxcServerStringUrlSafeHelperName(urlSafeHelperName);
   currentClientBoundaryHelperName = clientBoundaryHelperName;
   currentClientBoundaryFallbackSinkName = clientBoundaryFallbackSinkName;
   currentSpreadAttributesHelperName = spreadAttributesHelperName;
+  currentSpreadPropsName = spreadPropsName;
+  currentSpreadSelectedValueName = spreadSelectedValueName;
   currentStreamNodeHelperName = streamNodeHelperName;
   currentAsyncBoundaryHelperName = asyncBoundaryHelperName;
   currentOutOfOrderBoundaryHelperName = outOfOrderBoundaryHelperName;
@@ -204,6 +217,7 @@ export function emitServerStream(
             : { reactSuspenseRevealScriptSrc: options.reactSuspenseRevealScriptSrc }),
           dynamicAttributes: options.dynamicAttributes ?? "emit",
           ...(escapeBatchHelperName === undefined ? {} : { escapeBatchHelperName }),
+          selectionParameterName,
         },
       );
       return component.serverRenderValuePlaceholder === undefined
@@ -628,6 +642,7 @@ function emitSpreadAttributesHelper(
     `  for (const _rawName of Object.keys(props)) {`,
     `    if (_rawName === "key" || _rawName === "ref" || _rawName === "domRef" || _rawName === "children" || _rawName === "dangerouslySetInnerHTML") continue;`,
     `    if (/^on/i.test(_rawName)) continue;`,
+    `    if (tagName === "select" && (_rawName === "value" || _rawName === "defaultValue")) continue;`,
     `    let _value = props[_rawName];`,
     `    if (_value == null) continue;`,
     ...(isServerRenderValueHelperName === undefined
@@ -686,11 +701,14 @@ function emitComponent(
     Omit<EmitServerStreamOptions, "serverBootstrap"> & {
       dynamicAttributes: "drop" | "emit";
       escapeBatchHelperName?: string;
+      selectionParameterName: string;
     },
 ): string {
   const { serverBootstrap, serverBootstrapNonce, serverBootstrapSrc } = options;
   const sinkName = allocateComponentSinkName(component);
-  const parameters = [sinkName, ...component.parameters].join(", ");
+  const parameters = [sinkName, ...component.parameters, options.selectionParameterName].join(
+    ", ",
+  );
   const body = component.bodyStatements.map(
     (statement) =>
       `  ${statement.replaceAll(
@@ -718,6 +736,7 @@ function emitComponent(
     options.serverAwaitHydration === true,
     options.dynamicAttributes,
     options.escapeBatchHelperName,
+    options.selectionParameterName,
   );
   const bootstrapStatements =
     serverBootstrap === "out-of-order-reorder" && containsAsyncBoundary(component.root, true)
@@ -778,6 +797,7 @@ function emitAppendStatements(
   awaitHydration: boolean,
   dynamicAttributes: "drop" | "emit",
   escapeBatchHelperName: string | undefined,
+  selectionParameterName: string,
 ): string[] {
   if (node.kind === "conditional") {
     const emitBranch = (children: readonly JsxNodeIr[]): string[] =>
@@ -797,6 +817,7 @@ function emitAppendStatements(
           awaitHydration,
           dynamicAttributes,
           escapeBatchHelperName,
+          selectionParameterName,
         ),
       );
     const indentBranch = (line: string) => `  ${line}`;
@@ -839,6 +860,7 @@ function emitAppendStatements(
     nextFragmentId: 0,
     ...(reactSuspenseRevealScriptNonce === undefined ? {} : { reactSuspenseRevealScriptNonce }),
     ...(reactSuspenseRevealScriptSrc === undefined ? {} : { reactSuspenseRevealScriptSrc }),
+    selectedValueCode: selectionParameterName,
   };
   const collected = collectHtmlParts(
     node,
@@ -899,7 +921,9 @@ function emitAppendStatements(
           );
         }
 
-        return `  await ${part.name}(${sinkName}, ${emitPropsObject(part.props, part.children, part.escapeHelperName, part.name)});`;
+        const selectedArgument =
+          part.selectedValueCode === undefined ? "" : `, ${part.selectedValueCode}`;
+        return `  await ${part.name}(${sinkName}, ${emitPropsObject(part.props, part.children, part.escapeHelperName, part.name, undefined, part.selectedValueCode)}${selectedArgument});`;
       }
 
       if (part.kind === "react-node") {
@@ -995,7 +1019,9 @@ function emitSyncPartAsAppendStatement(
       );
     }
 
-    return `${indent}await ${part.name}(${sinkName}, ${emitPropsObject(part.props, part.children, part.escapeHelperName, part.name)});`;
+    const selectedArgument =
+      part.selectedValueCode === undefined ? "" : `, ${part.selectedValueCode}`;
+    return `${indent}await ${part.name}(${sinkName}, ${emitPropsObject(part.props, part.children, part.escapeHelperName, part.name, undefined, part.selectedValueCode)}${selectedArgument});`;
   }
 
   if (part.kind === "react-node") {
@@ -1146,7 +1172,7 @@ function tryEmitPartAsStringExpression(
   }
   if (part.kind === "component" && part.async !== true && part.hydrationId === undefined) {
     return emitRenderableHtmlExpression(
-      `${part.name}(${emitPropsObject(part.props, part.children, part.escapeHelperName, part.name)})`,
+      `${part.name}(${emitPropsObject(part.props, part.children, part.escapeHelperName, part.name, undefined, part.selectedValueCode)})`,
     );
   }
   // Non-compat component parts require `await sink-write`; lists with
@@ -1326,6 +1352,7 @@ type HtmlPart =
       runtime?: "compat";
       async?: boolean;
       hydrationId?: string;
+      selectedValueCode?: string;
       props: ComponentPropIr[];
       children: JsxNodeIr[];
       escapeHelperName: string;
@@ -1828,6 +1855,9 @@ function collectHtmlParts(
         props: node.props,
         children: node.children,
         escapeHelperName,
+        ...(state.selectedValueCode === undefined
+          ? {}
+          : { selectedValueCode: state.selectedValueCode }),
       },
     ];
   }
@@ -1860,7 +1890,11 @@ function collectHtmlParts(
   }
   const attributeScan = scanElementAttributes(node.tagName, node.attributes);
   const childSelectedValueCode =
-    node.tagName === "select" ? attributeScan.formValueAttributeCode : undefined;
+    node.tagName === "select"
+      ? node.attributes.some((attr) => attr.kind === "spread-attr")
+        ? currentSpreadSelectedValueName
+        : attributeScan.formValueAttributeCode
+      : undefined;
   const childState =
     childSelectedValueCode === undefined
       ? state
@@ -1872,7 +1906,7 @@ function collectHtmlParts(
     node.attributes.some((attr) => attr.kind === "spread-attr")
   ) {
     const fallbackParts =
-      (childState.selectedValueCode === undefined
+      (childSelectedValueCode === undefined
         ? collectTextSeparatedSimpleChildrenParts(
             node.children,
             escapeHelperName,
@@ -1910,7 +1944,7 @@ function collectHtmlParts(
     ? []
     : dangerousInnerHtml !== undefined
       ? [dangerousInnerHtml]
-      : ((childState.selectedValueCode === undefined
+      : ((childSelectedValueCode === undefined
           ? collectTextSeparatedSimpleChildrenParts(
               node.children,
               escapeHelperName,
@@ -2003,7 +2037,11 @@ function emitMergedSpreadElementPart(
   fallbackParts: HtmlPart[],
   escapeHelperName: string,
 ): HtmlPart {
-  const propsName = `${currentSpreadAttributesHelperName}$props`;
+  const propsName = currentSpreadPropsName;
+  const selectedValueDeclaration =
+    tagName === "select"
+      ? `const ${currentSpreadSelectedValueName} = ${emitSelectSelectionValueCode(`${propsName}.value`, `${propsName}.defaultValue`) ?? "undefined"};`
+      : "";
   const assignments = emitMergedSpreadPropsAssignments(
     tagName,
     attrs,
@@ -2028,7 +2066,7 @@ function emitMergedSpreadElementPart(
     const innerHtml = `Object.prototype.hasOwnProperty.call(${propsName}, "dangerouslySetInnerHTML") ? ${emitExactDangerouslySetInnerHtmlExpression(`${propsName}.dangerouslySetInnerHTML`)} : (${fallback})`;
     return {
       kind: "raw-dynamic",
-      code: `(() => { const ${propsName} = {}; ${assignments.join(" ")} return ${opening} + (${innerHtml}) + ${closing}; })()`,
+      code: `(() => { const ${propsName} = {}; ${assignments.join(" ")} ${selectedValueDeclaration} return ${opening} + (${innerHtml}) + ${closing}; })()`,
     };
   }
 
@@ -2039,7 +2077,7 @@ function emitMergedSpreadElementPart(
   );
   return {
     kind: "stream-node",
-    code: `async ($sink) => { const ${propsName} = {}; ${assignments.join(" ")} $sink.append(${opening}); if (Object.prototype.hasOwnProperty.call(${propsName}, "dangerouslySetInnerHTML")) { $sink.append(${emitExactDangerouslySetInnerHtmlExpression(`${propsName}.dangerouslySetInnerHTML`)}); } else {\n${fallbackStatements}\n} $sink.append(${closing}); }`,
+    code: `async ($sink) => { const ${propsName} = {}; ${assignments.join(" ")} ${selectedValueDeclaration} $sink.append(${opening}); if (Object.prototype.hasOwnProperty.call(${propsName}, "dangerouslySetInnerHTML")) { $sink.append(${emitExactDangerouslySetInnerHtmlExpression(`${propsName}.dangerouslySetInnerHTML`)}); } else {\n${fallbackStatements}\n} $sink.append(${closing}); }`,
     escapeHelperName,
   };
 }
@@ -2234,7 +2272,7 @@ function emitMergedSpreadAttributeExpression(
   attrs: readonly AttributeIr[],
   attributeScan: ElementAttributeScan,
 ): string {
-  const propsName = "_props";
+  const propsName = currentSpreadPropsName;
   const statements = emitMergedSpreadPropsAssignments(
     tagName,
     attrs,
@@ -2259,7 +2297,7 @@ function emitMergedSpreadPropsAssignments(
       ((tagName === "input" &&
         ((attr.name === "defaultValue" && attributeScan.hasExplicitInputValue) ||
           (attr.name === "defaultChecked" && attributeScan.hasExplicitInputChecked))) ||
-        ((tagName === "textarea" || tagName === "select") &&
+        (tagName === "textarea" &&
           (attr.name === "value" || attr.name === "defaultValue")))
     ) {
       return [];
@@ -2818,7 +2856,11 @@ function collectTextSeparatedSimpleChildrenParts(
   ];
 }
 
-function emitHtmlExpressionFromChildren(children: JsxNodeIr[], escapeHelperName: string): string {
+function emitHtmlExpressionFromChildren(
+  children: JsxNodeIr[],
+  escapeHelperName: string,
+  selectedValueCode?: string,
+): string {
   if (children.length === 0) {
     return '""';
   }
@@ -2836,6 +2878,7 @@ function emitHtmlExpressionFromChildren(children: JsxNodeIr[], escapeHelperName:
         hydration: false,
         awaitHydration: false,
         nextFragmentId: 0,
+        ...(selectedValueCode === undefined ? {} : { selectedValueCode }),
       },
     ),
   );
@@ -2852,6 +2895,7 @@ function emitStreamRendererFromChildren(
   children: JsxNodeIr[],
   escapeHelperName: string,
   forceInOrder = false,
+  selectedValueCode?: string,
 ): string | undefined {
   if (children.length === 0) {
     return undefined;
@@ -2870,6 +2914,11 @@ function emitStreamRendererFromChildren(
     ...(parentState?.reactSuspenseRevealScriptSrc === undefined
       ? {}
       : { reactSuspenseRevealScriptSrc: parentState.reactSuspenseRevealScriptSrc }),
+    ...(selectedValueCode === undefined
+      ? parentState?.selectedValueCode === undefined
+        ? {}
+        : { selectedValueCode: parentState.selectedValueCode }
+      : { selectedValueCode }),
   };
   const parts = children.flatMap((child) =>
     collectHtmlParts(
@@ -3285,6 +3334,7 @@ function emitPropsObject(
   escapeHelperName = "_escapeHtml",
   componentName?: string,
   childrenExpressionOverride?: string,
+  selectedValueCode?: string,
 ): string {
   const entries = props.map((prop) => {
     if (prop.kind === "spread-prop") {
@@ -3300,8 +3350,8 @@ function emitPropsObject(
 
     if (prop.kind === "render-prop") {
       const renderValue =
-        emitStreamRendererFromChildren(prop.children, escapeHelperName, true) ??
-        emitHtmlExpressionFromChildren(prop.children, escapeHelperName);
+        emitStreamRendererFromChildren(prop.children, escapeHelperName, true, selectedValueCode) ??
+        emitHtmlExpressionFromChildren(prop.children, escapeHelperName, selectedValueCode);
       return `${emitPropName(prop.name)}: ${currentMarkServerRenderValueHelperName}(${renderValue})`;
     }
 
@@ -3318,8 +3368,8 @@ function emitPropsObject(
   if (children.length > 0) {
     const childrenExpression =
       childrenExpressionOverride ??
-      emitStreamRendererFromChildren(children, escapeHelperName) ??
-      emitHtmlExpressionFromChildren(children, escapeHelperName);
+      emitStreamRendererFromChildren(children, escapeHelperName, false, selectedValueCode) ??
+      emitHtmlExpressionFromChildren(children, escapeHelperName, selectedValueCode);
     entries.push(
       `children: ${isRouterLinkComponentName(componentName) ? `${componentName}.trustedHtml(${childrenExpression})` : childrenExpression}`,
     );

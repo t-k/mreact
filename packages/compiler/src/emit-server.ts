@@ -41,6 +41,8 @@ let currentUrlSafeHelperName: string = "_urlAttrSafe";
 let currentClientBoundaryHelperName: string | undefined;
 let currentCompatChildHelperName: string | undefined;
 let currentSpreadAttributesHelperName: string = "_renderSpreadAttributes";
+let currentSpreadPropsName: string = "_renderSpreadAttributes$props";
+let currentSpreadSelectedValueName: string = "_renderSpreadAttributes$selected";
 let currentMarkServerRenderValueHelperName: string = "_registerServerRenderValue";
 let currentRenderServerValueHelperName: string = "_renderServerValue";
 let currentContainsServerRenderValueHelperName: string = "_containsServerRenderValue";
@@ -73,6 +75,7 @@ function withSelectedValueCode<T>(selectedValueCode: string | undefined, emit: (
 }
 
 export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitResult {
+  currentSelectedValueCode = undefined;
   const escapeHelperName = allocateEscapeHelperName(ir);
   const escapeBatchHelperName =
     options.escape === undefined ? undefined : allocateHelperName(ir, "_escapeHtmlBatch");
@@ -95,6 +98,14 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
     ? allocateHelperName(ir, "_renderCompatChild")
     : undefined;
   const spreadAttributesHelperName = allocateHelperName(ir, "_renderSpreadAttributes");
+  const spreadPropsName = allocateNestedBindingSafeName(
+    ir,
+    `${spreadAttributesHelperName}$props`,
+  );
+  const spreadSelectedValueName = allocateNestedBindingSafeName(
+    ir,
+    `${spreadAttributesHelperName}$selected`,
+  );
   const markServerRenderValueHelperName = allocateNestedBindingSafeName(
     ir,
     "_registerServerRenderValue",
@@ -110,6 +121,7 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
     ir,
     "_serverRenderAttributeValue",
   );
+  const selectionParameterName = allocateNestedBindingSafeName(ir, "_selectedValue");
   currentOptionSelectedLocalNames = {
     selected: allocateNestedBindingSafeName(ir, "_selected"),
     optionValue: allocateNestedBindingSafeName(ir, "_optionValue"),
@@ -123,6 +135,8 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
   currentClientBoundaryHelperName = clientBoundaryHelperName;
   currentCompatChildHelperName = compatChildHelperName;
   currentSpreadAttributesHelperName = spreadAttributesHelperName;
+  currentSpreadPropsName = spreadPropsName;
+  currentSpreadSelectedValueName = spreadSelectedValueName;
   currentMarkServerRenderValueHelperName = markServerRenderValueHelperName;
   currentRenderServerValueHelperName = renderServerValueHelperName;
   currentContainsServerRenderValueHelperName = containsServerRenderValueHelperName;
@@ -172,6 +186,7 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
         contextProviderHelperName,
         contextConsumerHelperName,
         reactNodeRenderHelperName,
+        selectionParameterName,
       );
       return component.serverRenderValuePlaceholder === undefined
         ? emitted
@@ -344,22 +359,25 @@ function emitComponent(
   contextProviderHelperName?: string,
   contextConsumerHelperName?: string,
   reactNodeRenderHelperName?: string,
+  selectionParameterName = "_selectedValue",
 ): string {
   const body = component.bodyStatements.map(
     (statement) =>
       `  ${replaceOxcServerStringReactNodeRenderHelper(statement, reactNodeRenderHelperName)}`,
   );
-  const parameters = component.parameters.join(", ");
-  const htmlStatements = collectHtmlStatements(
-    component.root,
-    outAccumulatorName,
-    escapeHelperName,
-    escapeBatchHelperName,
-    asyncComponentNames,
-    dynamicAttributes,
-    contextProviderHelperName,
-    contextConsumerHelperName,
-    reactNodeRenderHelperName,
+  const parameters = [...component.parameters, selectionParameterName].join(", ");
+  const htmlStatements = withSelectedValueCode(selectionParameterName, () =>
+    collectHtmlStatements(
+      component.root,
+      outAccumulatorName,
+      escapeHelperName,
+      escapeBatchHelperName,
+      asyncComponentNames,
+      dynamicAttributes,
+      contextProviderHelperName,
+      contextConsumerHelperName,
+      reactNodeRenderHelperName,
+    ),
   );
 
   const markerStart = stringLiteral(`<!--mreact-h:start:${encodeURIComponent(component.name)}-->`);
@@ -905,9 +923,13 @@ function selectedValueCodeForChildren(
   node: Extract<JsxNodeIr, { kind: "element" }>,
   attributeScan: ElementAttributeScan,
 ): string | undefined {
-  return node.tagName === "select"
-    ? attributeScan.formValueAttributeCode
-    : currentSelectedValueCode;
+  if (node.tagName !== "select") {
+    return currentSelectedValueCode;
+  }
+
+  return node.attributes.some((attr) => attr.kind === "spread-attr")
+    ? currentSpreadSelectedValueName
+    : attributeScan.formValueAttributeCode;
 }
 
 function collectHtmlParts(
@@ -1308,7 +1330,11 @@ function emitMergedSpreadElementExpression(
   selectedAttributePart: string | undefined,
   asyncFallback: boolean,
 ): string {
-  const propsName = `${currentSpreadAttributesHelperName}$props`;
+  const propsName = currentSpreadPropsName;
+  const selectedValueDeclaration =
+    tagName === "select"
+      ? `const ${currentSpreadSelectedValueName} = ${emitSelectSelectionValueCode(`${propsName}.value`, `${propsName}.defaultValue`) ?? "undefined"};`
+      : "";
   const assignments = emitMergedSpreadPropsAssignments(
     tagName,
     attrs,
@@ -1319,7 +1345,7 @@ function emitMergedSpreadElementExpression(
   const opening = `${stringLiteral(`<${tagName}`)} + ${currentSpreadAttributesHelperName}(${stringLiteral(tagName)}, ${propsName})${selectedAttributePart === undefined ? "" : ` + (${selectedAttributePart})`} + ">"`;
   const innerHtml = `Object.prototype.hasOwnProperty.call(${propsName}, "dangerouslySetInnerHTML") ? ${emitExactDangerouslySetInnerHtmlExpression(`${propsName}.dangerouslySetInnerHTML`)} : (${fallbackCode})`;
 
-  const invocation = `${asyncFallback ? "(async () =>" : "(() =>"} { const ${propsName} = {}; ${assignments.join(" ")} return ${opening} + (${innerHtml}) + ${stringLiteral(`</${tagName}>`)}; })()`;
+  const invocation = `${asyncFallback ? "(async () =>" : "(() =>"} { const ${propsName} = {}; ${assignments.join(" ")} ${selectedValueDeclaration} return ${opening} + (${innerHtml}) + ${stringLiteral(`</${tagName}>`)}; })()`;
   return asyncFallback ? `(await ${invocation})` : invocation;
 }
 
@@ -1472,7 +1498,7 @@ function emitMergedSpreadAttributeExpression(
   attrs: readonly AttributeIr[],
   attributeScan: ElementAttributeScan,
 ): string {
-  const propsName = "_props";
+  const propsName = currentSpreadPropsName;
   const statements = emitMergedSpreadPropsAssignments(
     tagName,
     attrs,
@@ -1497,7 +1523,7 @@ function emitMergedSpreadPropsAssignments(
       ((tagName === "input" &&
         ((attr.name === "defaultValue" && attributeScan.hasExplicitInputValue) ||
           (attr.name === "defaultChecked" && attributeScan.hasExplicitInputChecked))) ||
-        ((tagName === "textarea" || tagName === "select") &&
+        (tagName === "textarea" &&
           (attr.name === "value" || attr.name === "defaultValue")))
     ) {
       return [];
@@ -2095,7 +2121,9 @@ function emitComponentCallExpression(
   propsCode: string,
   asyncComponentNames: ReadonlySet<string>,
 ): string {
-  const call = `${name}(${propsCode})`;
+  const selectionArgument =
+    currentSelectedValueCode === undefined ? "" : `, ${currentSelectedValueCode}`;
+  const call = `${name}(${propsCode}${selectionArgument})`;
   return emitRenderableHtmlExpression(asyncComponentNames.has(name) ? `(await ${call})` : call);
 }
 
@@ -2524,6 +2552,7 @@ function emitSpreadAttributesHelper(
     `  for (const _rawName of Object.keys(props)) {`,
     `    if (_rawName === "key" || _rawName === "ref" || _rawName === "domRef" || _rawName === "children" || _rawName === "dangerouslySetInnerHTML") continue;`,
     `    if (/^on/i.test(_rawName)) continue;`,
+    `    if (tagName === "select" && (_rawName === "value" || _rawName === "defaultValue")) continue;`,
     `    let _value = props[_rawName];`,
     `    if (_value == null) continue;`,
     ...(isServerRenderValueHelperName === undefined

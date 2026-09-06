@@ -667,6 +667,92 @@ export function App(props) {
     );
   });
 
+  test("string and stream emitters carry select value through an option component", async () => {
+    await expectServerPairHtml(
+      `function StatusOption(props) {
+  return <option value={props.value}>{props.value}</option>;
+}
+export function App(props) {
+  return <select value={props.status}>
+    <StatusOption value="open" />
+    <StatusOption value="done" />
+  </select>;
+}`,
+      '<select><option value="open">open</option><option value="done" selected="">done</option></select>',
+      { status: "done" },
+    );
+  });
+
+  test("string and stream emitters resolve select value from a spread", async () => {
+    await expectServerPairHtml(
+      `const OPTIONS = ["open", "done"];
+export function App(props) {
+  return <select {...{ value: props.status }}>
+    {OPTIONS.map((value) => <option key={value} value={value}>{value}</option>)}
+  </select>;
+}`,
+      '<select><option value="open">open</option><option value="done" selected="">done</option></select>',
+      { status: "done" },
+    );
+  });
+
+  test("string and stream emitters keep select spread precedence and omit form values", async () => {
+    await expectServerPairHtml(
+      `const OPTIONS = ["open", "done"];
+export function App(props) {
+  return <select value="open" {...{ value: props.status }}>
+    {OPTIONS.map((value) => <option key={value} value={value}>{value}</option>)}
+  </select>;
+}`,
+      '<select><option value="open">open</option><option value="done" selected="">done</option></select>',
+      { status: "done" },
+    );
+
+    await expectServerPairHtml(
+      `const OPTIONS = ["open", "done"];
+export function App(props) {
+  return <select {...{ value: props.status }} value="open">
+    {OPTIONS.map((value) => <option key={value} value={value}>{value}</option>)}
+  </select>;
+}`,
+      '<select><option value="open" selected="">open</option><option value="done">done</option></select>',
+      { status: "done" },
+    );
+  });
+
+  test("string and stream emitters read select spread getters once", async () => {
+    const source = `let reads = 0;
+const first = { get value() { reads += 1; return "open"; } };
+const second = { get value() { reads += 1; return "done"; } };
+export function App() {
+  return <select {...first} {...second}>
+    <option value="open">open</option>
+    <option value="done">done</option>
+    <output>{reads}</output>
+  </select>;
+}`;
+    await expectServerPairHtml(
+      source,
+      '<select><option value="open">open</option><option value="done" selected="">done</option><output>2</output></select>',
+    );
+  });
+
+  test("string and stream emitters carry spread select values through option components", async () => {
+    await expectServerPairHtml(
+      `function StatusOption(props) {
+  return <option value={props.value}>{props.value}</option>;
+}
+export function App(props) {
+  return <select {...{ value: props.status, multiple: true }}>
+    <StatusOption value="open" />
+    <StatusOption value="done" />
+  </select>;
+}`,
+      '<select multiple=""><option value="open">open</option><option value="done" selected="">done</option></select>',
+      { status: ["done"] },
+    );
+  });
+
   test("string and stream emitters avoid collisions with option selection locals", async () => {
     await expectServerPairHtml(
       `const _optionValue = "done";
