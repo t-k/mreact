@@ -81,6 +81,9 @@ let currentOptionSelectedLocalNames: OptionSelectedLocalNames = {
   textBody: "_optionTextBody",
   textHasValue: "_optionTextHasValue",
   selectValue: "_selectValue",
+  selectValueAttribute: "_selectValueAttribute",
+  selectDefaultValue: "_selectDefaultValue",
+  selectMultiple: "_selectMultiple",
   attributes: "_optionAttributes",
   index: "_i",
   candidate: "_candidate",
@@ -154,6 +157,9 @@ export function emitServerStream(
     textBody: allocateNestedBindingSafeName(ir, "_optionTextBody"),
     textHasValue: allocateNestedBindingSafeName(ir, "_optionTextHasValue"),
     selectValue: allocateNestedBindingSafeName(ir, "_selectValue"),
+    selectValueAttribute: allocateNestedBindingSafeName(ir, "_selectValueAttribute"),
+    selectDefaultValue: allocateNestedBindingSafeName(ir, "_selectDefaultValue"),
+    selectMultiple: allocateNestedBindingSafeName(ir, "_selectMultiple"),
     attributes: allocateNestedBindingSafeName(ir, "_optionAttributes"),
     index: allocateNestedBindingSafeName(ir, "_i"),
     candidate: allocateNestedBindingSafeName(ir, "_candidate"),
@@ -1969,22 +1975,6 @@ function collectHtmlParts(
     state.selectedMultipleCode,
     node.attributes.some((attr) => attr.kind === "spread-attr"),
   );
-  const dynamicOptionValueAttribute = findDynamicOptionValueAttribute(node);
-  if (dynamicOptionValueAttribute !== undefined && state.selectedValueCode !== undefined) {
-    return [
-      emitBoundOptionValuePart(
-        node,
-        escapeHelperName,
-        asyncBoundaryHelperName,
-        outOfOrderBoundaryHelperName,
-        reactSuspenseBoundaryHelperName,
-        reactSuspenseOutOfOrderBoundaryHelperName,
-        state,
-        attributeScan,
-        dynamicOptionValueAttribute,
-      ),
-    ];
-  }
   const capturedOptionPart = emitCapturedOptionPart(node, escapeHelperName, state, attributeScan);
   if (capturedOptionPart !== undefined) {
     return [capturedOptionPart];
@@ -2040,6 +2030,22 @@ function collectHtmlParts(
         fallbackParts,
         escapeHelperName,
         capturedOptionText,
+      ),
+    ];
+  }
+  const dynamicOptionValueAttribute = findDynamicOptionValueAttribute(node);
+  if (dynamicOptionValueAttribute !== undefined && state.selectedValueCode !== undefined) {
+    return [
+      emitBoundOptionValuePart(
+        node,
+        escapeHelperName,
+        asyncBoundaryHelperName,
+        outOfOrderBoundaryHelperName,
+        reactSuspenseBoundaryHelperName,
+        reactSuspenseOutOfOrderBoundaryHelperName,
+        state,
+        attributeScan,
+        dynamicOptionValueAttribute,
       ),
     ];
   }
@@ -2119,24 +2125,20 @@ function emitBoundSelectPart(
   state: CollectHtmlState,
   attributeScan: ElementAttributeScan,
 ): HtmlPart {
-  const selectionCode = attributeScan.formValueAttributeCode;
-  if (selectionCode === undefined) {
+  if (attributeScan.formValueAttributeCode === undefined) {
     return { kind: "static", value: "" };
   }
 
-  const attributes = collectElementAttributeParts(
-    node.tagName,
-    node.attributes,
-    escapeHelperName,
-    state,
-    attributeScan,
-  );
-  const attributeExpressions = attributes.map((part) =>
-    tryEmitPartAsStringExpression(part, currentCompatRenderToStringHelperName),
-  );
-  const attributesCode =
-    attributeExpressions.length === 0 ? '""' : (attributeExpressions as string[]).join(" + ");
-  const selectedMultipleCode = attributeScan.multipleAttributeCode;
+  const selectionCode =
+    emitSelectSelectionValueCode(
+      currentOptionSelectedLocalNames.selectValueAttribute,
+      currentOptionSelectedLocalNames.selectDefaultValue,
+    ) ?? "undefined";
+  const attributeSetup = emitBoundSelectAttributeSetup(node, escapeHelperName, state);
+  const selectedMultipleCode =
+    attributeScan.multipleAttributeCode === undefined
+      ? undefined
+      : currentOptionSelectedLocalNames.selectMultiple;
   const childState: CollectHtmlState = {
     ...state,
     selectedValueCode: currentOptionSelectedLocalNames.selectValue,
@@ -2172,7 +2174,7 @@ function emitBoundSelectPart(
   const attributesName = currentOptionSelectedLocalNames.attributes;
   const opening = `${stringLiteral("<select")} + ${attributesName} + ">"`;
   const closing = stringLiteral("</select>");
-  const prefix = `const ${attributesName} = ${attributesCode}; const ${selectValueName} = (${selectionCode});`;
+  const prefix = `${attributeSetup} const ${selectValueName} = (${selectionCode});`;
 
   if (childExpressions.every((expression) => expression !== undefined)) {
     return {
@@ -2191,6 +2193,76 @@ function emitBoundSelectPart(
     code: `async ($sink) => { ${prefix} $sink.append(${opening});\n${nestedStatements}\n$sink.append(${closing}); }`,
     escapeHelperName,
   };
+}
+
+function emitBoundSelectAttributeSetup(
+  node: Extract<JsxNodeIr, { kind: "element" }>,
+  escapeHelperName: string,
+  state: CollectHtmlState,
+): string {
+  const attributesName = currentOptionSelectedLocalNames.attributes;
+  const valueAttributeName = currentOptionSelectedLocalNames.selectValueAttribute;
+  const defaultValueName = currentOptionSelectedLocalNames.selectDefaultValue;
+  const multipleName = currentOptionSelectedLocalNames.selectMultiple;
+  const statements = [
+    `let ${attributesName} = "";`,
+    `let ${valueAttributeName};`,
+    `let ${defaultValueName};`,
+    `let ${multipleName};`,
+  ];
+
+  for (const attr of node.attributes) {
+    if (attr.kind !== "spread-attr" && (attr.name === "value" || attr.name === "defaultValue")) {
+      const valueCode = readFormValueAttributeCode(attr);
+      if (valueCode !== undefined) {
+        statements.push(
+          `${attr.name === "value" ? valueAttributeName : defaultValueName} = ${valueCode};`,
+        );
+      }
+      continue;
+    }
+
+    if (attr.kind !== "spread-attr" && attr.name === "multiple") {
+      const multipleCode = readBooleanAttributeCode(attr);
+      const parts = collectHtmlAttributeParts(
+        node.tagName,
+        attr,
+        escapeHelperName,
+        state.escapeBatchHelperName,
+        state.dynamicAttributes,
+        attr.kind === "dynamic-attr" ? `(${multipleName} = (${attr.code}))` : undefined,
+      );
+      const expressions = parts.map((part) =>
+        tryEmitPartAsStringExpression(part, currentCompatRenderToStringHelperName),
+      );
+      statements.push(
+        ...expressions.map((expression) => `${attributesName} += ${expression ?? '""'};`),
+      );
+      if (
+        multipleCode !== undefined &&
+        (state.dynamicAttributes === "drop" || attr.kind !== "dynamic-attr")
+      ) {
+        statements.push(`${multipleName} = ${multipleCode};`);
+      }
+      continue;
+    }
+
+    const parts = collectHtmlAttributeParts(
+      node.tagName,
+      attr,
+      escapeHelperName,
+      state.escapeBatchHelperName,
+      state.dynamicAttributes,
+    );
+    const expressions = parts.map((part) =>
+      tryEmitPartAsStringExpression(part, currentCompatRenderToStringHelperName),
+    );
+    statements.push(
+      ...expressions.map((expression) => `${attributesName} += ${expression ?? '""'};`),
+    );
+  }
+
+  return statements.join(" ");
 }
 
 function emitBoundOptionValuePart(

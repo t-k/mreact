@@ -818,6 +818,51 @@ export function App() {
     );
   });
 
+  test("string and stream emitters handle spread options with direct dynamic values", async () => {
+    await expectServerPairHtml(
+      `function readValue() {
+  return "done";
+}
+export function App() {
+  return <select value="done"><option {...{ title: "status" }} value={readValue()}>done</option></select>;
+}`,
+      '<select><option title="status" value="done" selected="">done</option></select>',
+    );
+  });
+
+  test("string and stream emitters preserve select attribute evaluation order", async () => {
+    await expectServerPairHtml(
+      `let order = "";
+function readValue() {
+  order += "value,";
+  return "done";
+}
+function readTitle() {
+  order += "title";
+  return order;
+}
+export function App() {
+  return <select value={readValue()} title={readTitle()}><option value="done">done</option></select>;
+}`,
+      '<select title="value,title"><option value="done" selected="">done</option></select>',
+    );
+  });
+
+  test("string and stream emitters evaluate multiple once per select", async () => {
+    await expectServerPairHtml(
+      `let reads = 0;
+function readMultiple() {
+  reads += 1;
+  if (reads > 1) throw new Error("multiple evaluated more than once");
+  return true;
+}
+export function App() {
+  return <select value={["open", "done"]} multiple={readMultiple()}><option value="open">open</option><option value="done">done</option></select>;
+}`,
+      '<select multiple=""><option value="open" selected="">open</option><option value="done" selected="">done</option></select>',
+    );
+  });
+
   test("string and stream emitters select options whose text value is dynamic", async () => {
     await expectServerPairHtml(
       `const STATUSES = ["open", "done"];

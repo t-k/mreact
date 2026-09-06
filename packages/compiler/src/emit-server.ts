@@ -57,6 +57,9 @@ let currentOptionSelectedLocalNames: OptionSelectedLocalNames = {
   textBody: "_optionTextBody",
   textHasValue: "_optionTextHasValue",
   selectValue: "_selectValue",
+  selectValueAttribute: "_selectValueAttribute",
+  selectDefaultValue: "_selectDefaultValue",
+  selectMultiple: "_selectMultiple",
   attributes: "_optionAttributes",
   index: "_i",
   candidate: "_candidate",
@@ -157,6 +160,9 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
     textBody: allocateNestedBindingSafeName(ir, "_optionTextBody"),
     textHasValue: allocateNestedBindingSafeName(ir, "_optionTextHasValue"),
     selectValue: allocateNestedBindingSafeName(ir, "_selectValue"),
+    selectValueAttribute: allocateNestedBindingSafeName(ir, "_selectValueAttribute"),
+    selectDefaultValue: allocateNestedBindingSafeName(ir, "_selectDefaultValue"),
+    selectMultiple: allocateNestedBindingSafeName(ir, "_selectMultiple"),
     attributes: allocateNestedBindingSafeName(ir, "_optionAttributes"),
     index: allocateNestedBindingSafeName(ir, "_i"),
     candidate: allocateNestedBindingSafeName(ir, "_candidate"),
@@ -1071,22 +1077,26 @@ function emitBoundSelectExpression(
   reactNodeRenderHelperName: string | undefined,
   attributeScan: ElementAttributeScan,
 ): string {
-  const selectionCode = attributeScan.formValueAttributeCode;
-  if (selectionCode === undefined) {
+  if (attributeScan.formValueAttributeCode === undefined) {
     return '""';
   }
 
   const selectValueName = currentOptionSelectedLocalNames.selectValue;
-  const attributes = collectElementAttributeParts(
-    node.tagName,
-    node.attributes,
+  const selectionCode =
+    emitSelectSelectionValueCode(
+      currentOptionSelectedLocalNames.selectValueAttribute,
+      currentOptionSelectedLocalNames.selectDefaultValue,
+    ) ?? "undefined";
+  const attributeSetup = emitBoundSelectAttributeSetup(
+    node,
     escapeHelperName,
     escapeBatchHelperName,
     dynamicAttributes,
-    attributeScan,
   );
-  const attributesCode = attributes.length === 0 ? '""' : attributes.join(" + ");
-  const selectedMultipleCode = selectedMultipleCodeForChildren(node, attributeScan);
+  const selectedMultipleCode =
+    attributeScan.multipleAttributeCode === undefined
+      ? undefined
+      : currentOptionSelectedLocalNames.selectMultiple;
   const childrenHtml = withSelectedValueCode(selectValueName, selectedMultipleCode, () =>
     emitHtmlExpressionFromChildren(
       node.children,
@@ -1101,10 +1111,70 @@ function emitBoundSelectExpression(
   );
   const innerHtml =
     emitDangerouslySetInnerHtmlExpression(node.attributes, childrenHtml) ?? childrenHtml;
-  const invocation = `${containsAsyncServerOperationInChildren(node.children, asyncComponentNames) ? "(async () =>" : "(() =>"} { const ${currentOptionSelectedLocalNames.attributes} = ${attributesCode}; const ${selectValueName} = (${selectionCode}); return ${stringLiteral("<select")} + ${currentOptionSelectedLocalNames.attributes} + ">" + (${innerHtml}) + ${stringLiteral("</select>")}; })()`;
-  return containsAsyncServerOperationInChildren(node.children, asyncComponentNames)
-    ? `(await ${invocation})`
-    : invocation;
+  const isAsync = containsAsyncServerOperationInChildren(node.children, asyncComponentNames);
+  const invocation = `${isAsync ? "(async () =>" : "(() =>"} { ${attributeSetup} const ${selectValueName} = (${selectionCode}); return ${stringLiteral("<select")} + ${currentOptionSelectedLocalNames.attributes} + ">" + (${innerHtml}) + ${stringLiteral("</select>")}; })()`;
+  return isAsync ? `(await ${invocation})` : invocation;
+}
+
+function emitBoundSelectAttributeSetup(
+  node: Extract<JsxNodeIr, { kind: "element" }>,
+  escapeHelperName: string,
+  escapeBatchHelperName: string | undefined,
+  dynamicAttributes: "drop" | "emit",
+): string {
+  const attributesName = currentOptionSelectedLocalNames.attributes;
+  const valueAttributeName = currentOptionSelectedLocalNames.selectValueAttribute;
+  const defaultValueName = currentOptionSelectedLocalNames.selectDefaultValue;
+  const multipleName = currentOptionSelectedLocalNames.selectMultiple;
+  const statements = [
+    `let ${attributesName} = "";`,
+    `let ${valueAttributeName};`,
+    `let ${defaultValueName};`,
+    `let ${multipleName};`,
+  ];
+
+  for (const attr of node.attributes) {
+    if (attr.kind !== "spread-attr" && (attr.name === "value" || attr.name === "defaultValue")) {
+      const valueCode = readFormValueAttributeCode(attr);
+      if (valueCode !== undefined) {
+        statements.push(
+          `${attr.name === "value" ? valueAttributeName : defaultValueName} = ${valueCode};`,
+        );
+      }
+      continue;
+    }
+
+    if (attr.kind !== "spread-attr" && attr.name === "multiple") {
+      const multipleCode = readBooleanAttributeCode(attr);
+      const parts = collectHtmlAttributeParts(
+        node.tagName,
+        attr,
+        escapeHelperName,
+        escapeBatchHelperName,
+        dynamicAttributes,
+        attr.kind === "dynamic-attr" ? `(${multipleName} = (${attr.code}))` : undefined,
+      );
+      statements.push(...parts.map((part) => `${attributesName} += ${part};`));
+      if (
+        multipleCode !== undefined &&
+        (dynamicAttributes === "drop" || attr.kind !== "dynamic-attr")
+      ) {
+        statements.push(`${multipleName} = ${multipleCode};`);
+      }
+      continue;
+    }
+
+    const parts = collectHtmlAttributeParts(
+      node.tagName,
+      attr,
+      escapeHelperName,
+      escapeBatchHelperName,
+      dynamicAttributes,
+    );
+    statements.push(...parts.map((part) => `${attributesName} += ${part};`));
+  }
+
+  return statements.join(" ");
 }
 
 function emitBoundOptionValueExpression(

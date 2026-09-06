@@ -335,6 +335,9 @@ export interface OptionSelectedLocalNames {
   textBody: string;
   textHasValue: string;
   selectValue: string;
+  selectValueAttribute: string;
+  selectDefaultValue: string;
+  selectMultiple: string;
   attributes: string;
   index: string;
   candidate: string;
@@ -349,6 +352,9 @@ const DEFAULT_OPTION_SELECTED_LOCAL_NAMES: OptionSelectedLocalNames = {
   textBody: "_optionTextBody",
   textHasValue: "_optionTextHasValue",
   selectValue: "_selectValue",
+  selectValueAttribute: "_selectValueAttribute",
+  selectDefaultValue: "_selectDefaultValue",
+  selectMultiple: "_selectMultiple",
   attributes: "_optionAttributes",
   index: "_i",
   candidate: "_candidate",
