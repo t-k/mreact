@@ -1033,6 +1033,80 @@ function emitRenderValueExpression(
     .join(", ")}]`;
 }
 
+/**
+ * Render values handed to a component (children and render props) are evaluated
+ * once at the call site, so a reactive conditional inside them would never
+ * subscribe and would never mount. Give each such branch its own dynamic owner
+ * so the subscription, the DOM range, and the branch cleanup scope all live
+ * with the branch instead of with the caller.
+ */
+function emitComponentRenderValueExpression(
+  children: JsxNodeIr[],
+  state: EmitSetupState,
+): string {
+  if (!children.some(needsOwnedDynamicRenderValue)) {
+    return emitRenderValueExpression(children, state);
+  }
+
+  const parts = children.map((child) => {
+    const expression = emitNodeRenderValueExpression(child, state);
+
+    return needsOwnedDynamicRenderValue(child)
+      ? emitOwnedDynamicRenderValue(expression, state)
+      : expression;
+  });
+
+  return parts.length === 1 ? (parts[0] as string) : `[${parts.join(", ")}]`;
+}
+
+function emitOwnedDynamicRenderValue(valueExpression: string, state: EmitSetupState): string {
+  const fragmentName = state.allocateName("_ownedFragment");
+  const markerName = state.allocateName("_ownedMarker");
+
+  return [
+    "(() => {",
+    `  const ${fragmentName} = document.createDocumentFragment();`,
+    `  const ${markerName} = document.createComment("");`,
+    `  ${fragmentName}.append(${markerName});`,
+    `  ${state.helperNames.insertDynamic}(${fragmentName}, ${markerName}, () => ${valueExpression}${emitDynamicOptions(state.debugLabel)});`,
+    `  return ${fragmentName};`,
+    "})()",
+  ].join("\n");
+}
+
+function needsOwnedDynamicRenderValue(node: JsxNodeIr): boolean {
+  return (
+    node.kind === "conditional" &&
+    readsReactiveSourceCode(node.conditionCode) &&
+    [...node.whenTrue, ...node.whenFalse].some(rendersDomNode)
+  );
+}
+
+function rendersDomNode(node: JsxNodeIr): boolean {
+  if (
+    node.kind === "element" ||
+    node.kind === "component" ||
+    node.kind === "list" ||
+    node.kind === "async-boundary"
+  ) {
+    return true;
+  }
+
+  if (node.kind === "fragment") {
+    return node.children.some(rendersDomNode);
+  }
+
+  if (node.kind === "conditional") {
+    return [...node.whenTrue, ...node.whenFalse].some(rendersDomNode);
+  }
+
+  return false;
+}
+
+function readsReactiveSourceCode(code: string): boolean {
+  return /\.\s*get\s*\(/.test(code);
+}
+
 function emitAsyncBoundarySetup(
   node: Extract<JsxNodeIr, { kind: "async-boundary" }>,
   childPath: string,
@@ -1548,11 +1622,13 @@ function emitPropsObject(
     }
 
     if (prop.kind === "render-prop") {
-      const renderValue = emitRenderValueExpression(prop.children, state);
+      const renderValue = emitComponentRenderValueExpression(prop.children, state);
 
       // A call expression prop is analyzed as a render value because it may return
       // markup, but a plain reactive read inside it still has to stay lazy or the
-      // component receives a value frozen at its first render.
+      // component receives a value frozen at its first render. A reactive
+      // conditional is a different IR kind and is handled by the owned dynamic
+      // value above, so the two never apply to the same prop.
       return reactiveGetters && shouldEmitReactiveRenderPropGetter(prop.children)
         ? `get ${emitGetterPropName(prop.name)}() { return ${renderValue}; }`
         : `${emitPropName(prop.name)}: ${renderValue}`;
@@ -1566,7 +1642,7 @@ function emitPropsObject(
   });
 
   if (children.length > 0) {
-    entries.push(`children: ${emitRenderValueExpression(children, state)}`);
+    entries.push(`children: ${emitComponentRenderValueExpression(children, state)}`);
   }
 
   return `{ ${entries.join(", ")} }`;

@@ -5,6 +5,7 @@ import { gzipSync } from "node:zlib";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 // @vitest-environment happy-dom
 
+import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { buildApp } from "../src/build.js";
 import {
   buildClientRouteBundle,
@@ -5461,6 +5462,248 @@ export default function FamilyPage() {
 
     expect(document.querySelector("h2")?.textContent).toBe("Initial");
     expect(document.querySelector("[aria-live='polite']")?.textContent).toBe("Saved");
+  });
+
+  test("mounts a route module conditional child passed through a component's children", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-component-children-conditional-"));
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await mkdir(join(appDir, "state"), { recursive: true });
+    await mkdir(join(appDir, "tickets"), { recursive: true });
+    await writeFile(
+      join(appDir, "state", "panel.ts"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export const panelTicket = cell<number | null>(null);`,
+    );
+    await writeFile(
+      join(appDir, "components", "shell.tsx"),
+      `export function Shell(props: { children?: unknown }) {
+  return <section class="shell"><h1>Tickets</h1>{props.children}</section>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "components", "tickets.tsx"),
+      `import { panelTicket } from "../state/panel";
+
+export function Tickets() {
+  return (
+    <ul data-testid="tickets">
+      <li><button type="button" data-testid="open" onClick={() => panelTicket.set(1)}>Row 1</button></li>
+      <li><button type="button" data-testid="open-2" onClick={() => panelTicket.set(2)}>Row 2</button></li>
+      <li><button type="button" data-testid="close" onClick={() => panelTicket.set(null)}>Close</button></li>
+    </ul>
+  );
+}`,
+    );
+    await writeFile(
+      join(appDir, "components", "ticket-panel.tsx"),
+      `export function TicketPanel(props: { number: number }) {
+  return <aside data-testid="ticket-panel">Ticket #{props.number}</aside>;
+}`,
+    );
+    const file = join(appDir, "tickets", "page.mreact.tsx");
+    const code = `"use client";
+import { panelTicket } from "../state/panel";
+import { Shell } from "../components/shell";
+import { TicketPanel } from "../components/ticket-panel";
+import { Tickets } from "../components/tickets";
+
+export function loader() {
+  return { openTicket: null };
+}
+
+export default function Page(props) {
+  panelTicket.set(props.data.openTicket);
+  return (
+    <Shell>
+      <Tickets />
+      {panelTicket.get() === null ? null : <TicketPanel number={panelTicket.get() ?? 0} />}
+    </Shell>
+  );
+}`;
+    await writeFile(file, code);
+
+    const references = await collectClientRouteReferences({ appDir, code, filename: file });
+    expect(references.client).toBe(true);
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/tickets"),
+    });
+    setDocumentBodyFromHtml(await response.text());
+    expect(document.querySelector("[data-testid='ticket-panel']")).toBeNull();
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/tickets",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#component-children-conditional`
+    );
+    await flushRouterMicrotasks();
+
+    const tickets = document.querySelector("[data-testid='tickets']");
+    expect(tickets).not.toBeNull();
+    expect(document.querySelectorAll("[data-testid='ticket-panel']")).toHaveLength(0);
+
+    const clickTestId = async (testId: string): Promise<void> => {
+      document
+        .querySelector(`[data-testid='${testId}']`)
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushRouterMicrotasks();
+    };
+
+    await clickTestId("open");
+    expect(document.querySelectorAll("[data-testid='ticket-panel']")).toHaveLength(1);
+    expect(document.querySelector("[data-testid='ticket-panel']")?.textContent).toBe("Ticket #1");
+
+    // The route seeds panelTicket from loader data on every render; an update
+    // while the branch is open must not revert to the loader value.
+    await clickTestId("open-2");
+    expect(document.querySelectorAll("[data-testid='ticket-panel']")).toHaveLength(1);
+    expect(document.querySelector("[data-testid='ticket-panel']")?.textContent).toBe("Ticket #2");
+
+    await clickTestId("close");
+    expect(document.querySelectorAll("[data-testid='ticket-panel']")).toHaveLength(0);
+
+    await clickTestId("open");
+    expect(document.querySelectorAll("[data-testid='ticket-panel']")).toHaveLength(1);
+    expect(document.querySelector("[data-testid='ticket-panel']")?.textContent).toBe("Ticket #1");
+
+    // Toggling the branch must not re-create the sibling children around it.
+    expect(document.querySelector("[data-testid='tickets']")).toBe(tickets);
+  });
+
+  test("stops evaluating a component-children conditional branch after it closes", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-component-children-teardown-"));
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await mkdir(join(appDir, "state"), { recursive: true });
+    await mkdir(join(appDir, "tickets"), { recursive: true });
+    await writeFile(
+      join(appDir, "state", "panel.ts"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export const panelTicket = cell<number | null>(null);`,
+    );
+    await writeFile(
+      join(appDir, "components", "shell.tsx"),
+      `export function Shell(props: { children?: unknown }) {
+  return <section class="shell">{props.children}</section>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "components", "tickets.tsx"),
+      `import { panelTicket } from "../state/panel";
+
+export function Tickets() {
+  return (
+    <ul>
+      <li><button type="button" data-testid="open" onClick={() => panelTicket.set(1)}>Row 1</button></li>
+      <li><button type="button" data-testid="close" onClick={() => panelTicket.set(null)}>Close</button></li>
+    </ul>
+  );
+}`,
+    );
+    await writeFile(
+      join(appDir, "components", "ticket-panel.tsx"),
+      `import { panelTicket } from "../state/panel";
+
+function requireTicket() {
+  const value = panelTicket.get();
+  globalThis.__ticketViewReads = (globalThis.__ticketViewReads ?? 0) + 1;
+  if (value === null) {
+    globalThis.__ticketViewNullReads = (globalThis.__ticketViewNullReads ?? 0) + 1;
+    throw new Error("requireTicket() must not run while the panel is closed");
+  }
+  return value;
+}
+
+export function TicketPanel() {
+  return <aside data-testid="ticket-panel">Ticket #{requireTicket()}</aside>;
+}`,
+    );
+    const file = join(appDir, "tickets", "page.mreact.tsx");
+    const code = `"use client";
+import { panelTicket } from "../state/panel";
+import { Shell } from "../components/shell";
+import { TicketPanel } from "../components/ticket-panel";
+import { Tickets } from "../components/tickets";
+
+export function loader() {
+  return { openTicket: null };
+}
+
+export default function Page(props) {
+  panelTicket.set(props.data.openTicket);
+  return (
+    <Shell>
+      <Tickets />
+      {panelTicket.get() === null ? null : <TicketPanel />}
+    </Shell>
+  );
+}`;
+    await writeFile(file, code);
+
+    const references = await collectClientRouteReferences({ appDir, code, filename: file });
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/tickets"),
+    });
+    setDocumentBodyFromHtml(await response.text());
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/tickets",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#component-children-teardown`
+    );
+    await flushRouterMicrotasks();
+
+    const runtimeState = globalThis as {
+      __ticketViewNullReads?: number;
+      __ticketViewReads?: number;
+    };
+    runtimeState.__ticketViewNullReads = 0;
+    runtimeState.__ticketViewReads = 0;
+
+    document
+      .querySelector("[data-testid='open']")
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await flushRouterMicrotasks();
+    expect(document.querySelector("[data-testid='ticket-panel']")?.textContent).toBe("Ticket #1");
+    expect(runtimeState.__ticketViewReads).toBe(1);
+
+    document
+      .querySelector("[data-testid='close']")
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await flushRouterMicrotasks();
+
+    expect(document.querySelector("[data-testid='ticket-panel']")).toBeNull();
+    // The torn down branch must not be evaluated again with the closed state.
+    expect(runtimeState.__ticketViewNullReads).toBe(0);
+    expect(runtimeState.__ticketViewReads).toBe(1);
+    expect(() => flushEffects()).not.toThrow();
+    expect(runtimeState.__ticketViewNullReads).toBe(0);
+
+    // Reopening must build a fresh branch rather than revive the disposed one.
+    document
+      .querySelector("[data-testid='open']")
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await flushRouterMicrotasks();
+
+    expect(document.querySelectorAll("[data-testid='ticket-panel']")).toHaveLength(1);
+    expect(runtimeState.__ticketViewReads).toBe(2);
+    expect(runtimeState.__ticketViewNullReads).toBe(0);
+
+    delete runtimeState.__ticketViewNullReads;
+    delete runtimeState.__ticketViewReads;
   });
 
   test("keeps repeated route cell reads reactive across sibling conditional branches", async () => {

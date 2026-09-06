@@ -260,4 +260,57 @@ describe("compiler client runtime dynamic output", () => {
     );
     expect(output.code).toMatch(/import \{[^}]*\bbindText\b/);
   });
+
+  test("gives a reactive conditional in component children its own dynamic owner", () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+import { Panel } from "./Panel";
+import { Shell } from "./Shell";
+
+const ticket = cell<number | null>(null);
+
+export function App() {
+  return (
+    <Shell>
+      <p>Rows</p>
+      {ticket.get() === null ? null : <Panel number={ticket.get() ?? 0} />}
+    </Shell>
+  );
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    // Component children are evaluated once at the call site, so the branch
+    // needs its own insertDynamic owner to subscribe and to own its cleanup
+    // scope. Without it the conditional collapses to a one-shot value.
+    expect(output.code).toMatch(/children: \[[\s\S]*insertDynamic\(/);
+    expect(output.code).toContain("document.createDocumentFragment()");
+    expect(output.code).toContain('document.createComment("")');
+  });
+
+  test("keeps non-reactive conditionals in component children as inline values", () => {
+    const output = transform({
+      code: `import { Panel } from "./Panel";
+import { Shell } from "./Shell";
+
+export function App(props: { open: boolean }) {
+  return (
+    <Shell>
+      <p>Rows</p>
+      {props.open ? <Panel /> : null}
+    </Shell>
+  );
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("document.createDocumentFragment()");
+    expect(output.code).toMatch(/children: \[[\s\S]*\(props\.open\) \? Panel\(/);
+  });
 });
