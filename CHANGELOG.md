@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.212 - 2026-09-06
+
+### Fixed
+
+- Fixed reactive conditionals passed through component children and named render props so updates mount and unmount branches with isolated ownership instead of losing subscriptions or re-evaluating disposed bindings.
+- Fixed server-rendered `<select>` output so selected options are marked consistently for mapped, nested, fragment, optgroup, component, and multiple-value children across compiler, streaming, and React-compatible rendering.
+- Fixed reactive `Link` href props so updates retain the anchor node, apply URL safety filtering, and navigate using the latest URL.
+
 ## 0.0.211 - 2026-09-06
 
 ### Changed
