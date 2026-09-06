@@ -2061,6 +2061,92 @@ export default function Page() {
   }
 });
 
+test("route module conditional child mounts, unmounts and remounts through a component", async ({
+  page,
+}) => {
+  const { close, url } = await startFixtureServer({
+    "state.ts": `import { cell } from "@reckona/mreact-reactive-core";
+
+export const panelTicket = cell(null);`,
+    "shell.tsx": `"use client";
+
+export function Shell(props) {
+  return <section data-testid="shell">{props.children}</section>;
+}`,
+    "panel.tsx": `"use client";
+
+import { panelTicket } from "./state";
+
+function view() {
+  const value = panelTicket.get();
+
+  if (value === null) {
+    throw new Error("view() must not run while the panel is closed");
+  }
+
+  return "Ticket " + value;
+}
+
+export function TicketPanel() {
+  return <aside data-testid="ticket-panel">{view()}</aside>;
+}`,
+    "page.tsx": `"use client";
+
+import { panelTicket } from "./state";
+import { Shell } from "./shell";
+import { TicketPanel } from "./panel";
+
+export default function Page() {
+  return (
+    <main>
+      <h1>Tickets</h1>
+      <button type="button" data-testid="open" onClick={() => panelTicket.set(1)}>open</button>
+      <button type="button" data-testid="next" onClick={() => panelTicket.set(2)}>next</button>
+      <button type="button" data-testid="close" onClick={() => panelTicket.set(null)}>close</button>
+      <Shell>
+        {panelTicket.get() === null ? null : <TicketPanel />}
+      </Shell>
+      {panelTicket.get() === null ? null : <aside data-testid="direct-panel">direct</aside>}
+    </main>
+  );
+}`,
+  });
+  const pageErrors: string[] = [];
+
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+
+  try {
+    await page.goto(url);
+    await expect(page.getByRole("heading", { name: "Tickets" })).toBeVisible();
+    // The shell is empty while the panel is closed, so it has no box to be
+    // "visible"; its presence is what matters here.
+    await expect(page.getByTestId("shell")).toHaveCount(1);
+    await expect(page.getByTestId("ticket-panel")).toHaveCount(0);
+    await expect(page.getByTestId("direct-panel")).toHaveCount(0);
+
+    await page.getByTestId("open").click();
+    await expect(page.getByTestId("ticket-panel")).toHaveText("Ticket 1");
+    await expect(page.getByTestId("direct-panel")).toHaveCount(1);
+
+    await page.getByTestId("next").click();
+    await expect(page.getByTestId("ticket-panel")).toHaveText("Ticket 2");
+
+    await page.getByTestId("close").click();
+    await expect(page.getByTestId("ticket-panel")).toHaveCount(0);
+    await expect(page.getByTestId("direct-panel")).toHaveCount(0);
+
+    await page.getByTestId("open").click();
+    await expect(page.getByTestId("ticket-panel")).toHaveText("Ticket 1");
+    await expect(page.getByTestId("ticket-panel")).toHaveCount(1);
+
+    // The closed branch must not re-evaluate its bindings against the new
+    // state; `view()` rejects null precisely to make that observable.
+    expect(pageErrors).toEqual([]);
+  } finally {
+    await close();
+  }
+});
+
 async function startWorkspaceFixtureServer(files: Record<string, string>): Promise<{
   close(): Promise<void>;
   url: string;
