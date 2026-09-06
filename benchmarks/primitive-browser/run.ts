@@ -1,13 +1,8 @@
 import { createServer, type Server } from "node:http";
-import { createRequire } from "node:module";
-import { gzipSync } from "node:zlib";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, extname, join, normalize } from "node:path";
+import { readFile, rm } from "node:fs/promises";
+import { extname, join, normalize, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
-import { build as viteBuild } from "vite";
-import { qwikVite } from "@builder.io/qwik/optimizer";
-import { compile } from "svelte/compiler";
 import { collectBenchmarkEnvironment } from "../shared/env.js";
 import { formatBenchmarkMarkdown } from "../shared/report.js";
 import { createDatedResultsDir, writeJsonFile, writeTextFile } from "../shared/results.js";
@@ -17,22 +12,19 @@ import {
   primitiveBrowserCases,
   primitiveBrowserFrameworks,
 } from "./cases.js";
+import { createBrowserFixture } from "./fixture.js";
 
-const requireFromHere = createRequire(import.meta.url);
-const qwikPackageDir = dirname(dirname(requireFromHere.resolve("@builder.io/qwik")));
-const sveltePackageDir = dirname(requireFromHere.resolve("svelte/package.json"));
-const vuePackageDir = dirname(requireFromHere.resolve("vue/package.json"));
-const browserWarmupRuns = parseNonNegativeInteger(
-  process.env.MREACT_PRIMITIVE_BROWSER_WARMUP_RUNS ?? "5",
-  "MREACT_PRIMITIVE_BROWSER_WARMUP_RUNS",
-);
-const browserMeasuredRuns = parseNonNegativeInteger(
-  process.env.MREACT_PRIMITIVE_BROWSER_MEASURED_RUNS ?? "15",
-  "MREACT_PRIMITIVE_BROWSER_MEASURED_RUNS",
-);
-
-const fixture = await createBrowserFixture();
-const server = await serveDirectory(fixture.outDir);
+async function runBenchmark(): Promise<void> {
+  const browserWarmupRuns = parseNonNegativeInteger(
+    process.env.MREACT_PRIMITIVE_BROWSER_WARMUP_RUNS ?? "5",
+    "MREACT_PRIMITIVE_BROWSER_WARMUP_RUNS",
+  );
+  const browserMeasuredRuns = parseNonNegativeInteger(
+    process.env.MREACT_PRIMITIVE_BROWSER_MEASURED_RUNS ?? "15",
+    "MREACT_PRIMITIVE_BROWSER_MEASURED_RUNS",
+  );
+  const fixture = await createBrowserFixture(browserEntrySource());
+  const server = await serveDirectory(fixture.outDir);
 const browser = await chromium.launch({
   args: ["--js-flags=--expose-gc"],
   headless: true,
@@ -164,145 +156,6 @@ if (rows.some((row) => row.status === "failed")) {
   process.exitCode = 1;
 }
 
-async function createBrowserFixture(): Promise<{
-  gzipBytes: number;
-  outDir: string;
-  rootDir: string;
-}> {
-  const rootDir = await mkdtemp(join(tmpdir(), "mreact-primitive-browser-"));
-  const outDir = join(rootDir, "dist");
-  const sourceDir = join(rootDir, "src");
-  await mkdir(sourceDir, { recursive: true });
-  await writeSvelteBrowserComponents(sourceDir);
-  await writeFile(join(rootDir, "index.html"), `<main id="root"></main><script type="module" src="/src/bench.ts"></script>`);
-  await writeFile(join(sourceDir, "bench.ts"), browserEntrySource());
-
-  await viteBuild({
-    build: {
-      emptyOutDir: true,
-      outDir,
-      rollupOptions: {
-        output: {
-          entryFileNames: "assets/bench.js",
-        },
-      },
-    },
-    configFile: false,
-    logLevel: "silent",
-    plugins: [
-      qwikVite({
-        client: { input: join(sourceDir, "bench.ts") },
-        csr: true,
-        srcDir: sourceDir,
-      }),
-    ],
-    resolve: {
-      alias: [
-        {
-          find: "@reckona/mreact-reactive-core/testing",
-          replacement: join(process.cwd(), "packages/reactive-core/dist/testing.js"),
-        },
-        {
-          find: "@reckona/mreact-reactive-core/internal",
-          replacement: join(process.cwd(), "packages/reactive-core/dist/internal.js"),
-        },
-        {
-          find: "@reckona/mreact-reactive-core/runtime-state",
-          replacement: join(
-            process.cwd(),
-            "packages/reactive-core/dist/runtime-state-public.js",
-          ),
-        },
-        {
-          find: "@reckona/mreact-reactive-core",
-          replacement: join(process.cwd(), "packages/reactive-core/dist/index.js"),
-        },
-        {
-          find: "@reckona/mreact-reactive-dom/compat-normalize",
-          replacement: join(
-            process.cwd(),
-            "packages/reactive-dom/dist/compat-normalize.js",
-          ),
-        },
-        {
-          find: "@reckona/mreact-reactive-dom",
-          replacement: join(process.cwd(), "packages/reactive-dom/dist/index.js"),
-        },
-        {
-          find: "@reckona/mreact-compat",
-          replacement: join(process.cwd(), "packages/react-compat/dist/index.js"),
-        },
-        {
-          find: /^@builder\.io\/qwik$/,
-          replacement: join(qwikPackageDir, "dist/core.mjs"),
-        },
-        {
-          find: "@builder.io/qwik/build",
-          replacement: join(qwikPackageDir, "dist/build/index.mjs"),
-        },
-        {
-          find: "@builder.io/qwik/preloader",
-          replacement: join(qwikPackageDir, "dist/preloader.mjs"),
-        },
-        {
-          find: "@builder.io/qwik/qwikloader.js",
-          replacement: join(qwikPackageDir, "dist/qwikloader.js"),
-        },
-        {
-          find: "react-dom/client",
-          replacement: requireFromHere.resolve("react-dom/client"),
-        },
-        {
-          find: "zone.js",
-          replacement: requireFromHere.resolve("zone.js"),
-        },
-        {
-          find: /^@angular\/compiler$/,
-          replacement: requireFromHere.resolve("@angular/compiler"),
-        },
-        {
-          find: /^@angular\/core$/,
-          replacement: requireFromHere.resolve("@angular/core"),
-        },
-        {
-          find: /^@angular\/platform-browser$/,
-          replacement: requireFromHere.resolve("@angular/platform-browser"),
-        },
-        {
-          find: "svelte/internal/disclose-version",
-          replacement: join(sveltePackageDir, "src", "internal", "disclose-version.js"),
-        },
-        {
-          find: "svelte/internal/client",
-          replacement: join(sveltePackageDir, "src", "internal", "client", "index.js"),
-        },
-        {
-          find: /^svelte$/,
-          replacement: join(sveltePackageDir, "src", "index-client.js"),
-        },
-        {
-          find: /^vue$/,
-          replacement: join(vuePackageDir, "dist", "vue.runtime.esm-bundler.js"),
-        },
-        {
-          find: "react-dom",
-          replacement: requireFromHere.resolve("react-dom"),
-        },
-        {
-          find: "react",
-          replacement: requireFromHere.resolve("react"),
-        },
-        {
-          find: "solid-js",
-          replacement: requireFromHere.resolve("solid-js/dist/solid.js"),
-        },
-      ],
-    },
-    root: rootDir,
-  });
-
-  const bundle = await readFile(join(outDir, "assets", "bench.js"));
-  return { gzipBytes: gzipSync(bundle).length, outDir, rootDir };
 }
 
 function primitiveBrowserMeasurementExpression(options: {
@@ -353,37 +206,14 @@ function primitiveBrowserMeasurementExpression(options: {
   })()`;
 }
 
-async function writeSvelteBrowserComponents(sourceDir: string): Promise<void> {
-  const svelteDir = join(sourceDir, "svelte");
-  await mkdir(svelteDir, { recursive: true });
-  await writeFile(
-    join(svelteDir, "Rows.mjs"),
-    compileSvelteComponent(
-      "Rows.svelte",
-      `<script>
-let { rows = [], selectedId = -1 } = $props();
-export function setRows(next) { rows = next; }
-export function setSelectedId(next) { selectedId = next; }
-</script>{#each rows as row (row.id)}<div data-key={row.id} class:selected={selectedId === row.id} data-selected={selectedId === row.id ? "true" : undefined}>{row.label}</div>{/each}`,
-    ),
-  );
-}
-
-function compileSvelteComponent(filename: string, source: string): string {
-  return compile(source, {
-    dev: false,
-    filename,
-    generate: "client",
-  }).js.code;
-}
-
-function browserEntrySource(): string {
+export function browserEntrySource(): string {
   return String.raw`
 import "zone.js";
 import "@angular/compiler";
 import { batch, cell, effect } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { bindEvent, bindList, bindText } from "@reckona/mreact-reactive-dom";
+import { bindCapturedEvent as bindInternalCapturedEvent } from "@reckona/mreact-reactive-dom/internal";
 import { Fragment, createElement, createRoot, flushSync, useState } from "@reckona/mreact-compat";
 import { ApplicationRef as AngularApplicationRef, ChangeDetectionStrategy as AngularChangeDetectionStrategy, Component as AngularComponent, createComponent as angularCreateComponent, signal as angularSignal } from "@angular/core";
 import { createApplication as angularCreateApplication } from "@angular/platform-browser";
@@ -395,6 +225,8 @@ import { flushSync as svelteFlushSync, mount as svelteMount, unmount as svelteUn
 import { Fragment as VueFragment, createApp as createVueApp, h as vueH, nextTick as vueNextTick, ref as vueRef } from "vue";
 import { Fragment as QwikFragment, jsx as qwikJsx, render as qwikRender } from "@builder.io/qwik";
 import SvelteRows from "./svelte/Rows.mjs";
+
+void bindInternalCapturedEvent;
 
 function createRowsData(count) {
   return Array.from({ length: count }, (_unused, index) => ({
@@ -1276,4 +1108,8 @@ function parseNonNegativeInteger(value: string, name: string): number {
   }
 
   return parsed;
+}
+
+if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  await runBenchmark();
 }

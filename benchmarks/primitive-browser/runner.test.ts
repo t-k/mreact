@@ -42,16 +42,38 @@ describe("primitive browser benchmark configuration", () => {
   });
 
   it("resolves mreact reactive-dom subpath entrypoints before the root alias", async () => {
-    const source = await readFile(new URL("./run.ts", import.meta.url), "utf8");
+    const source = await readFile(new URL("./fixture.ts", import.meta.url), "utf8");
 
+    const internalAlias = source.indexOf(
+      'find: "@reckona/mreact-reactive-dom/internal"',
+    );
     const compatNormalizeAlias = source.indexOf(
       'find: "@reckona/mreact-reactive-dom/compat-normalize"',
     );
-    const rootAlias = source.indexOf('find: "@reckona/mreact-reactive-dom"');
+    const rootAlias = source.indexOf(
+      "find: /^@reckona\\/mreact-reactive-dom$/",
+    );
 
+    expect(internalAlias).toBeGreaterThanOrEqual(0);
     expect(compatNormalizeAlias).toBeGreaterThanOrEqual(0);
     expect(rootAlias).toBeGreaterThanOrEqual(0);
+    expect(internalAlias).toBeLessThan(compatNormalizeAlias);
     expect(compatNormalizeAlias).toBeLessThan(rootAlias);
+    expect(source).not.toContain('find: "@reckona/mreact-reactive-dom"');
+  });
+
+  it("keeps the fixture builder import-safe and exposes a build-only smoke", async () => {
+    const [runSource, buildSource, fixtureSource] = await Promise.all([
+      readFile(new URL("./run.ts", import.meta.url), "utf8"),
+      readFile(new URL("./build.ts", import.meta.url), "utf8"),
+      readFile(new URL("./fixture.ts", import.meta.url), "utf8"),
+    ]);
+
+    expect(runSource).toContain("if (process.argv[1] !== undefined");
+    expect(runSource).toContain("createBrowserFixture(browserEntrySource())");
+    expect(buildSource).toContain("createBrowserFixture(browserEntrySource())");
+    expect(buildSource).not.toContain("chromium");
+    expect(fixtureSource).toContain("await rm(rootDir, { force: true, recursive: true });");
   });
 
   it("evaluates primitive browser measurements without serializing transformed node functions", async () => {

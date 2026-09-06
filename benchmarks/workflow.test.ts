@@ -19,6 +19,9 @@ describe("benchmark GitHub workflow", () => {
     expect(workflow).toContain("timeout-minutes: 180");
     expect(workflow).toContain("NODE_OPTIONS: --max-old-space-size=6144");
     expect(workflow).toContain("playwright install --with-deps chromium");
+    expect(workflow).toContain(
+      "Build primitive browser fixture smoke\n        if: ${{ inputs.suite == 'all' || inputs.suite == 'primitive-browser' }}",
+    );
     expect(workflow).toContain("Resolve hosted Chrome");
     expect(workflow).toContain(
       "Resolve hosted Chrome\n        if: ${{ inputs.suite == 'all' || inputs.suite == 'js-framework' }}",

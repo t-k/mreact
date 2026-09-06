@@ -100,6 +100,10 @@ jobs:
           BENCH_CASES: ${{ inputs.suite == 'all' && 'source write with subscriber 1k,text binding update 1k,computed fan-out 1k,computed fan-in 1k,source write 1k,keyed reverse 1k rows,create 1k event targets,repeated create update clear memory' || '' }}
         run: NODE_ENV=production pnpm bench:primitive
 
+      - name: Build primitive browser fixture smoke
+        if: ${{ inputs.suite == 'all' || inputs.suite == 'primitive-browser' }}
+        run: NODE_ENV=production pnpm bench:primitive-browser:build
+
       - name: Run primitive browser benchmarks
         if: ${{ inputs.suite == 'all' || inputs.suite == 'primitive-browser' }}
         env:
