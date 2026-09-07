@@ -1459,7 +1459,7 @@ export function App() {
 
     const node = await runClientComponent(output.code);
     expect((node as HTMLElement).outerHTML).toBe(
-      "<div><em>loading</em><p>main</p><!----><!----></div>",
+      "<div><em>loading</em><!----><p>main</p><!----></div>",
     );
   });
 
@@ -1871,6 +1871,145 @@ export function App() {
     expect(node.querySelector("[data-state='open']")?.textContent).toBe("Open");
   });
 
+  test("computed destructuring keys remain declared with non-JSX consumers", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+const state = cell({ label: "A", other: "B" });
+let calls = 0;
+function key() { calls++; return "label"; }
+function consume(value) { if (value !== "A") throw new Error("unexpected initial consumer value"); }
+export function App() {
+  const { [key()]: label, ...rest } = state.get();
+  consume(label);
+  return <main><button onClick={() => state.set({ label: "C", other: "D" })}>Update</button><span>{label}:{rest.other}</span><output>{calls}</output></main>;
+}`,
+      filename: "computed-external-consumer.tsx",
+      target: "client",
+      dev: false,
+    });
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    expect(node.querySelector("span")?.textContent).toBe("A:B");
+    expect(node.querySelector("output")?.textContent).toBe("1");
+    node.querySelector("button")?.click();
+    await flushEffects();
+    expect(node.querySelector("span")?.textContent).toBe("C:D");
+    expect(node.querySelector("output")?.textContent).toBe("1");
+  });
+
+  test.each([
+    ["rest", "[first, ...rest]", "first", "rest[0]", "1:2", "3:4"],
+    ["finite prefix", "[first]", "first", "first", "1:1", "3:3"],
+    ["chained alias", "[first, ...rest]", "first", "rest[0]", "1:2", "3:4"],
+    ["nested", "[{ value: first }, ...rest]", "first", "rest[0].value", "1:2", "3:4"],
+  ])(
+    "reactive destructuring consumes a one-shot iterator once: %s",
+    async (kind, pattern, left, right, initial, updated) => {
+      const output = transform({
+        code: `import { cell } from "@reckona/mreact-reactive-core";
+let reads = 0; let closes = 0;
+function* values(start) {
+  try {
+    reads++; yield ${kind === "nested" ? "{ value: start }" : "start"};
+    reads++; yield ${kind === "nested" ? "{ value: start + 1 }" : "start + 1"};
+  } finally { closes++; }
+}
+const state = cell(values(1));
+export function App() {
+  ${kind === "chained alias" ? "const source = state.get();" : ""}
+  const ${pattern} = ${kind === "chained alias" ? "source" : "state.get()"};
+  return <main><button onClick={() => state.set(values(3))}>Update</button><span>{${left}}:{${right}}</span><aside>{${left}}</aside><output>{reads}:{closes}</output></main>;
+}`,
+        filename: "one-shot-destructuring.tsx",
+        target: "client",
+        dev: false,
+      });
+      expect(output.diagnostics).toEqual([]);
+      const node = (await runClientComponent(output.code)) as HTMLElement;
+      expect(node.querySelector("span")?.textContent).toBe(initial);
+      expect(node.querySelector("aside")?.textContent).toBe("1");
+      expect(node.querySelector("output")?.textContent).toBe(
+        kind === "finite prefix" ? "1:1" : "2:1",
+      );
+      node.querySelector("button")?.click();
+      await flushEffects();
+      expect(node.querySelector("span")?.textContent).toBe(updated);
+      expect(node.querySelector("aside")?.textContent).toBe("3");
+    },
+  );
+
+  test.each([
+    ["[first, second]", "[1, 2]", "[3, 4]"],
+    ["[[first] = [1], second]", "[undefined, 2]", "[[3], 4]"],
+    ["[first, { value: second } = { value: 2 }]", "[1, undefined]", "[3, { value: 4 }]"],
+    ["[first, ...[second]]", "[1, 2]", "[3, 4]"],
+  ])("native reactive patterns retain every binding: %s", async (pattern, initial, updated) => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+const state = cell(${initial});
+export function App() { const ${pattern} = (state.get()); return <main><button onClick={() => state.set(${updated})}>Update</button><span>{first}:{second}</span></main>; }`,
+      filename: "native-pattern-bindings.tsx",
+      target: "client",
+      dev: false,
+    });
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    expect(node.querySelector("span")?.textContent).toBe("1:2");
+    node.querySelector("button")?.click();
+    await flushEffects();
+    expect(node.querySelector("span")?.textContent).toBe("3:4");
+  });
+
+  test("captured reactive keys do not reconsume a closed iterator", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+let reads = 0; let closes = 0;
+function* values(start) { try { reads++; yield start; reads++; yield start + 1; } finally { closes++; } }
+const state = cell({ label: values(1) }); const key = cell("label");
+export function App() { const { [key.get()]: [first] } = state.get(); return <main><button onClick={() => key.set("other")}>Key</button><button onClick={() => state.set({ label: values(3) })}>Source</button><span>{first}</span><output>{reads}:{closes}</output></main>; }`,
+      filename: "captured-reactive-key.tsx",
+      target: "client",
+      dev: false,
+    });
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    expect(node.querySelector("span")?.textContent).toBe("1");
+    expect(node.querySelector("output")?.textContent).toBe("1:1");
+    node.querySelectorAll("button")[0]?.click();
+    await flushEffects();
+    expect(node.querySelector("span")?.textContent).toBe("1");
+    node.querySelectorAll("button")[1]?.click();
+    await flushEffects();
+    expect(node.querySelector("span")?.textContent).toBe("3");
+  });
+
+  test.each([
+    "<>{s.get() && <i>{s.get()}</i>}</>{true && <b>B</b>}",
+    "<><>{s.get() && <i>{s.get()}</i>}</></>{true && <b>B</b>}",
+    "<>{s.get() && <i>{s.get()}</i>}</><b>B</b>",
+    "{s.get() && <i>{s.get()}</i>}<>{true && <b>B</b>}</>",
+    "{s.get() && <i>{s.get()}</i>}{true && <b>B</b>}",
+  ])("fragment siblings retain order and identity across updates: %s", async (children) => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+const s = cell(1);
+export function App() { return <main><button onClick={() => s.set(s.get() === 1 ? 2 : s.get() === 2 ? 0 : 3)}>Update</button><section>${children}</section></main>; }`,
+      filename: "fragment-sibling-order.tsx",
+      target: "client",
+      dev: false,
+    });
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const sibling = node.querySelector("b");
+    expect(node.querySelector("section")?.textContent).toBe("1B");
+    for (const expected of ["2B", "0B", "3B"]) {
+      node.querySelector("button")?.click();
+      await flushEffects();
+      expect(node.querySelector("section")?.textContent).toBe(expected);
+      expect(node.querySelector("b")).toBe(sibling);
+    }
+  });
+
   test("client transform evaluates a computed destructuring key once per render", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";
@@ -2205,7 +2344,7 @@ export function App() {
     expect(server.diagnostics).toEqual([]);
     expect(client.code).toContain("insertDynamic(");
     expect(client.code).not.toContain("_renderServerValue(node)");
-    expect(server.code).toContain("_renderServerValue(node)");
+    expect(server.code).toContain("_renderServerValue(node, 0, _selectedValue, _selectedMultiple)");
   });
 
   test("client transform keeps fragment child positions after a dynamic sibling", async () => {

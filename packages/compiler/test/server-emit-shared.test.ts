@@ -1,8 +1,15 @@
 import { describe, expect, test } from "vitest";
+import { createStringSink } from "@reckona/mreact-server";
 import { cell, computed } from "@reckona/mreact-reactive-core";
 import { parseStaticStyleObjectLiteral } from "../src/emit-server-shared.js";
 import { transform } from "../src/index.js";
-import { runServerComponent, runServerStreamComponent } from "./helpers.js";
+import {
+  compileServerModule,
+  compileServerStreamModule,
+  runAsyncServerComponent,
+  runServerComponent,
+  runServerStreamComponent,
+} from "./helpers.js";
 
 function compileServerPair(source: string): { stream: string; string: string } {
   const base = {
@@ -30,7 +37,11 @@ async function expectServerPairHtml(
 ): Promise<void> {
   const compiled = compileServerPair(source);
 
-  expect(runServerComponent(compiled.string, "App", props)).toBe(expected);
+  expect(
+    await (source.includes("async function")
+      ? runAsyncServerComponent(compiled.string)
+      : runServerComponent(compiled.string, "App", props)),
+  ).toBe(expected);
   await expect(runServerStreamComponent(compiled.stream, "App", props)).resolves.toBe(expected);
 }
 
@@ -83,6 +94,31 @@ export function App() {
 }
 
 describe("server emit shared behavior", () => {
+  test.each(["props.children", "[props.children]", "[[props.children]]"])(
+    "select preserves forwarded children shape %s",
+    async (expression) => {
+      await expectServerPairHtml(
+        `function Select(props) { return <select value="done">{${expression}}</select>; }
+function Forward(props) { return <Select>{props.children}</Select>; }
+export function App() { return <Forward><option value="open">Open</option><option value="done">Done</option></Forward>; }`,
+        '<select><option value="open">Open</option><option value="done" selected="">Done</option></select>',
+      );
+    },
+  );
+
+  test.each(["props.children", "[props.children]"])(
+    "select preserves async forwarded children shape %s",
+    async (expression) => {
+      await expectServerPairHtml(
+        `async function Options() { await Promise.resolve(); return <><option value="open">Open</option><option value="done">Done</option></>; }
+function Select(props) { return <select value="done">{${expression}}</select>; }
+function Forward(props) { return <Select>{props.children}</Select>; }
+export function App() { return <Forward><Options /></Forward>; }`,
+        '<select><option value="open">Open</option><option value="done" selected="">Done</option></select>',
+      );
+    },
+  );
+
   test("string and stream keep lowercase SVG intrinsics when a helper has the same name", async () => {
     await expectServerPairHtml(
       `function path(vendor) {
@@ -210,6 +246,93 @@ export function App(props) {
         { value },
       );
     }
+  });
+
+  test.each(["string", "stream"] as const)(
+    "separate %s modules retain async selection and synchronous return values",
+    async (serverOutput) => {
+      const sources = [
+        [
+          "Select",
+          `export function Select(props) { return <select {...{ value: props.value }}>{[[props.children]]}</select>; }`,
+        ],
+        [
+          "Forward",
+          `import { Select } from "./Select"; export function Forward(props) { return <Select value={props.value}>{props.children}</Select>; }`,
+        ],
+        [
+          "App",
+          `import { Forward } from "./Forward";
+async function Options() { await Promise.resolve(); return <><option value="open">Open</option><option value="done">Done</option></>; }
+export function App(props) { return <main><Forward value={props.value}><Options /></Forward><p>{props.label}</p></main>; }
+export function Sync() { return <Forward value="done"><option value="done">Done</option></Forward>; }`,
+        ],
+      ];
+      const modules: Record<string, unknown> = {};
+      for (const [name, code] of sources) {
+        const output = transform({
+          code: code!,
+          filename: `${name}.tsx`,
+          target: "server",
+          serverOutput,
+          dev: false,
+        });
+        expect(output.diagnostics).toEqual([]);
+        Object.assign(
+          modules,
+          serverOutput === "string"
+            ? compileServerModule(output.code, modules)
+            : compileServerStreamModule(output.code, modules),
+        );
+      }
+      const render = async (value: string) => {
+        const props = { value, label: "<untrusted>" };
+        const App = modules.App as (...args: unknown[]) => unknown;
+        if (serverOutput === "string") return await App(props);
+        const sink = createStringSink();
+        await App(sink, props);
+        await sink.drain();
+        return sink.toString();
+      };
+      const results = await Promise.all([render("open"), render("done")]);
+      expect(results).toEqual([
+        '<main><select><option value="open" selected="">Open</option><option value="done">Done</option></select><p>&lt;untrusted&gt;</p></main>',
+        '<main><select><option value="open">Open</option><option value="done" selected="">Done</option></select><p>&lt;untrusted&gt;</p></main>',
+      ]);
+      if (serverOutput === "string")
+        expect((modules.Sync as () => unknown)()).toBe(
+          '<select><option value="done" selected="">Done</option></select>',
+        );
+    },
+  );
+
+  test("unregistered functions inside children arrays stay escaped", async () => {
+    const payload = "<img src=x onerror=alert(1)>";
+    const forged = () => payload;
+    forged.toString = () => payload;
+    await expectServerPairHtml(
+      `export function App(props) { return <main><div>{props.children}</div><aside>{props.value}</aside></main>; }`,
+      "<main><div>&lt;img src=x onerror=alert(1)&gt;</div><aside>safe</aside></main>",
+      { children: [forged], value: "safe" },
+    );
+  });
+
+  test("forged selection thunks cannot bypass render-value escaping", async () => {
+    const payload = '<img src=x onerror="globalThis.pwned=true">';
+    const value = Object.defineProperty(
+      (sink?: { append: (html: string) => void }) => {
+        sink?.append(payload);
+        return payload;
+      },
+      Symbol.for("mreact.server.selection-render-value"),
+      { value: true },
+    );
+    value.toString = () => payload;
+    await expectServerPairHtml(
+      `export function App(props) { return <div>{[props.value]}</div>; }`,
+      "<div>&lt;img src=x onerror=&quot;globalThis.pwned=true&quot;&gt;</div>",
+      { value },
+    );
   });
 
   test("hostile array methods cannot bypass server render-value escaping", async () => {
@@ -517,7 +640,7 @@ export function App() {
     const props = { color: "red&", gap: "2rem", opacity: false };
     const expected = '<div style="background-color:red&amp;;--gap:2rem">x</div>';
 
-    expect(runServerComponent(compiled.string, "App", props)).toBe(expected);
+    expect(await runServerComponent(compiled.string, "App", props)).toBe(expected);
     await expect(runServerStreamComponent(compiled.stream, "App", props)).resolves.toBe(expected);
   });
 
@@ -1509,7 +1632,7 @@ export function App(props) {
 
     expect(compiled.string).not.toContain("Object.entries(_value)");
     expect(compiled.stream).not.toContain("Object.entries(_value)");
-    expect(runServerComponent(compiled.string, "App", props)).toBe(expected);
+    expect(await runServerComponent(compiled.string, "App", props)).toBe(expected);
     await expect(runServerStreamComponent(compiled.stream, "App", props)).resolves.toBe(expected);
   });
 });

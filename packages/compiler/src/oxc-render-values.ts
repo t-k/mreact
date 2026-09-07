@@ -13,6 +13,8 @@ interface ReactiveAliasExpressionState {
   safe: boolean;
 }
 
+export const OXC_COMPUTED_REACTIVE_ALIAS_PLACEHOLDER = "__mreactComputedReactiveAlias";
+
 export const OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER = "__mreactUntrackReactiveAlias";
 
 export function collectOxcBodyJsxBindingNames(
@@ -156,6 +158,7 @@ export function formatOxcUntrackedReactiveAliasDeclaration(
   code: string,
   statementValue: unknown,
   aliases: ReadonlyMap<string, string>,
+  ownedAliases: ReadonlyMap<string, string> = aliases,
 ): string | undefined {
   const statement = readObject(statementValue);
 
@@ -172,6 +175,7 @@ export function formatOxcUntrackedReactiveAliasDeclaration(
 
   const replacements: ReactiveAliasReplacement[] = [];
   const computedKeys = new Map<number, Record<string, unknown>>();
+  const patternDeclarations: string[] = [];
 
   for (const declarationValue of readArray(statement.declarations)) {
     const declaration = readObject(declarationValue);
@@ -188,7 +192,44 @@ export function formatOxcUntrackedReactiveAliasDeclaration(
       continue;
     }
 
+    const owned =
+      typeof id.name === "string"
+        ? ownedAliases.has(id.name)
+        : collectOxcReactiveAliasBindingNames(id, aliases).every((name) => ownedAliases.has(name));
+    if (containsArrayPattern(id)) {
+      const names = collectOxcReactiveAliasBindingNames(id, aliases);
+      const cacheName = patternBindingName(readNumber(id.start) ?? start);
+      const keys = new Map<number, Record<string, unknown>>();
+      collectOxcComputedKeyNodes(id, keys);
+      let patternCode = readSource(code, id);
+      for (const [keyStart, key] of [...keys].sort(([a], [b]) => b - a)) {
+        const keyEnd = readNumber(key.end);
+        if (keyEnd === undefined) continue;
+        const keyName = computedKeyBindingName(keyStart);
+        computedKeys.set(keyStart, key);
+        const offset = readNumber(id.start) ?? start;
+        patternCode =
+          patternCode.slice(0, keyStart - offset) +
+          `(${cacheName}Ready ? ${keyName} : (${keyName} = ${OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER}(() => (${readSource(code, key)}))))` +
+          patternCode.slice(keyEnd - offset);
+      }
+      patternDeclarations.push(`let ${cacheName}Ready = false;`);
+      const initializerCode =
+        rewriteOxcReactiveAliasExpressionCode(code, initializer, aliases) ??
+        readSource(code, initializer);
+      patternDeclarations.push(
+        `const ${cacheName} = ${OXC_COMPUTED_REACTIVE_ALIAS_PLACEHOLDER}(() => { const ${patternCode} = (${initializerCode}); ${cacheName}Ready = true; return { ${names.join(", ")} }; });`,
+      );
+      replacements.push({
+        start: readNumber(id.start) ?? start,
+        end: readNumber(readObject(declaration.init).end) ?? end,
+        name: cacheName,
+        text: `{ ${names.join(", ")} } = ${owned ? `${OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER}(() => ${cacheName}.get())` : `${cacheName}.get()`}`,
+      });
+      continue;
+    }
     collectOxcComputedKeyNodes(id, computedKeys);
+    if (!owned) continue;
     replacements.push({
       start,
       end,
@@ -202,6 +243,8 @@ export function formatOxcUntrackedReactiveAliasDeclaration(
     if (end === undefined) continue;
 
     const name = computedKeyBindingName(start);
+    if (replacements.some((replacement) => replacement.start <= start && replacement.end >= end))
+      continue;
     replacements.push({
       start,
       end,
@@ -231,7 +274,7 @@ export function formatOxcUntrackedReactiveAliasDeclaration(
     .map((start) => `let ${computedKeyBindingName(start)};`)
     .join("\n");
 
-  return computedKeyDeclarations.length === 0 ? source : `${computedKeyDeclarations}\n${source}`;
+  return [computedKeyDeclarations, ...patternDeclarations, source].filter(Boolean).join("\n");
 }
 
 export function collectOxcCompilerOwnedReactiveAliases(
@@ -317,14 +360,38 @@ function collectOxcPatternReactiveAliases(
 ): Map<string, string> {
   const aliases = new Map<string, string>();
 
-  collectOxcPatternReactiveAliasesInto(
-    pattern,
-    initializerCode,
-    aliases,
-    code,
-    memoizeComputedKeys,
-  );
+  if (memoizeComputedKeys && containsArrayPattern(pattern)) {
+    const cacheName = patternBindingName(readNumber(pattern.start) ?? 0);
+    const names = new Set<string>();
+    collectOxcBindingNames(pattern, names);
+    for (const name of names) aliases.set(name, `${cacheName}.get().${name}`);
+  } else {
+    collectOxcPatternReactiveAliasesInto(
+      pattern,
+      initializerCode,
+      aliases,
+      code,
+      memoizeComputedKeys,
+    );
+  }
   return aliases;
+}
+
+function patternBindingName(start: number): string {
+  return `__mreactPattern_${start}`;
+}
+
+function containsArrayPattern(pattern: Record<string, unknown>): boolean {
+  if (pattern.type === "ArrayPattern") return true;
+  if (pattern.type === "AssignmentPattern") return containsArrayPattern(readObject(pattern.left));
+  if (pattern.type === "ObjectPattern")
+    return readArray(pattern.properties).some((value) => {
+      const property = readObject(value);
+      return containsArrayPattern(
+        readObject(property.type === "RestElement" ? property.argument : property.value),
+      );
+    });
+  return false;
 }
 
 function collectOxcPatternReactiveAliasesInto(

@@ -44,10 +44,14 @@ let currentSpreadAttributesHelperName: string = "_renderSpreadAttributes";
 let currentSpreadPropsName: string = "_renderSpreadAttributes$props";
 let currentSpreadSelectedValueName: string = "_renderSpreadAttributes$selected";
 let currentMarkServerRenderValueHelperName: string = "_registerServerRenderValue";
+let currentMarkServerRenderThunkHelperName = "_registerServerRenderThunk";
 let currentRenderServerValueHelperName: string = "_renderServerValue";
 let currentContainsServerRenderValueHelperName: string = "_containsServerRenderValue";
 let currentServerRenderAttributeValueName: string = "_serverRenderAttributeValue";
 let currentRenderServerChildHelperName: string = "_renderServerChild";
+let currentJoinServerHtmlHelperName = "_joinServerHtml";
+let currentAppendServerHtmlHelperName = "_appendServerHtml";
+let currentPromiseAwareComposition = false;
 let currentSelectionParameterName: string = "_selectedValue";
 let currentSelectionMultipleParameterName: string = "_selectedMultiple";
 let currentOptionSelectedLocalNames: OptionSelectedLocalNames = {
@@ -138,6 +142,10 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
     ir,
     "_registerServerRenderValue",
   );
+  currentMarkServerRenderThunkHelperName = allocateNestedBindingSafeName(
+    ir,
+    "_registerServerRenderThunk",
+  );
   const renderServerValueHelperName = allocateNestedBindingSafeName(ir, "_renderServerValue");
   const isServerRenderValueHelperName = allocateNestedBindingSafeName(ir, "_isServerRenderValue");
   const readServerRenderValueHelperName = allocateNestedBindingSafeName(
@@ -153,6 +161,9 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
     "_serverRenderAttributeValue",
   );
   const renderServerChildHelperName = allocateNestedBindingSafeName(ir, "_renderServerChild");
+  currentJoinServerHtmlHelperName = allocateNestedBindingSafeName(ir, "_joinServerHtml");
+  currentAppendServerHtmlHelperName = allocateNestedBindingSafeName(ir, "_appendServerHtml");
+  currentPromiseAwareComposition = false;
   const selectionParameterName = allocateNestedBindingSafeName(ir, "_selectedValue");
   const selectionMultipleParameterName = allocateNestedBindingSafeName(ir, "_selectedMultiple");
   currentSelectionParameterName = selectionParameterName;
@@ -258,6 +269,8 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
   const urlSafeBlock =
     components.includes(urlSafeHelperName) || needsSpreadAttributesHelper ? urlSafeHelper : "";
   const needsServerRenderValue =
+    emittedServerCode.includes(renderServerChildHelperName) ||
+    emittedServerCode.includes(currentMarkServerRenderThunkHelperName) ||
     emittedServerCode.includes(markServerRenderValueHelperName) ||
     emittedServerCode.includes(renderServerValueHelperName) ||
     emittedServerCode.includes(isServerRenderValueHelperName) ||
@@ -298,7 +311,7 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
   const serverRenderValueImport =
     serverRenderValueBlock === ""
       ? ""
-      : `import { isServerRenderValue as ${isServerRenderValueHelperName}, readServerRenderValue as ${readServerRenderValueHelperName}, registerServerRenderValue as ${markServerRenderValueHelperName} } from "@reckona/mreact-shared/server-render-value-internal";`;
+      : `import { isServerRenderValue as ${isServerRenderValueHelperName}, readServerRenderValue as ${readServerRenderValueHelperName}, registerServerRenderValue as ${markServerRenderValueHelperName}, registerServerRenderThunk as ${currentMarkServerRenderThunkHelperName} } from "@reckona/mreact-shared/server-render-value-internal";`;
   // Emit batch escape import only when the helper is actually referenced
   // by the generated component code (issue 048: dead-import elimination).
   // Helper names are uniquely allocated, so a literal substring check is
@@ -328,6 +341,13 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
   code.section(spreadAttributesBlock);
   code.section(serverRenderValueBlock);
   code.section(serverChildBlock);
+  if (
+    `${components}\n${serverChildBlock}\n${serverRenderValueBlock}`.includes(
+      currentJoinServerHtmlHelperName,
+    ) ||
+    components.includes(currentAppendServerHtmlHelperName)
+  )
+    code.section(emitJoinServerHtmlHelper(currentJoinServerHtmlHelperName));
   code.section(components);
 
   return {
@@ -348,6 +368,7 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
                 "isServerRenderValue",
                 "readServerRenderValue",
                 "registerServerRenderValue",
+                "registerServerRenderThunk",
               ],
             },
           ]),
@@ -428,6 +449,9 @@ function emitComponent(
     `  const ${selectionParameterName} = arguments[0]?.[Symbol.for(${JSON.stringify(serverSelectionContextKey)})];`,
     `  const ${selectionMultipleParameterName} = arguments[0]?.[Symbol.for(${JSON.stringify(serverSelectionMultipleContextKey)})];`,
   ];
+  const promiseAware = mayRenderDeferredChildren(component.root);
+  const previousPromiseAware = currentPromiseAwareComposition;
+  currentPromiseAwareComposition = promiseAware;
   const collect = () =>
     collectHtmlStatements(
       component.root,
@@ -453,15 +477,20 @@ function emitComponent(
     currentSelectedValueCode = previousSelectedValueCode;
     currentSelectedMultipleCode = previousSelectedMultipleCode;
     currentSelectionContextActive = previousSelectionContextActive;
+    currentPromiseAwareComposition = previousPromiseAware;
   }
 
   const markerStart = stringLiteral(`<!--mreact-h:start:${encodeURIComponent(component.name)}-->`);
   const markerEnd = stringLiteral(`<!--mreact-h:end:${encodeURIComponent(component.name)}-->`);
 
   const hydrationOpenStatements =
-    options.serverHydration === true ? [`  ${outAccumulatorName} += ${markerStart};`] : [];
+    options.serverHydration === true
+      ? [`  ${emitHtmlAppend(outAccumulatorName, markerStart, promiseAware)}`]
+      : [];
   const hydrationCloseStatements =
-    options.serverHydration === true ? [`  ${outAccumulatorName} += ${markerEnd};`] : [];
+    options.serverHydration === true
+      ? [`  ${emitHtmlAppend(outAccumulatorName, markerEnd, promiseAware)}`]
+      : [];
 
   const functionKeyword = `${component.exportDefault === true ? "export default " : component.exported === false ? "" : "export "}${
     asyncComponentNames.has(component.name) ? "async " : ""
@@ -505,7 +534,7 @@ function emitHtmlExpression(
     return '""';
   }
 
-  return parts.join(" + ");
+  return joinHtmlExpressions(parts, mayRenderDeferredChildren(node));
 }
 
 /**
@@ -537,33 +566,41 @@ function collectHtmlStatements(
     if (literal === "") {
       return [];
     }
-    return [`${outVar} += ${stringLiteral(literal)};`];
+    return [emitHtmlAppend(outVar, `${stringLiteral(literal)}`)];
   }
 
   if (node.kind === "expr") {
     if (isChildrenExpressionCode(node.code)) {
       return [
-        `${outVar} += ${currentRenderServerChildHelperName}(${node.code}, ${currentSelectedValueCode ?? "undefined"}, ${currentSelectedMultipleCode ?? "undefined"});`,
+        emitHtmlAppend(
+          outVar,
+          `${currentRenderServerChildHelperName}(${node.code}, ${currentSelectedValueCode ?? "undefined"}, ${currentSelectedMultipleCode ?? "undefined"})`,
+        ),
       ];
     }
 
     if (node.renderMode === "html") {
-      return [`${outVar} += ${rawHtmlExpression(node.code)};`];
+      return [emitHtmlAppend(outVar, `${rawHtmlExpression(node.code)}`)];
     }
 
     if (node.renderMode === "react-node" && reactNodeRenderHelperName !== undefined) {
-      return [`${outVar} += ${reactNodeRenderHelperName}(() => (${node.code}));`];
+      return [emitHtmlAppend(outVar, `${reactNodeRenderHelperName}(() => (${node.code}))`)];
     }
 
     if (node.renderMode === "compat-child" && currentCompatChildHelperName !== undefined) {
-      return [`${outVar} += ${currentCompatChildHelperName}(${node.code});`];
+      return [emitHtmlAppend(outVar, `${currentCompatChildHelperName}(${node.code})`)];
     }
 
     if (node.renderMode === "server-render-value") {
-      return [`${outVar} += ${currentRenderServerValueHelperName}(${node.code});`];
+      return [
+        emitHtmlAppend(
+          outVar,
+          `${currentRenderServerValueHelperName}(${node.code}, 0, ${currentSelectedValueCode ?? "undefined"}, ${currentSelectedMultipleCode ?? "undefined"})`,
+        ),
+      ];
     }
 
-    return [`${outVar} += ${escapeHelperName}(${node.code});`];
+    return [emitHtmlAppend(outVar, `${escapeHelperName}(${node.code})`)];
   }
 
   if (node.kind === "conditional") {
@@ -656,7 +693,7 @@ function collectHtmlStatements(
         reactNodeRenderHelperName,
       );
       const mapped = `(${node.itemsCode}).map(${renderer})`;
-      return [`${outVar} += (await Promise.all(${mapped})).join("");`];
+      return [emitHtmlAppend(outVar, `(await Promise.all(${mapped})).join("")`)];
     }
 
     // Sync list — inline for-loop appending to the caller's accumulator.
@@ -716,7 +753,7 @@ function collectHtmlStatements(
   if (node.kind === "component") {
     if (node.name === "Suspense") {
       return [
-        `${outVar} += "<!--$-->";`,
+        emitHtmlAppend(outVar, `"<!--$-->"`),
         ...node.children.flatMap((child) =>
           collectHtmlStatements(
             child,
@@ -730,7 +767,7 @@ function collectHtmlStatements(
             reactNodeRenderHelperName,
           ),
         ),
-        `${outVar} += "<!--/$-->";`,
+        emitHtmlAppend(outVar, `"<!--/$-->"`),
       ];
     }
 
@@ -740,7 +777,10 @@ function collectHtmlStatements(
       // helper contract.
       const valueCode = findComponentPropCode(node.props, "value") ?? "undefined";
       return [
-        `${outVar} += ${contextProviderHelperName}(${node.name}, ${valueCode}, () => ${emitHtmlExpressionFromChildren(node.children, escapeHelperName, escapeBatchHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)});`,
+        emitHtmlAppend(
+          outVar,
+          `${contextProviderHelperName}(${node.name}, ${valueCode}, () => ${emitHtmlExpressionFromChildren(node.children, escapeHelperName, escapeBatchHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)})`,
+        ),
       ];
     }
 
@@ -750,7 +790,10 @@ function collectHtmlStatements(
       if (renderProp !== undefined) {
         const valueName = renderProp.valueName ?? "_value";
         return [
-          `${outVar} += ${contextConsumerHelperName}(${node.name}, (${valueName}) => ${emitHtmlExpressionFromChildren(renderProp.children, escapeHelperName, escapeBatchHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)});`,
+          emitHtmlAppend(
+            outVar,
+            `${contextConsumerHelperName}(${node.name}, (${valueName}) => ${emitHtmlExpressionFromChildren(renderProp.children, escapeHelperName, escapeBatchHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)})`,
+          ),
         ];
       }
     }
@@ -815,41 +858,50 @@ function collectHtmlStatements(
             )
           : undefined;
         return [
-          `${outVar} += ${helperName}(${stringLiteral(node.name)}, ${boundaryProps}, ${fallbackHtml}${originalChildrenHtml === undefined ? "" : `, true, ${originalChildrenHtml}, ${node.children.length > 0}`});`,
+          emitHtmlAppend(
+            outVar,
+            `${helperName}(${stringLiteral(node.name)}, ${boundaryProps}, ${fallbackHtml}${originalChildrenHtml === undefined ? "" : `, true, ${originalChildrenHtml}, ${node.children.length > 0}`})`,
+          ),
         ];
       }
 
-      return [`${outVar} += ${stringLiteral(clientBoundaryPlaceholder(node))};`];
+      return [emitHtmlAppend(outVar, `${stringLiteral(clientBoundaryPlaceholder(node))}`)];
     }
 
     if (node.runtime === "compat" && reactNodeRenderHelperName !== undefined) {
       return [
-        `${outVar} += ${reactNodeRenderHelperName}(${node.name}, ${emitCompatRuntimePropsObject(
-          node.props,
-          node.children,
-          currentSelectedValueCode,
-          currentSelectedMultipleCode,
-        )});`,
+        emitHtmlAppend(
+          outVar,
+          `${reactNodeRenderHelperName}(${node.name}, ${emitCompatRuntimePropsObject(
+            node.props,
+            node.children,
+            currentSelectedValueCode,
+            currentSelectedMultipleCode,
+          )})`,
+        ),
       ];
     }
 
     return [
-      `${outVar} += ${emitComponentCallExpression(
-        node.name,
-        emitPropsObject(
-          node.props,
-          node.children,
-          escapeHelperName,
-          escapeBatchHelperName,
-          asyncComponentNames,
-          dynamicAttributes,
-          contextProviderHelperName,
-          contextConsumerHelperName,
-          reactNodeRenderHelperName,
+      emitHtmlAppend(
+        outVar,
+        `${emitComponentCallExpression(
           node.name,
-        ),
-        asyncComponentNames,
-      )};`,
+          emitPropsObject(
+            node.props,
+            node.children,
+            escapeHelperName,
+            escapeBatchHelperName,
+            asyncComponentNames,
+            dynamicAttributes,
+            contextProviderHelperName,
+            contextConsumerHelperName,
+            reactNodeRenderHelperName,
+            node.name,
+          ),
+          asyncComponentNames,
+        )}`,
+      ),
     ];
   }
 
@@ -861,7 +913,7 @@ function collectHtmlStatements(
   const statements: string[] = [];
   if (node.tagName === "textarea") {
     const attributeScan = scanElementAttributes(node.tagName, node.attributes);
-    statements.push(`${outVar} += ${stringLiteral("<textarea")};`);
+    statements.push(emitHtmlAppend(outVar, `${stringLiteral("<textarea")}`));
     for (const attributePart of collectElementAttributeParts(
       node.tagName,
       node.attributes,
@@ -870,9 +922,9 @@ function collectHtmlStatements(
       dynamicAttributes,
       attributeScan,
     )) {
-      statements.push(`${outVar} += ${attributePart};`);
+      statements.push(emitHtmlAppend(outVar, `${attributePart}`));
     }
-    statements.push(`${outVar} += ">";`);
+    statements.push(emitHtmlAppend(outVar, `">"`));
     for (const valuePart of collectTextareaValueParts(
       node,
       escapeHelperName,
@@ -884,26 +936,29 @@ function collectHtmlStatements(
       reactNodeRenderHelperName,
       attributeScan,
     )) {
-      statements.push(`${outVar} += ${valuePart};`);
+      statements.push(emitHtmlAppend(outVar, `${valuePart}`));
     }
-    statements.push(`${outVar} += "</textarea>";`);
+    statements.push(emitHtmlAppend(outVar, `"</textarea>"`));
     return statements;
   }
 
   const attributeScan = scanElementAttributes(node.tagName, node.attributes);
   if (hasDynamicSelectSelectionAttribute(node)) {
     return [
-      `${outVar} += ${emitBoundSelectExpression(
-        node,
-        escapeHelperName,
-        escapeBatchHelperName,
-        asyncComponentNames,
-        dynamicAttributes,
-        contextProviderHelperName,
-        contextConsumerHelperName,
-        reactNodeRenderHelperName,
-        attributeScan,
-      )};`,
+      emitHtmlAppend(
+        outVar,
+        `${emitBoundSelectExpression(
+          node,
+          escapeHelperName,
+          escapeBatchHelperName,
+          asyncComponentNames,
+          dynamicAttributes,
+          contextProviderHelperName,
+          contextConsumerHelperName,
+          reactNodeRenderHelperName,
+          attributeScan,
+        )}`,
+      ),
     ];
   }
   if (
@@ -924,31 +979,34 @@ function collectHtmlStatements(
       capturedOptionText?.valueCode,
     );
     statements.push(
-      `${outVar} += ${emitMergedSpreadElementExpression(
-        node.tagName,
-        node.attributes,
-        attributeScan,
-        withSelectedValueCode(
-          selectedValueCodeForChildren(node, attributeScan),
-          selectedMultipleCodeForChildren(node, attributeScan),
-          () =>
-            capturedOptionText === undefined
-              ? emitHtmlExpressionFromChildren(
-                  node.children,
-                  escapeHelperName,
-                  escapeBatchHelperName,
-                  asyncComponentNames,
-                  dynamicAttributes,
-                  contextProviderHelperName,
-                  contextConsumerHelperName,
-                  reactNodeRenderHelperName,
-                )
-              : capturedOptionText.bodyCode,
-        ),
-        selectedAttributePart,
-        containsAsyncServerOperationInChildren(node.children, asyncComponentNames),
-        capturedOptionText,
-      )};`,
+      emitHtmlAppend(
+        outVar,
+        `${emitMergedSpreadElementExpression(
+          node.tagName,
+          node.attributes,
+          attributeScan,
+          withSelectedValueCode(
+            selectedValueCodeForChildren(node, attributeScan),
+            selectedMultipleCodeForChildren(node, attributeScan),
+            () =>
+              capturedOptionText === undefined
+                ? emitHtmlExpressionFromChildren(
+                    node.children,
+                    escapeHelperName,
+                    escapeBatchHelperName,
+                    asyncComponentNames,
+                    dynamicAttributes,
+                    contextProviderHelperName,
+                    contextConsumerHelperName,
+                    reactNodeRenderHelperName,
+                  )
+                : capturedOptionText.bodyCode,
+          ),
+          selectedAttributePart,
+          containsAsyncServerOperationInChildren(node.children, asyncComponentNames),
+          capturedOptionText,
+        )}`,
+      ),
     );
     return statements;
   }
@@ -956,18 +1014,21 @@ function collectHtmlStatements(
   const dynamicOptionValueAttribute = findDynamicOptionValueAttribute(node);
   if (dynamicOptionValueAttribute !== undefined && currentSelectedValueCode !== undefined) {
     return [
-      `${outVar} += ${emitBoundOptionValueExpression(
-        node,
-        escapeHelperName,
-        escapeBatchHelperName,
-        asyncComponentNames,
-        dynamicAttributes,
-        contextProviderHelperName,
-        contextConsumerHelperName,
-        reactNodeRenderHelperName,
-        attributeScan,
-        dynamicOptionValueAttribute,
-      )};`,
+      emitHtmlAppend(
+        outVar,
+        `${emitBoundOptionValueExpression(
+          node,
+          escapeHelperName,
+          escapeBatchHelperName,
+          asyncComponentNames,
+          dynamicAttributes,
+          contextProviderHelperName,
+          contextConsumerHelperName,
+          reactNodeRenderHelperName,
+          attributeScan,
+          dynamicOptionValueAttribute,
+        )}`,
+      ),
     ];
   }
 
@@ -979,10 +1040,10 @@ function collectHtmlStatements(
     attributeScan,
   );
   if (capturedOptionExpression !== undefined) {
-    return [`${outVar} += ${capturedOptionExpression};`];
+    return [emitHtmlAppend(outVar, `${capturedOptionExpression}`)];
   }
 
-  statements.push(`${outVar} += ${stringLiteral(`<${node.tagName}`)};`);
+  statements.push(emitHtmlAppend(outVar, `${stringLiteral(`<${node.tagName}`)}`));
 
   for (const attributePart of collectElementAttributeParts(
     node.tagName,
@@ -992,14 +1053,14 @@ function collectHtmlStatements(
     dynamicAttributes,
     attributeScan,
   )) {
-    statements.push(`${outVar} += ${attributePart};`);
+    statements.push(emitHtmlAppend(outVar, `${attributePart}`));
   }
   const selectedAttributePart = collectOptionSelectedAttributePart(node);
   if (selectedAttributePart !== undefined) {
-    statements.push(`${outVar} += ${selectedAttributePart};`);
+    statements.push(emitHtmlAppend(outVar, `${selectedAttributePart}`));
   }
 
-  statements.push(`${outVar} += ">";`);
+  statements.push(emitHtmlAppend(outVar, `">"`));
 
   if (isVoidHtmlElement(node.tagName)) {
     return statements;
@@ -1022,8 +1083,8 @@ function collectHtmlStatements(
     ),
   );
   if (dangerousInnerHtml !== undefined) {
-    statements.push(`${outVar} += ${dangerousInnerHtml};`);
-    statements.push(`${outVar} += ${stringLiteral(`</${node.tagName}>`)};`);
+    statements.push(emitHtmlAppend(outVar, `${dangerousInnerHtml}`));
+    statements.push(emitHtmlAppend(outVar, `${stringLiteral(`</${node.tagName}>`)}`));
     return statements;
   }
 
@@ -1037,7 +1098,7 @@ function collectHtmlStatements(
     childrenExpression !== undefined &&
     !(node.tagName === "select" && attributeScan.formValueAttributeCode !== undefined)
   ) {
-    statements.push(`${outVar} += ${childrenExpression};`);
+    statements.push(emitHtmlAppend(outVar, `${childrenExpression}`));
   } else {
     withSelectedValueCode(childSelectedValueCode, childSelectedMultipleCode, () => {
       for (const child of node.children) {
@@ -1058,7 +1119,7 @@ function collectHtmlStatements(
     });
   }
 
-  statements.push(`${outVar} += ${stringLiteral(`</${node.tagName}>`)};`);
+  statements.push(emitHtmlAppend(outVar, `${stringLiteral(`</${node.tagName}>`)}`));
 
   return statements;
 }
@@ -1132,7 +1193,7 @@ function emitBoundSelectExpression(
   const innerHtml =
     emitDangerouslySetInnerHtmlExpression(node.attributes, childrenHtml) ?? childrenHtml;
   const isAsync = containsAsyncServerOperationInChildren(node.children, asyncComponentNames);
-  const invocation = `${isAsync ? "(async () =>" : "(() =>"} { ${attributeSetup} const ${selectValueName} = (${selectionCode}); return ${stringLiteral("<select")} + ${currentOptionSelectedLocalNames.attributes} + ">" + (${innerHtml}) + ${stringLiteral("</select>")}; })()`;
+  const invocation = `${isAsync ? "(async () =>" : "(() =>"} { ${attributeSetup} const ${selectValueName} = (${selectionCode}); return ${joinHtmlExpressions([`${stringLiteral("<select")} + ${currentOptionSelectedLocalNames.attributes} + ">"`, `(${innerHtml})`, stringLiteral("</select>")])}; })()`;
   return isAsync ? `(await ${invocation})` : invocation;
 }
 
@@ -1262,7 +1323,7 @@ function emitBoundOptionValueExpression(
     );
   const optionTextDeclaration = capturedOptionText?.declaration ?? "";
   const isAsync = containsAsyncServerOperationInChildren(node.children, asyncComponentNames);
-  const invocation = `${isAsync ? "(async () =>" : "(() =>"} { let ${boundValueName}; const ${currentOptionSelectedLocalNames.attributes} = ${attributesCode}; ${boundValueInitialization} ${optionTextDeclaration} return ${stringLiteral("<option")} + ${currentOptionSelectedLocalNames.attributes} + (${selectedAttribute}) + ">" + (${innerHtml}) + ${stringLiteral("</option>")}; })()`;
+  const invocation = `${isAsync ? "(async () =>" : "(() =>"} { let ${boundValueName}; const ${currentOptionSelectedLocalNames.attributes} = ${attributesCode}; ${boundValueInitialization} ${optionTextDeclaration} return ${joinHtmlExpressions([stringLiteral("<option"), currentOptionSelectedLocalNames.attributes, `(${selectedAttribute})`, stringLiteral(">"), `(${innerHtml})`, stringLiteral("</option>")])}; })()`;
   return isAsync ? `(await ${invocation})` : invocation;
 }
 
@@ -1332,7 +1393,9 @@ function collectHtmlParts(
     }
 
     if (node.renderMode === "server-render-value") {
-      return [`${currentRenderServerValueHelperName}(${node.code})`];
+      return [
+        `${currentRenderServerValueHelperName}(${node.code}, 0, ${currentSelectedValueCode ?? "undefined"}, ${currentSelectedMultipleCode ?? "undefined"})`,
+      ];
     }
 
     return [`${escapeHelperName}(${node.code})`];
@@ -1788,7 +1851,7 @@ function emitMergedSpreadElementExpression(
     capturedOptionText === undefined ? "" : capturedOptionText.declaration;
   const innerHtml = `Object.prototype.hasOwnProperty.call(${propsName}, "dangerouslySetInnerHTML") ? ${emitExactDangerouslySetInnerHtmlExpression(`${propsName}.dangerouslySetInnerHTML`)} : (${fallbackCode})`;
 
-  const invocation = `${asyncFallback ? "(async () =>" : "(() =>"} { const ${propsName} = {}; ${assignments.join(" ")} ${selectedValueDeclaration}${optionTextDeclaration} return ${opening} + (${innerHtml}) + ${stringLiteral(`</${tagName}>`)}; })()`;
+  const invocation = `${asyncFallback ? "(async () =>" : "(() =>"} { const ${propsName} = {}; ${assignments.join(" ")} ${selectedValueDeclaration}${optionTextDeclaration} return ${joinHtmlExpressions([opening, `(${innerHtml})`, stringLiteral(`</${tagName}>`)])}; })()`;
   return asyncFallback ? `(await ${invocation})` : invocation;
 }
 
@@ -2557,9 +2620,13 @@ function emitTextSeparatedSimpleChildrenExpression(
     return useBatch
       ? `_escaped[${index}]`
       : expressionChild.renderMode === "server-render-value"
-        ? `${currentRenderServerValueHelperName}(${expressionChild.code})`
+        ? `${currentRenderServerValueHelperName}(${expressionChild.code}, 0, ${currentSelectedValueCode ?? "undefined"}, ${currentSelectedMultipleCode ?? "undefined"})`
         : `${escapeHelperName}(${expressionChild.code})`;
   });
+  if (dynamicChildren.some((child) => child.renderMode === "server-render-value")) {
+    if (pieces.length === 1) return pieces[0];
+    return `${currentJoinServerHtmlHelperName}([${pieces.join(", ")}], "<!-- -->")`;
+  }
   const appendStatements = pieces.map(
     (piece) =>
       `{ const _text = ${piece}; if (_text !== "") { if (_hasText) _textOut += "<!-- -->"; _textOut += _text; _hasText = true; } }`,
@@ -2629,7 +2696,7 @@ function emitSyncListIife(
       ? ""
       : ` ${node.bodyStatements.join(" ")}`;
 
-  return `(() => { let _o = ""; const _arr = (${node.itemsCode}); for (let _i = 0, _len = _arr.length; _i < _len; _i++) { ${itemBinding}${indexBinding}${arrayBinding}${bodyStatements} _o += ${valueExpression}; } return _o; })()`;
+  return `(() => { let _o = ""; const _arr = (${node.itemsCode}); for (let _i = 0, _len = _arr.length; _i < _len; _i++) { ${itemBinding}${indexBinding}${arrayBinding}${bodyStatements} ${currentPromiseAwareComposition ? `_o = ${currentJoinServerHtmlHelperName}([_o, ${valueExpression}]);` : `_o += ${valueExpression};`} } return _o; })()`;
 }
 
 function emitListRenderer(
@@ -2729,7 +2796,6 @@ function emitPropsObject(
       const shouldDeferChildren =
         childrenExpressionOverride === undefined &&
         !isRouterLinkComponentName(componentName) &&
-        !containsAsyncServerOperationInChildren(children, asyncComponentNames) &&
         children.some(needsLazyServerChildren);
       const selectionAwareChildren = shouldDeferChildren;
       const childrenExpression =
@@ -2761,10 +2827,8 @@ function emitPropsObject(
               reactNodeRenderHelperName,
             ));
       if (selectionAwareChildren) {
-        const childRenderValue = `(${currentSelectionParameterName}, ${currentSelectionMultipleParameterName}) => (${childrenExpression})`;
-        entries.push(
-          `children: Object.defineProperty(${childRenderValue}, Symbol.for(${JSON.stringify(serverSelectionRenderValueKey)}), { value: true })`,
-        );
+        const childRenderValue = `${containsAsyncServerOperationInChildren(children, asyncComponentNames) ? "async " : ""}(${currentSelectionParameterName}, ${currentSelectionMultipleParameterName}) => (${childrenExpression})`;
+        entries.push(`children: ${currentMarkServerRenderThunkHelperName}(${childRenderValue})`);
       } else {
         entries.push(
           `children: ${isRouterLinkComponentName(componentName) ? `${componentName}.trustedHtml(${childrenExpression})` : childrenExpression}`,
@@ -2823,6 +2887,59 @@ function isChildrenExpressionCode(code: string): boolean {
   );
 }
 
+function mayRenderDeferredChildren(node: JsxNodeIr): boolean {
+  if (node.kind === "component")
+    return !isRouterLinkComponentName(node.name) || node.children.some(mayRenderDeferredChildren);
+  if (node.kind === "expr")
+    return isChildrenExpressionCode(node.code) || node.renderMode === "server-render-value";
+  if (node.kind === "conditional")
+    return [...node.whenTrue, ...node.whenFalse].some(mayRenderDeferredChildren);
+  if (
+    node.kind === "element" ||
+    node.kind === "fragment" ||
+    node.kind === "list" ||
+    node.kind === "async-boundary"
+  )
+    return node.children.some(mayRenderDeferredChildren);
+  return false;
+}
+
+function emitHtmlAppend(
+  outVar: string,
+  value: string,
+  promiseAware = currentPromiseAwareComposition,
+): string {
+  return promiseAware
+    ? `${outVar} = ${currentAppendServerHtmlHelperName}(${outVar}, ${value});`
+    : `${outVar} += ${value};`;
+}
+
+function joinHtmlExpressions(
+  parts: string[],
+  promiseAware = currentPromiseAwareComposition,
+): string {
+  if (parts.length === 1) return parts[0] ?? '""';
+  if (promiseAware && parts.length <= 3)
+    return parts.reduce((left, right) => `${currentAppendServerHtmlHelperName}(${left}, ${right})`);
+  return promiseAware
+    ? `${currentJoinServerHtmlHelperName}([${parts.join(", ")}])`
+    : parts.join(" + ");
+}
+
+function emitJoinServerHtmlHelper(name: string): string {
+  return [
+    `function ${currentAppendServerHtmlHelperName}(left, right) {`,
+    `  if (typeof left === "string" && typeof right === "string") return left + right;`,
+    `  if ((left != null && typeof left.then === "function") || (right != null && typeof right.then === "function")) return Promise.all([left, right]).then((parts) => parts.join(""));`,
+    `  return left + right;`,
+    `}`,
+    `function ${name}(parts, separator = "") {`,
+    `  if (parts.some((part) => part != null && typeof part.then === "function")) return Promise.all(parts).then((resolved) => ${name}(resolved, separator));`,
+    `  return (separator === "" ? parts : parts.filter((part) => part !== "")).join(separator);`,
+    `}`,
+  ].join("\n");
+}
+
 function emitServerChildHelper(
   name: string,
   escapeHelperName: string,
@@ -2835,20 +2952,17 @@ function emitServerChildHelper(
     readServerRenderValueHelperName === undefined ||
     renderServerValueHelperName === undefined
       ? undefined
-      : `if (${isServerRenderValueHelperName}(value)) return ${renderServerValueHelperName}(value);`;
-  const renderArray =
-    renderServerValueHelperName === undefined
-      ? `if (Array.isArray(value)) return value.join("");`
-      : `if (Array.isArray(value)) return ${renderServerValueHelperName}(value);`;
+      : `if (${isServerRenderValueHelperName}(value)) return ${renderServerValueHelperName}(value, 0, arguments[1], arguments[2]);`;
+  const renderArray = `if (Array.isArray(value)) return ${renderServerValueHelperName}(value, 0, arguments[1], arguments[2]);`;
   return [
     `function ${name}(value) {`,
     `  if (value == null || typeof value === "boolean") return "";`,
+    ...(renderRegisteredValue === undefined ? [] : [`  ${renderRegisteredValue}`]),
     `  if (typeof value === "function") {`,
     `    if (value[Symbol.for(${JSON.stringify(serverSelectionRenderValueKey)})] === true) return value(arguments[1], arguments[2]);`,
     `    return value();`,
     `  }`,
     `  ${renderArray}`,
-    ...(renderRegisteredValue === undefined ? [] : [`  ${renderRegisteredValue}`]),
     `  return ${escapeHelperName}(value);`,
     `}`,
   ].join("\n");
@@ -3133,19 +3247,20 @@ function emitServerRenderValueHelpers(
     `  }`,
     `  return false;`,
     `}`,
-    `function ${renderHelperName}(value, depth = 0) {`,
+    `function ${renderHelperName}(value, depth = 0, selectedValue, selectedMultiple) {`,
     `  if (depth > 256) throw new Error("mreact render value is too deep: exceeded 256 levels");`,
     `  if (value == null || typeof value === "boolean") return "";`,
     `  if (Array.isArray(value)) {`,
-    `    let rendered = "";`,
-    `    for (let index = 0; index < value.length; index += 1) {`,
-    `      rendered += ${renderHelperName}(value[index], depth + 1);`,
-    `    }`,
+    `    const rendered = [];`,
+    `    for (let index = 0; index < value.length; index += 1) rendered.push(${renderHelperName}(value[index], depth + 1, selectedValue, selectedMultiple));`,
+    `    return ${currentJoinServerHtmlHelperName}(rendered);`,
+    `  }`,
+    `  if (${isHelperName}(value)) {`,
+    `    const rendered = ${readHelperName}(value);`,
+    `    if (typeof rendered === "function" && rendered === value) return rendered(selectedValue, selectedMultiple);`,
     `    return rendered;`,
     `  }`,
-    `  return ${isHelperName}(value)`,
-    `    ? String(${readHelperName}(value))`,
-    `    : ${escapeHelperName}(value);`,
+    `  return ${escapeHelperName}(value);`,
     `}`,
   ].join("\n");
 }

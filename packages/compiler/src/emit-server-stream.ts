@@ -68,6 +68,7 @@ let currentCompatRenderToStringHelperName: string = "_renderCompatToString";
 let currentCompatChildHelperName: string | undefined;
 let currentPropChildrenCollectState: CollectHtmlState | undefined;
 let currentMarkServerRenderValueHelperName: string = "_registerServerRenderValue";
+let currentMarkServerRenderThunkHelperName = "_registerServerRenderThunk";
 let currentRenderServerValueHelperName: string = "_renderServerValue";
 let currentContainsServerRenderValueHelperName: string = "_containsServerRenderValue";
 let currentServerRenderValueSinkName: string = "$sink";
@@ -135,6 +136,10 @@ export function emitServerStream(
   const markServerRenderValueHelperName = allocateNestedBindingSafeName(
     ir,
     "_registerServerRenderValue",
+  );
+  currentMarkServerRenderThunkHelperName = allocateNestedBindingSafeName(
+    ir,
+    "_registerServerRenderThunk",
   );
   const renderServerValueHelperName = allocateNestedBindingSafeName(ir, "_renderServerValue");
   const isServerRenderValueHelperName = allocateNestedBindingSafeName(ir, "_isServerRenderValue");
@@ -302,6 +307,8 @@ export function emitServerStream(
   const urlSafeBlock =
     components.includes(urlSafeHelperName) || needsSpreadAttributesHelper ? urlSafeHelper : "";
   const needsServerRenderValue =
+    components.includes(streamNodeHelperName) ||
+    emittedServerCode.includes(currentMarkServerRenderThunkHelperName) ||
     emittedServerCode.includes(markServerRenderValueHelperName) ||
     emittedServerCode.includes(renderServerValueHelperName) ||
     emittedServerCode.includes(isServerRenderValueHelperName) ||
@@ -322,7 +329,11 @@ export function emitServerStream(
       )
     : "";
   const streamNodeBlock = components.includes(streamNodeHelperName)
-    ? emitStreamNodeHelper(streamNodeHelperName)
+    ? emitStreamNodeHelper(
+        streamNodeHelperName,
+        isServerRenderValueHelperName,
+        renderServerValueHelperName,
+      )
     : "";
   const serverRenderValueBlock = needsServerRenderValue
     ? emitServerRenderValueHelpers(
@@ -335,7 +346,7 @@ export function emitServerStream(
   const serverRenderValueImport =
     serverRenderValueBlock === ""
       ? ""
-      : `import { isServerRenderValue as ${isServerRenderValueHelperName}, readServerRenderValue as ${readServerRenderValueHelperName}, registerServerRenderValue as ${markServerRenderValueHelperName} } from "@reckona/mreact-shared/server-render-value-internal";`;
+      : `import { isServerRenderValue as ${isServerRenderValueHelperName}, readServerRenderValue as ${readServerRenderValueHelperName}, registerServerRenderValue as ${markServerRenderValueHelperName}, registerServerRenderThunk as ${currentMarkServerRenderThunkHelperName} } from "@reckona/mreact-shared/server-render-value-internal";`;
   const code = createCodeBuilder();
   code.section(serverRenderValueImport);
   code.section(importsBlock);
@@ -360,6 +371,7 @@ export function emitServerStream(
                 "isServerRenderValue",
                 "readServerRenderValue",
                 "registerServerRenderValue",
+                "registerServerRenderThunk",
               ],
             },
           ]),
@@ -708,15 +720,20 @@ function emitSpreadAttributesHelper(
   ].join("\n");
 }
 
-function emitStreamNodeHelper(name: string): string {
+function emitStreamNodeHelper(
+  name: string,
+  isRenderValueName: string,
+  renderValueName: string,
+): string {
   return [
     `async function ${name}($sink, value, escapeHtml, selectedValue, selectedMultiple) {`,
     `  if (value == null || value === false) return;`,
+    `  if (${isRenderValueName}(value)) { await ${renderValueName}($sink, value, escapeHtml, 0, selectedValue, selectedMultiple); return; }`,
     `  if (typeof value === "function") {`,
     `    if (value[Symbol.for(${JSON.stringify(serverSelectionRenderValueKey)})] === true) { await value($sink, selectedValue, selectedMultiple); return; }`,
     `    await value($sink); return;`,
     `  }`,
-    `  if (Array.isArray(value)) { for (const item of value) await ${name}($sink, item, escapeHtml); return; }`,
+    `  if (Array.isArray(value)) { await ${renderValueName}($sink, value, escapeHtml, 0, selectedValue, selectedMultiple); return; }`,
     `  if (typeof value === "string") { $sink.append(value); return; }`,
     `  $sink.append(escapeHtml(value === true ? "" : value));`,
     `}`,
@@ -1504,7 +1521,7 @@ function collectHtmlParts(
       return [
         {
           kind: "stream-node",
-          code: `async (${currentServerRenderValueSinkName}) => { await ${currentRenderServerValueHelperName}(${currentServerRenderValueSinkName}, ${node.code}, ${escapeHelperName}); }`,
+          code: `async (${currentServerRenderValueSinkName}) => { await ${currentRenderServerValueHelperName}(${currentServerRenderValueSinkName}, ${node.code}, ${escapeHelperName}, 0, ${state.selectedValueCode ?? currentSelectionParameterName ?? "undefined"}, ${state.selectedMultipleCode ?? currentSelectionMultipleParameterName ?? "undefined"}); }`,
           escapeHelperName,
         },
       ];
@@ -3474,7 +3491,7 @@ function collectTextSeparatedSimpleChildrenParts(
       if (expressionChild.renderMode !== "server-render-value") {
         return `const _text = ${escapeHelperName}(${expressionChild.code}); if (_text !== "") { if (_hasText) ${sinkName}.append("<!-- -->"); ${sinkName}.append(_text); _hasText = true; }`;
       }
-      return `let _text = ""; const _tasks = []; const _capture = { __mreactForceInOrder: true, append(chunk) { _text += chunk; }, defer(task) { _tasks.push(Promise.resolve(task)); } }; await ${currentRenderServerValueHelperName}(_capture, ${expressionChild.code}, ${escapeHelperName}); while (_tasks.length > 0) await Promise.all(_tasks.splice(0)); if (_text !== "") { if (_hasText) ${sinkName}.append("<!-- -->"); ${sinkName}.append(_text); _hasText = true; }`;
+      return `let _text = ""; const _tasks = []; const _capture = { __mreactForceInOrder: true, append(chunk) { _text += chunk; }, defer(task) { _tasks.push(Promise.resolve(task)); } }; await ${currentRenderServerValueHelperName}(_capture, ${expressionChild.code}, ${escapeHelperName}, 0, ${currentPropChildrenCollectState?.selectedValueCode ?? currentSelectionParameterName ?? "undefined"}, ${currentPropChildrenCollectState?.selectedMultipleCode ?? currentSelectionMultipleParameterName ?? "undefined"}); while (_tasks.length > 0) await Promise.all(_tasks.splice(0)); if (_text !== "") { if (_hasText) ${sinkName}.append("<!-- -->"); ${sinkName}.append(_text); _hasText = true; }`;
     });
     return [
       {
@@ -4143,7 +4160,7 @@ function emitPropsObject(
         );
       entries.push(
         selectionAwareChildren
-          ? `children: Object.defineProperty(${childrenExpression}, Symbol.for(${JSON.stringify(serverSelectionRenderValueKey)}), { value: true })`
+          ? `children: ${currentMarkServerRenderThunkHelperName}(${childrenExpression})`
           : `children: ${isRouterLinkComponentName(componentName) ? `${componentName}.trustedHtml(${childrenExpression})` : childrenExpression}`,
       );
     }
@@ -4358,18 +4375,21 @@ function emitServerRenderValueHelpers(
     `  }`,
     `  return false;`,
     `}`,
-    `async function ${renderHelperName}($sink, value, escapeHtml, depth = 0) {`,
+    `async function ${renderHelperName}($sink, value, escapeHtml, depth = 0, selectedValue, selectedMultiple) {`,
     `  if (depth > 256) throw new Error("mreact render value is too deep: exceeded 256 levels");`,
     `  if (value == null || typeof value === "boolean") return;`,
     `  if (Array.isArray(value)) {`,
     `    for (let index = 0; index < value.length; index += 1) {`,
-    `      await ${renderHelperName}($sink, value[index], escapeHtml, depth + 1);`,
+    `      await ${renderHelperName}($sink, value[index], escapeHtml, depth + 1, selectedValue, selectedMultiple);`,
     `    }`,
     `    return;`,
     `  }`,
     `  if (${isHelperName}(value)) {`,
     `    const rendered = ${readHelperName}(value);`,
-    `    if (typeof rendered === "function") await rendered($sink);`,
+    `    if (typeof rendered === "function") {`,
+    `      if (rendered === value) await rendered($sink, selectedValue, selectedMultiple);`,
+    `      else await rendered($sink);`,
+    `    }`,
     `    else $sink.append(String(rendered));`,
     `    return;`,
     `  }`,

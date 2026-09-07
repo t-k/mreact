@@ -26,3 +26,9 @@ export function isServerRenderValue(value: unknown): boolean {
     serverRenderValues.has(value)
   );
 }
+
+/** @internal A self payload identifies a selection-aware compiler thunk without a public brand. */
+export function registerServerRenderThunk<T extends (...args: never[]) => unknown>(render: T): T {
+  serverRenderValues.set(render, render);
+  return render;
+}

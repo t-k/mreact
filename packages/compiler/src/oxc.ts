@@ -1917,6 +1917,7 @@ function analyzeOxcFunctionLikeComponent(
       ? (formatOxcUntrackedReactiveAliasDeclaration(
           code,
           bodyStatement,
+          reactiveAliasBindings,
           compilerOwnedReactiveAliasBindings,
         ) ?? formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx))
       : formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx);

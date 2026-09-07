@@ -48,6 +48,7 @@ import {
   isServerRenderValue,
   readServerRenderValue,
   registerServerRenderValue,
+  registerServerRenderThunk,
 } from "../../shared/src/server-render-value-internal.js";
 import { Link } from "../../router/src/link.js";
 import {
@@ -139,13 +140,19 @@ export function runServerComponent(
   return component(props);
 }
 
-export function compileServerModule(code: string): Record<string, unknown> {
+export function compileServerModule(
+  code: string,
+  imports: Record<string, unknown> = {},
+): Record<string, unknown> {
   const exports = extractFunctionExports(code);
   const runnableCode = stripFunctionExports(stripImports(code));
   const returnEntries = exports
     .map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`)
     .join(", ");
-  const runtimeEntries = extractServerRenderValueRuntimeEntries(code);
+  const runtimeEntries = [
+    ...extractServerRenderValueRuntimeEntries(code),
+    ...Object.entries(imports).map(([localName, value]) => ({ localName, value })),
+  ];
   const module = new Function(
     ...runtimeEntries.map((entry) => entry.localName),
     `${runnableCode}\nreturn { ${returnEntries} };`,
@@ -306,7 +313,10 @@ function compileCompatServerModule(code: string): CompatComponentExports {
   )(...runtimeEntries.map((entry) => entry.value)) as CompatComponentExports;
 }
 
-function compileServerStreamModule(code: string): StreamComponentExports {
+export function compileServerStreamModule(
+  code: string,
+  imports: Record<string, unknown> = {},
+): StreamComponentExports {
   const exports = extractFunctionExports(code);
   const runnableCode = stripImports(code)
     .replace(/export default async function ([A-Za-z_$][\w$]*)\s*\(/g, "async function $1(")
@@ -318,6 +328,7 @@ function compileServerStreamModule(code: string): StreamComponentExports {
     ...extractReactCompatRuntimeEntries(code),
     ...extractNativeEscapeRuntimeEntries(code),
     ...extractServerRenderValueRuntimeEntries(code),
+    ...Object.entries(imports).map(([localName, value]) => ({ localName, value })),
   ];
   const returnEntries = exports
     .map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`)
@@ -343,7 +354,7 @@ function extractServerRenderValueRuntimeEntries(
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>isServerRenderValue|readServerRenderValue|registerServerRenderValue) as (?<localName>[A-Za-z_$][\w$]*)$/,
+      /^(?<importedName>isServerRenderValue|readServerRenderValue|registerServerRenderValue|registerServerRenderThunk) as (?<localName>[A-Za-z_$][\w$]*)$/,
     );
 
     if (match?.groups === undefined) {
@@ -357,7 +368,9 @@ function extractServerRenderValueRuntimeEntries(
           ? isServerRenderValue
           : match.groups.importedName === "readServerRenderValue"
             ? readServerRenderValue
-            : registerServerRenderValue,
+            : match.groups.importedName === "registerServerRenderThunk"
+              ? registerServerRenderThunk
+              : registerServerRenderValue,
     };
   });
 }
@@ -394,6 +407,8 @@ function stripImports(code: string): string {
 
 function stripFunctionExports(code: string): string {
   return code
+    .replace(/export default async function ([A-Za-z_$][\w$]*)\s*\(/g, "async function $1(")
+    .replace(/export async function /g, "async function ")
     .replace(/export default class ([A-Za-z_$][\w$]*)\s*/g, "class $1 ")
     .replace(/export class /g, "class ")
     .replace(/export default function ([A-Za-z_$][\w$]*)\s*\(/g, "function $1(")

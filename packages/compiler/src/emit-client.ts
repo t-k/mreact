@@ -2,7 +2,10 @@ import type { AttributeIr, ComponentPropIr, ComponentIr, JsxNodeIr, ModuleIr } f
 import type { RuntimeImport } from "./types.js";
 import { listReadsNestedItemObject } from "./ir-nested-object-read.js";
 import { OXC_BIND_DOM_REF_PLACEHOLDER } from "./oxc-dom-lowering.js";
-import { OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER } from "./oxc-render-values.js";
+import {
+  OXC_COMPUTED_REACTIVE_ALIAS_PLACEHOLDER,
+  OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER,
+} from "./oxc-render-values.js";
 import { getCompatInlineMemo, type CompatInlineMemo } from "./compat-inline-memo.js";
 import { escapeHtmlAttribute as escapeHtml } from "@reckona/mreact-shared/html-escape";
 import { isStaticUrlValueUnsafe, isUrlAttribute } from "./emit-server-shared.js";
@@ -60,7 +63,8 @@ export function emitClient(
     )
     .join("\n\n")
     .replaceAll(OXC_BIND_DOM_REF_PLACEHOLDER, helperNames.bindDomRef)
-    .replaceAll(OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER, helperNames.untrack);
+    .replaceAll(OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER, helperNames.untrack)
+    .replaceAll(OXC_COMPUTED_REACTIVE_ALIAS_PLACEHOLDER, helperNames.computed);
 
   return {
     code: `${[importLines, userImports, memoNormalizerSetup, moduleStatements, clientBoundaryHelper]
@@ -219,6 +223,10 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
 
   if (JSON.stringify(ir).includes(OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER)) {
     reactiveCoreSpecifiers.add("untrack");
+  }
+
+  if (JSON.stringify(ir).includes(OXC_COMPUTED_REACTIVE_ALIAS_PLACEHOLDER)) {
+    reactiveCoreSpecifiers.add("computed");
   }
 
   for (const component of ir.components) {
@@ -834,6 +842,8 @@ function emitSetup(
           : `${currentPath}.childNodes[${childIndex}]`
       : `${stableChildrenName}[${childIndex}]`;
 
+    if (usesLiveInsertionAnchor(child)) sawComponentMutation = true;
+
     if (child.kind === "expr") {
       if (isClientDynamicExpression(child)) {
         const markerPath =
@@ -987,6 +997,7 @@ function emitSetup(
         emitSetup(child, currentPath, state, childIndex, stableChildrenName, liveChildrenName),
       );
       state.compilerKeyedElementPath = previousCompilerKeyedElementPath;
+      sawComponentMutation ||= hasLiveChildListMutation(child.children);
       childIndex += renderedChildNodeCount(child);
       continue;
     }
@@ -1107,13 +1118,19 @@ function usesLiveInsertionAnchor(child: JsxNodeIr): boolean {
 }
 
 function hasLiveChildListMutation(children: readonly JsxNodeIr[]): boolean {
-  return children.some(usesLiveInsertionAnchor);
+  return children.some(
+    (child) =>
+      usesLiveInsertionAnchor(child) ||
+      (child.kind === "fragment" && hasLiveChildListMutation(child.children)),
+  );
 }
 
 function needsStableChildrenSnapshot(children: readonly JsxNodeIr[]): boolean {
   if (!hasLiveChildListMutation(children)) {
     return false;
   }
+
+  if (children.filter(usesLiveInsertionAnchor).length > 1) return true;
 
   let sawStaticText = false;
 

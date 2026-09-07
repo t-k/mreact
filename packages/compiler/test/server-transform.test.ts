@@ -865,7 +865,7 @@ export function App() {
     expect(output.code).not.toMatch(/return\s+"<main>"\s*\+\s*"<p>"/);
     // Statement-list form
     expect(output.code).toMatch(/let\s+_out\b/);
-    expect(output.code).toMatch(/_out\s*\+=\s*"<main"/);
+    expect(output.code).toMatch(/_out\s*=\s*_appendServerHtml\(_out, "<main"/);
     expect(output.code).toMatch(/return\s+_out\s*;/);
     // Semantics preserved
     expect(runServerComponent(output.code, "App", { name: "Ada" })).toBe(
@@ -2208,11 +2208,14 @@ export function App(props) {
         return Reflect.get(target, property, receiver);
       },
     });
-    const objectProxy = new Proxy({}, {
-      ownKeys() {
-        throw new Error("blocked keys");
+    const objectProxy = new Proxy(
+      {},
+      {
+        ownKeys() {
+          throw new Error("blocked keys");
+        },
       },
-    });
+    );
     const throwingToJson = Object.create({
       toJSON() {
         throw new Error("blocked serialization");
