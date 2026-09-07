@@ -18,26 +18,26 @@ export default createStrykerConfig({
     // Decision and emission helpers for all three client specializations.
     "packages/compiler/src/emit-client-specialization.ts",
     // Their call sites inside the client emitter.
-    "packages/compiler/src/emit-client.ts:271-275",
-    "packages/compiler/src/emit-client.ts:279-283",
-    "packages/compiler/src/emit-client.ts:314-336",
-    "packages/compiler/src/emit-client.ts:585-585",
-    "packages/compiler/src/emit-client.ts:799-828",
-    "packages/compiler/src/emit-client.ts:875-889",
-    "packages/compiler/src/emit-client.ts:1010-1015",
-    "packages/compiler/src/emit-client.ts:1021-1029",
+    "packages/compiler/src/emit-client.ts:275-279",
+    "packages/compiler/src/emit-client.ts:283-287",
+    "packages/compiler/src/emit-client.ts:318-340",
+    "packages/compiler/src/emit-client.ts:589-589",
+    "packages/compiler/src/emit-client.ts:838-867",
+    "packages/compiler/src/emit-client.ts:914-928",
+    "packages/compiler/src/emit-client.ts:1049-1054",
+    "packages/compiler/src/emit-client.ts:1060-1068",
     // 20260907-compiler-unused-component-initialization
-    "packages/compiler/src/emit-client.ts:521-526",
-    "packages/compiler/src/emit-client.ts:606-619",
+    "packages/compiler/src/emit-client.ts:525-530",
+    "packages/compiler/src/emit-client.ts:610-623",
     // 20260907-compiler-native-component-specialization
-    "packages/compiler/src/emit-client.ts:57-67",
-    "packages/compiler/src/emit-client.ts:723-735",
-    "packages/compiler/src/emit-client.ts:770-775",
+    "packages/compiler/src/emit-client.ts:61-71",
+    "packages/compiler/src/emit-client.ts:762-774",
+    "packages/compiler/src/emit-client.ts:809-814",
     "packages/compiler/src/oxc.ts:576-582",
     // 20260907-compiler-specialized-dom-props
     "packages/reactive-dom/src/bind-element-property.ts",
-    "packages/compiler/src/emit-client.ts:330-337",
-    "packages/compiler/src/emit-client.ts:830-835",
+    "packages/compiler/src/emit-client.ts:334-341",
+    "packages/compiler/src/emit-client.ts:869-874",
     // 20260907-compiler-select-binding
     "packages/reactive-dom/src/bind-select-value.ts",
     // 20260907-compiler-branch-specialization
@@ -53,6 +53,10 @@ export default createStrykerConfig({
     "packages/compiler/src/emit-server-stream.ts:1253-1256",
     // 20260907-compiler-native-component-specialization constant folding
     "packages/compiler/src/component-constant-inline.ts",
+    // 20260907-static-jsx-prop-names-unmapped-in-client-template
+    "packages/compiler/src/emit-server-shared.ts:332-344",
+    "packages/compiler/src/emit-client.ts:671-693",
+    "packages/compiler/src/emit-client.ts:703-714",
   ],
   testFiles: [
     "packages/compiler/test/expression-facts.test.ts",
@@ -79,6 +83,7 @@ export default createStrykerConfig({
     "packages/compiler/test/runtime-smoke.test.ts",
     "packages/compiler/test/component-prop-text.test.ts",
     "packages/compiler/test/component-constant-inline.test.ts",
+    "packages/compiler/test/static-attribute-names.test.ts",
     "packages/compiler/test/intermediate-computed.test.ts",
     "packages/compiler/test/oxc-internals.test.ts",
     "packages/compiler/test/server-emit-shared.test.ts",

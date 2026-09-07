@@ -16,7 +16,11 @@ import {
 } from "./oxc-render-values.js";
 import { getCompatInlineMemo, type CompatInlineMemo } from "./compat-inline-memo.js";
 import { escapeHtmlAttribute as escapeHtml } from "@reckona/mreact-shared/html-escape";
-import { isStaticUrlValueUnsafe, isUrlAttribute } from "./emit-server-shared.js";
+import {
+  htmlAttributeNameForElement,
+  isStaticUrlValueUnsafe,
+  isUrlAttribute,
+} from "./emit-server-shared.js";
 
 export interface EmitResult {
   code: string;
@@ -659,19 +663,54 @@ function renderStaticHtml(node: JsxNodeIr): string {
     return "<!--mreact-async-boundary-->";
   }
 
+  // Hydration compares this template against the server markup attribute by
+  // attribute, so the template has to name attributes the way the server does.
+  // The JSX prop name is not that name: HTML parsing would lowercase it, and
+  // attribute synchronisation would then drop the server's attribute and copy
+  // the lowercased JSX name across.
+  const textareaSeed = readStaticTextareaSeed(node);
   const attrs = node.attributes
-    .filter(
-      (attr): attr is Extract<AttributeIr, { kind: "static-attr" }> =>
-        attr.kind === "static-attr" &&
-        !(isUrlAttribute(attr.name) && isStaticUrlValueUnsafe(attr.name, attr.value)),
-    )
-    .map((attr) => ` ${attr.name}="${escapeHtml(attr.value)}"`)
+    .flatMap((attr) => {
+      if (attr.kind !== "static-attr" || attr === textareaSeed) {
+        return [];
+      }
+
+      const htmlName = htmlAttributeNameForElement(node.tagName, attr.name);
+
+      return isUrlAttribute(htmlName) && isStaticUrlValueUnsafe(htmlName, attr.value)
+        ? []
+        : [` ${htmlName}="${escapeHtml(attr.value)}"`];
+    })
     .join("");
-  const children = hasDirectDangerouslySetInnerHtml(node)
-    ? ""
-    : renderStaticChildren(node.children);
+  const children =
+    textareaSeed === undefined
+      ? hasDirectDangerouslySetInnerHtml(node)
+        ? ""
+        : renderStaticChildren(node.children)
+      : escapeHtml(textareaSeed.value);
 
   return `<${node.tagName}${attrs}>${children}</${node.tagName}>`;
+}
+
+/**
+ * Reads the static attribute a textarea seeds its content from.
+ *
+ * A textarea has no value attribute in HTML: the server writes `value` or
+ * `defaultValue` between the tags and lets it win over any children. Mapping the
+ * name could not reconcile an attribute with content, so the template writes the
+ * seed as content too.
+ */
+function readStaticTextareaSeed(
+  node: Extract<JsxNodeIr, { kind: "element" }>,
+): Extract<AttributeIr, { kind: "static-attr" }> | undefined {
+  if (node.tagName !== "textarea") {
+    return undefined;
+  }
+
+  return node.attributes.find(
+    (attr): attr is Extract<AttributeIr, { kind: "static-attr" }> =>
+      attr.kind === "static-attr" && (attr.name === "value" || attr.name === "defaultValue"),
+  );
 }
 
 function renderStaticChildren(children: readonly JsxNodeIr[]): string {
