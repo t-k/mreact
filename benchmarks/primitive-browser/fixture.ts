@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { qwikVite } from "@builder.io/qwik/optimizer";
@@ -13,7 +13,17 @@ const sveltePackageDir = dirname(requireFromHere.resolve("svelte/package.json"))
 const vuePackageDir = dirname(requireFromHere.resolve("vue/package.json"));
 
 export interface BrowserFixture {
-  gzipBytes: number;
+  /**
+   * Gzip size of every JavaScript file Vite emitted for the fixture, including chunks the entry
+   * pulls in. This is the fixture's whole client payload, still shared by all frameworks.
+   */
+  emittedJavaScriptGzipBytes: number;
+  /**
+   * Gzip size of `assets/bench.js` only. Every framework case is compiled into this single entry,
+   * so the value is a mixed-framework harness measurement and never a per-framework bundle size.
+   * Dependency chunks emitted next to the entry are excluded.
+   */
+  entryGzipBytes: number;
   outDir: string;
   rootDir: string;
 }
@@ -160,12 +170,32 @@ export async function createBrowserFixture(entrySource: string): Promise<Browser
       root: rootDir,
     });
 
-    const bundle = await readFile(join(outDir, "assets", "bench.js"));
-    return { gzipBytes: gzipSync(bundle).length, outDir, rootDir };
+    const entry = await readFile(join(outDir, "assets", "bench.js"));
+    return {
+      emittedJavaScriptGzipBytes: await sumEmittedJavaScriptGzipBytes(outDir),
+      entryGzipBytes: gzipSync(entry).length,
+      outDir,
+      rootDir,
+    };
   } catch (error) {
     await rm(rootDir, { force: true, recursive: true });
     throw error;
   }
+}
+
+async function sumEmittedJavaScriptGzipBytes(outDir: string): Promise<number> {
+  const entries = await readdir(outDir, { recursive: true, withFileTypes: true });
+  let total = 0;
+
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(".js")) {
+      continue;
+    }
+
+    total += gzipSync(await readFile(join(entry.parentPath, entry.name))).length;
+  }
+
+  return total;
 }
 
 async function writeSvelteBrowserComponents(sourceDir: string): Promise<void> {

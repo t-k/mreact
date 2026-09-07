@@ -43,6 +43,8 @@
     "example:mreact-app-router:dev": "pnpm --filter @reckona/example-app-router dev",
     "size": "pnpm size:dist",
     "size:check": "pnpm size:dist:check",
+    "size:client": "NODE_ENV=production tsx size/client-delivery.ts",
+    "size:client:check": "CHECK_CLIENT_DELIVERY_BUDGET=1 NODE_ENV=production tsx size/client-delivery.ts",
     "size:dist": "tsx size/run.ts",
     "size:dist:check": "CHECK_BUNDLE_SIZE_BUDGET=1 tsx size/run.ts",
     "test": "vitest run --passWithNoTests",

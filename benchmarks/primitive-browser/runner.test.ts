@@ -76,6 +76,22 @@ describe("primitive browser benchmark configuration", () => {
     expect(fixtureSource).toContain("await rm(rootDir, { force: true, recursive: true });");
   });
 
+  it("labels the shared mixed-framework entry instead of a per-framework bundle size", async () => {
+    const [runSource, fixtureSource] = await Promise.all([
+      readFile(new URL("./run.ts", import.meta.url), "utf8"),
+      readFile(new URL("./fixture.ts", import.meta.url), "utf8"),
+    ]);
+
+    // Every framework case shares one Vite entry, so a plain "bundle gzip bytes" note reads as a
+    // per-framework client payload that this fixture never measures.
+    expect(runSource).not.toContain("bundle gzip bytes:");
+    expect(runSource).toContain("mixed-framework benchmark entry gzip bytes");
+    expect(runSource).toContain("emitted JavaScript gzip bytes");
+    expect(fixtureSource).toContain("entryGzipBytes");
+    expect(fixtureSource).toContain("emittedJavaScriptGzipBytes");
+    expect(fixtureSource).not.toMatch(/\bgzipBytes\s*:/u);
+  });
+
   it("evaluates primitive browser measurements without serializing transformed node functions", async () => {
     const source = await readFile(new URL("./run.ts", import.meta.url), "utf8");
 

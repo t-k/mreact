@@ -84,6 +84,9 @@ jobs:
           - name: E2E smoke
             run: pnpm exec playwright test packages/router/e2e/navigation.spec.ts --grep "client navigation preserves layouts"
 
+          - name: E2E client delivery accounting
+            run: pnpm exec playwright test packages/router/e2e/client-delivery-accounting.spec.ts
+
           - name: API reports
             run: node scripts/generate-api-reports.mjs --check
 
@@ -95,6 +98,19 @@ jobs:
 
           - name: Test router build
             run: pnpm exec vitest run packages/router/test/build.test.ts --passWithNoTests --maxWorkers=1 --maxConcurrency=1
+
+      # Builds the fixed production client fixtures and compares initial, cumulative and HTML
+      # delivery bytes against size/client-delivery-budgets.json. Local only: no network access.
+      - name: Client delivery size gate
+        run: pnpm size:client:check
+
+      - name: Upload client delivery size reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-delivery-size-${{ github.run_id }}-${{ github.run_attempt }}
+          path: size/reports
+          if-no-files-found: error
 
   test-shard:
     name: Test shard ${{ matrix.shard }}/3

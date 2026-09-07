@@ -6,11 +6,13 @@ import { createBrowserFixture } from "./fixture.js";
 const fixture = await createBrowserFixture(browserEntrySource());
 
 try {
-  const bundle = await readFile(join(fixture.outDir, "assets", "bench.js"));
-  if (bundle.length === 0) {
-    throw new Error("primitive browser fixture build emitted an empty bundle");
+  const entry = await readFile(join(fixture.outDir, "assets", "bench.js"));
+  if (entry.length === 0) {
+    throw new Error("primitive browser fixture build emitted an empty mixed-framework entry");
   }
-  console.log(`Primitive browser fixture build passed (${bundle.length} bytes).`);
+  console.log(
+    `Primitive browser fixture build passed (mixed-framework entry ${entry.length} raw bytes, ${fixture.entryGzipBytes} gzip bytes; emitted JavaScript ${fixture.emittedJavaScriptGzipBytes} gzip bytes).`,
+  );
 } finally {
   await rm(fixture.rootDir, { force: true, recursive: true });
 }

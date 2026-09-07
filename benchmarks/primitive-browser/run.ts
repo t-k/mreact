@@ -99,7 +99,10 @@ try {
           value: summary.median,
           summary,
           samples,
-          notes: [`bundle gzip bytes: ${fixture.gzipBytes}`],
+          notes: [
+            `mixed-framework benchmark entry gzip bytes (all frameworks compiled into assets/bench.js, dependency chunks excluded): ${fixture.entryGzipBytes}`,
+            `fixture emitted JavaScript gzip bytes (entry plus every emitted chunk): ${fixture.emittedJavaScriptGzipBytes}`,
+          ],
         });
       } catch (error) {
         rows.push({
