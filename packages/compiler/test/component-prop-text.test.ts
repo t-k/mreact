@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 import { describe, expect, test } from "vitest";
 import { createRoot } from "@reckona/mreact-reactive-dom";
+import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { transform } from "../src/index.js";
 import { analyzeToIr } from "../src/internal.js";
-import { compileClientComponent, runServerComponent } from "./helpers.js";
+import { compileClientComponent, compileServerModule, runServerComponent } from "./helpers.js";
 import type { ExprIr, JsxNodeIr } from "../src/ir.js";
 
 interface CellHost {
@@ -196,6 +197,30 @@ export function App() { return <main><Badge label="alpha" /><Badge label="beta" 
     try {
       await flushEffects();
       expect(runServerComponent(serverOutput.code)).toBe(container.innerHTML);
+    } finally {
+      dispose();
+    }
+  });
+
+  test("renders the same markup on the server as the client mounts for a dynamic prop", async () => {
+    const serverOutput = transform({
+      code: primitiveCallSites,
+      filename: "App.tsx",
+      target: "server",
+      dev: false,
+    });
+
+    expect(serverOutput.diagnostics).toEqual([]);
+    const clientCode = compile(primitiveCallSites);
+    expect(clientCode).not.toContain("insertRenderValue");
+    const serverModule = compileServerModule(serverOutput.code, { cell });
+    const serverApp = serverModule.App as () => string;
+    const container = document.createElement("div");
+    const dispose = createRoot(container, compileClientComponent(clientCode));
+
+    try {
+      await flushEffects();
+      expect(serverApp()).toBe(container.innerHTML);
     } finally {
       dispose();
     }
