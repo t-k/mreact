@@ -27,9 +27,6 @@ export function emitClient(
   options: { dev?: boolean; filename?: string } = {},
 ): EmitResult {
   const imports = collectImports(ir);
-  const usesDeferredComponentRenderValues = ir.components.some((component) =>
-    treeUsesDeferredComponentRenderValues(component.root),
-  );
   const helperNames = allocateRuntimeHelperNames(
     ir,
     imports.flatMap((entry) => entry.specifiers),
@@ -39,9 +36,6 @@ export function emitClient(
     .map((entry) => emitRuntimeImportLine(entry, helperNames))
     .join("\n");
   const userImports = emitUserImports(ir);
-  const memoNormalizerSetup = usesDeferredComponentRenderValues
-    ? `${helperNames.installMemoRenderValueNormalizer}();`
-    : "";
   const moduleStatements = emitModuleStatements(ir);
   const moduleAllocator = createNameAllocator([]);
   const clientBoundaryHelperName = hasClientReferenceNodes(ir)
@@ -74,7 +68,7 @@ export function emitClient(
     .replaceAll(OXC_COMPUTED_REACTIVE_ALIAS_PLACEHOLDER, helperNames.deferredComputed);
 
   return {
-    code: `${[importLines, userImports, memoNormalizerSetup, moduleStatements, clientBoundaryHelper]
+    code: `${[importLines, userImports, moduleStatements, clientBoundaryHelper]
       .filter(Boolean)
       .join("\n")}\n\n${components}\n`,
     imports,
@@ -257,7 +251,9 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
               ? "bindCompilerKeyedText"
               : "bindCompilerKeyedPropertyText",
           );
-        } else if (node.renderMode !== "compiler-keyed-initial-text") {
+        } else if (context === "setup" && node.renderMode !== "compiler-keyed-initial-text") {
+          // Render-value expressions are inlined into the branch expression, so
+          // they never produce a text binding of their own.
           specifiers.add("bindText");
         }
       }
@@ -494,7 +490,16 @@ function emitComponent(
 ): string {
   const templateName = moduleAllocator("_tmpl_" + component.name, component.bindingNames);
   const allocator = createNameAllocator([...component.bindingNames, templateName]);
-  const body = component.bodyStatements.map((statement) => `  ${statement}`);
+  // Installing the normalizer from inside the component that needs it keeps the
+  // dependency out of a module whose only deferred-render-value component is
+  // unreachable. The runtime installer is idempotent, so repeated renders do no
+  // redundant setup.
+  const body = [
+    ...(treeUsesDeferredComponentRenderValues(component.root)
+      ? [`  ${helperNames.installMemoRenderValueNormalizer}();`]
+      : []),
+    ...component.bodyStatements.map((statement) => `  ${statement}`),
+  ];
   const parameters = component.parameters.join(", ");
   const functionKeyword = emitFunctionKeyword(component);
   const debugLabel =
@@ -573,12 +578,20 @@ function emitComponent(
     listBindingCaches: new Map(),
   };
   const setup = emitSetup(component.root, rootName, state);
+  const createTemplateHelper =
+    component.root.kind === "element" && component.root.namespace === "svg"
+      ? helperNames.createSvgTemplate
+      : helperNames.createTemplate;
+
   return [
-    `const ${templateName} = ${component.root.kind === "element" && component.root.namespace === "svg" ? helperNames.createSvgTemplate : helperNames.createTemplate}(${templateHtml});`,
+    // The template is created on first render rather than at module load, so a
+    // bundler can drop an unused export together with its HTML payload, and so
+    // importing the module never requires a DOM.
+    `let ${templateName};`,
     `${functionKeyword} ${component.name}(${parameters}) {`,
     ...body,
     ...state.ownerDeclarations.map((declaration) => `  ${declaration}`),
-    `  const ${fragmentName} = ${templateName}();`,
+    `  const ${fragmentName} = (${templateName} ??= ${createTemplateHelper}(${templateHtml}))();`,
     component.root.kind === "fragment"
       ? `  const ${rootName} = ${fragmentName};`
       : `  const ${rootName} = ${fragmentName}.firstChild;`,

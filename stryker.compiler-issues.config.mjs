@@ -18,6 +18,7 @@ export default createStrykerConfig({
     // Decision and emission helpers for all three client specializations.
     "packages/compiler/src/emit-client-specialization.ts",
     // Their call sites inside the client emitter.
+    "packages/compiler/src/emit-client.ts:254-258",
     "packages/compiler/src/emit-client.ts:266-270",
     "packages/compiler/src/emit-client.ts:301-315",
     "packages/compiler/src/emit-client.ts:556-556",
@@ -25,6 +26,9 @@ export default createStrykerConfig({
     "packages/compiler/src/emit-client.ts:811-825",
     "packages/compiler/src/emit-client.ts:946-951",
     "packages/compiler/src/emit-client.ts:957-965",
+    // 20260907-compiler-unused-component-initialization
+    "packages/compiler/src/emit-client.ts:497-502",
+    "packages/compiler/src/emit-client.ts:581-594",
     // 20260907-compiler-select-binding
     "packages/reactive-dom/src/bind-select-value.ts",
     // 20260907-compiler-branch-specialization
@@ -45,5 +49,7 @@ export default createStrykerConfig({
     "packages/compiler/test/branch-specialization.test.ts",
     "packages/reactive-dom/test/insert-branch.test.ts",
     "packages/compiler/test/transform-dynamic.test.ts",
+    "packages/compiler/test/component-initialization.test.ts",
+    "packages/compiler/test/transform-static.test.ts",
   ],
 });

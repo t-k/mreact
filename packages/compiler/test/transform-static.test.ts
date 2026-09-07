@@ -21,7 +21,8 @@ describe("compiler static JSX transform", () => {
     expect(output.code).toContain(
       'import { createTemplate } from "@reckona/mreact-reactive-dom";',
     );
-    expect(output.code).toContain("const _tmpl_App = createTemplate");
+    expect(output.code).toContain("let _tmpl_App;");
+    expect(output.code).toContain("(_tmpl_App ??= createTemplate(");
     expect(output.code).toContain("export function App()");
     expect(output.code).toContain("const _root = _fragment.firstChild");
     expect(output.code).toContain("return _root");
@@ -37,7 +38,7 @@ describe("compiler static JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain(
-      'const _tmpl_App = createTemplate("<div id=\\"app\\">Hello</div>");',
+      '(_tmpl_App ??= createTemplate("<div id=\\"app\\">Hello</div>"))()',
     );
   });
 
