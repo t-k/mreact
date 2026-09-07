@@ -1019,6 +1019,12 @@ describe("shallowEqual", () => {
     ).toBe(false);
   });
 
+  it("compares operands whose own keys are declared in different orders", () => {
+    expect(shallowEqual({ a: 1, b: 2 }, { b: 2, a: 1 })).toBe(true);
+    expect(shallowEqual({ a: 1, b: 2 }, { b: 2, a: 3 })).toBe(false);
+    expect(shallowEqual({ a: undefined, b: 1 }, { b: 1, c: undefined } as never)).toBe(false);
+  });
+
   it("treats identical references as equal without inspecting keys", () => {
     const date = new Date(0);
     const map = new Map([["a", 1]]);

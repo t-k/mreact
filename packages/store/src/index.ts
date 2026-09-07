@@ -605,10 +605,15 @@ function compareOwnEnumerableValues(left: object, right: object): boolean {
     return false;
   }
 
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+
+  // Equal key positions already prove own-key membership, so the membership
+  // probe only runs for the operands whose key orders diverge.
   return leftKeys.every(
-    (key) =>
-      Object.hasOwn(right, key) &&
-      Object.is((left as Record<string, unknown>)[key], (right as Record<string, unknown>)[key]),
+    (key, index) =>
+      (key === rightKeys[index] || Object.hasOwn(right, key)) &&
+      Object.is(leftRecord[key], rightRecord[key]),
   );
 }
 
