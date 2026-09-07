@@ -183,6 +183,63 @@ describe("dormant dependency validation", () => {
     expect(runs).toBe(3);
   });
 
+  test("does not allocate per-source maps while validating a dormant diamond", () => {
+    const originalMap = globalThis.Map;
+    let allocations = 0;
+
+    class CountingMap<K, V> {
+      readonly map: Map<K, V>;
+
+      constructor(entries?: readonly (readonly [K, V])[] | null) {
+        allocations += 1;
+        this.map = new originalMap<K, V>(entries);
+      }
+
+      get(key: K): V | undefined {
+        return this.map.get(key);
+      }
+
+      has(key: K): boolean {
+        return this.map.has(key);
+      }
+
+      set(key: K, value: V): this {
+        this.map.set(key, value);
+        return this;
+      }
+    }
+
+    const base = cell(1);
+    let current = computed(() => base.get());
+    for (let level = 0; level < 6; level += 1) {
+      const previous = current;
+      const left = computed(() => previous.get() + 1);
+      const right = computed(() => previous.get() + 2);
+      current = computed(() => left.get() + right.get());
+    }
+    const top = current;
+    top.get();
+
+    Object.defineProperty(globalThis, "Map", {
+      configurable: true,
+      value: CountingMap,
+      writable: true,
+    });
+
+    try {
+      top.get();
+      top.get();
+
+      expect(allocations).toBe(0);
+    } finally {
+      Object.defineProperty(globalThis, "Map", {
+        configurable: true,
+        value: originalMap,
+        writable: true,
+      });
+    }
+  });
+
   test("follows a dormant dependency switch to the newly read source", () => {
     const useFirst = cell(true);
     const first = cell("first");
