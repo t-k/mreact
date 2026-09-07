@@ -55,10 +55,9 @@ export function collectOxcEscapedComponentNames(
  * proven native cell read, the prop can only be text, so the callee gets an
  * ordinary text binding instead.
  *
- * This runs for client output only. Both shapes render one text node, so the
- * hydrated structure is unchanged, while the server emitters keep the render
- * value classification they use to choose between their string and stream
- * calling conventions.
+ * This runs for every target. Both shapes render one text node, so the hydrated
+ * structure is unchanged, and each server emitter calls a lowered callee with
+ * its own calling convention rather than inferring one from the classification.
  */
 export function lowerProvenTextComponentProps(
   components: readonly ComponentIr[],

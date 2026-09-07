@@ -580,12 +580,10 @@ function analyzeOxcToIr(
     }
   }
 
-  if (target === "client") {
-    lowerProvenTextComponentProps(
-      components,
-      collectOxcEscapedComponentNames(program, componentNames),
-    );
-  }
+  lowerProvenTextComponentProps(
+    components,
+    collectOxcEscapedComponentNames(program, componentNames),
+  );
 
   if (options?.serverOutput === "stream") {
     for (const component of components) {

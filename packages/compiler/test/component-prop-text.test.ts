@@ -160,7 +160,7 @@ export function App(props) { return <main>{props.open ? <Badge label="alpha" /> 
     }
   });
 
-  test("lowers the prop child on the client only and keeps the server classification", () => {
+  test("lowers the prop child on every target", () => {
     const renderModes = (target: "client" | "server"): (string | undefined)[] => {
       const output = analyzeToIr({ code: primitiveCallSites, filename: "App.tsx", target });
 
@@ -174,10 +174,11 @@ export function App(props) { return <main>{props.open ? <Badge label="alpha" /> 
       return collectExpressions(badge.root).map((expression) => expression.renderMode);
     };
 
-    // The client drops the render value classification; the server keeps
-    // whichever one it uses to pick between its calling conventions.
+    // Neither target keeps the render value classification: each server emitter
+    // calls a lowered callee with its own convention rather than reading one off
+    // the classification.
     expect(renderModes("client")).toEqual([undefined]);
-    expect(renderModes("server").every((mode) => mode !== undefined)).toBe(true);
+    expect(renderModes("server")).toEqual([undefined]);
   });
 
   test("renders the same markup on the server as the client mounts", async () => {

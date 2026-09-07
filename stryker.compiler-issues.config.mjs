@@ -14,7 +14,7 @@ export default createStrykerConfig({
     "packages/compiler/src/oxc-child-analysis.ts:1898-1903",
     "packages/compiler/src/oxc-child-analysis.ts:1910-1910",
     "packages/compiler/src/oxc.ts:261-261",
-    "packages/compiler/src/oxc.ts:1980-1984",
+    "packages/compiler/src/oxc.ts:1978-1982",
     // Decision and emission helpers for all three client specializations.
     "packages/compiler/src/emit-client-specialization.ts",
     // Their call sites inside the client emitter.
@@ -46,7 +46,7 @@ export default createStrykerConfig({
     "packages/compiler/src/component-prop-text.ts",
     "packages/compiler/src/oxc-component-props.ts:119-127",
     "packages/compiler/src/oxc-child-analysis.ts:228-229",
-    "packages/compiler/src/oxc.ts:583-588",
+    "packages/compiler/src/oxc.ts:583-586",
     // 20260907-compiler-intermediate-computed-fusion
     "packages/compiler/src/oxc-render-values.ts:232-246",
     // 20260907-server-stream-select-option-calling-convention
