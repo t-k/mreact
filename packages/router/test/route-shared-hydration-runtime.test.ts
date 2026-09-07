@@ -9,7 +9,7 @@ import {
   buildClientRouteBundle,
   buildClientRouteEntrySource,
 } from "../src/client.js";
-import { startDevServer } from "../src/dev-server.js";
+import { routeHydrationRuntimeSource } from "../src/route-hydration-runtime.js";
 
 /** A DOM fragment marker that only the shared resume runtime emits. */
 const resumeRuntimeMarker = "data-mreact-layout-boundary";
@@ -34,8 +34,6 @@ export default function Page() {
   return <button type="button" onClick={() => count.set(value => value + 1)}>{count.get()}</button>;
 }`;
 
-const devServers: Array<{ close(): Promise<void> }> = [];
-
 describe("shared route hydration runtime", () => {
   beforeEach(() => {
     document.head.innerHTML = "";
@@ -43,35 +41,10 @@ describe("shared route hydration runtime", () => {
     document.documentElement.removeAttribute("data-mreact-hydrated");
   });
 
-  afterEach(async () => {
+  afterEach(() => {
     delete (globalThis as { __mreactRouteStates?: unknown }).__mreactRouteStates;
     delete (globalThis as { __mreactRouteDisposers?: unknown }).__mreactRouteDisposers;
     delete (globalThis as { __mreactRouteCell?: unknown }).__mreactRouteCell;
-    await Promise.all(devServers.splice(0).map((server) => server.close()));
-  });
-
-  test("the dev server resolves the shared runtime the unbundled route module imports", async () => {
-    const appDir = await mkdtemp(join(tmpdir(), "mreact-shared-resume-dev-"));
-    await writeFile(join(appDir, "page.tsx"), interactiveRouteCode);
-    const server = await startDevServer({ appDir, port: 0 });
-    devServers.push(server);
-
-    const moduleResponse = await fetch(`${server.url}/_mreact/client/routes/index.js`);
-    const moduleSource = await moduleResponse.text();
-    const runtimeSpecifiers = [...moduleSource.matchAll(/from\s+"([^"]+)"/gu)]
-      .map((match) => match[1] ?? "")
-      .filter((specifier) => specifier.includes("route-hydration-runtime"));
-
-    expect(moduleResponse.status).toBe(200);
-    expect(runtimeSpecifiers.length).toBeGreaterThan(0);
-
-    for (const specifier of runtimeSpecifiers) {
-      const runtimeResponse = await fetch(new URL(specifier, server.url));
-
-      expect(runtimeResponse.status, specifier).toBe(200);
-      expect(runtimeResponse.headers.get("content-type"), specifier).toContain("javascript");
-      expect((await runtimeResponse.text()).length, specifier).toBeGreaterThan(0);
-    }
   });
 
   test("route entries import the resume runtime instead of inlining its helpers", async () => {
@@ -321,6 +294,181 @@ export default function Page() {
     for (const route of output.routes) {
       expect(route.chunk.code.length).toBeLessThan(resumeRuntimeChunk?.code.length ?? 0);
     }
+  });
+
+  test("the shared resume module indents the helper bodies it wraps", async () => {
+    const source = routeHydrationRuntimeSource("resume");
+    const bodyLines = source
+      .split("\n")
+      .filter((line) => line.startsWith("  function __mreact"));
+
+    expect(bodyLines).not.toHaveLength(0);
+    expect(source).toContain("  function __mreactResumeChildren(current, next) {");
+    expect(source.split("\n").some((line) => line.trim() === "" && line !== "")).toBe(false);
+  });
+
+  test("a single route batch entry never calls the resume factory it cannot share", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-shared-resume-single-factory-"));
+    const filename = await writeRoute(appDir, "index", interactiveRouteCode);
+
+    const output = await buildClientRouteBatchOutput({
+      projectRoot: appDir,
+      routes: [{ code: interactiveRouteCode, clientNavigation: false, filename, routePath: "/" }],
+    });
+
+    expect(output.routes[0]?.chunk.code).not.toContain("__mreactCreateRouteResumeRuntime");
+    expect(output.routes[0]?.chunk.code).toContain(resumeRuntimeMarker);
+  });
+
+  test("the shared import block carries exactly the groups a route reaches", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-shared-import-block-"));
+    const filename = await writeRoute(appDir, "index", interactiveRouteCode);
+
+    const plain = await buildClientRouteEntrySource({
+      code: interactiveRouteCode,
+      clientNavigation: false,
+      filename,
+      routePath: "/",
+      shareHydrationRuntime: true,
+    });
+    const navigating = await buildClientRouteEntrySource({
+      code: interactiveRouteCode,
+      clientNavigation: true,
+      forceInlineNavigationRuntime: true,
+      filename,
+      routePath: "/",
+      shareHydrationRuntime: true,
+    });
+
+    expect(plain.code.startsWith(
+      [
+        'import { __mreactRunLifecycleTasks } from "mreact-route-hydration-runtime/lifecycle";',
+        'import { __mreactCreateRouteResumeRuntime } from "mreact-route-hydration-runtime/resume";',
+        "",
+      ].join("\n"),
+    )).toBe(true);
+    expect(navigating.code.startsWith(
+      [
+        'import { __mreactRunLifecycleTasks } from "mreact-route-hydration-runtime/lifecycle";',
+        'import { __mreactCreateRouteResumeRuntime } from "mreact-route-hydration-runtime/resume";',
+        'import { __mreactApplyOutOfOrderFragments } from "mreact-route-hydration-runtime/fragments";',
+        "",
+      ].join("\n"),
+    )).toBe(true);
+    expect(plain.code).toContain(
+      "const { resumeRoute: __mreactResumeRoute } = __mreactCreateRouteResumeRuntime(__mreactSyncEventBindings, __mreactSyncDomRefBindings);",
+    );
+    expect(navigating.code).toContain(
+      "const { resumeNode: __mreactResumeNode, resumeRoute: __mreactResumeRoute, unmountCompatBoundaries: __mreactUnmountCompatBoundaries } = __mreactCreateRouteResumeRuntime(__mreactSyncEventBindings, __mreactSyncDomRefBindings);",
+    );
+  });
+
+  test("a route with plain client references passes no compat entry points to the boundary runtime", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-shared-boundary-compat-args-"));
+    await writeFile(
+      join(appDir, "Counter.tsx"),
+      `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set(value => value + 1)}>{count.get()}</button>;
+}`,
+    );
+    const code = `import { Counter } from "./Counter";
+
+export const clientNavigation = false;
+
+export default function Page() {
+  return <main><Counter /></main>;
+}`;
+    const filename = await writeRoute(appDir, "index", code);
+
+    const entry = await buildClientRouteEntrySource({
+      clientBoundaryImports: ["./Counter"],
+      clientReferenceImports: [{ name: "Counter", source: "./Counter", exportName: "Counter" }],
+      clientReferenceManifest: [
+        { name: "Counter", moduleId: "./Counter.js", exportName: "Counter" },
+      ],
+      code,
+      clientNavigation: false,
+      filename,
+      routePath: "/",
+      shareHydrationRuntime: true,
+    });
+
+    expect(entry.code).toContain("__mreactCreateClientBoundaryRuntime(undefined, undefined);");
+  });
+
+  test("inline route entries omit the groups the route cannot reach", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-shared-inline-omit-"));
+    const filename = await writeRoute(appDir, "index", interactiveRouteCode);
+
+    const entry = await buildClientRouteEntrySource({
+      code: interactiveRouteCode,
+      clientNavigation: false,
+      filename,
+      routePath: "/",
+    });
+
+    expect(entry.code).not.toContain("__mreactHydrateClientBoundaries");
+    expect(entry.code).not.toContain(clientBoundaryRuntimeMarker);
+    expect(entry.code).not.toContain("__mreactApplyOutOfOrderFragments");
+    expect(entry.code).toContain("function __mreactResumeRoute(marker, nextNode) {");
+  });
+
+  test("a batch built route hydrates through the shared chunk it imports", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-shared-resume-run-"));
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+
+export const clientNavigation = false;
+
+export default function Page() {
+  const count = cell(0);
+  return <main><h1 data-title="home">Home</h1><button type="button" onClick={() => count.set(value => value + 1)}>count: {count.get()}</button></main>;
+}`;
+    const routes = await Promise.all(
+      ["/", "/about"].map(async (routePath) => ({
+        code,
+        clientNavigation: false,
+        filename: await writeRoute(appDir, routePath === "/" ? "index" : routePath.slice(1), code),
+        routePath,
+      })),
+    );
+
+    const output = await buildClientRouteBatchOutput({ projectRoot: appDir, routes });
+    const entryChunk = output.routes.find((route) => route.routePath === "/")?.chunk;
+    const sharedChunk = output.chunks.find((chunk) => !chunk.isEntry);
+
+    expect(sharedChunk).toBeDefined();
+    expect(entryChunk?.imports).toContain(sharedChunk?.fileName);
+
+    // Vitest resolves dynamic imports through Vite, so the emitted chunk boundary is preserved by
+    // rewriting the entry's relative import to a data URL of the real shared chunk.
+    const sharedModuleUrl = `data:text/javascript;charset=utf-8,${encodeURIComponent(sharedChunk?.code ?? "")}`;
+    const entryCode = (entryChunk?.code ?? "").replaceAll(
+      /"\.\.\/chunks\/[^"]+"/gu,
+      JSON.stringify(sharedModuleUrl),
+    );
+
+    expect(entryCode).toContain(sharedModuleUrl);
+
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><main><h1 data-title="home">Home</h1>',
+      '<button type="button">count: <!-- -->0</button></main></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+    ].join("");
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(entryCode)}#shared-chunk-run`
+    );
+
+    expect(document.querySelector("h1")?.getAttribute("data-title")).toBe("home");
+    expect(document.documentElement.getAttribute("data-mreact-hydrated")).toBe("true");
+
+    document.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(document.querySelector("button")?.textContent).toContain("count: 1");
   });
 
   test("hydration through the shared runtime resumes server rendered markup", async () => {

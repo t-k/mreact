@@ -16,7 +16,7 @@ export default createStrykerConfig({
   name: "route-hydration-runtime",
   mutate: [
     "packages/router/src/route-hydration-runtime.ts:1-105",
-    "packages/router/src/client.ts:2876",
+    "packages/router/src/client.ts:2876-2876",
     "packages/router/src/client.ts:3494-3549",
     "packages/router/src/client.ts:5470-5483",
   ],
