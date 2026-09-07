@@ -174,6 +174,7 @@ export interface ComponentIr {
 export interface ComponentNamedPropIr {
     // (undocumented)
     code: string;
+    facts?: ExpressionFactsIr;
     // (undocumented)
     kind: "prop";
     // (undocumented)
@@ -308,6 +309,8 @@ export type ExpressionValueIr = {
     binding: ResolvedBindingIr;
 } | {
     kind: "renderable-primitive";
+} | {
+    kind: "component-prop-read";
 };
 
 // @public
