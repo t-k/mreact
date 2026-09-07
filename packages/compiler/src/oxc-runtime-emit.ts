@@ -1,6 +1,6 @@
 import type { AttributeIr, ComponentPropIr, JsxNodeIr } from "./ir.js";
 import {
-  htmlAttributeName,
+  htmlAttributeNameForElement,
   isDangerousHtmlAttribute,
   isStaticUrlValueUnsafe,
   isUrlAttribute,
@@ -141,20 +141,6 @@ function emitOxcServerAttribute(tagName: string, attr: AttributeIr): string {
   }
 
   return '""';
-}
-
-function htmlAttributeNameForElement(tagName: string, name: string): string {
-  if (tagName === "input") {
-    if (name === "defaultValue") {
-      return "value";
-    }
-
-    if (name === "defaultChecked") {
-      return "checked";
-    }
-  }
-
-  return htmlAttributeName(name);
 }
 
 function emitOxcCompatObjectNode(node: JsxNodeIr): string {

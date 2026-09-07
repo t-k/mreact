@@ -320,6 +320,29 @@ export function htmlAttributeName(name: string): string {
     : name;
 }
 
+/**
+ * Resolves the HTML attribute name one JSX prop name produces on one element.
+ *
+ * `input` is the only element where the name depends on the tag: React seeds an
+ * input through `defaultValue` and `defaultChecked`, which are the `value` and
+ * `checked` attributes in HTML. Every emitter has to agree on this, because the
+ * client template and the server markup are compared attribute by attribute
+ * during hydration.
+ */
+export function htmlAttributeNameForElement(tagName: string, name: string): string {
+  if (tagName === "input") {
+    if (name === "defaultValue") {
+      return "value";
+    }
+
+    if (name === "defaultChecked") {
+      return "checked";
+    }
+  }
+
+  return htmlAttributeName(name);
+}
+
 export function isBooleanishStringAttribute(name: string): boolean {
   return isSharedBooleanishStringAttribute(htmlAttributeName(name));
 }

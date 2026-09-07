@@ -6,7 +6,7 @@ import { escapeHtmlAttribute as escapeHtml } from "@reckona/mreact-shared/html-e
 import {
   emitOptionSelectedAttributeCode,
   emitSelectSelectionValueCode,
-  htmlAttributeName,
+  htmlAttributeNameForElement,
   isBooleanishStringAttribute,
   isDangerousHtmlAttribute,
   isStaticUrlValueUnsafe,
@@ -2550,20 +2550,6 @@ function findOptionTextValueCode(
   return parts.length === 0
     ? stringLiteral("")
     : `(() => { const ${textValueName} = ${parts.join(" + ")}; return ${textValueName}; })()`;
-}
-
-function htmlAttributeNameForElement(tagName: string, name: string): string {
-  if (tagName === "input") {
-    if (name === "defaultValue") {
-      return "value";
-    }
-
-    if (name === "defaultChecked") {
-      return "checked";
-    }
-  }
-
-  return htmlAttributeName(name);
 }
 
 function rawHtmlExpression(code: string): string {
