@@ -212,6 +212,54 @@ describe("inactive entry cap removal order", () => {
     expect(cachedKeys(client)).toEqual(["second", "third"]);
   });
 
+  it("evicts the oldest excess entries by updatedAt when several become evictable at once", () => {
+    vi.useFakeTimers();
+    const client = createQueryClient({ maxInactiveEntries: 2 });
+    const releaseActive = client.subscribe(["active"], () => {});
+    let observedDuringUpdater: string[] = [];
+
+    client.setQueryData(["active"], "active");
+    vi.advanceTimersByTime(10);
+    client.setQueryData(["older"], "older");
+    vi.advanceTimersByTime(10);
+    client.setQueryData(["newer"], "newer");
+    vi.advanceTimersByTime(10);
+
+    // Four entries are evictable at the nested write, and the entry created for
+    // the updater itself is the oldest, so insertion order and updatedAt order
+    // disagree about which two entries have to go.
+    client.setQueryData(["updater"], (previous: string | undefined) => {
+      client.setQueryData(["nested"], "nested");
+      observedDuringUpdater = cachedKeys(client);
+      return previous ?? "value";
+    });
+
+    expect(observedDuringUpdater).toEqual(["active", "newer", "nested"]);
+    expect(cachedKeys(client)).toEqual(["active", "nested", "updater"]);
+
+    releaseActive();
+  });
+
+  it("evicts every excess entry when several become evictable before one enforcement", () => {
+    vi.useFakeTimers();
+    const client = createQueryClient({ maxInactiveEntries: 1 });
+    let observedDuringUpdater: string[] = [];
+
+    client.setQueryData(["existing"], "existing");
+    vi.advanceTimersByTime(10);
+
+    // The updater runs after its own entry is created but before the cap is
+    // enforced, so the nested write sees three evictable entries at once.
+    client.setQueryData(["updated"], (previous: string | undefined) => {
+      client.setQueryData(["nested"], "nested");
+      observedDuringUpdater = cachedKeys(client);
+      return previous ?? "value";
+    });
+
+    expect(observedDuringUpdater).toEqual(["nested"]);
+    expect(cachedKeys(client)).toEqual(["updated"]);
+  });
+
   it("evicts several entries at once when the cache overflows the cap by more than one", () => {
     vi.useFakeTimers();
     const client = createQueryClient({ maxInactiveEntries: 4 });

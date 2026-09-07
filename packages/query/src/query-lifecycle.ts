@@ -338,21 +338,56 @@ export function createQueryLifecycle(
     entry.resource = undefined;
   }
 
+  function isEvictableInactiveEntry(entry: InternalQueryEntry): boolean {
+    return (subscriberCounts.get(entry.queryHash) ?? 0) === 0 && !entry.isFetching;
+  }
+
   function enforceInactiveLimit(): void {
     const maxInactiveEntries = clientOptions.maxInactiveEntries;
     if (maxInactiveEntries === undefined || maxInactiveEntries === false) {
       return;
     }
 
-    const inactiveEntries = Array.from(cache.values())
-      .filter((entry) => (subscriberCounts.get(entry.queryHash) ?? 0) === 0 && !entry.isFetching)
-      .sort((left, right) => left.updatedAt - right.updatedAt);
+    const limit = Math.max(0, maxInactiveEntries);
+    let evictableCount = 0;
+    let oldest: InternalQueryEntry | undefined;
 
-    while (inactiveEntries.length > Math.max(0, maxInactiveEntries)) {
-      const entry = inactiveEntries.shift();
-      if (entry === undefined) {
-        return;
+    // One pass keeps a retention-safe cache free of allocation and sorting, and
+    // it already names the entry that a single-entry overflow has to drop.
+    // A strict comparison keeps the first entry of an updatedAt tie, which is
+    // what the stable sort below the fallback selects.
+    for (const entry of cache.values()) {
+      if (!isEvictableInactiveEntry(entry)) {
+        continue;
       }
+
+      evictableCount += 1;
+      if (oldest === undefined || entry.updatedAt < oldest.updatedAt) {
+        oldest = entry;
+      }
+    }
+
+    if (evictableCount <= limit) {
+      return;
+    }
+
+    if (oldest !== undefined && evictableCount === limit + 1) {
+      removeEntry(oldest);
+      return;
+    }
+
+    evictOldestInactiveEntries(limit);
+  }
+
+  function evictOldestInactiveEntries(limit: number): void {
+    const inactiveEntries = Array.from(cache.values())
+      .filter(isEvictableInactiveEntry)
+      .sort((left, right) => left.updatedAt - right.updatedAt);
+    // Clamped so that an over-eager caller can only waste work, never evict:
+    // a negative slice end would otherwise count back from the newest entry.
+    const excess = Math.max(0, inactiveEntries.length - limit);
+
+    for (const entry of inactiveEntries.slice(0, excess)) {
       removeEntry(entry);
     }
   }
