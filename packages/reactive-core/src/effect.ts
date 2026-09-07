@@ -6,7 +6,12 @@ import {
 import { registerReactiveDevtoolsResource } from "./devtools.js";
 import { registerCleanup } from "./cleanup-scope.js";
 import { runtimeState, type ReactiveComputation } from "./state.js";
-import { cleanupDeps, cleanupUntrackedDeps, nextTrackingVersionFor } from "./tracking.js";
+import {
+  cleanupDeps,
+  cleanupUntrackedDeps,
+  nextTrackingVersionFor,
+  preserveIncrementalTracking,
+} from "./tracking.js";
 
 declare const __MREACT_CLIENT_DEVTOOLS__: boolean | undefined;
 
@@ -92,6 +97,11 @@ function effectRun(this: ReactiveComputation): void {
   }
 
   const previousTracker = runtimeState.activeTracker;
+
+  // Child reads can overwrite the shared source stamps used by the parent.
+  if (previousTracker !== null && previousTracker !== computation) {
+    preserveIncrementalTracking(previousTracker);
+  }
 
   if (computation.cleanup !== undefined) {
     const currentCleanup = computation.cleanup;

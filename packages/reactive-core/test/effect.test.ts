@@ -5,6 +5,36 @@ import { runtimeState, type ReactiveComputation } from "../src/state.js";
 import { flushEffects } from "../src/testing.js";
 
 describe("effect", () => {
+  test("keeps a parent subscription across interleaved child effects and repeated reads", async () => {
+    const ticket = cell<number | null>(null);
+    const values: (number | null)[] = [];
+    const dispose = effect(() => {
+      const current = ticket.get();
+      values.push(current);
+      if (current === null) return;
+      const first = effect(() => {
+        ticket.get();
+      });
+      ticket.get();
+      const second = effect(() => {
+        ticket.get();
+      });
+      return () => {
+        first();
+        second();
+      };
+    });
+    try {
+      ticket.set(1);
+      await flushEffects();
+      ticket.set(null);
+      await flushEffects();
+      expect(values).toEqual([null, 1, null]);
+    } finally {
+      dispose();
+    }
+  });
+
   test("runs once synchronously on creation", () => {
     const calls: number[] = [];
     const count = cell(0);

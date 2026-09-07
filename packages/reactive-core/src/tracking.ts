@@ -169,6 +169,15 @@ export function preserveIncrementalTracking(computation: ReactiveComputation): v
     return;
   }
 
+  // Ordered reads are retained by their prefix index, not per-source stamps.
+  // A later mismatch snapshots that prefix before switching to stamped tracking.
+  if (
+    computation.trackingOrderedIndex !== undefined &&
+    computation.trackingOrderedMismatch !== true
+  ) {
+    return;
+  }
+
   const touchedDeps: Source[] = [];
 
   for (const dep of computation.deps) {

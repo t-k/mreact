@@ -8,6 +8,64 @@ import { runtimeState, type ReactiveComputation } from "../src/state.js";
 import { flushEffects } from "../src/testing.js";
 
 describe("computed", () => {
+  test("retains an ordered dependency prefix around nested effects when a branch shrinks", async () => {
+    const enabled = cell(true);
+    const first = cell(1);
+    const second = cell(2);
+    const derived = computed(() => {
+      const on = enabled.get();
+      effect(() => {})();
+      return on ? first.get() + second.get() : first.get();
+    });
+    const seen: number[] = [];
+    const dispose = effect(() => {
+      seen.push(derived.get());
+    });
+    try {
+      enabled.set(false);
+      await flushEffects();
+      first.set(10);
+      await flushEffects();
+      enabled.set(true);
+      await flushEffects();
+      expect(seen).toEqual([3, 1, 10, 12]);
+      expect(derived.get()).toBe(12);
+    } finally {
+      dispose();
+    }
+  });
+
+  test("preserves stamped dependencies when ordered tracking mismatches before a nested effect", async () => {
+    const first = cell(1);
+    const replacement = cell(20);
+    const second = cell(2);
+    let useReplacement = false;
+    const derived = computed(() => {
+      const selected = useReplacement ? replacement : first;
+      const value = selected.get();
+      effect(() => {
+        selected.get();
+      })();
+      return value + second.get();
+    });
+    const seen: number[] = [];
+    const dispose = effect(() => {
+      seen.push(derived.get());
+    });
+    try {
+      useReplacement = true;
+      first.set(3);
+      await flushEffects();
+      replacement.set(30);
+      await flushEffects();
+      first.set(4);
+      await flushEffects();
+      expect(seen).toEqual([3, 22, 32]);
+    } finally {
+      dispose();
+    }
+  });
+
   test("does not retain upstream dependencies after an untracked read", () => {
     const source = cell(1);
     const doubled = computed(() => source.get() * 2);
