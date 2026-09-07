@@ -3532,13 +3532,7 @@ ${inlineClientNavigation ? "  resumeNode: __mreactResumeNode,\n" : ""}  resumeRo
       : "";
   const routeInlineHydrationRuntime = shareHydrationRuntime
     ? ""
-    : [
-        routeUsesOutOfOrderFragments ? routeHydrationRuntimeInlineSource("fragments") : "",
-        routeUsesClientBoundaryRuntime ? routeHydrationRuntimeInlineSource("boundaries") : "",
-        routeUsesResumeRuntime ? routeHydrationRuntimeInlineSource("resume") : "",
-      ]
-        .filter((source) => source !== "")
-        .join("\n");
+    : `${routeUsesOutOfOrderFragments ? routeHydrationRuntimeInlineSource("fragments") : ""}${routeUsesClientBoundaryRuntime ? routeHydrationRuntimeInlineSource("boundaries") : ""}${routeUsesResumeRuntime ? routeHydrationRuntimeInlineSource("resume") : ""}`;
   const routeInlineLifecycleRuntime = shareHydrationRuntime
     ? ""
     : `\n${routeHydrationRuntimeInlineSource("lifecycle")}`;

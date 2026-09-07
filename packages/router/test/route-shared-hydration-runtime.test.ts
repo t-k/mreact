@@ -2,6 +2,8 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
+
+import { createCompilerModuleContext } from "@reckona/mreact-compiler/internal";
 // @vitest-environment happy-dom
 
 import {
@@ -17,6 +19,10 @@ const resumeRuntimeMarker = "data-mreact-layout-boundary";
 const clientBoundaryRuntimeMarker = "data-mreact-client-boundary-nonserializable";
 /** A DOM selector that only the shared out-of-order fragment runtime emits. */
 const fragmentRuntimeMarker = "template[data-mreact-oob-fragment]";
+/** Parse diagnostics of a generated entry. A group a route skips must leave valid JavaScript. */
+function entryParseErrors(code: string): readonly unknown[] {
+  return createCompilerModuleContext({ code, filename: "route-entry.js" }).parseErrors;
+}
 
 async function writeRoute(directory: string, name: string, code: string): Promise<string> {
   const filename = join(directory, `${name}.mreact.tsx`);
@@ -140,7 +146,7 @@ export default function Page() {
 
     const entry = await buildClientRouteEntrySource({
       clientBoundaryImports: ["./Counter"],
-      clientReferenceImports: [{ name: "Counter", source: "./Counter", exportName: "Counter" }],
+      clientReferenceImports: [{ name: "Counter", importSource: "./Counter", exportName: "Counter" }],
       clientReferenceManifest: [
         { name: "Counter", moduleId: "./Counter.js", exportName: "Counter" },
       ],
@@ -210,7 +216,7 @@ export default function Page() {
     const filename = await writeRoute(appDir, "index", code);
     const boundaryOnlyOptions = {
       clientBoundaryImports: ["./Counter"],
-      clientReferenceImports: [{ name: "Counter", source: "./Counter", exportName: "Counter" }],
+      clientReferenceImports: [{ name: "Counter", importSource: "./Counter", exportName: "Counter" }],
       clientReferenceManifest: [
         { name: "Counter", moduleId: "./Counter.js", exportName: "Counter" },
       ],
@@ -231,7 +237,16 @@ export default function Page() {
     expect(shared.code).not.toContain("mreact-route-hydration-runtime/resume");
     expect(shared.code).not.toContain("__mreactResumeRoute");
     expect(inline.code).toContain("__mreactHydrateClientBoundaries");
-    expect(shared.code).toContain("mreact-route-hydration-runtime/boundaries");
+    expect(shared.code.startsWith(
+      [
+        'import { __mreactRunLifecycleTasks } from "mreact-route-hydration-runtime/lifecycle";',
+        'import { __mreactCreateClientBoundaryRuntime } from "mreact-route-hydration-runtime/boundaries";',
+        "",
+      ].join("\n"),
+    )).toBe(true);
+    // A group the route does not reach must leave nothing behind, not a fragment of source.
+    expect(entryParseErrors(inline.code)).toHaveLength(0);
+    expect(entryParseErrors(shared.code)).toHaveLength(0);
   });
 
   test("a multi-route build emits the resume runtime in exactly one shared chunk", async () => {
@@ -307,6 +322,18 @@ export default function Page() {
     expect(source.split("\n").some((line) => line.trim() === "" && line !== "")).toBe(false);
   });
 
+  test("the shared boundary module wraps its helpers in the compat aware factory", async () => {
+    const source = routeHydrationRuntimeSource("boundaries");
+
+    expect(source.startsWith("/**")).toBe(true);
+    expect(source).toContain(
+      "export function __mreactCreateClientBoundaryRuntime(__mreactCompatCreateRoot, __mreactCompatCreateElement) {",
+    );
+    expect(source).toContain("  function __mreactHydrateClientBoundaries(marker, references, components) {");
+    expect(source).toContain("    hydrateClientBoundaries: __mreactHydrateClientBoundaries,");
+    expect(source.split("\n").some((line) => line.trim() === "" && line !== "")).toBe(false);
+  });
+
   test("a single route batch entry never calls the resume factory it cannot share", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-shared-resume-single-factory-"));
     const filename = await writeRoute(appDir, "index", interactiveRouteCode);
@@ -355,6 +382,8 @@ export default function Page() {
         "",
       ].join("\n"),
     )).toBe(true);
+    expect(entryParseErrors(plain.code)).toHaveLength(0);
+    expect(entryParseErrors(navigating.code)).toHaveLength(0);
     expect(plain.code).toContain(
       "const { resumeRoute: __mreactResumeRoute } = __mreactCreateRouteResumeRuntime(__mreactSyncEventBindings, __mreactSyncDomRefBindings);",
     );
@@ -386,7 +415,7 @@ export default function Page() {
 
     const entry = await buildClientRouteEntrySource({
       clientBoundaryImports: ["./Counter"],
-      clientReferenceImports: [{ name: "Counter", source: "./Counter", exportName: "Counter" }],
+      clientReferenceImports: [{ name: "Counter", importSource: "./Counter", exportName: "Counter" }],
       clientReferenceManifest: [
         { name: "Counter", moduleId: "./Counter.js", exportName: "Counter" },
       ],
@@ -398,6 +427,85 @@ export default function Page() {
     });
 
     expect(entry.code).toContain("__mreactCreateClientBoundaryRuntime(undefined, undefined);");
+  });
+
+  test("a compat client reference hands its entry points to the boundary runtime", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-shared-boundary-compat-"));
+    await writeFile(
+      join(appDir, "Widget.compat.tsx"),
+      `"use client";
+export function Widget() {
+  return <span>widget</span>;
+}`,
+    );
+    const code = `import { Widget } from "./Widget.compat";
+
+export const clientNavigation = false;
+
+export default function Page() {
+  return <main><Widget /></main>;
+}`;
+    const filename = await writeRoute(appDir, "index", code);
+
+    const entry = await buildClientRouteEntrySource({
+      clientBoundaryImports: ["./Widget.compat"],
+      clientReferenceImports: [
+        { name: "Widget", importSource: "./Widget.compat", exportName: "Widget" },
+      ],
+      clientReferenceManifest: [
+        { name: "Widget", moduleId: "./Widget.compat.js", exportName: "Widget" },
+      ],
+      code,
+      clientNavigation: false,
+      filename,
+      routePath: "/",
+      shareHydrationRuntime: true,
+    });
+
+    expect(entry.code).toContain(
+      "__mreactCreateClientBoundaryRuntime(__mreactCompatCreateRoot, __mreactCompatCreateElement);",
+    );
+    expect(entry.code).not.toContain("__mreactCreateClientBoundaryRuntime(undefined, undefined)");
+  });
+
+  test("inline route entries carry the boundary and fragment helpers they reach", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-shared-inline-groups-"));
+    await writeFile(
+      join(appDir, "Counter.tsx"),
+      `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set(value => value + 1)}>{count.get()}</button>;
+}`,
+    );
+    const code = `import { Counter } from "./Counter";
+
+export const clientNavigation = false;
+
+export default function Page() {
+  return <main><Counter /></main>;
+}`;
+    const filename = await writeRoute(appDir, "index", code);
+
+    const entry = await buildClientRouteEntrySource({
+      clientBoundaryImports: ["./Counter"],
+      clientReferenceImports: [{ name: "Counter", importSource: "./Counter", exportName: "Counter" }],
+      clientReferenceManifest: [
+        { name: "Counter", moduleId: "./Counter.js", exportName: "Counter" },
+      ],
+      code,
+      clientNavigation: false,
+      filename,
+      routeMayUseOutOfOrderFragments: true,
+      routePath: "/",
+    });
+
+    expect(entry.code).toContain("function __mreactHydrateClientBoundaries(marker, references, components) {");
+    expect(entry.code).toContain("function __mreactApplyOutOfOrderFragments(root) {");
+    expect(entry.code).toContain(clientBoundaryRuntimeMarker);
+    expect(entry.code).toContain(fragmentRuntimeMarker);
   });
 
   test("inline route entries omit the groups the route cannot reach", async () => {
@@ -415,6 +523,7 @@ export default function Page() {
     expect(entry.code).not.toContain(clientBoundaryRuntimeMarker);
     expect(entry.code).not.toContain("__mreactApplyOutOfOrderFragments");
     expect(entry.code).toContain("function __mreactResumeRoute(marker, nextNode) {");
+    expect(entryParseErrors(entry.code)).toHaveLength(0);
   });
 
   test("a batch built route hydrates through the shared chunk it imports", async () => {
