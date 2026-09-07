@@ -107,7 +107,6 @@ function writeResolvedCellValue<T>(source: CellSource<T>, resolved: T): void {
   }
 
   source.value = resolved;
-  bumpSourceVersion(source);
 
   const activeTracker = runtimeState.activeTracker;
   if (
@@ -126,16 +125,23 @@ function writeResolvedCellValue<T>(source: CellSource<T>, resolved: T): void {
   }
 
   const subscribers = source.subscribers;
-  if (subscribers !== null) {
-    if (runtimeState.batchDepth > 0 && !(subscribers instanceof Set)) {
-      if (!subscribers.disposed && !subscribers.queued) {
-        subscribers.markDirty();
-      }
-      return;
-    }
-
-    notifySubscribers(source);
+  if (subscribers === null) {
+    bumpSourceVersion(source);
+    return;
   }
+
+  if (runtimeState.batchDepth > 0 && !(subscribers instanceof Set)) {
+    bumpSourceVersion(source);
+
+    if (!subscribers.disposed && !subscribers.queued) {
+      subscribers.markDirty();
+    }
+    return;
+  }
+
+  // Notification advances the snapshot version itself, so a notified write must
+  // not bump it a second time.
+  notifySubscribers(source);
 }
 
 export function cell<T>(initial: T): Cell<T> {
