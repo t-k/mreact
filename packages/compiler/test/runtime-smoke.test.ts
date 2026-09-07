@@ -1871,6 +1871,46 @@ export function App() {
     expect(node.querySelector("[data-state='open']")?.textContent).toBe("Open");
   });
 
+  test("client transform evaluates a computed destructuring key once per render", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const state = cell({ label: "A", other: "B" });
+const calls = globalThis.__computedKeyCalls ??= [];
+function key() {
+  calls.push("key");
+  return "label";
+}
+
+export function App() {
+  const { [key()]: label, ...rest } = state.get();
+  return <main>
+    <button type="button" onClick={() => state.set({ label: "C", other: "D" })}>Update</button>
+    <span>{label}:{rest.other}</span>
+  </main>;
+}`,
+      filename: "computed-key-evaluated-once.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    (globalThis as typeof globalThis & { __computedKeyCalls?: string[] }).__computedKeyCalls = [];
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const calls = () =>
+      (globalThis as typeof globalThis & { __computedKeyCalls?: string[] }).__computedKeyCalls ??
+      [];
+
+    expect(node.querySelector("span")?.textContent).toBe("A:B");
+    expect(calls()).toEqual(["key"]);
+
+    node.querySelector("button")?.click();
+    await flushEffects();
+
+    expect(node.querySelector("span")?.textContent).toBe("C:D");
+    expect(calls()).toEqual(["key"]);
+  });
+
   test("client transform tracks computed object aliases of reactive reads", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";
@@ -1924,6 +1964,33 @@ export function App() {
     node.querySelector("button")?.click();
     await flushEffects();
     expect(node.querySelector("span")?.textContent).toBe("B");
+  });
+
+  test("client transform preserves array destructuring semantics for iterable rest", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const state = cell(new Set([1, 2]));
+
+export function App() {
+  const [first, ...tail] = state.get();
+  return <main>
+    <button type="button" onClick={() => state.set(new Set([3, 4]))}>Update</button>
+    <span>{String(first)}:{tail[0]}</span>
+  </main>;
+}`,
+      filename: "array-rest-iterable.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+
+    expect(node.querySelector("span")?.textContent).toBe("1:2");
+    node.querySelector("button")?.click();
+    await flushEffects();
+    expect(node.querySelector("span")?.textContent).toBe("3:4");
   });
 
   test("client transform tracks array rest aliases of reactive reads", async () => {
@@ -2047,6 +2114,71 @@ export function App() {
     expect(node.querySelector("i")?.textContent).toBe("A");
     expect(node.querySelector("span")?.textContent).toBe("B");
     expect(node.textContent).toBe("AB");
+  });
+
+  test("client transform preserves select attribute evaluation order across spreads", async () => {
+    const output = transform({
+      code: `const order = globalThis.__selectEvaluationOrder ??= [];
+const spread = {
+  get value() {
+    order.push("spread");
+    return "open";
+  },
+};
+function finalValue() {
+  order.push("value");
+  return order.length === 2 ? "done" : "open";
+}
+
+export function App() {
+  return <select {...spread} value={finalValue()}>
+    <option value="open">Open</option>
+    <option value="done">Done</option>
+  </select>;
+}`,
+      filename: "select-attribute-evaluation-order.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    (
+      globalThis as typeof globalThis & { __selectEvaluationOrder?: string[] }
+    ).__selectEvaluationOrder = [];
+    const node = (await runClientComponent(output.code)) as HTMLSelectElement;
+
+    expect(
+      (globalThis as typeof globalThis & { __selectEvaluationOrder?: string[] })
+        .__selectEvaluationOrder,
+    ).toEqual(["spread", "value"]);
+    expect(node.value).toBe("done");
+  });
+
+  test("client transform keeps fragment conditional order after a sibling update", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const value = cell(1);
+
+export function App() {
+  return <div>
+    {value.get() && <i>{value.get()}</i>}
+    <>{true && <b>B</b>}</>
+    <button type="button" onClick={() => value.set(2)}>update</button>
+  </div>;
+}`,
+      filename: "fragment-conditional-update-order.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+
+    expect(node.textContent).toBe("1Bupdate");
+    node.querySelector("button")?.click();
+    await flushEffects();
+    expect(node.textContent).toBe("2Bupdate");
   });
 
   test("client transform applies select value after a later spread multiple attribute", async () => {
@@ -2199,6 +2331,38 @@ export function App() {
     const node = (await runClientComponent(output.code)) as HTMLSelectElement;
 
     expect(node.value).toBe("open");
+  });
+
+  test("client transform defers JSX aliases passed through a component child owner", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const open = cell(false);
+
+function PanelSlot(props) {
+  return <section data-testid="slot">{props.open ? props.children : null}</section>;
+}
+
+export function App() {
+  const node = <b>{open.get() ? "P" : "Q"}</b>;
+  const alias = node;
+  return <main>
+    <button type="button" onClick={() => open.set(true)}>Open</button>
+    <PanelSlot open={open.get()}>{alias}</PanelSlot>
+  </main>;
+}`,
+      filename: "jsx-alias-component-children.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+
+    expect(node.querySelector("[data-testid='slot'] b")).toBeNull();
+    node.querySelector("button")?.click();
+    await flushEffects();
+    expect(node.querySelector("[data-testid='slot'] b")?.textContent).toBe("P");
   });
 
   test("client transform defers component children into the branch owner", async () => {

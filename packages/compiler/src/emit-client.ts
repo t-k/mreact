@@ -770,7 +770,11 @@ function emitSetup(
     }
 
     if (selectBindingSources.length > 0) {
-      const selectBindingLine = `  ${state.helperNames.bindSpreadProps}(${currentPath}, () => Object.assign({}, ${selectBindingSources.join(", ")}));`;
+      const selectPropsName = state.allocateName("_selectProps");
+      const selectAssignments = selectBindingSources
+        .map((source) => `Object.assign(${selectPropsName}, ${source});`)
+        .join(" ");
+      const selectBindingLine = `  ${state.helperNames.bindSpreadProps}(${currentPath}, () => { const ${selectPropsName} = {}; ${selectAssignments} return ${selectPropsName}; });`;
       if (hasDirectDangerouslySetInnerHtml(node)) {
         lines.push(selectBindingLine);
         return lines.join("\n");
@@ -803,6 +807,8 @@ function emitSetup(
 
   let sawStaticText = false;
   let sawComponentMutation = false;
+  const ownsStableChildrenSnapshot =
+    stableChildrenName !== undefined && inheritedStableChildrenName === undefined;
 
   for (let sourceChildIndex = 0; sourceChildIndex < children.length; sourceChildIndex += 1) {
     const child = children[sourceChildIndex] as JsxNodeIr;
@@ -814,7 +820,8 @@ function emitSetup(
 
     const usesLiveChildPath =
       stableChildrenName === undefined ||
-      (child.kind !== "component" &&
+      (ownsStableChildrenSnapshot &&
+        child.kind !== "component" &&
         !sawComponentMutation &&
         usesLiveInsertionAnchor(child) &&
         !sawStaticText);
@@ -1189,6 +1196,10 @@ function emitComponentRenderValueNode(node: JsxNodeIr, state: EmitSetupState): s
 }
 
 function shouldDeferComponentRenderValue(node: JsxNodeIr): boolean {
+  if (node.kind === "expr") {
+    return node.deferRenderValue === true;
+  }
+
   if (node.kind === "conditional") {
     return (
       needsDeferredComponentRenderValue(node) ||

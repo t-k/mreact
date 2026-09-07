@@ -1863,6 +1863,7 @@ function analyzeOxcFunctionLikeComponent(
     code,
     body,
     reactiveDerivedFunctionNames,
+    target === "client",
   );
   const componentBodyStatements = body.filter(
     (bodyStatement) =>
@@ -2047,10 +2048,12 @@ function analyzeOxcFunctionLikeComponent(
   );
   markOxcRenderValueExpressions(
     [root],
-    new Set([
-      ...componentRenderValueBindings,
-      ...[...lazyRenderValueBindings].map((name) => `${name}()`),
-    ]),
+    componentRenderValueBindings,
+    bodyStatementJsx === "server-string" ? "server-render-value" : "dynamic",
+  );
+  markOxcRenderValueExpressions(
+    [root],
+    new Set([...lazyRenderValueBindings].map((name) => `${name}()`)),
     bodyStatementJsx === "server-string" ? "server-render-value" : "dynamic",
   );
 

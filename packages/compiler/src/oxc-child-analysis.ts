@@ -641,6 +641,10 @@ export function analyzeOxcExpressionChild(
       )
     : undefined;
   const isKnownRenderValue = legacyRenderValue || sameModuleComponentCall;
+  const isLazyRenderValueBinding =
+    unwrappedExpression.type === "Identifier" &&
+    typeof unwrappedExpression.name === "string" &&
+    context.lazyRenderValueBindings?.has(unwrappedExpression.name) === true;
   const isPotentialComponentPropRenderValue =
     (bodyStatementJsx === "server-string" || bodyStatementJsx === "dom-node") &&
     !sameModuleComponentCall &&
@@ -688,6 +692,7 @@ export function analyzeOxcExpressionChild(
             )
           : readOxcReactiveExpressionCode(code, expression, context)),
       ...(renderMode === undefined ? {} : { renderMode }),
+      ...(isLazyRenderValueBinding ? { deferRenderValue: true as const } : {}),
     },
   ];
 }

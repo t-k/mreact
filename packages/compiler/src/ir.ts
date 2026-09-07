@@ -167,6 +167,7 @@ export interface TextIr {
 export interface ExprIr {
   kind: "expr";
   code: string;
+  deferRenderValue?: true;
   compilerKeyedProperty?: string;
   renderMode?:
     | "dynamic"

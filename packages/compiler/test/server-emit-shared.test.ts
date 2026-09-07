@@ -749,6 +749,21 @@ export function App() {
     );
   });
 
+  test("string and stream emitters preserve selection through transparent children wrappers", async () => {
+    await expectServerPairHtml(
+      `function Select(props) {
+  return <select value="done">{props.children}</select>;
+}
+function Forward(props) {
+  return <Select>{props.children}</Select>;
+}
+export function App() {
+  return <Forward><option value="open">open</option><option value="done">done</option></Forward>;
+}`,
+      '<select><option value="open">open</option><option value="done" selected="">done</option></select>',
+    );
+  });
+
   test("string and stream emitters carry multiple selection through a select-owning component", async () => {
     await expectServerPairHtml(
       `function Select(props) {

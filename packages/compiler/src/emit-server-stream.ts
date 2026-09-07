@@ -4094,47 +4094,59 @@ function emitPropsObject(
   });
 
   if (children.length > 0) {
-    const shouldDeferChildren =
+    const directChildrenExpression =
       childrenExpressionOverride === undefined &&
       !isRouterLinkComponentName(componentName) &&
-      children.some(needsLazyServerChildren);
-    const selectionAwareChildren = shouldDeferChildren;
-    const streamedChildren =
-      childrenExpressionOverride === undefined
-        ? emitStreamRendererFromChildren(
-            children,
-            escapeHelperName,
-            false,
-            selectionAwareChildren ? currentSelectionParameterName : selectedValueCode,
-            selectionAwareChildren ? currentSelectionMultipleParameterName : selectedMultipleCode,
-            selectionAwareChildren,
-          )
+      children.length === 1 &&
+      children[0]?.kind === "expr" &&
+      isChildrenExpressionCode(children[0].code)
+        ? children[0].code
         : undefined;
-    const childrenExpression =
-      childrenExpressionOverride ??
-      (shouldDeferChildren
-        ? (streamedChildren ??
-          (selectionAwareChildren
-            ? `async (${currentServerRenderValueSinkName}, ${currentSelectionParameterName}, ${currentSelectionMultipleParameterName}) => { ${currentServerRenderValueSinkName}.append(${emitHtmlExpressionFromChildren(children, escapeHelperName, currentSelectionParameterName, currentSelectionMultipleParameterName)}); }`
-            : emitStreamRendererFromChildren(
-                children,
-                escapeHelperName,
-                true,
-                selectedValueCode,
-                selectedMultipleCode,
-              )))
-        : streamedChildren) ??
-      emitHtmlExpressionFromChildren(
-        children,
-        escapeHelperName,
-        selectedValueCode,
-        selectedMultipleCode,
+    if (directChildrenExpression !== undefined) {
+      entries.push(`children: ${directChildrenExpression}`);
+    } else {
+      const shouldDeferChildren =
+        childrenExpressionOverride === undefined &&
+        !isRouterLinkComponentName(componentName) &&
+        children.some(needsLazyServerChildren);
+      const selectionAwareChildren = shouldDeferChildren;
+      const streamedChildren =
+        childrenExpressionOverride === undefined
+          ? emitStreamRendererFromChildren(
+              children,
+              escapeHelperName,
+              false,
+              selectionAwareChildren ? currentSelectionParameterName : selectedValueCode,
+              selectionAwareChildren ? currentSelectionMultipleParameterName : selectedMultipleCode,
+              selectionAwareChildren,
+            )
+          : undefined;
+      const childrenExpression =
+        childrenExpressionOverride ??
+        (shouldDeferChildren
+          ? (streamedChildren ??
+            (selectionAwareChildren
+              ? `async (${currentServerRenderValueSinkName}, ${currentSelectionParameterName}, ${currentSelectionMultipleParameterName}) => { ${currentServerRenderValueSinkName}.append(${emitHtmlExpressionFromChildren(children, escapeHelperName, currentSelectionParameterName, currentSelectionMultipleParameterName)}); }`
+              : emitStreamRendererFromChildren(
+                  children,
+                  escapeHelperName,
+                  true,
+                  selectedValueCode,
+                  selectedMultipleCode,
+                )))
+          : streamedChildren) ??
+        emitHtmlExpressionFromChildren(
+          children,
+          escapeHelperName,
+          selectedValueCode,
+          selectedMultipleCode,
+        );
+      entries.push(
+        selectionAwareChildren
+          ? `children: Object.defineProperty(${childrenExpression}, Symbol.for(${JSON.stringify(serverSelectionRenderValueKey)}), { value: true })`
+          : `children: ${isRouterLinkComponentName(componentName) ? `${componentName}.trustedHtml(${childrenExpression})` : childrenExpression}`,
       );
-    entries.push(
-      selectionAwareChildren
-        ? `children: Object.defineProperty(${childrenExpression}, Symbol.for(${JSON.stringify(serverSelectionRenderValueKey)}), { value: true })`
-        : `children: ${isRouterLinkComponentName(componentName) ? `${componentName}.trustedHtml(${childrenExpression})` : childrenExpression}`,
-    );
+    }
   }
 
   const object = `{ ${entries.join(", ")} }`;

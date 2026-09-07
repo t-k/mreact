@@ -51,6 +51,7 @@ export function collectOxcReactiveReadAliases(
   code: string,
   statements: readonly unknown[],
   reactiveDerivedFunctions: ReadonlySet<string> = new Set(),
+  memoizeComputedKeys = false,
 ): Map<string, string> {
   const aliases = new Map<string, string>();
 
@@ -86,6 +87,7 @@ export function collectOxcReactiveReadAliases(
         code,
         id,
         initializerCode,
+        memoizeComputedKeys,
       )) {
         aliases.set(name, expressionCode);
       }
@@ -169,6 +171,7 @@ export function formatOxcUntrackedReactiveAliasDeclaration(
   }
 
   const replacements: ReactiveAliasReplacement[] = [];
+  const computedKeys = new Map<number, Record<string, unknown>>();
 
   for (const declarationValue of readArray(statement.declarations)) {
     const declaration = readObject(declarationValue);
@@ -181,15 +184,27 @@ export function formatOxcUntrackedReactiveAliasDeclaration(
       (typeof id.name === "string" && aliases.has(id.name)) ||
       (id.type !== "Identifier" && hasOxcReactiveAliasBinding(id, aliases));
 
-    if (!hasAlias || start === undefined || end === undefined) {
-      continue;
+    if (hasAlias && start !== undefined && end !== undefined) {
+      collectOxcComputedKeyNodes(id, computedKeys);
+      replacements.push({
+        start,
+        end,
+        name: typeof id.name === "string" ? id.name : "pattern",
+        text: `${OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER}(() => (${readSource(code, initializer)}))`,
+      });
     }
+  }
 
+  for (const [start, key] of computedKeys) {
+    const end = readNumber(key.end);
+    if (end === undefined) continue;
+
+    const name = computedKeyBindingName(start);
     replacements.push({
       start,
       end,
-      name: typeof id.name === "string" ? id.name : "pattern",
-      text: `${OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER}(() => (${readSource(code, initializer)}))`,
+      name,
+      text: `(${name} = (${readSource(code, key)}))`,
     });
   }
 
@@ -210,7 +225,12 @@ export function formatOxcUntrackedReactiveAliasDeclaration(
     source = `${source.slice(0, start)}${replacement.text}${source.slice(end)}`;
   }
 
-  return source;
+  const computedKeyDeclarations = [...computedKeys.keys()]
+    .sort((left, right) => left - right)
+    .map((start) => `let ${computedKeyBindingName(start)};`)
+    .join("\n");
+
+  return computedKeyDeclarations.length === 0 ? source : `${computedKeyDeclarations}\n${source}`;
 }
 
 export function collectOxcCompilerOwnedReactiveAliases(
@@ -292,10 +312,17 @@ function collectOxcPatternReactiveAliases(
   code: string,
   pattern: Record<string, unknown>,
   initializerCode: string,
+  memoizeComputedKeys = false,
 ): Map<string, string> {
   const aliases = new Map<string, string>();
 
-  collectOxcPatternReactiveAliasesInto(pattern, initializerCode, aliases, code);
+  collectOxcPatternReactiveAliasesInto(
+    pattern,
+    initializerCode,
+    aliases,
+    code,
+    memoizeComputedKeys,
+  );
   return aliases;
 }
 
@@ -304,6 +331,7 @@ function collectOxcPatternReactiveAliasesInto(
   sourceCode: string,
   aliases: Map<string, string>,
   code: string,
+  memoizeComputedKeys = false,
 ): void {
   if (pattern.type === "Identifier" && typeof pattern.name === "string") {
     aliases.set(pattern.name, sourceCode);
@@ -344,8 +372,8 @@ function collectOxcPatternReactiveAliasesInto(
         continue;
       }
 
-      const access = readPropertyAccess(property, code);
-      const excludedProperty = readExcludedProperty(property, code);
+      const access = readPropertyAccess(property, code, memoizeComputedKeys);
+      const excludedProperty = readExcludedProperty(property, code, memoizeComputedKeys);
       if (access === undefined || excludedProperty === undefined) continue;
       excludedProperties.push(
         `${excludedProperty}: __mreactRestExcluded${excludedProperties.length}`,
@@ -355,6 +383,7 @@ function collectOxcPatternReactiveAliasesInto(
         `(${sourceCode})${access}`,
         aliases,
         code,
+        memoizeComputedKeys,
       );
     }
     return;
@@ -366,20 +395,34 @@ function collectOxcPatternReactiveAliasesInto(
       if (element.type === "RestElement") {
         const argument = readObject(element.argument);
         if (argument.type === "Identifier" && typeof argument.name === "string") {
-          aliases.set(argument.name, `(${sourceCode}).slice(${index})`);
+          aliases.set(argument.name, `Array.from(${sourceCode}).slice(${index})`);
         }
         continue;
       }
       if (Object.keys(element).length === 0) continue;
-      collectOxcPatternReactiveAliasesInto(element, `(${sourceCode})[${index}]`, aliases, code);
+      collectOxcPatternReactiveAliasesInto(
+        element,
+        `Array.from(${sourceCode})[${index}]`,
+        aliases,
+        code,
+        memoizeComputedKeys,
+      );
     }
   }
 }
 
-function readPropertyKeyCode(property: Record<string, unknown>, code: string): string | undefined {
+function readPropertyKeyCode(
+  property: Record<string, unknown>,
+  code: string,
+  memoizeComputedKeys = false,
+): string | undefined {
   const key = readObject(property.key);
 
   if (property.computed === true) {
+    const keyStart = readNumber(key.start);
+    if (memoizeComputedKeys && keyStart !== undefined) {
+      return computedKeyBindingName(keyStart);
+    }
     return readSource(code, key);
   }
 
@@ -394,16 +437,71 @@ function readPropertyKeyCode(property: Record<string, unknown>, code: string): s
   return undefined;
 }
 
-function readPropertyAccess(property: Record<string, unknown>, code: string): string | undefined {
-  const key = readPropertyKeyCode(property, code);
+function readPropertyAccess(
+  property: Record<string, unknown>,
+  code: string,
+  memoizeComputedKeys = false,
+): string | undefined {
+  const key = readPropertyKeyCode(property, code, memoizeComputedKeys);
   if (key === undefined) return undefined;
   return property.computed === true || !/^[A-Za-z_$][\w$]*$/.test(key) ? `[${key}]` : `.${key}`;
 }
 
-function readExcludedProperty(property: Record<string, unknown>, code: string): string | undefined {
-  const key = readPropertyKeyCode(property, code);
+function readExcludedProperty(
+  property: Record<string, unknown>,
+  code: string,
+  memoizeComputedKeys = false,
+): string | undefined {
+  const key = readPropertyKeyCode(property, code, memoizeComputedKeys);
   if (key === undefined) return undefined;
   return property.computed === true ? `[${key}]` : key;
+}
+
+function computedKeyBindingName(start: number): string {
+  return `__mreactComputedKey_${start}`;
+}
+
+function collectOxcComputedKeyNodes(
+  pattern: Record<string, unknown>,
+  keys: Map<number, Record<string, unknown>>,
+): void {
+  if (pattern.type === "AssignmentPattern") {
+    collectOxcComputedKeyNodes(readObject(pattern.left), keys);
+    return;
+  }
+
+  if (pattern.type === "RestElement") {
+    collectOxcComputedKeyNodes(readObject(pattern.argument), keys);
+    return;
+  }
+
+  if (pattern.type === "ObjectPattern") {
+    for (const propertyValue of readArray(pattern.properties)) {
+      const property = readObject(propertyValue);
+      if (property.type === "RestElement") {
+        collectOxcComputedKeyNodes(readObject(property.argument), keys);
+        continue;
+      }
+      if (property.type !== "Property" && property.type !== "ObjectProperty") continue;
+
+      if (property.computed === true) {
+        const key = readObject(property.key);
+        const start = readNumber(key.start);
+        if (start !== undefined) keys.set(start, key);
+      }
+      collectOxcComputedKeyNodes(readObject(property.value), keys);
+    }
+    return;
+  }
+
+  if (pattern.type === "ArrayPattern") {
+    for (const elementValue of readArray(pattern.elements)) {
+      const element = readObject(elementValue);
+      if (Object.keys(element).length > 0) {
+        collectOxcComputedKeyNodes(element, keys);
+      }
+    }
+  }
 }
 
 function collectOxcReactiveAliasBindingNames(
@@ -870,7 +968,7 @@ function readNumber(value: unknown): number | undefined {
 export function markOxcRenderValueExpressions(
   nodes: readonly JsxNodeIr[],
   names: Set<string>,
-  renderMode: "dynamic" | "html" | "server-render-value" = "dynamic",
+  renderMode: "dynamic" | "html" | "render-value" | "server-render-value" = "dynamic",
 ): void {
   if (names.size === 0) {
     return;

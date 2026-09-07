@@ -2715,49 +2715,61 @@ function emitPropsObject(
   });
 
   if (children.length > 0) {
-    const shouldDeferChildren =
+    const directChildrenExpression =
       childrenExpressionOverride === undefined &&
       !isRouterLinkComponentName(componentName) &&
-      !containsAsyncServerOperationInChildren(children, asyncComponentNames) &&
-      children.some(needsLazyServerChildren);
-    const selectionAwareChildren = shouldDeferChildren;
-    const childrenExpression =
-      childrenExpressionOverride ??
-      (selectionAwareChildren
-        ? withSelectedValueCode(
-            currentSelectionParameterName,
-            currentSelectionMultipleParameterName,
-            () =>
-              emitHtmlExpressionFromChildren(
-                children,
-                escapeHelperName,
-                escapeBatchHelperName,
-                asyncComponentNames,
-                dynamicAttributes,
-                contextProviderHelperName,
-                contextConsumerHelperName,
-                reactNodeRenderHelperName,
-              ),
-          )
-        : emitHtmlExpressionFromChildren(
-            children,
-            escapeHelperName,
-            escapeBatchHelperName,
-            asyncComponentNames,
-            dynamicAttributes,
-            contextProviderHelperName,
-            contextConsumerHelperName,
-            reactNodeRenderHelperName,
-          ));
-    if (selectionAwareChildren) {
-      const childRenderValue = `(${currentSelectionParameterName}, ${currentSelectionMultipleParameterName}) => (${childrenExpression})`;
-      entries.push(
-        `children: Object.defineProperty(${childRenderValue}, Symbol.for(${JSON.stringify(serverSelectionRenderValueKey)}), { value: true })`,
-      );
+      children.length === 1 &&
+      children[0]?.kind === "expr" &&
+      isChildrenExpressionCode(children[0].code)
+        ? children[0].code
+        : undefined;
+    if (directChildrenExpression !== undefined) {
+      entries.push(`children: ${directChildrenExpression}`);
     } else {
-      entries.push(
-        `children: ${isRouterLinkComponentName(componentName) ? `${componentName}.trustedHtml(${childrenExpression})` : childrenExpression}`,
-      );
+      const shouldDeferChildren =
+        childrenExpressionOverride === undefined &&
+        !isRouterLinkComponentName(componentName) &&
+        !containsAsyncServerOperationInChildren(children, asyncComponentNames) &&
+        children.some(needsLazyServerChildren);
+      const selectionAwareChildren = shouldDeferChildren;
+      const childrenExpression =
+        childrenExpressionOverride ??
+        (selectionAwareChildren
+          ? withSelectedValueCode(
+              currentSelectionParameterName,
+              currentSelectionMultipleParameterName,
+              () =>
+                emitHtmlExpressionFromChildren(
+                  children,
+                  escapeHelperName,
+                  escapeBatchHelperName,
+                  asyncComponentNames,
+                  dynamicAttributes,
+                  contextProviderHelperName,
+                  contextConsumerHelperName,
+                  reactNodeRenderHelperName,
+                ),
+            )
+          : emitHtmlExpressionFromChildren(
+              children,
+              escapeHelperName,
+              escapeBatchHelperName,
+              asyncComponentNames,
+              dynamicAttributes,
+              contextProviderHelperName,
+              contextConsumerHelperName,
+              reactNodeRenderHelperName,
+            ));
+      if (selectionAwareChildren) {
+        const childRenderValue = `(${currentSelectionParameterName}, ${currentSelectionMultipleParameterName}) => (${childrenExpression})`;
+        entries.push(
+          `children: Object.defineProperty(${childRenderValue}, Symbol.for(${JSON.stringify(serverSelectionRenderValueKey)}), { value: true })`,
+        );
+      } else {
+        entries.push(
+          `children: ${isRouterLinkComponentName(componentName) ? `${componentName}.trustedHtml(${childrenExpression})` : childrenExpression}`,
+        );
+      }
     }
   }
 
