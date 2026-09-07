@@ -66,6 +66,41 @@ describe("computed", () => {
     }
   });
 
+  test("preserves a computed dependency across a synchronous flush of an existing effect", async () => {
+    const first = cell(1);
+    const replacement = cell(20);
+    const second = cell(2);
+    const tick = cell(0);
+    let useReplacement = false;
+    let epoch = 0;
+    const restoreScheduler = setScheduler({ schedule: (flush) => flush() });
+    const child = effect(() => {
+      tick.get();
+      (useReplacement ? replacement : first).get();
+    });
+    const derived = computed(() => {
+      const value = (useReplacement ? replacement : first).get();
+      tick.set(++epoch);
+      return value + second.get();
+    });
+    const seen: number[] = [];
+    const dispose = effect(() => {
+      seen.push(derived.get());
+    });
+    try {
+      useReplacement = true;
+      first.set(3);
+      await flushEffects();
+      replacement.set(30);
+      await flushEffects();
+      expect(seen).toEqual([3, 22, 32]);
+    } finally {
+      dispose();
+      child();
+      restoreScheduler();
+    }
+  });
+
   test("does not retain upstream dependencies after an untracked read", () => {
     const source = cell(1);
     const doubled = computed(() => source.get() * 2);
