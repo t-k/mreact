@@ -1,4 +1,11 @@
-import { cell, computed, type ReadonlyCell } from "@reckona/mreact-reactive-core";
+import {
+  cell,
+  computed,
+  createCleanupScope,
+  runWithCleanupScope,
+  type ReadonlyCell,
+} from "@reckona/mreact-reactive-core";
+import { registerCleanup } from "@reckona/mreact-reactive-core/internal";
 import { type StandardSchemaV1, validateStandardSchema } from "./standard-schema.js";
 export type { StandardSchemaValidationResult } from "./standard-schema.js";
 
@@ -244,6 +251,11 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
   >();
   let nextFieldArrayKey = 0;
   let activeSubmit: object | undefined;
+  // Cached field computed values outlive the consumer that first reads them, so
+  // the form owns them instead of whichever scope happened to render first.
+  // Disposing the creation owner still releases every cached subscription.
+  const formScope = createCleanupScope();
+  registerCleanup(formScope.dispose);
 
   function commit(patch: Partial<FormState<TValues>>, dirty = dirtyFields.size > 0): void {
     const previous = state.get();
@@ -495,7 +507,9 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
       return existing as ReadonlyCell<Array<FieldArrayRow<ArrayFieldValue<TValues, Name>>>>;
     }
 
-    const next = computed(() => fieldArrayRows(name), { equals: fieldArrayRowsEqual });
+    const next = runWithCleanupScope(formScope, () =>
+      computed(() => fieldArrayRows(name), { equals: fieldArrayRowsEqual }),
+    );
     fieldArrayCells.set(
       name,
       next as ReadonlyCell<Array<FieldArrayRow<ArrayFieldValue<TValues, ArrayFieldName<TValues>>>>>,
@@ -511,9 +525,11 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
       return existing as ReadonlyCell<FieldState<TValues[Name]>>;
     }
 
-    const next = computed(() => fieldState(state.get(), name, dirtyFields.has(name)), {
-      equals: fieldStateEquals,
-    });
+    const next = runWithCleanupScope(formScope, () =>
+      computed(() => fieldState(state.get(), name, dirtyFields.has(name)), {
+        equals: fieldStateEquals,
+      }),
+    );
     fieldStateCells.set(name, next as ReadonlyCell<FieldState<TValues[FieldName<TValues>]>>);
     return next;
   }
