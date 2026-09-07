@@ -1,4 +1,5 @@
 import type { AttributeIr, ComponentPropIr, ComponentIr, JsxNodeIr, ModuleIr } from "./ir.js";
+import { readExpressionFacts } from "./expression-facts.js";
 import type { RuntimeImport } from "./types.js";
 import { listReadsNestedItemObject } from "./ir-nested-object-read.js";
 import { OXC_BIND_DOM_REF_PLACEHOLDER } from "./oxc-dom-lowering.js";
@@ -915,7 +916,10 @@ function emitSetup(
           );
         }
       } else if (child.renderMode !== "compiler-keyed-initial-text") {
-        lines.push(`  ${state.helperNames.bindText}(${textVar}, () => (${child.code}));`);
+        const provenCell = provenNativeCellTextBinding(child);
+        lines.push(
+          `  ${state.helperNames.bindText}(${textVar}, ${provenCell ?? `() => (${child.code})`});`,
+        );
       }
       childIndex += 1;
       continue;
@@ -1564,6 +1568,18 @@ function isOwnerScopedMemoBranches(
           (branch[0]?.kind === "expr" || branch[0]?.kind === "text" || branch[0]?.kind === "list")),
     )
   );
+}
+
+/**
+ * Names the cell a text child is proven to read, so the emitter can hand the
+ * cell itself to bindText instead of a thunk. bindText subscribes to a native
+ * cell source directly and falls back to a tracked effect otherwise, so the
+ * observable value, normalization and disposal contract are unchanged.
+ */
+function provenNativeCellTextBinding(child: Extract<JsxNodeIr, { kind: "expr" }>): string | undefined {
+  const value = readExpressionFacts(child).value;
+
+  return value.kind === "native-cell-read" ? value.binding.name : undefined;
 }
 
 function emitConditionalRenderValueExpression(
