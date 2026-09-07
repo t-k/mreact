@@ -1362,7 +1362,7 @@ function getStateTextBinding(
 function getStateBinding(slot: Extract<HookSlot, { kind: "state" }>): ReactiveStateBinding {
   slot.stateBinding ??= {
     value: slot.value,
-    source: { subscribers: null },
+    source: { subscribers: null, version: 0 },
     get() {
       trackSource(this.source);
       return this.value;

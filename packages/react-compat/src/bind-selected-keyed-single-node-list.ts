@@ -183,5 +183,5 @@ function updateSelectedKeyedRowContext<T>(
 }
 
 function ensureContextSource(context: InternalSelectedKeyedRowContext): Source {
-  return (context[contextSource] ??= { subscribers: null });
+  return (context[contextSource] ??= { subscribers: null, version: 0 });
 }

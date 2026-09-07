@@ -1288,7 +1288,7 @@ function createKeyedItemCell(value: unknown): KeyedItemCell {
 
 function getKeyedItemValue(cell: KeyedItemCell): unknown {
   if (runtimeState.activeTracker !== null) {
-    cell.source ??= { subscribers: null };
+    cell.source ??= { subscribers: null, version: 0 };
     trackSource(cell.source);
   }
 

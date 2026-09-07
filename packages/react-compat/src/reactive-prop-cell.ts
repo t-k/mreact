@@ -30,7 +30,7 @@ let propCellBatchDepth = 0;
 let propCellBatchNeedsFlush = false;
 
 export function createReactivePropCell(props: Record<string, unknown>): ReactivePropCell {
-  return { value: props, source: { subscribers: null } };
+  return { value: props, source: { subscribers: null, version: 0 } };
 }
 
 export function batchReactivePropCellUpdates<T>(run: () => T): T {
@@ -82,7 +82,7 @@ function getReactivePropPropertySource(cell: ReactivePropCell, property: Propert
   let source = propertySources.get(property);
 
   if (source === undefined) {
-    source = { subscribers: null };
+    source = { subscribers: null, version: 0 };
     propertySources.set(property, source);
   }
 

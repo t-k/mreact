@@ -535,7 +535,7 @@ export function bindCompilerKeyedSingleNodeList<T, TNode extends ChildNode>(
 }
 
 function ensureCompilerRowSource(context: InternalCompilerKeyedRowContext): Source {
-  return (context[compilerRowSource] ??= { subscribers: null });
+  return (context[compilerRowSource] ??= { subscribers: null, version: 0 });
 }
 
 function trackCompilerRowContext(context: InternalCompilerKeyedRowContext): void {
