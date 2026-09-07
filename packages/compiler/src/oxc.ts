@@ -120,6 +120,13 @@ import type { AnalyzeModuleOptions, CompileTarget, Diagnostic } from "./types.js
 export type { AnalyzeToIrInput, AnalyzeToIrOutput } from "./internal.js";
 export type { CompilerModuleContext } from "./compiler-module-context.js";
 export type {
+  ExpressionFactsIr,
+  ExpressionPhaseIr,
+  ExpressionValueIr,
+  FactCertainty,
+  ResolvedBindingIr,
+} from "./expression-facts.js";
+export type {
   AsyncBoundaryIr,
   AttributeIr,
   ClientReferenceIr,

@@ -163,6 +163,7 @@ export interface ComponentIr {
     parameterPropAliases?: PropAliasIr[];
     // (undocumented)
     parameters: string[];
+    reassigned?: true;
     // (undocumented)
     root: JsxNodeIr;
     // (undocumented)
@@ -288,6 +289,28 @@ export interface EventAttributeIr {
 }
 
 // @public
+export interface ExpressionFactsIr {
+    dependencies?: ResolvedBindingIr[];
+    effectFree: FactCertainty;
+    escape: "contained" | "unknown";
+    phases?: ExpressionPhaseIr[];
+    value: ExpressionValueIr;
+}
+
+// @public
+export type ExpressionPhaseIr = "server" | "attach" | "update" | "mount";
+
+// @public
+export type ExpressionValueIr = {
+    kind: "unknown";
+} | {
+    kind: "native-cell-read";
+    binding: ResolvedBindingIr;
+} | {
+    kind: "renderable-primitive";
+};
+
+// @public
 export interface ExprIr {
     // (undocumented)
     code: string;
@@ -295,11 +318,15 @@ export interface ExprIr {
     compilerKeyedProperty?: string;
     // (undocumented)
     deferRenderValue?: true;
+    facts?: ExpressionFactsIr;
     // (undocumented)
     kind: "expr";
     // (undocumented)
     renderMode?: "dynamic" | "render-value" | "html" | "server-render-value" | "react-node" | "stream-node" | "compat-child" | "compiler-keyed-initial-text" | "compiler-keyed-cell-text" | "compiler-keyed-text";
 }
+
+// @public
+export type FactCertainty = "proven" | "unknown";
 
 // @public
 export interface JsxElementIr {
@@ -402,6 +429,16 @@ export interface PropAliasIr {
     localName: string;
     // (undocumented)
     propName: string;
+}
+
+// @public
+export interface ResolvedBindingIr {
+    // (undocumented)
+    end: number;
+    // (undocumented)
+    name: string;
+    // (undocumented)
+    start: number;
 }
 
 // @public
