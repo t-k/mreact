@@ -50,10 +50,17 @@ export interface CurrentCheckContext {
 
 export type Tracker = ReactiveComputation | null;
 
+/**
+ * Registers a disposer with an owning scope. An owner may return an unregister
+ * handle so a manually stopped resource can drop its registration; any other
+ * return value, including void, keeps the historical fire-and-forget contract.
+ */
+export type CleanupOwner = (dispose: () => void) => unknown;
+
 export const runtimeState: {
   activeTracker: Tracker;
   batchDepth: number;
-  cleanupOwner: ((dispose: () => void) => void) | undefined;
+  cleanupOwner: CleanupOwner | undefined;
   flushingComputed: boolean;
   nextComputationId: number;
   notificationDepth: number;

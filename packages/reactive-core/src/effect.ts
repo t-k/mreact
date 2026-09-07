@@ -20,6 +20,10 @@ const clientDevtoolsDisabled =
 
 type EffectFn = () => void | (() => void);
 
+// Shared placeholder installed on disposal so a stopped effect stops retaining
+// the user closure even while its stop handle or owner entry is still alive.
+const disposedEffectFn: EffectFn = () => {};
+
 interface EffectComputation extends ReactiveComputation {
   cleanup: (() => void) | undefined;
   fn: EffectFn;
@@ -66,22 +70,27 @@ function createEffect(fn: EffectFn, debugLabel?: string): () => void {
   try {
     computation.run();
   } catch (error) {
-    computation.disposed = true;
-    computation.queued = false;
-    cleanupDeps(computation);
-    resource.dispose();
-
-    if (computation.cleanup !== undefined) {
-      const currentCleanup = computation.cleanup;
-      computation.cleanup = undefined;
-      currentCleanup();
-    }
-
+    computation.dispose();
     throw error;
   }
 
-  const dispose = () => computation.dispose();
-  registerCleanup(dispose);
+  // Declared before the stop handle so an owner that disposes during
+  // registration never reads an uninitialized binding.
+  let unregister: (() => void) | undefined;
+  const dispose = (): void => {
+    const currentUnregister = unregister;
+    unregister = undefined;
+    currentUnregister?.();
+    computation.dispose();
+  };
+  const registration = registerCleanup(dispose);
+
+  if (computation.disposed) {
+    registration?.();
+  } else {
+    unregister = registration;
+  }
+
   return dispose;
 }
 
@@ -155,8 +164,12 @@ function effectDispose(this: ReactiveComputation): void {
   cleanupDeps(computation);
   computation.resource.dispose();
 
-  if (computation.cleanup !== undefined) {
-    const currentCleanup = computation.cleanup;
+  // Drop the user closures before running cleanup so a throwing cleanup cannot
+  // leave the stopped effect holding on to what it captured.
+  computation.fn = disposedEffectFn;
+  const currentCleanup = computation.cleanup;
+
+  if (currentCleanup !== undefined) {
     computation.cleanup = undefined;
     currentCleanup();
   }

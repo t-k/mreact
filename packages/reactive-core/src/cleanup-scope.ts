@@ -1,4 +1,4 @@
-import { runtimeState } from "./state.js";
+import { runtimeState, type CleanupOwner } from "./state.js";
 import { registerReactiveDevtoolsResource } from "./devtools.js";
 
 /** Owns cleanup callbacks for DOM-independent resources. */
@@ -101,13 +101,11 @@ export function createCleanupScope(): CleanupScope {
 
 /** Runs a synchronous callback with a public cleanup scope as its dynamic owner. */
 export function runWithCleanupScope<T>(scope: CleanupScope, run: () => T): T {
-  return withCleanupScope((dispose) => {
-    scope.register(dispose);
-  }, run);
+  return withCleanupScope((dispose) => scope.register(dispose), run);
 }
 
 /** Runs a callback with a cleanup owner that can collect disposers. */
-export function withCleanupScope<T>(owner: (dispose: () => void) => void, run: () => T): T {
+export function withCleanupScope<T>(owner: CleanupOwner, run: () => T): T {
   const previousOwner = runtimeState.cleanupOwner;
   runtimeState.cleanupOwner = owner;
 
@@ -118,7 +116,18 @@ export function withCleanupScope<T>(owner: (dispose: () => void) => void, run: (
   }
 }
 
-/** Registers a disposer with the currently active cleanup scope. */
-export function registerCleanup(dispose: () => void): void {
-  runtimeState.cleanupOwner?.(dispose);
+/**
+ * Registers a disposer with the currently active cleanup scope and returns the
+ * owner's unregister handle when it provides one.
+ */
+export function registerCleanup(dispose: () => void): (() => void) | undefined {
+  const owner = runtimeState.cleanupOwner;
+
+  if (owner === undefined) {
+    return undefined;
+  }
+
+  const unregister = owner(dispose);
+
+  return typeof unregister === "function" ? (unregister as () => void) : undefined;
 }
