@@ -1868,11 +1868,16 @@ function shadowOxcContextBindings(
     context.serverRenderValueCallNames === undefined
       ? undefined
       : new Set([...context.serverRenderValueCallNames].filter((name) => !shadowed.has(name)));
+  const lazyRenderValueBindings =
+    context.lazyRenderValueBindings === undefined
+      ? undefined
+      : new Set([...context.lazyRenderValueBindings].filter((name) => !shadowed.has(name)));
   return {
     ...context,
     componentNames,
     ...(componentCallNames === undefined ? {} : { componentCallNames }),
     ...(serverRenderValueCallNames === undefined ? {} : { serverRenderValueCallNames }),
+    ...(lazyRenderValueBindings === undefined ? {} : { lazyRenderValueBindings }),
     ...(aliases === undefined ? {} : { reactiveAliasBindings: aliases }),
   };
 }

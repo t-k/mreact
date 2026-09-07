@@ -72,6 +72,8 @@ let currentRenderServerValueHelperName: string = "_renderServerValue";
 let currentContainsServerRenderValueHelperName: string = "_containsServerRenderValue";
 let currentServerRenderValueSinkName: string = "$sink";
 let currentServerRenderAttributeValueName: string = "_serverRenderAttributeValue";
+let currentSelectionParameterName: string = "_selectedValue";
+let currentSelectionMultipleParameterName: string = "_selectedMultiple";
 let currentOptionSelectedLocalNames: OptionSelectedLocalNames = {
   selected: "_selected",
   optionValue: "_optionValue",
@@ -90,6 +92,7 @@ let currentOptionSelectedLocalNames: OptionSelectedLocalNames = {
 };
 const serverSelectionContextKey = "mreact.server.selected-value";
 const serverSelectionMultipleContextKey = "mreact.server.select-multiple";
+const serverSelectionRenderValueKey = "mreact.server.selection-render-value";
 
 export function emitServerStream(
   ir: ModuleIr,
@@ -164,13 +167,10 @@ export function emitServerStream(
     index: allocateNestedBindingSafeName(ir, "_i"),
     candidate: allocateNestedBindingSafeName(ir, "_candidate"),
   };
-  const selectionParameterName = containsServerSelectionContext(ir)
-    ? allocateNestedBindingSafeName(ir, "_selectedValue")
-    : undefined;
-  const selectionMultipleParameterName =
-    selectionParameterName === undefined
-      ? undefined
-      : allocateNestedBindingSafeName(ir, "_selectedMultiple");
+  const selectionParameterName = allocateNestedBindingSafeName(ir, "_selectedValue");
+  const selectionMultipleParameterName = allocateNestedBindingSafeName(ir, "_selectedMultiple");
+  currentSelectionParameterName = selectionParameterName;
+  currentSelectionMultipleParameterName = selectionMultipleParameterName;
   const urlSafeHelperName = allocateHelperName(ir, "_urlAttrSafe");
   currentUrlSafeHelperName = urlSafeHelperName;
   setOxcServerStringUrlSafeHelperName(urlSafeHelperName);
@@ -710,14 +710,31 @@ function emitSpreadAttributesHelper(
 
 function emitStreamNodeHelper(name: string): string {
   return [
-    `async function ${name}($sink, value, escapeHtml) {`,
+    `async function ${name}($sink, value, escapeHtml, selectedValue, selectedMultiple) {`,
     `  if (value == null || value === false) return;`,
-    `  if (typeof value === "function") { await value($sink); return; }`,
+    `  if (typeof value === "function") {`,
+    `    if (value[Symbol.for(${JSON.stringify(serverSelectionRenderValueKey)})] === true) { await value($sink, selectedValue, selectedMultiple); return; }`,
+    `    await value($sink); return;`,
+    `  }`,
     `  if (Array.isArray(value)) { for (const item of value) await ${name}($sink, item, escapeHtml); return; }`,
     `  if (typeof value === "string") { $sink.append(value); return; }`,
     `  $sink.append(escapeHtml(value === true ? "" : value));`,
     `}`,
   ].join("\n");
+}
+
+function emitStreamSelectionArguments(part?: Extract<HtmlPart, { kind: "stream-node" }>): string {
+  const selectedValue =
+    part?.selectedValueCode ??
+    currentPropChildrenCollectState?.selectedValueCode ??
+    currentSelectionParameterName ??
+    "undefined";
+  const selectedMultiple =
+    part?.selectedMultipleCode ??
+    currentPropChildrenCollectState?.selectedMultipleCode ??
+    currentSelectionMultipleParameterName ??
+    "undefined";
+  return `, ${selectedValue}, ${selectedMultiple}`;
 }
 
 function emitComponent(
@@ -740,13 +757,10 @@ function emitComponent(
   const { serverBootstrap, serverBootstrapNonce, serverBootstrapSrc } = options;
   const sinkName = allocateComponentSinkName(component);
   const parameters = [sinkName, ...component.parameters].join(", ");
-  const selectionContextDeclaration =
-    options.selectionParameterName === undefined
-      ? []
-      : [
-          `  const ${options.selectionParameterName} = arguments[1]?.[Symbol.for(${JSON.stringify(serverSelectionContextKey)})];`,
-          `  const ${options.selectionMultipleParameterName} = arguments[1]?.[Symbol.for(${JSON.stringify(serverSelectionMultipleContextKey)})];`,
-        ];
+  const selectionContextDeclaration = [
+    `  const ${options.selectionParameterName} = arguments[1]?.[Symbol.for(${JSON.stringify(serverSelectionContextKey)})];`,
+    `  const ${options.selectionMultipleParameterName} = arguments[1]?.[Symbol.for(${JSON.stringify(serverSelectionMultipleContextKey)})];`,
+  ];
   const body = component.bodyStatements.map(
     (statement) =>
       `  ${statement.replaceAll(
@@ -966,7 +980,7 @@ function emitAppendStatements(
           );
         }
 
-        return `  await ${part.name}(${sinkName}, ${emitPropsObject(part.props, part.children, part.escapeHelperName, part.name, undefined, part.selectedValueCode, part.selectedMultipleCode)});`;
+        return `  await ${part.name}(${sinkName}, ${emitPropsObject(part.props, part.children, part.escapeHelperName, part.name, undefined, part.selectedValueCode, part.selectedMultipleCode, part.selectionContextActive)});`;
       }
 
       if (part.kind === "react-node") {
@@ -974,7 +988,7 @@ function emitAppendStatements(
       }
 
       if (part.kind === "stream-node") {
-        return `  await ${currentStreamNodeHelperName}(${sinkName}, (${part.code}), ${part.escapeHelperName});`;
+        return `  await ${currentStreamNodeHelperName}(${sinkName}, (${part.code}), ${part.escapeHelperName}${emitStreamSelectionArguments(part)});`;
       }
 
       if (part.kind === "list") {
@@ -1062,7 +1076,7 @@ function emitSyncPartAsAppendStatement(
       );
     }
 
-    return `${indent}await ${part.name}(${sinkName}, ${emitPropsObject(part.props, part.children, part.escapeHelperName, part.name, undefined, part.selectedValueCode, part.selectedMultipleCode)});`;
+    return `${indent}await ${part.name}(${sinkName}, ${emitPropsObject(part.props, part.children, part.escapeHelperName, part.name, undefined, part.selectedValueCode, part.selectedMultipleCode, part.selectionContextActive)});`;
   }
 
   if (part.kind === "react-node") {
@@ -1070,7 +1084,7 @@ function emitSyncPartAsAppendStatement(
   }
 
   if (part.kind === "stream-node") {
-    return `${indent}await ${currentStreamNodeHelperName}(${sinkName}, (${part.code}), ${part.escapeHelperName});`;
+    return `${indent}await ${currentStreamNodeHelperName}(${sinkName}, (${part.code}), ${part.escapeHelperName}${emitStreamSelectionArguments(part)});`;
   }
 
   if (part.kind === "list") {
@@ -1204,7 +1218,7 @@ function tryEmitPartAsStringExpression(
     return emitListPartAsStringExpression(part, compatRenderToStringHelperName);
   }
   if (part.kind === "component" && part.runtime === "compat") {
-    const rendered = `${compatRenderToStringHelperName}(${part.name}, ${emitCompatRuntimePropsObject(part.props, part.children, part.selectedValueCode, part.selectedMultipleCode)})`;
+    const rendered = `${compatRenderToStringHelperName}(${part.name}, ${emitCompatRuntimePropsObject(part.props, part.children, part.selectedValueCode, part.selectedMultipleCode, part.selectionContextActive)})`;
     if (part.hydrationId === undefined) {
       return rendered;
     }
@@ -1213,7 +1227,7 @@ function tryEmitPartAsStringExpression(
   }
   if (part.kind === "component" && part.async !== true && part.hydrationId === undefined) {
     return emitRenderableHtmlExpression(
-      `${part.name}(${emitPropsObject(part.props, part.children, part.escapeHelperName, part.name, undefined, part.selectedValueCode, part.selectedMultipleCode)})`,
+      `${part.name}(${emitPropsObject(part.props, part.children, part.escapeHelperName, part.name, undefined, part.selectedValueCode, part.selectedMultipleCode, part.selectionContextActive)})`,
     );
   }
   // Non-compat component parts require `await sink-write`; lists with
@@ -1312,7 +1326,7 @@ function emitCompatComponentAppendStatements(
   compatRenderToStringHelperName: string,
   indent: string,
 ): string {
-  const rendered = `${compatRenderToStringHelperName}(${part.name}, ${emitCompatRuntimePropsObject(part.props, part.children, part.selectedValueCode, part.selectedMultipleCode)})`;
+  const rendered = `${compatRenderToStringHelperName}(${part.name}, ${emitCompatRuntimePropsObject(part.props, part.children, part.selectedValueCode, part.selectedMultipleCode, part.selectionContextActive)})`;
   const statements =
     part.hydrationId === undefined
       ? [`${sinkName}.append(${rendered});`]
@@ -1347,6 +1361,8 @@ type HtmlPart =
       kind: "stream-node";
       code: string;
       escapeHelperName: string;
+      selectedValueCode?: string;
+      selectedMultipleCode?: string;
     }
   | {
       kind: "async-boundary";
@@ -1395,6 +1411,7 @@ type HtmlPart =
       hydrationId?: string;
       selectedValueCode?: string;
       selectedMultipleCode?: string;
+      selectionContextActive?: boolean;
       props: ComponentPropIr[];
       children: JsxNodeIr[];
       escapeHelperName: string;
@@ -1440,6 +1457,7 @@ interface CollectHtmlState {
   reactSuspenseRevealScriptSrc?: string;
   selectedValueCode?: string | undefined;
   selectedMultipleCode?: string | undefined;
+  selectionContextActive?: boolean;
   forceInOrder?: boolean;
 }
 
@@ -1463,7 +1481,15 @@ function collectHtmlParts(
 
   if (node.kind === "expr") {
     if (node.renderMode === "html" && isChildrenExpressionCode(node.code)) {
-      return [{ kind: "stream-node", code: node.code, escapeHelperName }];
+      return [
+        {
+          kind: "stream-node",
+          code: node.code,
+          escapeHelperName,
+          selectedValueCode: state.selectedValueCode ?? currentSelectionParameterName,
+          selectedMultipleCode: state.selectedMultipleCode ?? currentSelectionMultipleParameterName,
+        },
+      ];
     }
 
     if (node.renderMode === "html") {
@@ -1485,7 +1511,15 @@ function collectHtmlParts(
     }
 
     if (node.renderMode === "stream-node") {
-      return [{ kind: "stream-node", code: node.code, escapeHelperName }];
+      return [
+        {
+          kind: "stream-node",
+          code: node.code,
+          escapeHelperName,
+          selectedValueCode: state.selectedValueCode ?? currentSelectionParameterName,
+          selectedMultipleCode: state.selectedMultipleCode ?? currentSelectionMultipleParameterName,
+        },
+      ];
     }
 
     if (node.renderMode === "compat-child" && currentCompatChildHelperName !== undefined) {
@@ -1904,6 +1938,7 @@ function collectHtmlParts(
         ...(state.selectedMultipleCode === undefined
           ? {}
           : { selectedMultipleCode: state.selectedMultipleCode }),
+        ...(state.selectionContextActive === true ? { selectionContextActive: true } : {}),
       },
     ];
   }
@@ -1968,6 +2003,7 @@ function collectHtmlParts(
           ...state,
           selectedValueCode: childSelectedValueCode,
           selectedMultipleCode: childSelectedMultipleCode,
+          selectionContextActive: true,
         };
   const selectedAttributePart = collectOptionSelectedAttributePart(
     node,
@@ -2109,6 +2145,7 @@ function hasDynamicSelectSelectionAttribute(
 function findDynamicOptionValueAttribute(
   node: Extract<JsxNodeIr, { kind: "element" }>,
 ): Extract<AttributeIr, { kind: "dynamic-attr" }> | undefined {
+  if (node.tagName !== "option") return undefined;
   const valueAttribute = node.attributes.find(
     (attr) => attr.kind !== "spread-attr" && attr.name === "value",
   );
@@ -2143,6 +2180,7 @@ function emitBoundSelectPart(
     ...state,
     selectedValueCode: currentOptionSelectedLocalNames.selectValue,
     selectedMultipleCode,
+    selectionContextActive: true,
   };
   const dangerousInnerHtml = emitDangerouslySetInnerHtmlPart(
     node.attributes,
@@ -3521,6 +3559,7 @@ function emitStreamRendererFromChildren(
   forceInOrder = false,
   selectedValueCode?: string,
   selectedMultipleCode?: string,
+  selectionAware = false,
 ): string | undefined {
   if (children.length === 0) {
     return undefined;
@@ -3576,7 +3615,7 @@ function emitStreamRendererFromChildren(
     return undefined;
   }
 
-  return `async (${currentServerRenderValueSinkName}) => {\n${emitNestedStreamAppendStatements(parts, currentServerRenderValueSinkName, currentCompatRenderToStringHelperName)}\n}`;
+  return `async (${currentServerRenderValueSinkName}${selectionAware ? `, ${currentSelectionParameterName}, ${currentSelectionMultipleParameterName}` : ""}) => {\n${emitNestedStreamAppendStatements(parts, currentServerRenderValueSinkName, currentCompatRenderToStringHelperName)}\n}`;
 }
 
 function containsAsyncBoundary(node: JsxNodeIr, outOfOrder: boolean): boolean {
@@ -4012,6 +4051,7 @@ function emitPropsObject(
   childrenExpressionOverride?: string,
   selectedValueCode?: string,
   selectedMultipleCode?: string,
+  selectionContextActive = false,
 ): string {
   const entries = props.map((prop) => {
     if (prop.kind === "spread-prop") {
@@ -4058,27 +4098,31 @@ function emitPropsObject(
       childrenExpressionOverride === undefined &&
       !isRouterLinkComponentName(componentName) &&
       children.some(needsLazyServerChildren);
+    const selectionAwareChildren = shouldDeferChildren;
     const streamedChildren =
       childrenExpressionOverride === undefined
         ? emitStreamRendererFromChildren(
             children,
             escapeHelperName,
             false,
-            selectedValueCode,
-            selectedMultipleCode,
+            selectionAwareChildren ? currentSelectionParameterName : selectedValueCode,
+            selectionAwareChildren ? currentSelectionMultipleParameterName : selectedMultipleCode,
+            selectionAwareChildren,
           )
         : undefined;
     const childrenExpression =
       childrenExpressionOverride ??
       (shouldDeferChildren
         ? (streamedChildren ??
-          emitStreamRendererFromChildren(
-            children,
-            escapeHelperName,
-            true,
-            selectedValueCode,
-            selectedMultipleCode,
-          ))
+          (selectionAwareChildren
+            ? `async (${currentServerRenderValueSinkName}, ${currentSelectionParameterName}, ${currentSelectionMultipleParameterName}) => { ${currentServerRenderValueSinkName}.append(${emitHtmlExpressionFromChildren(children, escapeHelperName, currentSelectionParameterName, currentSelectionMultipleParameterName)}); }`
+            : emitStreamRendererFromChildren(
+                children,
+                escapeHelperName,
+                true,
+                selectedValueCode,
+                selectedMultipleCode,
+              )))
         : streamedChildren) ??
       emitHtmlExpressionFromChildren(
         children,
@@ -4087,12 +4131,14 @@ function emitPropsObject(
         selectedMultipleCode,
       );
     entries.push(
-      `children: ${isRouterLinkComponentName(componentName) ? `${componentName}.trustedHtml(${childrenExpression})` : childrenExpression}`,
+      selectionAwareChildren
+        ? `children: Object.defineProperty(${childrenExpression}, Symbol.for(${JSON.stringify(serverSelectionRenderValueKey)}), { value: true })`
+        : `children: ${isRouterLinkComponentName(componentName) ? `${componentName}.trustedHtml(${childrenExpression})` : childrenExpression}`,
     );
   }
 
   const object = `{ ${entries.join(", ")} }`;
-  return selectedValueCode === undefined
+  return selectedValueCode === undefined || isRouterLinkComponentName(componentName)
     ? object
     : `Object.defineProperty(Object.defineProperty(${object}, Symbol.for(${JSON.stringify(serverSelectionContextKey)}), { value: ${selectedValueCode} }), Symbol.for(${JSON.stringify(serverSelectionMultipleContextKey)}), { value: ${selectedMultipleCode} })`;
 }
@@ -4134,6 +4180,7 @@ function emitCompatRuntimePropsObject(
   children: JsxNodeIr[] = [],
   selectedValueCode?: string,
   selectedMultipleCode?: string,
+  selectionContextActive = false,
 ): string {
   const entries = props.map((prop) => {
     if (prop.kind === "spread-prop") {
@@ -4152,7 +4199,7 @@ function emitCompatRuntimePropsObject(
   }
 
   const object = `{ ${entries.join(", ")} }`;
-  return selectedValueCode === undefined
+  return !selectionContextActive || selectedValueCode === undefined
     ? object
     : `Object.defineProperty(Object.defineProperty(${object}, Symbol.for(${JSON.stringify(serverSelectionContextKey)}), { value: ${selectedValueCode} }), Symbol.for(${JSON.stringify(serverSelectionMultipleContextKey)}), { value: ${selectedMultipleCode} })`;
 }

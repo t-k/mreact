@@ -1871,6 +1871,88 @@ export function App() {
     expect(node.querySelector("[data-state='open']")?.textContent).toBe("Open");
   });
 
+  test("client transform tracks computed object aliases of reactive reads", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const state = cell({ label: "A" });
+const key = "label";
+
+export function App() {
+  const { [key]: label } = state.get();
+  return <main>
+    <button type="button" onClick={() => state.set({ label: "B" })}>Update</button>
+    <span>{label}</span>
+  </main>;
+}`,
+      filename: "computed-reactive-alias.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+
+    expect(node.querySelector("span")?.textContent).toBe("A");
+    node.querySelector("button")?.click();
+    await flushEffects();
+    expect(node.querySelector("span")?.textContent).toBe("B");
+  });
+
+  test("client transform tracks object rest aliases of reactive reads", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const state = cell({ ignored: 0, label: "A" });
+
+export function App() {
+  const { ignored, ...rest } = state.get();
+  return <main>
+    <button type="button" onClick={() => state.set({ ignored: 1, label: "B" })}>Update</button>
+    <span>{rest.label}</span>
+  </main>;
+}`,
+      filename: "object-rest-reactive-alias.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+
+    expect(node.querySelector("span")?.textContent).toBe("A");
+    node.querySelector("button")?.click();
+    await flushEffects();
+    expect(node.querySelector("span")?.textContent).toBe("B");
+  });
+
+  test("client transform tracks array rest aliases of reactive reads", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const state = cell(["A", "B"]);
+
+export function App() {
+  const [head, ...tail] = state.get();
+  return <main>
+    <button type="button" onClick={() => state.set(["X", "Y"])}>Update</button>
+    <span>{tail[0]}</span>
+  </main>;
+}`,
+      filename: "array-rest-reactive-alias.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+
+    expect(node.querySelector("span")?.textContent).toBe("B");
+    node.querySelector("button")?.click();
+    await flushEffects();
+    expect(node.querySelector("span")?.textContent).toBe("Y");
+  });
+
   test("client transform tracks JSX bindings derived from a reactive read alias", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";
@@ -1898,6 +1980,134 @@ export function App() {
     node.querySelector("button")?.click();
     await flushEffects();
     expect(node.querySelector("[data-state='open']")?.textContent).toBe("Open");
+  });
+
+  test("client transform keeps callback parameters from shadowing lazy JSX bindings", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const state = cell("A");
+
+export function App() {
+  const node = <span>{state.get()}</span>;
+  return <div>{[1].map(node => <b>{node}</b>)}</div>;
+}`,
+      filename: "lazy-binding-shadowing.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+
+    expect(node.querySelector("b")?.textContent).toBe("1");
+    expect(node.textContent).toBe("1");
+  });
+
+  test("client transform preserves JSX elements through const aliases", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const state = cell("A");
+
+export function App() {
+  const node = <span>{state.get()}</span>;
+  const alias = node;
+  const forwarded = alias;
+  return <div><button type="button" onClick={() => state.set("B")}>B</button>{forwarded}</div>;
+}`,
+      filename: "lazy-binding-alias.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+
+    expect(node.querySelector("span")?.textContent).toBe("A");
+    node.querySelector("button")?.click();
+    await flushEffects();
+    expect(node.querySelector("span")?.textContent).toBe("B");
+    expect(node.textContent).toContain("B");
+  });
+
+  test("client transform keeps fragment child positions after a dynamic sibling", async () => {
+    const output = transform({
+      code: `export function App() {
+  return <div>{true && <i>A</i>}<><span>{"B"}</span></></div>;
+}`,
+      filename: "fragment-after-dynamic-sibling.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+
+    expect(node.querySelector("i")?.textContent).toBe("A");
+    expect(node.querySelector("span")?.textContent).toBe("B");
+    expect(node.textContent).toBe("AB");
+  });
+
+  test("client transform applies select value after a later spread multiple attribute", async () => {
+    const output = transform({
+      code: `export function App() {
+  return <select value={["open", "done"]} {...{ multiple: true }}><option value="open">Open</option><option value="done">Done</option></select>;
+}`,
+      filename: "select-direct-value-spread-multiple.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLSelectElement;
+
+    expect(
+      Array.from(node.options)
+        .filter((option) => option.selected)
+        .map((option) => option.value),
+    ).toEqual(["open", "done"]);
+  });
+
+  test("client transform keeps static select attributes available to the selection owner", async () => {
+    const output = transform({
+      code: `export function App() {
+  return <select data-testid="status" multiple value="done"><option value="open">Open</option><option value="done">Done</option></select>;
+}`,
+      filename: "select-static-selection-attributes.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLSelectElement;
+
+    expect(node.dataset.testid).toBe("status");
+    expect(
+      Array.from(node.options)
+        .filter((option) => option.selected)
+        .map((option) => option.value),
+    ).toEqual(["done"]);
+  });
+
+  test("client transform applies the final select value after an earlier spread", async () => {
+    const output = transform({
+      code: `export function App() {
+  return <select {...{ value: "open" }} value="done"><option value="open">Open</option><option value="done">Done</option></select>;
+}`,
+      filename: "select-spread-direct-value-precedence.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLSelectElement;
+
+    expect(
+      Array.from(node.options)
+        .filter((option) => option.selected)
+        .map((option) => option.value),
+    ).toEqual(["done"]);
   });
 
   test("client transform applies select values after component option children mount", async () => {

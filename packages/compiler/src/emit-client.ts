@@ -278,8 +278,21 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
           internalSpecifiers.add("createSvgTemplate");
         }
         for (const attr of node.attributes) {
+          if (
+            node.tagName === "select" &&
+            ((attr.kind === "static-attr" && isSelectControlAttributeName(attr.name)) ||
+              attr.kind === "spread-attr" ||
+              (attr.kind === "dynamic-attr" && isSelectControlAttributeName(attr.name)))
+          ) {
+            specifiers.add("bindSpreadProps");
+          }
+
           if (attr.kind === "dynamic-attr") {
-            specifiers.add("bindProp");
+            specifiers.add(
+              node.tagName === "select" && isSelectControlAttributeName(attr.name)
+                ? "bindSpreadProps"
+                : "bindProp",
+            );
           }
 
           if (attr.kind === "dom-ref") {
@@ -654,6 +667,8 @@ function emitSetup(
   path: string,
   state: EmitSetupState,
   initialChildIndex = 0,
+  inheritedStableChildrenName?: string,
+  inheritedLiveChildrenName?: string,
 ): string {
   const lines: string[] = [];
 
@@ -692,10 +707,27 @@ function emitSetup(
   }
 
   const postChildBindingLines: string[] = [];
+  const selectBindingSources: string[] = [];
 
   if (node.kind === "element") {
     for (const attr of node.attributes) {
+      if (
+        node.tagName === "select" &&
+        attr.kind === "static-attr" &&
+        isSelectControlAttributeName(attr.name)
+      ) {
+        selectBindingSources.push(
+          `{ ${JSON.stringify(attr.name)}: ${JSON.stringify(attr.value)} }`,
+        );
+        continue;
+      }
+
       if (attr.kind === "dynamic-attr") {
+        if (node.tagName === "select" && isSelectControlAttributeName(attr.name)) {
+          selectBindingSources.push(`{ ${JSON.stringify(attr.name)}: (${attr.code}) }`);
+          continue;
+        }
+
         const line = `  ${state.helperNames.bindProp}(${currentPath}, "${attr.name}", () => (${attr.code}));`;
         if (shouldDeferSelectBinding(node, attr)) {
           postChildBindingLines.push(line);
@@ -709,6 +741,11 @@ function emitSetup(
       }
 
       if (attr.kind === "spread-attr") {
+        if (node.tagName === "select") {
+          selectBindingSources.push(`(${attr.code})`);
+          continue;
+        }
+
         const line = `  ${state.helperNames.bindSpreadProps}(${currentPath}, () => (${attr.code}));`;
         if (shouldDeferSelectBinding(node, attr)) {
           postChildBindingLines.push(line);
@@ -732,26 +769,35 @@ function emitSetup(
       }
     }
 
-    if (hasDirectDangerouslySetInnerHtml(node)) {
+    if (selectBindingSources.length > 0) {
+      const selectBindingLine = `  ${state.helperNames.bindSpreadProps}(${currentPath}, () => Object.assign({}, ${selectBindingSources.join(", ")}));`;
+      if (hasDirectDangerouslySetInnerHtml(node)) {
+        lines.push(selectBindingLine);
+        return lines.join("\n");
+      }
+      postChildBindingLines.push(selectBindingLine);
+    } else if (hasDirectDangerouslySetInnerHtml(node)) {
       return lines.join("\n");
     }
   }
 
   const children = node.children;
-  const stableChildrenName = needsStableChildrenSnapshot(children)
-    ? state.allocateName("_children")
-    : undefined;
+  const stableChildrenName =
+    inheritedStableChildrenName ??
+    (needsStableChildrenSnapshot(children) ? state.allocateName("_children") : undefined);
   const liveChildrenName =
-    stableChildrenName === undefined &&
-    state.compilerKeyedRowContext !== undefined &&
-    needsCompilerKeyedLiveChildrenAlias(children)
-      ? state.allocateName("_keyedChildren")
+    stableChildrenName === undefined
+      ? (inheritedLiveChildrenName ??
+        (state.compilerKeyedRowContext !== undefined &&
+        needsCompilerKeyedLiveChildrenAlias(children)
+          ? state.allocateName("_keyedChildren")
+          : undefined))
       : undefined;
   let childIndex = initialChildIndex;
 
-  if (stableChildrenName !== undefined) {
+  if (stableChildrenName !== undefined && inheritedStableChildrenName === undefined) {
     lines.push(`  const ${stableChildrenName} = Array.from(${currentPath}.childNodes);`);
-  } else if (liveChildrenName !== undefined) {
+  } else if (liveChildrenName !== undefined && inheritedLiveChildrenName === undefined) {
     lines.push(`  const ${liveChildrenName} = ${currentPath}.childNodes;`);
   }
 
@@ -931,7 +977,9 @@ function emitSetup(
     if (child.kind === "fragment") {
       const previousCompilerKeyedElementPath = state.compilerKeyedElementPath;
       state.compilerKeyedElementPath = undefined;
-      lines.push(emitSetup(child, currentPath, state, childIndex));
+      lines.push(
+        emitSetup(child, currentPath, state, childIndex, stableChildrenName, liveChildrenName),
+      );
       state.compilerKeyedElementPath = previousCompilerKeyedElementPath;
       childIndex += renderedChildNodeCount(child);
       continue;
@@ -951,6 +999,10 @@ function emitSetup(
   lines.push(...postChildBindingLines);
 
   return lines.filter(Boolean).join("\n");
+}
+
+function isSelectControlAttributeName(name: string): boolean {
+  return name === "value" || name === "defaultValue" || name === "multiple";
 }
 
 function shouldDeferSelectBinding(

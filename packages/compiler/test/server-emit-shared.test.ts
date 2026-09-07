@@ -34,6 +34,54 @@ async function expectServerPairHtml(
   await expect(runServerStreamComponent(compiled.stream, "App", props)).resolves.toBe(expected);
 }
 
+async function expectImportedServerPairHtml(expected: string): Promise<void> {
+  const sources = [
+    `export function Options() {
+  return <><option value="open">open</option><option value="done">done</option></>;
+}`,
+    `import { Options } from "./Options";
+export function Wrapper() {
+  return <Options />;
+}`,
+    `import { Wrapper } from "./Wrapper";
+export function App() {
+  return <select value="done"><Wrapper /></select>;
+}`,
+  ];
+  const names = ["Options", "Wrapper", "App"];
+
+  for (const serverOutput of ["string", "stream"] as const) {
+    const modules: Record<string, Function> = {};
+    for (let index = 0; index < sources.length; index += 1) {
+      const output = transform({
+        code: sources[index] ?? "",
+        filename: `${names[index] ?? "App"}.tsx`,
+        target: "server",
+        serverOutput,
+        dev: true,
+      });
+      expect(output.diagnostics).toEqual([]);
+      const code = output.code.replace(/^import.*$/gm, "").replace(/export /g, "");
+      const name = names[index] ?? "App";
+      modules[name] = new Function(...Object.keys(modules), `${code}\nreturn ${name};`)(
+        ...Object.values(modules),
+      ) as Function;
+    }
+
+    if (serverOutput === "string") {
+      expect(modules.App?.()).toBe(expected);
+    } else {
+      let html = "";
+      await modules.App?.({
+        append(value: string) {
+          html += value;
+        },
+      });
+      expect(html).toBe(expected);
+    }
+  }
+}
+
 describe("server emit shared behavior", () => {
   test("string and stream keep lowercase SVG intrinsics when a helper has the same name", async () => {
     await expectServerPairHtml(
@@ -680,6 +728,36 @@ export function App(props) {
 }`,
       '<select><option value="open">open</option><option value="done" selected="">done</option></select>',
       { status: "done" },
+    );
+  });
+
+  test("string and stream emitters carry select value through imported wrapper components", async () => {
+    await expectImportedServerPairHtml(
+      '<select><option value="open">open</option><option value="done" selected="">done</option></select>',
+    );
+  });
+
+  test("string and stream emitters carry select value through a select-owning component", async () => {
+    await expectServerPairHtml(
+      `function Select(props) {
+  return <select value="done">{props.children}</select>;
+}
+export function App() {
+  return <Select><option value="open">open</option><option value="done">done</option></Select>;
+}`,
+      '<select><option value="open">open</option><option value="done" selected="">done</option></select>',
+    );
+  });
+
+  test("string and stream emitters carry multiple selection through a select-owning component", async () => {
+    await expectServerPairHtml(
+      `function Select(props) {
+  return <select {...{ multiple: true }} value={["open", "done"]}>{props.children}</select>;
+}
+export function App() {
+  return <Select><option value="open">open</option><option value="done">done</option></Select>;
+}`,
+      '<select multiple=""><option value="open" selected="">open</option><option value="done" selected="">done</option></select>',
     );
   });
 

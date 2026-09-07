@@ -174,9 +174,13 @@ export function lowerOxcBodyStatementJsx(
     const declaration = readObject(declarationValue);
     const id = readObject(declaration.id);
     const initializer = unwrapOxcParentheses(readObject(declaration.init));
+    const isLazyRenderValueBinding =
+      typeof id.name === "string" && lazyRenderValueBindings?.has(id.name) === true;
     if (
       typeof id.name !== "string" ||
-      (!containsOxcJsxSyntax(initializer) && serverRenderValueBindingNames?.has(id.name) !== true)
+      (!containsOxcJsxSyntax(initializer) &&
+        !isLazyRenderValueBinding &&
+        serverRenderValueBindingNames?.has(id.name) !== true)
     ) {
       return readSource(code, declaration);
     }
@@ -186,36 +190,43 @@ export function lowerOxcBodyStatementJsx(
         ? serverRenderValueWrapper
         : undefined;
     const lowered =
-      mode === "dom-node"
-        ? lowerers.lowerDomNodeExpression(
-            code,
-            initializer,
-            componentNames,
-            reactiveAliasBindings === undefined
-              ? undefined
-              : (expression) =>
-                  rewriteOxcReactiveAliasExpressionCode(code, expression, reactiveAliasBindings) ??
-                  readSource(code, expression),
-          )
-        : mode === "compat-object"
-          ? lowerers.lowerCompatObjectExpression(
+      mode === "dom-node" &&
+      isLazyRenderValueBinding &&
+      initializer.type === "Identifier" &&
+      typeof initializer.name === "string" &&
+      initializer.name !== id.name &&
+      lazyRenderValueBindings?.has(initializer.name) === true
+        ? `${initializer.name}()`
+        : mode === "dom-node"
+          ? lowerers.lowerDomNodeExpression(
               code,
               initializer,
               componentNames,
-              target,
-              diagnostics,
+              reactiveAliasBindings === undefined
+                ? undefined
+                : (expression) =>
+                    rewriteOxcReactiveAliasExpressionCode(code, expression, reactiveAliasBindings) ??
+                    readSource(code, expression),
             )
-          : mode === "server-string"
-            ? lowerers.lowerServerStringExpression(
+          : mode === "compat-object"
+            ? lowerers.lowerCompatObjectExpression(
                 code,
                 initializer,
                 componentNames,
                 target,
                 diagnostics,
-                renderValueWrapper,
-                serverRenderValueCallNames,
               )
-            : undefined;
+            : mode === "server-string"
+              ? lowerers.lowerServerStringExpression(
+                  code,
+                  initializer,
+                  componentNames,
+                  target,
+                  diagnostics,
+                  renderValueWrapper,
+                  serverRenderValueCallNames,
+                )
+              : undefined;
     if (lowered === undefined) return readSource(code, declaration);
     didLower = true;
     const renderValue =

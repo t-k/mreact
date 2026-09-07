@@ -120,6 +120,33 @@ export function collectOxcReactiveJsxBindingNames(
     }
   }
 
+  let changed = true;
+  while (changed) {
+    changed = false;
+
+    for (const statementValue of statements) {
+      const statement = readObject(statementValue);
+      if (statement.type !== "VariableDeclaration" || statement.kind !== "const") continue;
+
+      for (const declarationValue of readArray(statement.declarations)) {
+        const declaration = readObject(declarationValue);
+        const id = readObject(declaration.id);
+        const initializer = unwrapOxcParentheses(readObject(declaration.init));
+
+        if (
+          typeof id.name === "string" &&
+          initializer.type === "Identifier" &&
+          typeof initializer.name === "string" &&
+          names.has(initializer.name) &&
+          !names.has(id.name)
+        ) {
+          names.add(id.name);
+          changed = true;
+        }
+      }
+    }
+  }
+
   return names;
 }
 
@@ -296,17 +323,33 @@ function collectOxcPatternReactiveAliasesInto(
   }
 
   if (pattern.type === "ObjectPattern") {
-    for (const propertyValue of readArray(pattern.properties)) {
+    const properties = readArray(pattern.properties);
+    const excludedProperties: string[] = [];
+
+    for (const propertyValue of properties) {
       const property = readObject(propertyValue);
-      if (
-        (property.type !== "Property" && property.type !== "ObjectProperty") ||
-        property.computed === true
-      ) {
+      if (property.type === "RestElement") {
+        const argument = readObject(property.argument);
+        if (argument.type === "Identifier" && typeof argument.name === "string") {
+          const excludedPattern = excludedProperties.join(", ");
+          aliases.set(
+            argument.name,
+            `((__mreactRestSource) => { const { ${excludedPattern}, ...__mreactRestValue } = __mreactRestSource; return __mreactRestValue; })(${sourceCode})`,
+          );
+        }
         continue;
       }
 
-      const access = readStaticPropertyAccess(property);
-      if (access === undefined) continue;
+      if (property.type !== "Property" && property.type !== "ObjectProperty") {
+        continue;
+      }
+
+      const access = readPropertyAccess(property, code);
+      const excludedProperty = readExcludedProperty(property, code);
+      if (access === undefined || excludedProperty === undefined) continue;
+      excludedProperties.push(
+        `${excludedProperty}: __mreactRestExcluded${excludedProperties.length}`,
+      );
       collectOxcPatternReactiveAliasesInto(
         readObject(property.value),
         `(${sourceCode})${access}`,
@@ -320,24 +363,47 @@ function collectOxcPatternReactiveAliasesInto(
   if (pattern.type === "ArrayPattern") {
     for (const [index, elementValue] of readArray(pattern.elements).entries()) {
       const element = readObject(elementValue);
-      if (Object.keys(element).length === 0 || element.type === "RestElement") continue;
+      if (element.type === "RestElement") {
+        const argument = readObject(element.argument);
+        if (argument.type === "Identifier" && typeof argument.name === "string") {
+          aliases.set(argument.name, `(${sourceCode}).slice(${index})`);
+        }
+        continue;
+      }
+      if (Object.keys(element).length === 0) continue;
       collectOxcPatternReactiveAliasesInto(element, `(${sourceCode})[${index}]`, aliases, code);
     }
   }
 }
 
-function readStaticPropertyAccess(property: Record<string, unknown>): string | undefined {
+function readPropertyKeyCode(property: Record<string, unknown>, code: string): string | undefined {
   const key = readObject(property.key);
 
+  if (property.computed === true) {
+    return readSource(code, key);
+  }
+
   if (key.type === "Identifier" && typeof key.name === "string") {
-    return `.${key.name}`;
+    return key.name;
   }
 
   if (key.type === "Literal" && (typeof key.value === "string" || typeof key.value === "number")) {
-    return `[${JSON.stringify(key.value)}]`;
+    return JSON.stringify(key.value);
   }
 
   return undefined;
+}
+
+function readPropertyAccess(property: Record<string, unknown>, code: string): string | undefined {
+  const key = readPropertyKeyCode(property, code);
+  if (key === undefined) return undefined;
+  return property.computed === true || !/^[A-Za-z_$][\w$]*$/.test(key) ? `[${key}]` : `.${key}`;
+}
+
+function readExcludedProperty(property: Record<string, unknown>, code: string): string | undefined {
+  const key = readPropertyKeyCode(property, code);
+  if (key === undefined) return undefined;
+  return property.computed === true ? `[${key}]` : key;
 }
 
 function collectOxcReactiveAliasBindingNames(
