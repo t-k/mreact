@@ -4,7 +4,7 @@ export default createStrykerConfig({
   name: "state",
   breakThreshold: 80,
   mutate: [
-    "packages/store/src/index.ts:575-619",
+    "packages/store/src/index.ts:577-621",
     "packages/query/src/query-lifecycle.ts:341-393",
   ],
   testFiles: [

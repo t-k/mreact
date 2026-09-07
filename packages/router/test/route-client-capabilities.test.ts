@@ -373,6 +373,29 @@ export default function Page() {
     expect(code).toContain("__mreactRouteStates");
   });
 
+  test("keeps the conservative cell hint when an unknown graph carries no compiled evidence", async () => {
+    const code = await buildRoute({
+      "panel.tsx": `export function Panel() {
+  return <aside>panel</aside>;
+}
+`,
+      "page.mreact.tsx": `export const clientNavigation = false;
+
+const loadPanel = () => import("./panel.js");
+const cell = (value) => ({ get: () => value });
+
+export default function Page() {
+  const counter = cell(0);
+  return <button type="button" onClick={() => { void loadPanel(); }}>{counter.get()}</button>;
+}`,
+    });
+
+    // No imported cell call, so there is no compiled evidence to force the capability on, and the
+    // dynamic import leaves the graph unknown. An unknown fact must fall back to the conservative
+    // name-shaped hint rather than resolving the capability off.
+    expect(code).toContain("__mreactRouteStates");
+  });
+
   test("does not treat a shadowed local cell binding as reactive route state", async () => {
     const code = await buildRoute({
       "page.mreact.tsx": `export const clientNavigation = false;

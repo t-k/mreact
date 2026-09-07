@@ -46,7 +46,7 @@ export default createStrykerConfig({
     "packages/compiler/src/component-prop-text.ts",
     "packages/compiler/src/oxc-component-props.ts:119-127",
     "packages/compiler/src/oxc-child-analysis.ts:228-229",
-    "packages/compiler/src/oxc.ts:594-599",
+    "packages/compiler/src/oxc.ts:583-588",
     // 20260907-compiler-intermediate-computed-fusion
     "packages/compiler/src/oxc-render-values.ts:232-246",
   ],
