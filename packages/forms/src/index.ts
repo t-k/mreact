@@ -4,6 +4,8 @@ import {
   computed,
   createCleanupScope,
   runWithCleanupScope,
+  untrack,
+  type Cell,
   type ReadonlyCell,
 } from "@reckona/mreact-reactive-core";
 import { registerCleanup } from "@reckona/mreact-reactive-core/internal";
@@ -250,6 +252,7 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     ArrayFieldName<TValues>,
     ReadonlyCell<Array<FieldArrayRow<ArrayFieldValue<TValues, ArrayFieldName<TValues>>>>>
   >();
+  const fieldRevisions = new Map<FieldName<TValues>, Cell<number>>();
   let nextFieldArrayKey = 0;
   let activeSubmit: object | undefined;
   // Cached field computed values outlive the consumer that first reads them, so
@@ -258,7 +261,15 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
   const formScope = createCleanupScope();
   registerCleanup(formScope.dispose);
 
-  function commit(patch: Partial<FormState<TValues>>, dirty = dirtyFields.size > 0): void {
+  // Cached field values read the form state untracked and depend only on their own
+  // revision cell, so one field change derives that field instead of every observed
+  // field. Both writes happen in one batch to keep form.state and the field snapshots
+  // coherent for a reader that observes them together.
+  function commit(
+    patch: Partial<FormState<TValues>>,
+    dirty = dirtyFields.size > 0,
+    changed?: readonly FieldName<TValues>[] | undefined,
+  ): void {
     const previous = state.get();
     const next = {
       ...previous,
@@ -266,11 +277,68 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     };
     next.dirty = dirty;
     next.valid = hasNoErrors(next.errors);
-    state.set(next);
+    batch(() => {
+      state.set(next);
+      invalidateFieldCaches(changed);
+    });
+  }
+
+  function fieldRevision(name: FieldName<TValues>): Cell<number> {
+    const existing = fieldRevisions.get(name);
+    if (existing !== undefined) {
+      return existing;
+    }
+
+    const revision = cell(0);
+    fieldRevisions.set(name, revision);
+    return revision;
+  }
+
+  /** Invalidates the named cached fields, or every cached field when names are omitted. */
+  function invalidateFieldCaches(names: readonly FieldName<TValues>[] | undefined): void {
+    if (names === undefined) {
+      for (const revision of fieldRevisions.values()) {
+        revision.set(revision.get() + 1);
+      }
+      return;
+    }
+
+    for (const name of names) {
+      const revision = fieldRevisions.get(name);
+      if (revision !== undefined) {
+        revision.set(revision.get() + 1);
+      }
+    }
+  }
+
+  function changedErrorFields(
+    previous: FormErrors<TValues>,
+    next: FormErrors<TValues>,
+  ): Array<FieldName<TValues>> {
+    const names = new Set([...Object.keys(previous), ...Object.keys(next)]);
+    const changed: Array<FieldName<TValues>> = [];
+
+    for (const name of names) {
+      const fieldName = name as FieldName<TValues>;
+      if (!stringArraysEqual(previous[fieldName] ?? [], next[fieldName] ?? [])) {
+        changed.push(fieldName);
+      }
+    }
+
+    return changed;
   }
 
   function setErrors(errors: FormErrors<TValues>): void {
-    commit({ errors: normalizeErrors(errors) });
+    const normalized = normalizeErrors(errors);
+    commit({ errors: normalized }, undefined, changedErrorFields(state.get().errors, normalized));
+  }
+
+  /** Replaces the errors of one field without scanning the other error entries. */
+  function commitFieldErrors<Name extends FieldName<TValues>>(
+    name: Name,
+    errors: FormErrors<TValues>,
+  ): void {
+    commit({ errors: normalizeErrors(errors) }, undefined, [name]);
   }
 
   function invalidateFieldValidations(names: readonly FieldName<TValues>[]): void {
@@ -283,7 +351,7 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
       validationGenerations.set(name, (validationGenerations.get(name) ?? 0) + 1);
       validating[name] = false;
     }
-    commit({ validating });
+    commit({ validating }, undefined, names);
   }
 
   async function validateField<Name extends FieldName<TValues>>(name: Name): Promise<void> {
@@ -320,7 +388,7 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     errors: readonly string[],
   ): void {
     const current = state.get().errors;
-    setErrors({
+    commitFieldErrors(name, {
       ...current,
       [name]: [...errors],
     } as FormErrors<TValues>);
@@ -331,12 +399,16 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     validating: boolean,
   ): void {
     const current = state.get().validating;
-    commit({
-      validating: {
-        ...current,
-        [name]: validating,
+    commit(
+      {
+        validating: {
+          ...current,
+          [name]: validating,
+        },
       },
-    });
+      undefined,
+      [name],
+    );
   }
 
   async function setValue<Name extends FieldName<TValues>>(
@@ -354,12 +426,16 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
       if (valueChanged) {
         invalidateFieldValidations([name, ...dependentFieldsFor(name)]);
       }
-      commit({
-        values: {
-          ...previous.values,
-          [name]: ownedValue,
+      commit(
+        {
+          values: {
+            ...previous.values,
+            [name]: ownedValue,
+          },
         },
-      });
+        undefined,
+        [name],
+      );
     });
 
     if (validateOn.has("change")) {
@@ -368,12 +444,16 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
   }
 
   async function blurField<Name extends FieldName<TValues>>(name: Name): Promise<void> {
-    commit({
-      touched: {
-        ...state.get().touched,
-        [name]: true,
+    commit(
+      {
+        touched: {
+          ...state.get().touched,
+          [name]: true,
+        },
       },
-    });
+      undefined,
+      [name],
+    );
 
     if (validateOn.has("blur")) {
       await validateFields([name, ...dependentFieldsFor(name)]);
@@ -513,8 +593,15 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
       return existing as ReadonlyCell<Array<FieldArrayRow<ArrayFieldValue<TValues, Name>>>>;
     }
 
+    const revision = fieldRevision(name);
     const next = runWithCleanupScope(formScope, () =>
-      computed(() => fieldArrayRows(name), { equals: fieldArrayRowsEqual }),
+      computed(
+        () => {
+          revision.get();
+          return untrack(() => fieldArrayRows(name));
+        },
+        { equals: fieldArrayRowsEqual },
+      ),
     );
     fieldArrayCells.set(
       name,
@@ -531,10 +618,15 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
       return existing as ReadonlyCell<FieldState<TValues[Name]>>;
     }
 
+    const revision = fieldRevision(name);
     const next = runWithCleanupScope(formScope, () =>
-      computed(() => fieldState(state.get(), name, dirtyFields.has(name)), {
-        equals: fieldStateEquals,
-      }),
+      computed(
+        () => {
+          revision.get();
+          return untrack(() => fieldState(state.get(), name, dirtyFields.has(name)));
+        },
+        { equals: fieldStateEquals },
+      ),
     );
     fieldStateCells.set(name, next as ReadonlyCell<FieldState<TValues[FieldName<TValues>]>>);
     return next;
@@ -736,10 +828,14 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
       const submitToken = {};
       activeSubmit = submitToken;
       const task = (async (): Promise<FormSubmitResult<TValues, TResult>> => {
-        commit({
-          submitCount: state.get().submitCount + 1,
-          submitting: true,
-        });
+        commit(
+          {
+            submitCount: state.get().submitCount + 1,
+            submitting: true,
+          },
+          undefined,
+          [],
+        );
 
         try {
           const validation = await validateForm(() => activeSubmit === submitToken);
@@ -776,7 +872,7 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
         } finally {
           if (activeSubmit === submitToken) {
             activeSubmit = undefined;
-            commit({ submitting: false });
+            commit({ submitting: false }, undefined, []);
           }
         }
       })();
