@@ -29,6 +29,10 @@ export default createStrykerConfig({
     // 20260907-compiler-unused-component-initialization
     "packages/compiler/src/emit-client.ts:497-502",
     "packages/compiler/src/emit-client.ts:581-594",
+    // 20260907-compiler-specialized-dom-props
+    "packages/reactive-dom/src/bind-element-property.ts",
+    "packages/compiler/src/emit-client.ts:316-322",
+    "packages/compiler/src/emit-client.ts:790-794",
     // 20260907-compiler-select-binding
     "packages/reactive-dom/src/bind-select-value.ts",
     // 20260907-compiler-branch-specialization
@@ -51,5 +55,9 @@ export default createStrykerConfig({
     "packages/compiler/test/transform-dynamic.test.ts",
     "packages/compiler/test/component-initialization.test.ts",
     "packages/compiler/test/transform-static.test.ts",
+    "packages/compiler/test/specialized-dom-props.test.ts",
+    "packages/reactive-dom/test/bind-element-property.test.ts",
+    "packages/reactive-dom/test/dom-prop-application.test.ts",
+    "packages/reactive-dom/test/bind-prop.test.ts",
   ],
 });

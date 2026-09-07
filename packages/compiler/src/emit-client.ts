@@ -3,6 +3,7 @@ import {
   emitSelectBindingLine,
   isSelectControlAttributeName,
   provenNativeCellTextBinding,
+  specializedElementProperty,
   usesBranchInsertion,
   usesDedicatedSelectBinding,
 } from "./emit-client-specialization.js";
@@ -81,6 +82,7 @@ type RuntimeHelperName =
   | "bindDomRef"
   | "bindEvent"
   | "bindProp"
+  | "bindElementProperty"
   | "bindSelectValue"
   | "bindSpreadProps"
   | "bindText"
@@ -129,6 +131,7 @@ function allocateRuntimeHelperNames(
     bindDomRef: "bindDomRef",
     bindEvent: "bindEvent",
     bindProp: "bindProp",
+    bindElementProperty: "bindElementProperty",
     bindSelectValue: "bindSelectValue",
     bindSpreadProps: "bindSpreadProps",
     bindText: "bindText",
@@ -311,7 +314,11 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
           }
 
           if (attr.kind === "dynamic-attr") {
-            specifiers.add("bindProp");
+            if (specializedElementProperty(node, attr.name) === undefined) {
+              specifiers.add("bindProp");
+            } else {
+              internalSpecifiers.add("bindElementProperty");
+            }
           }
 
           if (attr.kind === "dom-ref") {
@@ -780,7 +787,11 @@ function emitSetup(
           continue;
         }
 
-        const line = `  ${state.helperNames.bindProp}(${currentPath}, "${attr.name}", () => (${attr.code}));`;
+        const specializedProperty = specializedElementProperty(node, attr.name);
+        const line =
+          specializedProperty === undefined
+            ? `  ${state.helperNames.bindProp}(${currentPath}, ${JSON.stringify(attr.name)}, () => (${attr.code}));`
+            : `  ${state.helperNames.bindElementProperty}(${currentPath}, ${JSON.stringify(specializedProperty.property)}, ${JSON.stringify(specializedProperty.attribute)}, () => (${attr.code}));`;
         if (shouldDeferSelectBinding(node, attr)) {
           postChildBindingLines.push(line);
         } else {

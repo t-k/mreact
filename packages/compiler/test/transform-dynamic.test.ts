@@ -793,6 +793,6 @@ describe("compiler dynamic JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).not.toContain("compilerSelectedClass");
-    expect(output.code).toContain('bindProp(_keyedRoot, "class"');
+    expect(output.code).toContain('bindElementProperty(_keyedRoot, "class", "class"');
   });
 });

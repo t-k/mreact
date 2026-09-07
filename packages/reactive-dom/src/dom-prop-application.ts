@@ -6,66 +6,21 @@ import {
   isUrlAttribute,
 } from "./url-safety.js";
 import { isBooleanishStringAttribute, isEventLikePropName } from "@reckona/mreact-shared";
-import { registerDispose } from "./scope.js";
-import type { Dispose } from "./types.js";
 import { applySelectValue } from "./form-state.js";
+import { isDomRenderValue } from "./render-value-guard.js";
+import {
+  hasActivePropBindingMetadata,
+  registerReactivePropBinding,
+  withPropBindingMetadata,
+  type PropBinding,
+} from "./prop-binding-registry.js";
 
-export interface PropBinding {
-  dispose: Dispose;
-  retarget: (element: Element) => void;
-}
-
-type PropElement = Element & {
-  __mreactHasReactiveProps?: true;
-  __mreactPropBindings?: PropBinding[];
+export {
+  hasActivePropBindingMetadata,
+  registerReactivePropBinding,
+  withPropBindingMetadata,
+  type PropBinding,
 };
-
-let propBindingMetadataDepth = 0;
-
-export function withPropBindingMetadata<T>(fn: () => T): T {
-  propBindingMetadataDepth += 1;
-
-  try {
-    return fn();
-  } finally {
-    propBindingMetadataDepth -= 1;
-  }
-}
-
-export function hasActivePropBindingMetadata(): boolean {
-  return propBindingMetadataDepth > 0;
-}
-
-export function registerReactivePropBinding(element: Element, binding: PropBinding): Dispose {
-  if (propBindingMetadataDepth === 0) {
-    return registerDispose(binding.dispose);
-  }
-
-  const propElement = element as PropElement;
-
-  propElement.__mreactHasReactiveProps = true;
-  const bindings = propElement.__mreactPropBindings;
-
-  if (bindings === undefined) {
-    propElement.__mreactPropBindings = [binding];
-  } else {
-    bindings.push(binding);
-  }
-
-  return registerDispose(() => {
-    binding.dispose();
-    const bindings = propElement.__mreactPropBindings;
-    const index = bindings?.indexOf(binding) ?? -1;
-
-    if (index !== -1) {
-      bindings?.splice(index, 1);
-    }
-
-    if (bindings?.length === 0) {
-      delete propElement.__mreactHasReactiveProps;
-    }
-  });
-}
 
 export function applyDomProp(
   element: Element,
@@ -153,54 +108,6 @@ export function applyDomProp(
   }
 
   setDomAttribute(element, attrName, stringAttributeValue ?? String(value));
-}
-
-function isDomRenderValue(value: unknown): boolean {
-  const pending = [value];
-  const seen = new Set<unknown>();
-
-  while (pending.length > 0) {
-    const current = pending.pop();
-
-    if (current instanceof Node) {
-      return true;
-    }
-
-    if ((typeof current !== "object" && typeof current !== "function") || current === null) {
-      continue;
-    }
-
-    if (seen.has(current)) {
-      continue;
-    }
-    seen.add(current);
-
-    if (Array.isArray(current)) {
-      try {
-        for (let index = 0; index < current.length; index += 1) {
-          pending.push(current[index]);
-        }
-      } catch {
-        return true;
-      }
-      continue;
-    }
-
-    let descriptors: Record<string, PropertyDescriptor>;
-    try {
-      descriptors = Object.getOwnPropertyDescriptors(current);
-    } catch {
-      return true;
-    }
-
-    for (const descriptor of Object.values(descriptors)) {
-      if ("value" in descriptor) {
-        pending.push(descriptor.value);
-      }
-    }
-  }
-
-  return false;
 }
 
 export function removeDomProp(element: Element, name: string): void {

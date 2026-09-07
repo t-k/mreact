@@ -109,3 +109,35 @@ function isNonListBranch(nodes: readonly JsxNodeIr[]): boolean {
     return node.kind === "expr" && readExpressionFacts(node).value.kind === "renderable-primitive";
   });
 }
+
+/**
+ * Names whose generic applyDomProp handling provably reduces to writing one
+ * element property and its attribute.
+ *
+ * Every entry is a plain string prop: never an event handler, never a URL
+ * carrier, never a dangerous HTML sink, never a style object, never a
+ * booleanish attribute, and never form state. The runtime helper decides
+ * between the property and the attribute exactly as applyDomProp does.
+ */
+export const SPECIALIZED_ELEMENT_PROPERTIES: ReadonlyMap<string, { attribute: string; property: string }> =
+  new Map([
+    ["class", { attribute: "class", property: "class" }],
+    ["className", { attribute: "class", property: "className" }],
+    ["dir", { attribute: "dir", property: "dir" }],
+    ["id", { attribute: "id", property: "id" }],
+    ["lang", { attribute: "lang", property: "lang" }],
+    ["slot", { attribute: "slot", property: "slot" }],
+    ["title", { attribute: "title", property: "title" }],
+  ]);
+
+/** Resolves the specialized property binding for one dynamic intrinsic attribute. */
+export function specializedElementProperty(
+  node: Extract<JsxNodeIr, { kind: "element" }>,
+  name: string,
+): { attribute: string; property: string } | undefined {
+  if (node.namespace === "svg") {
+    return undefined;
+  }
+
+  return SPECIALIZED_ELEMENT_PROPERTIES.get(name);
+}
