@@ -159,6 +159,7 @@ export function formatOxcUntrackedReactiveAliasDeclaration(
   statementValue: unknown,
   aliases: ReadonlyMap<string, string>,
   ownedAliases: ReadonlyMap<string, string> = aliases,
+  loweredDeclarators?: ReadonlyMap<unknown, string>,
 ): string | undefined {
   const statement = readObject(statementValue);
 
@@ -183,6 +184,21 @@ export function formatOxcUntrackedReactiveAliasDeclaration(
     const initializer = unwrapOxcParentheses(readObject(declaration.init));
     const start = readNumber(initializer.start);
     const end = readNumber(initializer.end);
+
+    const loweredDeclarator = loweredDeclarators?.get(declarationValue);
+    if (loweredDeclarator !== undefined) {
+      const declarationStart = readNumber(declaration.start);
+      const declarationEnd = readNumber(declaration.end);
+      if (declarationStart !== undefined && declarationEnd !== undefined) {
+        replacements.push({
+          start: declarationStart,
+          end: declarationEnd,
+          name: String(id.name),
+          text: loweredDeclarator,
+        });
+      }
+      continue;
+    }
 
     const hasAlias =
       (typeof id.name === "string" && aliases.has(id.name)) ||

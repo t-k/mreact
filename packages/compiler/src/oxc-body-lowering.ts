@@ -114,6 +114,7 @@ export function lowerOxcBodyStatementJsx(
   serverRenderValueCallNames?: ReadonlySet<string>,
   reactiveAliasBindings?: ReadonlyMap<string, string>,
   lazyRenderValueBindings?: ReadonlySet<string>,
+  loweredDeclarators?: Map<unknown, string>,
 ): string | undefined {
   const object = readObject(statement);
 
@@ -205,8 +206,11 @@ export function lowerOxcBodyStatementJsx(
               reactiveAliasBindings === undefined
                 ? undefined
                 : (expression) =>
-                    rewriteOxcReactiveAliasExpressionCode(code, expression, reactiveAliasBindings) ??
-                    readSource(code, expression),
+                    rewriteOxcReactiveAliasExpressionCode(
+                      code,
+                      expression,
+                      reactiveAliasBindings,
+                    ) ?? readSource(code, expression),
             )
           : mode === "compat-object"
             ? lowerers.lowerCompatObjectExpression(
@@ -231,7 +235,9 @@ export function lowerOxcBodyStatementJsx(
     didLower = true;
     const renderValue =
       lazyRenderValueBindings?.has(id.name) === true ? `() => ${lowered}` : lowered;
-    return `${id.name} = ${renderValue}`;
+    const loweredDeclarator = `${id.name} = ${renderValue}`;
+    loweredDeclarators?.set(declarationValue, loweredDeclarator);
+    return loweredDeclarator;
   });
 
   return didLower ? `${kind} ${loweredDeclarations.join(", ")};` : undefined;

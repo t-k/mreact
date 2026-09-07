@@ -1894,6 +1894,7 @@ function analyzeOxcFunctionLikeComponent(
       ? allocateOxcServerRenderValuePlaceholder(code, functionLike)
       : undefined;
   const bodyStatements = componentBodyStatements.map((bodyStatement) => {
+    const loweredDeclarators = new Map<unknown, string>();
     const loweredStatement = lowerOxcBodyStatementJsx(
       code,
       bodyStatement,
@@ -1907,11 +1908,8 @@ function analyzeOxcFunctionLikeComponent(
       unshadowedLocalJsxReturnFunctionNames,
       reactiveAliasBindings,
       lazyRenderValueBindings,
+      loweredDeclarators,
     );
-
-    if (loweredStatement !== undefined) {
-      return loweredStatement;
-    }
 
     return target === "client" && bodyStatementJsx !== "compat-object"
       ? (formatOxcUntrackedReactiveAliasDeclaration(
@@ -1919,8 +1917,11 @@ function analyzeOxcFunctionLikeComponent(
           bodyStatement,
           reactiveAliasBindings,
           compilerOwnedReactiveAliasBindings,
-        ) ?? formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx))
-      : formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx);
+          loweredDeclarators,
+        ) ??
+          loweredStatement ??
+          formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx))
+      : (loweredStatement ?? formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx));
   });
   const componentBodyBindings = collectOxcVariableInitializers(body);
   const componentPropBindings = collectOxcComponentPropBindings(
