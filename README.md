@@ -140,6 +140,7 @@ Mutation testing is intentionally local and split by responsibility:
 ```bash
 pnpm test:mutation:security
 pnpm test:mutation:core
+pnpm test:mutation:compiler
 pnpm test:mutation:all
 pnpm test:mutation:all:force
 ```
