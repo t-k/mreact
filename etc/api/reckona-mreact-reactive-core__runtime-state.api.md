@@ -8,7 +8,7 @@
 export function getGlobalRuntimeState<TState extends object>(key: string, create: () => TState): TState;
 
 // @public
-export function registerCleanup(dispose: () => void): void;
+export function registerCleanup(dispose: () => void): (() => void) | undefined;
 
 // (No @packageDocumentation comment for this package)
 
