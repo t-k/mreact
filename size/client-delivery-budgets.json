@@ -1,14 +1,14 @@
 {
-  "baselineCommit": "e4968b8e8de9d122c83f625b76f4499eea89c376",
+  "baselineCommit": "65250617cca8bbb843c6d3bae7b8680fb3cf2a10",
   "headroomRatio": 0.05,
   "fixtures": {
     "native-counter": {
       "initialBrotliBytes": 15500,
       "initialGzipBytes": 17300,
       "measuredBaseline": {
-        "initialBrotliBytes": 14674,
-        "initialGzipBytes": 16409,
-        "sessionCumulativeGzipBytes": 16409
+        "initialBrotliBytes": 14721,
+        "initialGzipBytes": 16444,
+        "sessionCumulativeGzipBytes": 16444
       },
       "sessionCumulativeGzipBytes": 17300
     },
@@ -16,51 +16,51 @@
       "initialBrotliBytes": 6300,
       "initialGzipBytes": 7000,
       "measuredBaseline": {
-        "initialBrotliBytes": 5918,
-        "initialGzipBytes": 6575
+        "initialBrotliBytes": 5943,
+        "initialGzipBytes": 6605
       }
     },
     "keyed-list": {
       "initialBrotliBytes": 13300,
       "initialGzipBytes": 14700,
       "measuredBaseline": {
-        "initialBrotliBytes": 12594,
-        "initialGzipBytes": 13979
+        "initialBrotliBytes": 12621,
+        "initialGzipBytes": 13998
       }
     },
     "forms": {
       "initialBrotliBytes": 11200,
       "initialGzipBytes": 12400,
       "measuredBaseline": {
-        "initialBrotliBytes": 10629,
-        "initialGzipBytes": 11803
+        "initialBrotliBytes": 11031,
+        "initialGzipBytes": 12235
       }
     },
     "query": {
       "initialBrotliBytes": 14200,
       "initialGzipBytes": 15800,
       "measuredBaseline": {
-        "initialBrotliBytes": 13432,
-        "initialGzipBytes": 14955
+        "initialBrotliBytes": 13527,
+        "initialGzipBytes": 15043
       }
     },
     "react-compat": {
       "initialBrotliBytes": 35300,
       "initialGzipBytes": 40400,
       "measuredBaseline": {
-        "initialBrotliBytes": 33581,
-        "initialGzipBytes": 38458
+        "initialBrotliBytes": 33606,
+        "initialGzipBytes": 38474
       }
     },
     "multi-route-session": {
       "initialBrotliBytes": 19900,
       "initialGzipBytes": 22300,
       "measuredBaseline": {
-        "initialBrotliBytes": 18939,
-        "initialGzipBytes": 21169,
-        "sessionCumulativeGzipBytes": 33157
+        "initialBrotliBytes": 19080,
+        "initialGzipBytes": 21341,
+        "sessionCumulativeGzipBytes": 30396
       },
-      "sessionCumulativeGzipBytes": 34900
+      "sessionCumulativeGzipBytes": 32000
     }
   },
   "version": 1
