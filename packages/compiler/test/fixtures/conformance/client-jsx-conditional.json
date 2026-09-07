@@ -7,7 +7,15 @@
     "imports": [
       {
         "source": "@reckona/mreact-reactive-dom",
-        "specifiers": ["createTemplate", "insertDynamic"]
+        "specifiers": [
+          "createTemplate"
+        ]
+      },
+      {
+        "source": "@reckona/mreact-reactive-dom/internal",
+        "specifiers": [
+          "insertBranch"
+        ]
       }
     ],
     "client": {

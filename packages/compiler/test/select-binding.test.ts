@@ -137,6 +137,16 @@ describe("compiler select control binding", () => {
     expect(innerHtmlIndex).toBeLessThan(bindingIndex);
   });
 
+  test("emits no select binding for an inner HTML select without control props", () => {
+    const code = compile(`export function App(props) {
+  return <select dangerouslySetInnerHTML={{ __html: props.html }} />;
+}`);
+
+    expect(code).toContain('bindProp(_root, "dangerouslySetInnerHTML"');
+    expect(code).not.toContain("bindSelectValue");
+    expect(code).not.toContain("bindSpreadProps");
+  });
+
   test("keeps other dynamic select attributes on their own prop bindings", () => {
     const code = compile(`export function App(props) {
   return <select name={props.name} value={props.value}><option value="a">A</option></select>;

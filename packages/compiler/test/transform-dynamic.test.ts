@@ -593,7 +593,7 @@ describe("compiler dynamic JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain('createTemplate("<div><!----></div>")');
-    expect(output.code).toContain("insertDynamic(");
+    expect(output.code).toContain("insertBranch(");
   });
 
   test("keeps non-key-equivalent keyed row text on reactive bindings", () => {

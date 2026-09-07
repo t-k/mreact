@@ -69,7 +69,10 @@ import {
   rewriteOxcReactiveAliasExpressionCode,
 } from "./oxc-render-values.js";
 import type { ResolvedBindingIr } from "./expression-facts.js";
-import { analyzeOxcExpressionFacts } from "./oxc-expression-facts.js";
+import {
+  analyzeOxcExpressionFacts,
+  RENDERABLE_PRIMITIVE_FACTS,
+} from "./oxc-expression-facts.js";
 import { transformJsxWithOxc } from "./oxc-transform.js";
 import type { CompileTarget, Diagnostic, ServerOutputMode } from "./types.js";
 
@@ -577,6 +580,7 @@ export function analyzeOxcExpressionChild(
             {
               kind: "expr",
               code: renderableFalsyConditionValueCode(conditionValueName),
+              facts: RENDERABLE_PRIMITIVE_FACTS,
             },
           ],
         },

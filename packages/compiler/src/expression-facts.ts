@@ -12,6 +12,9 @@
  *   identifier that a `const` declaration bound to `cell()` imported from
  *   `@reckona/mreact-reactive-core`, where no member of that binding is
  *   assigned anywhere in the module and the name is not shadowed in scope.
+ * - `renderable-primitive`: an expression that can only evaluate to a string,
+ *   number, bigint, boolean, null or undefined, so it can never be a list or
+ *   any other structured render value.
  *
  * Everything else stays `unknown`.
  */
@@ -29,7 +32,8 @@ export interface ResolvedBindingIr {
 /** Describes the proven value shape of a lowered expression. */
 export type ExpressionValueIr =
   | { kind: "unknown" }
-  | { kind: "native-cell-read"; binding: ResolvedBindingIr };
+  | { kind: "native-cell-read"; binding: ResolvedBindingIr }
+  | { kind: "renderable-primitive" };
 
 /** Names one output phase a lowered expression can be required in. */
 export type ExpressionPhaseIr = "server" | "attach" | "update" | "mount";
@@ -106,7 +110,7 @@ function sameExpressionValue(left: ExpressionValueIr, right: ExpressionValueIr):
     return sameResolvedBinding(left.binding, right.binding);
   }
 
-  return false;
+  return left.kind === "renderable-primitive" && right.kind === "renderable-primitive";
 }
 
 function unionBindings(

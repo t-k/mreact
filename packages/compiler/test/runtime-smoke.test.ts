@@ -2471,7 +2471,7 @@ export function App() {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain("insertDynamic(_root, _root.childNodes[0]");
+    expect(output.code).toContain("insertBranch(_root, _root.childNodes[0]");
     const node = (await runClientComponent(output.code)) as HTMLElement;
 
     expect(node.textContent).toBe("1B");

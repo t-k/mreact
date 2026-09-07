@@ -1,5 +1,11 @@
 import type { AttributeIr, ComponentPropIr, ComponentIr, JsxNodeIr, ModuleIr } from "./ir.js";
-import { readExpressionFacts } from "./expression-facts.js";
+import {
+  emitSelectBindingLine,
+  isSelectControlAttributeName,
+  provenNativeCellTextBinding,
+  usesBranchInsertion,
+  usesDedicatedSelectBinding,
+} from "./emit-client-specialization.js";
 import type { RuntimeImport } from "./types.js";
 import { listReadsNestedItemObject } from "./ir-nested-object-read.js";
 import { OXC_BIND_DOM_REF_PLACEHOLDER } from "./oxc-dom-lowering.js";
@@ -93,6 +99,7 @@ type RuntimeHelperName =
   | "computed"
   | "deferredComputed"
   | "createCompilerListBindingCache"
+  | "insertBranch"
   | "insertDynamic"
   | "insertRenderValue"
   | "insertMemo"
@@ -140,6 +147,7 @@ function allocateRuntimeHelperNames(
     computed: "computed",
     deferredComputed: "deferredComputed",
     createCompilerListBindingCache: "createCompilerListBindingCache",
+    insertBranch: "insertBranch",
     insertDynamic: "insertDynamic",
     insertRenderValue: "insertRenderValue",
     insertMemo: "insertMemo",
@@ -255,7 +263,11 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
       }
 
       if (node.kind === "conditional") {
-        specifiers.add("insertDynamic");
+        if (usesBranchInsertion(node)) {
+          internalSpecifiers.add("insertBranch");
+        } else {
+          specifiers.add("insertDynamic");
+        }
       }
 
       if (node.kind === "list") {
@@ -541,7 +553,7 @@ function emitComponent(
       `  const ${fragmentName} = document.createDocumentFragment();`,
       `  const ${markerName} = document.createComment("");`,
       `  ${fragmentName}.append(${markerName});`,
-      `  ${ownerScopedMemoHelper ?? helperNames.insertDynamic}(${fragmentName}, ${markerName}, () => ${renderValue}${emitDynamicOptions(debugLabel)});`,
+      `  ${ownerScopedMemoHelper ?? (usesBranchInsertion(component.root) ? helperNames.insertBranch : helperNames.insertDynamic)}(${fragmentName}, ${markerName}, () => ${renderValue}${emitDynamicOptions(debugLabel)});`,
       `  return ${fragmentName};`,
       `}`,
     ].join("\n");
@@ -943,8 +955,13 @@ function emitSetup(
 
     if (child.kind === "conditional") {
       const ownerScopedMemoHelper = ownerScopedMemoInsertionHelper(child, state);
+      const insertionHelper =
+        ownerScopedMemoHelper ??
+        (usesBranchInsertion(child)
+          ? state.helperNames.insertBranch
+          : state.helperNames.insertDynamic);
       lines.push(
-        `  ${ownerScopedMemoHelper ?? state.helperNames.insertDynamic}(${currentPath}, ${childPath}, () => ${emitConditionalRenderValueExpression(child, state)}${emitDynamicOptions(state.debugLabel)});`,
+        `  ${insertionHelper}(${currentPath}, ${childPath}, () => ${emitConditionalRenderValueExpression(child, state)}${emitDynamicOptions(state.debugLabel)});`,
       );
       childIndex += 1;
       continue;
@@ -1042,69 +1059,6 @@ function emitSetup(
   return lines.filter(Boolean).join("\n");
 }
 
-/**
- * Reports whether a select can use the dedicated control binding.
- *
- * A real spread prop or a dynamic `multiple` keeps the generic spread binding,
- * because both can add, remove or reorder arbitrary props and the selection
- * has to be re-applied whenever `multiple` changes.
- */
-function usesDedicatedSelectBinding(node: Extract<JsxNodeIr, { kind: "element" }>): boolean {
-  if (node.tagName !== "select") {
-    return false;
-  }
-
-  let hasControlProp = false;
-
-  for (const attribute of node.attributes) {
-    if (attribute.kind === "spread-attr") {
-      return false;
-    }
-
-    if (attribute.kind !== "static-attr" && attribute.kind !== "dynamic-attr") {
-      continue;
-    }
-
-    if (attribute.name === "multiple") {
-      if (attribute.kind === "dynamic-attr") {
-        return false;
-      }
-      continue;
-    }
-
-    if (isSelectControlAttributeName(attribute.name)) {
-      hasControlProp = true;
-    }
-  }
-
-  return hasControlProp;
-}
-
-function emitSelectBindingLine(
-  currentPath: string,
-  selectControlEntries: readonly string[],
-  selectBindingSources: readonly string[],
-  state: EmitSetupState,
-): string | undefined {
-  if (selectControlEntries.length > 0) {
-    return `  ${state.helperNames.bindSelectValue}(${currentPath}, () => ({ ${selectControlEntries.join(", ")} }));`;
-  }
-
-  if (selectBindingSources.length === 0) {
-    return undefined;
-  }
-
-  const selectPropsName = state.allocateName("_selectProps");
-  const selectAssignments = selectBindingSources
-    .map((source) => `Object.assign(${selectPropsName}, ${source});`)
-    .join(" ");
-
-  return `  ${state.helperNames.bindSpreadProps}(${currentPath}, () => { const ${selectPropsName} = {}; ${selectAssignments} return ${selectPropsName}; });`;
-}
-
-function isSelectControlAttributeName(name: string): boolean {
-  return name === "value" || name === "defaultValue" || name === "multiple";
-}
 
 function shouldDeferSelectBinding(
   node: Extract<JsxNodeIr, { kind: "element" }>,
@@ -1646,17 +1600,6 @@ function isOwnerScopedMemoBranches(
   );
 }
 
-/**
- * Names the cell a text child is proven to read, so the emitter can hand the
- * cell itself to bindText instead of a thunk. bindText subscribes to a native
- * cell source directly and falls back to a tracked effect otherwise, so the
- * observable value, normalization and disposal contract are unchanged.
- */
-function provenNativeCellTextBinding(child: Extract<JsxNodeIr, { kind: "expr" }>): string | undefined {
-  const value = readExpressionFacts(child).value;
-
-  return value.kind === "native-cell-read" ? value.binding.name : undefined;
-}
 
 function emitConditionalRenderValueExpression(
   node: Extract<JsxNodeIr, { kind: "conditional" }>,

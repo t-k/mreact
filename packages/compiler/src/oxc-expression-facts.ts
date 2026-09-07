@@ -133,16 +133,45 @@ export function analyzeOxcExpressionFacts(
 ): ExpressionFactsIr | undefined {
   const binding = readOxcNativeCellReadBinding(expression, nativeCellBindings);
 
-  if (binding === undefined) {
-    return undefined;
+  if (binding !== undefined) {
+    return {
+      value: { kind: "native-cell-read", binding },
+      dependencies: [binding],
+      effectFree: "proven",
+      escape: "unknown",
+    };
   }
 
-  return {
-    value: { kind: "native-cell-read", binding },
-    dependencies: [binding],
-    effectFree: "proven",
-    escape: "unknown",
-  };
+  return isOxcRenderablePrimitiveExpression(expression) ? RENDERABLE_PRIMITIVE_FACTS : undefined;
+}
+
+/** Facts for an expression proven to evaluate to a primitive render value. */
+export const RENDERABLE_PRIMITIVE_FACTS: ExpressionFactsIr = Object.freeze({
+  value: Object.freeze({ kind: "renderable-primitive" }) as ExpressionFactsIr["value"],
+  dependencies: Object.freeze([]) as unknown as ResolvedBindingIr[],
+  effectFree: "proven",
+  escape: "contained",
+});
+
+/**
+ * Reports whether an expression can only ever evaluate to a primitive.
+ *
+ * The supported subset is deliberately syntactic: literals, `undefined`, and
+ * template literals with no substitutions. Anything that reads a binding or
+ * calls a function stays unknown.
+ */
+function isOxcRenderablePrimitiveExpression(expression: Record<string, unknown>): boolean {
+  const unwrapped = unwrapOxcParentheses(expression);
+
+  if (unwrapped.type === "Literal") {
+    return true;
+  }
+
+  if (unwrapped.type === "TemplateLiteral") {
+    return readArray(unwrapped.expressions).length === 0;
+  }
+
+  return unwrapped.type === "Identifier" && unwrapped.name === "undefined";
 }
 
 function readOxcNativeCellReadBinding(

@@ -15,6 +15,7 @@ export {
   createCompilerListBindingCache,
   trackCompilerKeyedItem,
 } from "./bind-list.js";
+export { insertBranch } from "./insert-branch.js";
 export { insertMemo } from "./insert-memo.js";
 export { insertMemoDynamic, installMemoRenderValueNormalizer } from "./insert-memo-dynamic.js";
 export { setDomAttribute } from "./dom-prop-application.js";

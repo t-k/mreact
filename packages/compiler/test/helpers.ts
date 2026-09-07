@@ -77,6 +77,7 @@ import {
   trackCompilerKeyedItem,
 } from "../../reactive-dom/src/internal.js";
 import { createMemo } from "../../reactive-dom/src/create-memo.js";
+import { insertBranch } from "../../reactive-dom/src/insert-branch.js";
 import { insertMemo } from "../../reactive-dom/src/insert-memo.js";
 import { insertMemoDynamic } from "../../reactive-dom/src/insert-memo-dynamic.js";
 
@@ -500,7 +501,7 @@ function extractClientInternalRuntimeEntries(
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>bindCompilerKeyedCellText|bindCompilerKeyedPropertyText|bindCompilerKeyedSingleNodeList|bindCompilerKeyedText|bindListWithRenderArity|bindSelectValue|createCompilerListBindingCache|createListWithRenderArity|createMemo|createSvgTemplate|createSvgTemplateElement|insertMemo|insertMemoDynamic|installMemoRenderValueNormalizer|markCompilerKeyedEventSlot|trackCompilerKeyedItem)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+      /^(?<importedName>bindCompilerKeyedCellText|bindCompilerKeyedPropertyText|bindCompilerKeyedSingleNodeList|bindCompilerKeyedText|bindListWithRenderArity|bindSelectValue|createCompilerListBindingCache|insertBranch|createListWithRenderArity|createMemo|createSvgTemplate|createSvgTemplateElement|insertMemo|insertMemoDynamic|installMemoRenderValueNormalizer|markCompilerKeyedEventSlot|trackCompilerKeyedItem)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
     );
 
     if (match?.groups === undefined) {
@@ -510,8 +511,10 @@ function extractClientInternalRuntimeEntries(
     return {
       localName: match.groups.localName ?? match.groups.importedName,
       value:
-        match.groups.importedName === "bindSelectValue"
-          ? bindSelectValue
+        match.groups.importedName === "insertBranch"
+          ? insertBranch
+          : match.groups.importedName === "bindSelectValue"
+            ? bindSelectValue
           : match.groups.importedName === "bindListWithRenderArity"
             ? bindListWithRenderArity
           : match.groups.importedName === "createCompilerListBindingCache"

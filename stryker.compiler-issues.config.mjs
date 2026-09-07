@@ -10,21 +10,25 @@ export default createStrykerConfig({
     // 20260907-compiler-expression-facts
     "packages/compiler/src/expression-facts.ts",
     "packages/compiler/src/oxc-expression-facts.ts",
-    "packages/compiler/src/oxc-child-analysis.ts:684-688",
-    "packages/compiler/src/oxc-child-analysis.ts:1889-1895",
-    "packages/compiler/src/oxc-child-analysis.ts:1901-1901",
+    "packages/compiler/src/oxc-child-analysis.ts:691-691",
+    "packages/compiler/src/oxc-child-analysis.ts:1893-1898",
+    "packages/compiler/src/oxc-child-analysis.ts:1905-1905",
     "packages/compiler/src/oxc.ts:250-250",
     "packages/compiler/src/oxc.ts:1954-1958",
-    // 20260907-compiler-direct-cell-text
-    "packages/compiler/src/emit-client.ts:934-939",
-    "packages/compiler/src/emit-client.ts:1655-1659",
+    // Decision and emission helpers for all three client specializations.
+    "packages/compiler/src/emit-client-specialization.ts",
+    // Their call sites inside the client emitter.
+    "packages/compiler/src/emit-client.ts:266-270",
+    "packages/compiler/src/emit-client.ts:301-315",
+    "packages/compiler/src/emit-client.ts:556-556",
+    "packages/compiler/src/emit-client.ts:739-768",
+    "packages/compiler/src/emit-client.ts:811-825",
+    "packages/compiler/src/emit-client.ts:946-951",
+    "packages/compiler/src/emit-client.ts:957-965",
     // 20260907-compiler-select-binding
     "packages/reactive-dom/src/bind-select-value.ts",
-    "packages/compiler/src/emit-client.ts:289-302",
-    "packages/compiler/src/emit-client.ts:726-727",
-    "packages/compiler/src/emit-client.ts:736-757",
-    "packages/compiler/src/emit-client.ts:799-813",
-    "packages/compiler/src/emit-client.ts:1045-1104",
+    // 20260907-compiler-branch-specialization
+    "packages/reactive-dom/src/insert-branch.ts",
   ],
   testFiles: [
     "packages/compiler/test/expression-facts.test.ts",
@@ -38,5 +42,8 @@ export default createStrykerConfig({
     "packages/compiler/test/select-binding.test.ts",
     "packages/reactive-dom/test/bind-select-value.test.ts",
     "packages/reactive-dom/test/bind-spread-props.test.ts",
+    "packages/compiler/test/branch-specialization.test.ts",
+    "packages/reactive-dom/test/insert-branch.test.ts",
+    "packages/compiler/test/transform-dynamic.test.ts",
   ],
 });

@@ -239,6 +239,25 @@ export function App(props) {
     );
   });
 
+  test("merges two proven primitive branches into one primitive fact", () => {
+    const root = analyzeClientRoot(`export function App(props) {
+  return <main>{props.ready ? "ready" : "waiting"}</main>;
+}`);
+    const conditional = (root as Extract<JsxNodeIr, { kind: "element" }>)
+      .children[0] as ConditionalIr;
+    const whenTrue = readExpressionFacts(conditional.whenTrue[0] as ExprIr);
+    const whenFalse = readExpressionFacts(conditional.whenFalse[0] as ExprIr);
+
+    expect(whenTrue.value).toEqual({ kind: "renderable-primitive" });
+    expect(whenFalse.value).toEqual({ kind: "renderable-primitive" });
+    expect(mergeExpressionFacts(whenTrue, whenFalse).value).toEqual({
+      kind: "renderable-primitive",
+    });
+    expect(mergeExpressionFacts(whenTrue, UNKNOWN_EXPRESSION_FACTS).value).toEqual({
+      kind: "unknown",
+    });
+  });
+
   test("produces the same facts for equivalent client and server analyses", () => {
     const code = `import { cell } from "@reckona/mreact-reactive-core";
 export function App() {
