@@ -2635,6 +2635,63 @@ export default function Page() {
   }
 });
 
+test("dev server tears down and remounts a computed PanelSlot child", async ({ page }) => {
+  const { close, url } = await startDevFixtureServer({
+    "state.ts": `import { cell } from "@reckona/mreact-reactive-core";
+
+export const panelTicket = cell(null);`,
+    "panel-slot.tsx": `"use client";
+
+export function PanelSlot(props) {
+  return <section data-testid="panel-slot">{props.open ? props.children : null}</section>;
+}`,
+    "ticket-panel.tsx": `"use client";
+
+import { computed } from "@reckona/mreact-reactive-core";
+import { panelTicket } from "./state";
+
+export function TicketPanel(props) {
+  const viewModel = computed(() => {
+    const ticket = panelTicket.get();
+    if (ticket === null) throw new Error("closed child was evaluated");
+    return "Ticket " + props.number + " / " + ticket;
+  });
+  return <aside data-testid="panel">{viewModel.get()}</aside>;
+}`,
+    "page.tsx": `"use client";
+
+import { panelTicket } from "./state";
+import { PanelSlot } from "./panel-slot";
+import { TicketPanel } from "./ticket-panel";
+
+export default function Page() {
+  return <main>
+    <button type="button" data-testid="open" onClick={() => panelTicket.set(1)}>open</button>
+    <button type="button" data-testid="close" onClick={() => panelTicket.set(null)}>close</button>
+    <PanelSlot open={panelTicket.get() !== null}>
+      <TicketPanel number={panelTicket.get() ?? 0} />
+    </PanelSlot>
+  </main>;
+}`,
+  });
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+
+  try {
+    await page.goto(url);
+    await expect(page.getByTestId("panel")).toHaveCount(0);
+    await page.getByTestId("open").click();
+    await expect(page.getByTestId("panel")).toHaveText("Ticket 1 / 1");
+    await page.getByTestId("close").click();
+    await expect(page.getByTestId("panel")).toHaveCount(0);
+    await page.getByTestId("open").click();
+    await expect(page.getByTestId("panel")).toHaveText("Ticket 1 / 1");
+    expect(pageErrors).toEqual([]);
+  } finally {
+    await close();
+  }
+});
+
 async function startWorkspaceFixtureServer(files: Record<string, string>): Promise<{
   close(): Promise<void>;
   url: string;
