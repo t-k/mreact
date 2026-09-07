@@ -2391,18 +2391,18 @@ export function Shell(props) {
 
 import { panelTicket } from "./state";
 
-function view() {
+function view(number) {
   const value = panelTicket.get();
 
   if (value === null) {
     throw new Error("view() must not run while the panel is closed");
   }
 
-  return "Ticket " + value;
+  return "Ticket " + number + " / " + value;
 }
 
-export function TicketPanel() {
-  return <aside data-testid="ticket-panel">{view()}</aside>;
+export function TicketPanel(props) {
+  return <aside data-testid={props.testId ?? "ticket-panel"}>{view(props.number)}</aside>;
 }`,
     "page.tsx": `"use client";
 
@@ -2418,9 +2418,11 @@ export default function Page() {
       <button type="button" data-testid="next" onClick={() => panelTicket.set(2)}>next</button>
       <button type="button" data-testid="close" onClick={() => panelTicket.set(null)}>close</button>
       <Shell>
-        {panelTicket.get() === null ? null : <TicketPanel />}
+        {panelTicket.get() === null ? null : <TicketPanel number={panelTicket.get() ?? 0} />}
       </Shell>
-      {panelTicket.get() === null ? null : <aside data-testid="direct-panel">direct</aside>}
+      {panelTicket.get() === null ? null : (
+        <TicketPanel testId="direct-panel" number={panelTicket.get() ?? 0} />
+      )}
     </main>
   );
 }`,
@@ -2439,18 +2441,19 @@ export default function Page() {
     await expect(page.getByTestId("direct-panel")).toHaveCount(0);
 
     await page.getByTestId("open").click();
-    await expect(page.getByTestId("ticket-panel")).toHaveText("Ticket 1");
-    await expect(page.getByTestId("direct-panel")).toHaveCount(1);
+    await expect(page.getByTestId("ticket-panel")).toHaveText("Ticket 1 / 1");
+    await expect(page.getByTestId("direct-panel")).toHaveText("Ticket 1 / 1");
 
     await page.getByTestId("next").click();
-    await expect(page.getByTestId("ticket-panel")).toHaveText("Ticket 2");
+    await expect(page.getByTestId("ticket-panel")).toHaveText("Ticket 2 / 2");
+    await expect(page.getByTestId("direct-panel")).toHaveText("Ticket 2 / 2");
 
     await page.getByTestId("close").click();
     await expect(page.getByTestId("ticket-panel")).toHaveCount(0);
     await expect(page.getByTestId("direct-panel")).toHaveCount(0);
 
     await page.getByTestId("open").click();
-    await expect(page.getByTestId("ticket-panel")).toHaveText("Ticket 1");
+    await expect(page.getByTestId("ticket-panel")).toHaveText("Ticket 1 / 1");
     await expect(page.getByTestId("ticket-panel")).toHaveCount(1);
 
     // The closed branch must not re-evaluate its bindings against the new
@@ -2467,7 +2470,8 @@ test("PanelSlot route module conditional child hydrates, unmounts and remounts",
   const { close, url } = await startFixtureServer({
     "state.ts": `import { cell } from "@reckona/mreact-reactive-core";
 
-export const panelTicket = cell(null);`,
+export const panelTicket = cell(null);
+export const panelNoise = cell(0);`,
     "panel-slot.tsx": `"use client";
 
 export function PanelSlot(props) {
@@ -2476,9 +2480,13 @@ export function PanelSlot(props) {
     "ticket-panel.tsx": `"use client";
 
 import { computed } from "@reckona/mreact-reactive-core";
-import { panelTicket } from "./state";
+import { panelNoise, panelTicket } from "./state";
+
+const diagnostics = globalThis;
 
 function itemFor(number) {
+  diagnostics.__panelItemReads = (diagnostics.__panelItemReads ?? 0) + 1;
+  panelNoise.get();
   const ticket = panelTicket.get();
   return ticket === null ? null : { title: "Ticket " + number };
 }
@@ -2501,7 +2509,7 @@ export function TicketPanel(props) {
 }`,
     "page.tsx": `"use client";
 
-import { panelTicket } from "./state";
+import { panelNoise, panelTicket } from "./state";
 import { PanelSlot } from "./panel-slot";
 import { TicketPanel } from "./ticket-panel";
 
@@ -2512,6 +2520,7 @@ export default function Page() {
       <button type="button" data-testid="open" onClick={() => panelTicket.set(1)}>open</button>
       <button type="button" data-testid="next" onClick={() => panelTicket.set(2)}>next</button>
       <button type="button" data-testid="close" onClick={() => panelTicket.set(null)}>close</button>
+      <button type="button" data-testid="noise" onClick={() => panelNoise.set(value => value + 1)}>noise</button>
       <PanelSlot open={panelTicket.get() !== null}>
         <TicketPanel number={panelTicket.get() ?? 0} />
       </PanelSlot>
@@ -2538,10 +2547,88 @@ export default function Page() {
     await page.getByTestId("close").click();
     await expect(page.getByTestId("panel")).toHaveCount(0);
     await expect(page.getByTestId("panel-slot")).toHaveCount(1);
+    const readsAfterClose = await page.evaluate(
+      () => (globalThis as typeof globalThis & { __panelItemReads?: number }).__panelItemReads ?? 0,
+    );
+
+    await page.getByTestId("noise").click();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (globalThis as typeof globalThis & { __panelItemReads?: number }).__panelItemReads ?? 0,
+        ),
+      )
+      .toBe(readsAfterClose);
 
     await page.getByTestId("open").click();
     await expect(page.getByTestId("panel")).toHaveText("Ticket 1");
     await expect(page.getByTestId("panel")).toHaveCount(1);
+    expect(pageErrors).toEqual([]);
+  } finally {
+    await close();
+  }
+});
+
+test("PanelSlot route module conditional child keeps an initially SSR-rendered panel", async ({
+  page,
+}) => {
+  const { close, url } = await startFixtureServer({
+    "state.ts": `import { cell } from "@reckona/mreact-reactive-core";
+
+export const panelTicket = cell(1);`,
+    "panel-slot.tsx": `"use client";
+
+export function PanelSlot(props) {
+  return <section data-testid="panel-slot">{props.open ? props.children : null}</section>;
+}`,
+    "ticket-panel.tsx": `"use client";
+
+import { computed } from "@reckona/mreact-reactive-core";
+import { panelTicket } from "./state";
+
+export function TicketPanel(props) {
+  const viewModel = computed(() => {
+    const ticket = panelTicket.get();
+    if (ticket === null) throw new Error("closed child was evaluated");
+    return { title: "Ticket " + props.number + " / " + ticket };
+  });
+
+  return <aside data-testid="panel">{viewModel.get().title}</aside>;
+}`,
+    "page.tsx": `"use client";
+
+import { panelTicket } from "./state";
+import { PanelSlot } from "./panel-slot";
+import { TicketPanel } from "./ticket-panel";
+
+export default function Page() {
+  return (
+    <main>
+      <button type="button" data-testid="close" onClick={() => panelTicket.set(null)}>close</button>
+      <button type="button" data-testid="open" onClick={() => panelTicket.set(2)}>open</button>
+      <PanelSlot open={panelTicket.get() !== null}>
+        <TicketPanel number={panelTicket.get() ?? 0} />
+      </PanelSlot>
+    </main>
+  );
+}`,
+  });
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+
+  try {
+    const response = await fetch(url);
+    const html = await response.text();
+    expect(response.status).toBe(200);
+    expect(html).toContain('data-testid="panel"');
+
+    await page.goto(url);
+    await expect(page.getByTestId("panel")).toHaveText("Ticket 1 / 1");
+    await page.getByTestId("close").click();
+    await expect(page.getByTestId("panel")).toHaveCount(0);
+    await page.getByTestId("open").click();
+    await expect(page.getByTestId("panel")).toHaveText("Ticket 2 / 2");
     expect(pageErrors).toEqual([]);
   } finally {
     await close();

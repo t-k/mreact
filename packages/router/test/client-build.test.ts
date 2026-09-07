@@ -7192,6 +7192,31 @@ export default function Page() {
     expect(document.querySelector('link[href*="routes/next."]')).not.toBeNull();
     expect(document.querySelectorAll("a")).toHaveLength(1);
     expect(await routeModule.__mreactPrefetch("/next")).toBe(true);
+
+    const observationsAfterNext = observed.length;
+    anchor?.setAttribute("href", "/about");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(observed).toHaveLength(observationsAfterNext + 1);
+    intersectionCallback?.(
+      [{ isIntersecting: true, target: anchor } as unknown as IntersectionObserverEntry],
+      observer,
+    );
+    await flushRouterMicrotasks();
+    expect(document.querySelectorAll('link[href*="routes/about."]')).toHaveLength(1);
+
+    anchor?.setAttribute("data-mreact-prefetch", "none");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(unobserved.at(-1)).toBe(anchor);
+    anchor?.setAttribute("data-mreact-prefetch", "viewport");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(observed.at(-1)).toBe(anchor);
+
+    anchor?.remove();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(unobserved.at(-1)).toBe(anchor);
+    document.body.append(anchor as HTMLAnchorElement);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(observed.at(-1)).toBe(anchor);
   });
 
   test("prefetches server route navigation HTML when no client route script matches", async () => {
