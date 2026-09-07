@@ -82,6 +82,8 @@ export interface ComponentNamedPropIr {
   kind: "prop";
   name: string;
   code: string;
+  /** Conservative facts proven about the value this call site passes. */
+  facts?: ExpressionFactsIr;
   serverRenderValuePlaceholder?: string;
 }
 

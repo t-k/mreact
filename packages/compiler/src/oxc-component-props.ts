@@ -2,6 +2,8 @@ import {
   unsupportedComponentDomRefDiagnostic,
   unsupportedRefAttributeDiagnostic,
 } from "./diagnostics.js";
+import type { ExpressionFactsIr } from "./expression-facts.js";
+import { RENDERABLE_PRIMITIVE_FACTS } from "./oxc-expression-facts.js";
 import type { ComponentPropIr, JsxNodeIr } from "./ir.js";
 import type { OxcBodyStatementJsxMode } from "./oxc-analysis-types.js";
 import { normalizeOxcExpressionCode, stripOxcGeneratedImports } from "./oxc-code-utils.js";
@@ -38,6 +40,7 @@ export function analyzeOxcComponentProp(
     resolveServerRenderValueExpressionCode?: (
       expression: Record<string, unknown>,
     ) => { code: string; placeholder: string } | undefined;
+    analyzeFacts?: (expression: Record<string, unknown>) => ExpressionFactsIr | undefined;
   } = {},
 ): ComponentPropIr[] {
   const object = readObject(attr);
@@ -76,7 +79,11 @@ export function analyzeOxcComponentProp(
   }
 
   if (value.type === "Literal") {
-    return [{ kind: "prop", name, code: JSON.stringify(value.value) }];
+    // A literal JSX attribute value is always a string, so a callee can render
+    // it as text no matter which call site it came from.
+    return [
+      { kind: "prop", name, code: JSON.stringify(value.value), facts: RENDERABLE_PRIMITIVE_FACTS },
+    ];
   }
 
   if (value.type === "JSXExpressionContainer") {
@@ -109,10 +116,13 @@ export function analyzeOxcComponentProp(
       ];
     }
 
+    const facts = options.analyzeFacts?.(expression);
+
     return [
       {
         kind: "prop",
         name,
+        ...(facts === undefined ? {} : { facts }),
         code:
           options.resolveExpressionCode?.(expression) ??
           (expression.type === "ArrowFunctionExpression" && containsOxcJsxSyntax(expression)

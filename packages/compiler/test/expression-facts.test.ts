@@ -109,7 +109,9 @@ export function App(count) {
   return <main>{count.get()}</main>;
 }`);
 
-    expect(onlyExpressionFacts(root)).toEqual(UNKNOWN_EXPRESSION_FACTS);
+    // The parameter shadows the module cell, so the read is a component prop
+    // read whose shape depends on the caller rather than a proven cell read.
+    expect(onlyExpressionFacts(root).value).toEqual({ kind: "component-prop-read" });
   });
 
   test("keeps a reactive alias that shadows a module cell unknown", () => {
@@ -203,7 +205,7 @@ export function App(props) {
     const [whenFalse] = findExpressions(conditional.whenFalse[0] as JsxNodeIr);
 
     expect(readExpressionFacts(whenTrue as ExprIr).value.kind).toBe("native-cell-read");
-    expect(readExpressionFacts(whenFalse as ExprIr)).toEqual(UNKNOWN_EXPRESSION_FACTS);
+    expect(readExpressionFacts(whenFalse as ExprIr).value.kind).toBe("component-prop-read");
     expect(
       mergeExpressionFacts(
         readExpressionFacts(whenTrue as ExprIr),

@@ -40,6 +40,10 @@ import {
   lowerOxcTopLevelStatement,
   type OxcBodyLowerers,
 } from "./oxc-body-lowering.js";
+import {
+  collectOxcEscapedComponentNames,
+  lowerProvenTextComponentProps,
+} from "./component-prop-text.js";
 import { collectOxcVariableInitializers } from "./oxc-await-analysis.js";
 import {
   collectOxcModuleExpressionFacts,
@@ -574,6 +578,13 @@ function analyzeOxcToIr(
     if (reassignedComponentNames.has(component.name)) {
       component.reassigned = true;
     }
+  }
+
+  if (target === "client") {
+    lowerProvenTextComponentProps(
+      components,
+      collectOxcEscapedComponentNames(program, componentNames),
+    );
   }
 
   if (options?.serverOutput === "stream") {

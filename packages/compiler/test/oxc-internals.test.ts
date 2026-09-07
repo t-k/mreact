@@ -1048,7 +1048,14 @@ export default function Page() {
         },
         analyzeJsxNode,
       ),
-    ).toEqual([{ kind: "prop", name: "title", code: '"Ada"' }]);
+    ).toEqual([
+      {
+        kind: "prop",
+        name: "title",
+        code: '"Ada"',
+        facts: { value: { kind: "renderable-primitive" }, dependencies: [], effectFree: "proven", escape: "contained" },
+      },
+    ]);
     expect(
       analyzeOxcComponentProp(
         code,

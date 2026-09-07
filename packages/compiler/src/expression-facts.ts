@@ -15,6 +15,8 @@
  * - `renderable-primitive`: an expression that can only evaluate to a string,
  *   number, bigint, boolean, null or undefined, so it can never be a list or
  *   any other structured render value.
+ * - `component-prop-read`: an expression that reads a prop of the component it
+ *   appears in, so its shape depends on what every call site passes.
  *
  * Everything else stays `unknown`.
  */
@@ -33,7 +35,8 @@ export interface ResolvedBindingIr {
 export type ExpressionValueIr =
   | { kind: "unknown" }
   | { kind: "native-cell-read"; binding: ResolvedBindingIr }
-  | { kind: "renderable-primitive" };
+  | { kind: "renderable-primitive" }
+  | { kind: "component-prop-read" };
 
 /** Names one output phase a lowered expression can be required in. */
 export type ExpressionPhaseIr = "server" | "attach" | "update" | "mount";
@@ -110,7 +113,7 @@ function sameExpressionValue(left: ExpressionValueIr, right: ExpressionValueIr):
     return sameResolvedBinding(left.binding, right.binding);
   }
 
-  return left.kind === "renderable-primitive" && right.kind === "renderable-primitive";
+  return left.kind !== "unknown" && left.kind === right.kind;
 }
 
 function unionBindings(

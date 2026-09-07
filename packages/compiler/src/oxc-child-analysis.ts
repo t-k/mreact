@@ -71,6 +71,7 @@ import {
 import type { ResolvedBindingIr } from "./expression-facts.js";
 import {
   analyzeOxcExpressionFacts,
+  COMPONENT_PROP_READ_FACTS,
   RENDERABLE_PRIMITIVE_FACTS,
 } from "./oxc-expression-facts.js";
 import { transformJsxWithOxc } from "./oxc-transform.js";
@@ -224,6 +225,8 @@ export function analyzeOxcJsxNode(
             allowRef,
             analyzeExpression: (expression) =>
               analyzeOxcExpressionChild(code, expression, context, bodyStatementJsx),
+            analyzeFacts: (expression) =>
+              analyzeOxcExpressionFacts(expression, context.nativeCellBindings),
             analyzeRenderValueExpression: (expression) =>
               analyzeOxcComponentPropRenderValueExpression(
                 code,
@@ -688,7 +691,9 @@ export function analyzeOxcExpressionChild(
   // Only the narrow `binding.get()` shape can carry facts, and that shape is
   // never a same-module stream call and never contains JSX, so the analyzer
   // needs no extra guard against the rewritten emission paths below.
-  const facts = analyzeOxcExpressionFacts(unwrappedExpression, context.nativeCellBindings);
+  const facts = isPotentialComponentPropRenderValue
+    ? COMPONENT_PROP_READ_FACTS
+    : analyzeOxcExpressionFacts(unwrappedExpression, context.nativeCellBindings);
 
   return [
     {

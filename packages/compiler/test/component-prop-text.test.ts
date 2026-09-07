@@ -1,0 +1,158 @@
+// @vitest-environment happy-dom
+import { describe, expect, test } from "vitest";
+import { createRoot } from "@reckona/mreact-reactive-dom";
+import { flushEffects } from "@reckona/mreact-reactive-core/testing";
+import { transform } from "../src/index.js";
+import { analyzeToIr } from "../src/internal.js";
+import { compileClientComponent, runServerComponent } from "./helpers.js";
+import type { ExprIr, JsxNodeIr } from "../src/ir.js";
+
+interface CellHost {
+  set(value: unknown): void;
+}
+
+type PropHost = typeof globalThis & { __badgeLabel?: CellHost };
+
+function compile(code: string): string {
+  const output = transform({ code, filename: "App.tsx", target: "client", dev: false });
+
+  expect(output.diagnostics).toEqual([]);
+  return output.code;
+}
+
+function collectExpressions(node: JsxNodeIr, found: ExprIr[] = []): ExprIr[] {
+  if (node.kind === "expr") {
+    found.push(node);
+    return found;
+  }
+
+  if (node.kind === "conditional") {
+    for (const child of [...node.whenTrue, ...node.whenFalse]) collectExpressions(child, found);
+    return found;
+  }
+
+  if (node.kind === "component") {
+    for (const prop of node.props) {
+      if (prop.kind === "render-prop") {
+        for (const child of prop.children) collectExpressions(child, found);
+      }
+    }
+  }
+
+  if (
+    node.kind === "element" ||
+    node.kind === "fragment" ||
+    node.kind === "list" ||
+    node.kind === "component"
+  ) {
+    for (const child of node.children) collectExpressions(child, found);
+  }
+
+  return found;
+}
+
+const primitiveCallSites = `import { cell } from "@reckona/mreact-reactive-core";
+function Badge(props) { return <span class="badge">{props.label}</span>; }
+export function App() {
+  const count = cell(0);
+  globalThis.__badgeLabel = count;
+  return <main><Badge label="alpha" /><Badge label={count.get()} /></main>;
+}`;
+
+describe("compiler component prop text lowering", () => {
+  test("binds a component prop child as text when every call site passes text", () => {
+    const code = compile(primitiveCallSites);
+
+    expect(code).toContain("bindText(");
+    expect(code).not.toContain("insertRenderValue");
+    expect(code).not.toContain("insertDynamic");
+  });
+
+  test("keeps the render value insertion when the component is exported", () => {
+    const code = compile(`export function Badge(props) { return <span>{props.label}</span>; }
+export function App() { return <main><Badge label="alpha" /></main>; }`);
+
+    expect(code).toContain("insertRenderValue");
+  });
+
+  test("keeps the render value insertion when a call site cannot be proven text", () => {
+    const unproven = [
+      'function Badge(props) { return <span>{props.label}</span>; }\nexport function App(props) { return <main><Badge label={props.node} /></main>; }',
+      'function Badge(props) { return <span>{props.label}</span>; }\nexport function App(props) { return <main><Badge {...props.rest} /></main>; }',
+      'function Badge(props) { return <span>{props.label}</span>; }\nexport function App(props) { return <main><Badge label={props.make()} /></main>; }',
+    ];
+
+    for (const source of unproven) {
+      expect(compile(source), source).toContain("insertRenderValue");
+    }
+  });
+
+  test("keeps the render value insertion when the component escapes as a value", () => {
+    const code = compile(`function Badge(props) { return <span>{props.label}</span>; }
+const registry = { Badge };
+export function App() { return <main><Badge label="alpha" />{registry.Badge === Badge ? "" : ""}</main>; }`);
+
+    expect(code).toContain("insertRenderValue");
+  });
+
+  test("renders and updates a lowered component prop child", async () => {
+    const code = compile(primitiveCallSites);
+    const host = globalThis as PropHost;
+    const container = document.createElement("div");
+    const dispose = createRoot(container, compileClientComponent(code));
+
+    try {
+      await flushEffects();
+      expect(container.textContent).toBe("alpha0");
+
+      host.__badgeLabel?.set(7);
+      await flushEffects();
+      expect(container.textContent).toBe("alpha7");
+    } finally {
+      dispose();
+      delete host.__badgeLabel;
+    }
+  });
+
+  test("lowers the prop child on the client only and keeps the server classification", () => {
+    const renderModes = (target: "client" | "server"): (string | undefined)[] => {
+      const output = analyzeToIr({ code: primitiveCallSites, filename: "App.tsx", target });
+
+      expect(output.diagnostics).toEqual([]);
+      const badge = output.ir.components.find((component) => component.name === "Badge");
+
+      if (badge === undefined) {
+        throw new Error("Expected the analyzed module to contain Badge.");
+      }
+
+      return collectExpressions(badge.root).map((expression) => expression.renderMode);
+    };
+
+    // The client drops the render value classification; the server keeps
+    // whichever one it uses to pick between its calling conventions.
+    expect(renderModes("client")).toEqual([undefined]);
+    expect(renderModes("server").every((mode) => mode !== undefined)).toBe(true);
+  });
+
+  test("renders the same markup on the server as the client mounts", async () => {
+    const source = `function Badge(props) { return <span class="badge">{props.label}</span>; }
+export function App() { return <main><Badge label="alpha" /><Badge label="beta" /></main>; }`;
+    const serverOutput = transform({
+      code: source,
+      filename: "App.tsx",
+      target: "server",
+      dev: false,
+    });
+
+    expect(serverOutput.diagnostics).toEqual([]);
+    const container = document.createElement("div");
+    const dispose = createRoot(container, compileClientComponent(compile(source)));
+
+    try {
+      await flushEffects();
+      expect(runServerComponent(serverOutput.code)).toBe(container.innerHTML);
+    } finally {
+      dispose();
+    }
+  });
+});

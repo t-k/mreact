@@ -145,6 +145,13 @@ export function analyzeOxcExpressionFacts(
   return isOxcRenderablePrimitiveExpression(expression) ? RENDERABLE_PRIMITIVE_FACTS : undefined;
 }
 
+/** Facts for an expression that reads a prop of the component it appears in. */
+export const COMPONENT_PROP_READ_FACTS: ExpressionFactsIr = Object.freeze({
+  value: Object.freeze({ kind: "component-prop-read" }) as ExpressionFactsIr["value"],
+  effectFree: "unknown",
+  escape: "unknown",
+});
+
 /** Facts for an expression proven to evaluate to a primitive render value. */
 export const RENDERABLE_PRIMITIVE_FACTS: ExpressionFactsIr = Object.freeze({
   value: Object.freeze({ kind: "renderable-primitive" }) as ExpressionFactsIr["value"],
