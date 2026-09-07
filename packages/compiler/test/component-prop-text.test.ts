@@ -88,6 +88,19 @@ export function App() { return <main><Badge label="alpha" /></main>; }`);
     }
   });
 
+  test("keeps the render value insertion when only some call sites are proven text", () => {
+    const code = compile(`import { cell } from "@reckona/mreact-reactive-core";
+function Badge(props) { return <span>{props.label}</span>; }
+export function App(props) {
+  const count = cell(0);
+  return <main><Badge label={count.get()} /><Badge label={props.node} /></main>;
+}`);
+
+    // One unprovable call site is enough: the callee has to keep the generic
+    // insertion for every call site, not just for that one.
+    expect(code).toContain("insertRenderValue");
+  });
+
   test("keeps the render value insertion when the component escapes as a value", () => {
     const code = compile(`function Badge(props) { return <span>{props.label}</span>; }
 const registry = { Badge };
@@ -97,9 +110,13 @@ export function App() { return <main><Badge label="alpha" />{registry.Badge === 
   });
 
   test("keeps one shared component function for repeated lowered call sites", () => {
-    const code = compile(`function Badge(props) { return <span class="badge">{props.label}</span>; }
+    // Every call site reads the same cell, so all four are lowered to text and
+    // none of them folds into the caller, which is what keeps them sharing.
+    const code = compile(`import { cell } from "@reckona/mreact-reactive-core";
+function Badge(props) { return <span class="badge">{props.label}</span>; }
 export function App() {
-  return <main><Badge label="a" /><Badge label="b" /><Badge label="c" /><Badge label="d" /></main>;
+  const count = cell(0);
+  return <main><Badge label={count.get()} /><Badge label={count.get()} /><Badge label={count.get()} /><Badge label={count.get()} /></main>;
 }`);
 
     expect(code.match(/function Badge\(/g)).toHaveLength(1);

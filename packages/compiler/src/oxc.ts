@@ -40,6 +40,7 @@ import {
   lowerOxcTopLevelStatement,
   type OxcBodyLowerers,
 } from "./oxc-body-lowering.js";
+import { inlineConstantComponentCalls } from "./component-constant-inline.js";
 import {
   collectOxcEscapedComponentNames,
   lowerProvenTextComponentProps,
@@ -580,10 +581,10 @@ function analyzeOxcToIr(
     }
   }
 
-  lowerProvenTextComponentProps(
-    components,
-    collectOxcEscapedComponentNames(program, componentNames),
-  );
+  const escapedComponentNames = collectOxcEscapedComponentNames(program, componentNames);
+
+  inlineConstantComponentCalls(components, escapedComponentNames);
+  lowerProvenTextComponentProps(components, escapedComponentNames);
 
   if (options?.serverOutput === "stream") {
     for (const component of components) {

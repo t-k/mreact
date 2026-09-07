@@ -14,19 +14,23 @@ function compile(code: string): string {
 
 describe("compiler native component call specialization", () => {
   test("drops the render-value guard for a same-module component call", () => {
+    // The prop is dynamic, so the call survives constant folding and the guard
+    // around it is the thing under test.
     const code = compile(`function Badge(props) { return <span class="badge">{props.label}</span>; }
-export function App() {
-  return <main><Badge label="new" /></main>;
+export function App(props) {
+  return <main><Badge label={props.title} /></main>;
 }`);
 
-    expect(code).toContain('_children[0].replaceWith(Badge({ label: ("new") }))');
+    expect(code).toContain('_children[0].replaceWith(Badge({ label: (props.title) }))');
     expect(code).not.toContain('typeof _component === "boolean"');
   });
 
   test("keeps one shared component function for repeated call sites", () => {
-    const code = compile(`function Badge(props) { return <span class="badge">{props.label}</span>; }
+    const code = compile(`import { cell } from "@reckona/mreact-reactive-core";
+function Badge(props) { return <span class="badge">{props.label}</span>; }
 export function App() {
-  return <main><Badge label="a" /><Badge label="b" /><Badge label="c" /></main>;
+  const count = cell(0);
+  return <main><Badge label={count.get()} /><Badge label={count.get()} /><Badge label={count.get()} /></main>;
 }`);
 
     expect(code.match(/function Badge\(/g)).toHaveLength(1);

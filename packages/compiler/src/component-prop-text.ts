@@ -150,7 +150,9 @@ function isTextOnlyCallee(
     return false;
   }
 
-  return callSites !== undefined && callSites.length > 0 && callSites.every(isTextOnlyCallSite);
+  // No call site at all means the module cannot reach the component, so nothing
+  // can pass it a value the text binding would be wrong for.
+  return callSites === undefined || callSites.every(isTextOnlyCallSite);
 }
 
 function isTextOnlyCallSite(node: ComponentRefIr): boolean {
