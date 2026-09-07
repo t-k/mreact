@@ -45,7 +45,10 @@ interface UntrackedDependency {
 }
 
 export interface CurrentCheckContext {
-  readonly results: WeakMap<Source, Map<number, boolean>>;
+  // Memoizes only the recursive validity of a shared source for one traversal.
+  // Each edge still compares its own snapshot version before this is consulted,
+  // so one entry per source is enough and no per-version map is allocated.
+  readonly results: WeakMap<Source, boolean>;
 }
 
 export type Tracker = ReactiveComputation | null;
@@ -108,22 +111,25 @@ export function untrackedDependencyIsCurrent(
     return false;
   }
 
+  if (sourceVersion(source) !== dependency.version) {
+    return false;
+  }
+
+  const isCurrent = source.isCurrent;
+  if (isCurrent === undefined) {
+    return true;
+  }
+
   if (context === undefined) {
-    return sourceVersion(source) === dependency.version && source.isCurrent?.() !== false;
+    return isCurrent.call(source) !== false;
   }
 
-  const sourceResults = context.results.get(source);
-  const cachedResult = sourceResults?.get(dependency.version);
-  if (cachedResult !== undefined || sourceResults?.has(dependency.version) === true) {
-    return cachedResult as boolean;
+  const cachedResult = context.results.get(source);
+  if (cachedResult !== undefined) {
+    return cachedResult;
   }
 
-  const current =
-    sourceVersion(source) === dependency.version && source.isCurrent?.(context) !== false;
-  if (sourceResults === undefined) {
-    context.results.set(source, new Map([[dependency.version, current]]));
-  } else {
-    sourceResults.set(dependency.version, current);
-  }
+  const current = isCurrent.call(source, context) !== false;
+  context.results.set(source, current);
   return current;
 }

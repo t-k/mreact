@@ -74,6 +74,27 @@ describe("dormant dependency validation", () => {
     ).toBe(false);
   });
 
+  test("invokes a source check with the source as its receiver", () => {
+    const receivers: unknown[] = [];
+    const source: Source = {
+      subscribers: null,
+      isCurrent(this: Source) {
+        receivers.push(this);
+        return true;
+      },
+    };
+    const ref = new WeakRef(source);
+
+    expect(checkDependency({ ref, requiresCurrentCheckContext: true, version: 0 })).toBe(true);
+    expect(
+      checkDependency(
+        { ref, requiresCurrentCheckContext: true, version: 0 },
+        createCurrentCheckContext(),
+      ),
+    ).toBe(true);
+    expect(receivers).toEqual([source, source]);
+  });
+
   test("revalidates a stale sibling edge to a shared dormant computed", () => {
     const base = cell(1);
     let sharedRuns = 0;
