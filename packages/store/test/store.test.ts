@@ -988,4 +988,130 @@ describe("shallowEqual", () => {
     expect(shallowEqual({ name: "Ada" }, { name: "Ada" })).toBe(true);
     expect(shallowEqual([1, 2], [1, 2])).toBe(true);
   });
+
+  it("rejects objects whose own keys differ even when every value is undefined", () => {
+    expect(shallowEqual({ a: undefined }, { b: undefined } as never)).toBe(false);
+    expect(shallowEqual({ b: undefined }, { a: undefined } as never)).toBe(false);
+  });
+
+  it("keeps Object.is value semantics for matching own keys", () => {
+    expect(shallowEqual({ value: Number.NaN }, { value: Number.NaN })).toBe(true);
+    expect(shallowEqual({ value: 0 }, { value: -0 })).toBe(false);
+    expect(shallowEqual({ value: undefined }, { value: undefined })).toBe(true);
+  });
+
+  it("compares null-prototype peers by their own keys", () => {
+    const left = Object.assign(Object.create(null) as Record<string, unknown>, { a: undefined });
+    const right = Object.assign(Object.create(null) as Record<string, unknown>, { b: undefined });
+    const sameKey = Object.assign(Object.create(null) as Record<string, unknown>, { a: undefined });
+
+    expect(shallowEqual(left, right)).toBe(false);
+    expect(shallowEqual(left, sameKey)).toBe(true);
+    expect(shallowEqual(left, { a: undefined } as Record<string, unknown>)).toBe(false);
+  });
+
+  it("does not let inherited Object.prototype members stand in for a missing own key", () => {
+    expect(
+      shallowEqual({ hasOwnProperty: Object.prototype.hasOwnProperty }, { other: 1 } as never),
+    ).toBe(false);
+    expect(
+      shallowEqual({ toString: Object.prototype.toString }, { other: 1 } as never),
+    ).toBe(false);
+  });
+
+  it("treats identical references as equal without inspecting keys", () => {
+    const date = new Date(0);
+    const map = new Map([["a", 1]]);
+
+    expect(shallowEqual(date, date)).toBe(true);
+    expect(shallowEqual(map, map)).toBe(true);
+    expect(shallowEqual(Number.NaN, Number.NaN)).toBe(true);
+  });
+
+  it("never compares an array against an object-shaped peer by index keys", () => {
+    expect(shallowEqual([1, 2], { 0: 1, 1: 2 } as never)).toBe(false);
+    expect(shallowEqual({ 0: 1, 1: 2 } as never, [1, 2])).toBe(false);
+  });
+
+  it("rejects null and undefined operands instead of throwing", () => {
+    expect(shallowEqual({ a: 1 }, null as never)).toBe(false);
+    expect(shallowEqual(null as never, { a: 1 })).toBe(false);
+    expect(shallowEqual({ a: 1 }, undefined as never)).toBe(false);
+  });
+
+  it("requires every own key to match rather than any single key", () => {
+    expect(shallowEqual({ a: 1, b: 2 }, { a: 1, b: 3 })).toBe(false);
+    expect(shallowEqual({}, {})).toBe(true);
+  });
+
+  it("rejects arrays whose own index keys differ despite equal undefined holes", () => {
+    const holeThenUndefined = sparseArray(2, { 1: undefined });
+    const samePeer = sparseArray(2, { 1: undefined });
+    const undefinedAtZero = [undefined];
+    const holeInTheMiddle = sparseArray(3, { 0: 1, 2: 3 });
+
+    expect(Object.keys(holeThenUndefined)).toEqual(["1"]);
+    expect(shallowEqual(holeThenUndefined, undefinedAtZero)).toBe(false);
+    expect(shallowEqual(holeThenUndefined, samePeer)).toBe(true);
+    expect(shallowEqual(holeInTheMiddle, [1, 2, 3])).toBe(false);
+  });
 });
+
+describe("shallowEqual store selection", () => {
+  it("notifies selected-slice subscribers when the selected own key is replaced", async () => {
+    const store = createStore<{ activeKey: string }>({ activeKey: "a" });
+    const selected = store.select(
+      (state) => ({ [state.activeKey]: undefined }) as Record<string, undefined>,
+      shallowEqual,
+    );
+    const seen: Array<string[]> = [];
+
+    effect(() => {
+      seen.push(Object.keys(selected.get()));
+    });
+    await flushEffects();
+    store.set({ activeKey: "b" });
+    await flushEffects();
+
+    expect(seen).toEqual([["a"], ["b"]]);
+    expect(Object.keys(selected.get())).toEqual(["b"]);
+
+    selected.dispose();
+  });
+
+  it("keeps selected-slice subscribers quiet when the selected own keys are unchanged", async () => {
+    const store = createStore<{ activeKey: string; unrelated: number }>({
+      activeKey: "a",
+      unrelated: 0,
+    });
+    const selected = store.select(
+      (state) => ({ [state.activeKey]: undefined }) as Record<string, undefined>,
+      shallowEqual,
+    );
+    let notifications = 0;
+
+    effect(() => {
+      selected.get();
+      notifications += 1;
+    });
+    await flushEffects();
+    store.set({ unrelated: 1 });
+    await flushEffects();
+
+    expect(notifications).toBe(1);
+
+    selected.dispose();
+  });
+});
+
+/** Builds an array with real index holes so sparse own-key behaviour can be asserted. */
+function sparseArray(length: number, entries: Record<number, unknown>): unknown[] {
+  const array: unknown[] = [];
+  array.length = length;
+
+  for (const [index, value] of Object.entries(entries)) {
+    array[Number(index)] = value;
+  }
+
+  return array;
+}

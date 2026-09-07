@@ -605,8 +605,10 @@ function compareOwnEnumerableValues(left: object, right: object): boolean {
     return false;
   }
 
-  return leftKeys.every((key) =>
-    Object.is((left as Record<string, unknown>)[key], (right as Record<string, unknown>)[key]),
+  return leftKeys.every(
+    (key) =>
+      Object.hasOwn(right, key) &&
+      Object.is((left as Record<string, unknown>)[key], (right as Record<string, unknown>)[key]),
   );
 }
 
