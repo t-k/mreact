@@ -64,7 +64,7 @@ export function emitClient(
     .join("\n\n")
     .replaceAll(OXC_BIND_DOM_REF_PLACEHOLDER, helperNames.bindDomRef)
     .replaceAll(OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER, helperNames.untrack)
-    .replaceAll(OXC_COMPUTED_REACTIVE_ALIAS_PLACEHOLDER, helperNames.computed);
+    .replaceAll(OXC_COMPUTED_REACTIVE_ALIAS_PLACEHOLDER, helperNames.deferredComputed);
 
   return {
     code: `${[importLines, userImports, memoNormalizerSetup, moduleStatements, clientBoundaryHelper]
@@ -89,6 +89,7 @@ type RuntimeHelperName =
   | "createTemplate"
   | "createTemplateElement"
   | "computed"
+  | "deferredComputed"
   | "createCompilerListBindingCache"
   | "insertDynamic"
   | "insertRenderValue"
@@ -134,6 +135,7 @@ function allocateRuntimeHelperNames(
     createTemplate: "createTemplate",
     createTemplateElement: "createTemplateElement",
     computed: "computed",
+    deferredComputed: "deferredComputed",
     createCompilerListBindingCache: "createCompilerListBindingCache",
     insertDynamic: "insertDynamic",
     insertRenderValue: "insertRenderValue",
@@ -223,10 +225,6 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
 
   if (JSON.stringify(ir).includes(OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER)) {
     reactiveCoreSpecifiers.add("untrack");
-  }
-
-  if (JSON.stringify(ir).includes(OXC_COMPUTED_REACTIVE_ALIAS_PLACEHOLDER)) {
-    reactiveCoreSpecifiers.add("computed");
   }
 
   for (const component of ir.components) {
@@ -341,6 +339,12 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
     imports.push({
       source: "@reckona/mreact-reactive-core",
       specifiers: Array.from(reactiveCoreSpecifiers).sort(),
+    });
+  }
+  if (JSON.stringify(ir).includes(OXC_COMPUTED_REACTIVE_ALIAS_PLACEHOLDER)) {
+    imports.push({
+      source: "@reckona/mreact-reactive-core/internal",
+      specifiers: ["deferredComputed"],
     });
   }
   return imports;

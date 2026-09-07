@@ -99,7 +99,7 @@ describe("server emit shared behavior", () => {
     async (expression) => {
       await expectServerPairHtml(
         `function Select(props) { return <select value="done">{${expression}}</select>; }
-function Forward(props) { return <Select>{props.children}</Select>; }
+function Forward(props) { return <Select>{${expression}}</Select>; }
 export function App() { return <Forward><option value="open">Open</option><option value="done">Done</option></Forward>; }`,
         '<select><option value="open">Open</option><option value="done" selected="">Done</option></select>',
       );
@@ -112,12 +112,45 @@ export function App() { return <Forward><option value="open">Open</option><optio
       await expectServerPairHtml(
         `async function Options() { await Promise.resolve(); return <><option value="open">Open</option><option value="done">Done</option></>; }
 function Select(props) { return <select value="done">{${expression}}</select>; }
-function Forward(props) { return <Select>{props.children}</Select>; }
+function Forward(props) { return <Select>{${expression}}</Select>; }
 export function App() { return <Forward><Options /></Forward>; }`,
         '<select><option value="open">Open</option><option value="done" selected="">Done</option></select>',
       );
     },
   );
+
+  test.each([false, true])(
+    "array children retain multiple selection with a trailing sibling: %s",
+    async (trailing) => {
+      await expectServerPairHtml(
+        `function Select(props) { return <select multiple value={["open", "done"]}>{[props.children]}${trailing ? '<option value="other">Other</option>' : ""}</select>; }
+export function App() { return <Select><option value="open">Open</option><option value="done">Done</option></Select>; }`,
+        '<select multiple=""><option value="open" selected="">Open</option><option value="done" selected="">Done</option>' +
+          (trailing ? '<option value="other">Other</option>' : "") +
+          "</select>",
+      );
+    },
+  );
+
+  test.each([
+    [
+      "<div>before{[props.children]}after</div>",
+      "<div>before<!-- --><b>Ready</b><!-- -->after</div>",
+    ],
+    ["props.show ? <div>{props.children}</div> : <i>empty</i>", "<div><b>Ready</b></div>"],
+    ["<>{props.children}<i>end</i></>", "<b>Ready</b><i>end</i>"],
+    [
+      "<ul>{[0, 1].map(() => <li>{props.children}</li>)}</ul>",
+      "<ul><li><b>Ready</b></li><li><b>Ready</b></li></ul>",
+    ],
+  ])("async forwarded children compose through %s", async (body, expected) => {
+    await expectServerPairHtml(
+      `async function Child() { await Promise.resolve(); return <b>Ready</b>; }
+function Wrap(props) { return ${body}; }
+export function App() { return <Wrap show={true}><Child /></Wrap>; }`,
+      expected!,
+    );
+  });
 
   test("string and stream keep lowercase SVG intrinsics when a helper has the same name", async () => {
     await expectServerPairHtml(

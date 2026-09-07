@@ -34,6 +34,19 @@ export function computed<T>(
   fn: () => T,
   options?: ComputedOptions<T> | ComputedEquality<T>,
 ): ReadonlyCell<T> {
+  return createComputed(fn, options, false);
+}
+
+/** Defers compiler-owned, potentially consuming reads until their owner reads them. */
+export function deferredComputed<T>(fn: () => T): ReadonlyCell<T> {
+  return createComputed(fn, undefined, true);
+}
+
+function createComputed<T>(
+  fn: () => T,
+  options: ComputedOptions<T> | ComputedEquality<T> | undefined,
+  deferred: boolean,
+): ReadonlyCell<T> {
   let hasValue = false;
   let value: T;
   let dirty = true;
@@ -88,6 +101,10 @@ export function computed<T>(
       dirty = true;
 
       if (source.subscribers !== null) {
+        if (deferred) {
+          notifySubscribers(source);
+          return;
+        }
         if (runtimeState.notificationDepth > 0 || runtimeState.batchDepth > 0) {
           computation.queued = true;
           runtimeState.pendingComputed.add(computation);

@@ -22,3 +22,6 @@ export { subscribeCell } from "./cell-subscription.js";
 export { getGlobalRuntimeState } from "./runtime-state.js";
 export { runtimeState } from "./state.js";
 export type { Source } from "./state.js";
+
+/** Lazy invalidation for compiler-generated consuming computations. */
+export { deferredComputed } from "./computed.js";

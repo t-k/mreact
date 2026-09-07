@@ -14,6 +14,11 @@ export function isServerRenderValue(value: unknown): boolean;
 // @internal
 export function readServerRenderValue(value: object): unknown;
 
+// Warning: (ae-internal-missing-underscore) The name "registerServerRenderThunk" should be prefixed with an underscore because the declaration is marked as @internal
+//
+// @internal
+export function registerServerRenderThunk<T extends (...args: never[]) => unknown>(render: T): T;
+
 // Warning: (ae-internal-missing-underscore) The name "registerServerRenderValue" should be prefixed with an underscore because the declaration is marked as @internal
 //
 // @internal

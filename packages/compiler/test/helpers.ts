@@ -42,6 +42,7 @@ import {
 } from "@reckona/mreact-compat/jsx-runtime";
 import { jsxDEV } from "@reckona/mreact-compat/jsx-dev-runtime";
 import { bindSelectedKeyedSingleNodeList } from "@reckona/mreact-compat/internal";
+import { deferredComputed } from "@reckona/mreact-reactive-core/internal";
 import { cell, computed, effect, untrack } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import {
@@ -572,7 +573,9 @@ function extractRouterLinkRuntimeEntries(code: string): { localName: string; val
 
 function extractReactiveCoreRuntimeEntries(code: string): { localName: string; value: unknown }[] {
   const importMatches = Array.from(
-    code.matchAll(/^import \{ (?<specifiers>[^}]+) \} from "@reckona\/mreact-reactive-core";/gm),
+    code.matchAll(
+      /^import \{ (?<specifiers>[^}]+) \} from "@reckona\/mreact-reactive-core(?:\/internal)?";/gm,
+    ),
   );
 
   return importMatches.flatMap((importMatch) => {
@@ -584,7 +587,7 @@ function extractReactiveCoreRuntimeEntries(code: string): { localName: string; v
 
     return specifiers.split(", ").map((specifier) => {
       const match = specifier.match(
-        /^(?<importedName>cell|computed|effect|untrack)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+        /^(?<importedName>cell|computed|deferredComputed|effect|untrack)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
       );
 
       if (match?.groups === undefined) {
@@ -600,6 +603,7 @@ function extractReactiveCoreRuntimeEntries(code: string): { localName: string; v
 }
 
 function getReactiveCoreRuntimeValue(importedName: string): unknown {
+  if (importedName === "deferredComputed") return deferredComputed;
   if (importedName === "cell") {
     return cell;
   }

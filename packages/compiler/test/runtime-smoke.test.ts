@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, test } from "vitest";
+import { effect } from "@reckona/mreact-reactive-core";
+import { createRoot } from "@reckona/mreact-reactive-dom";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { transform } from "../src/index.js";
 import { compileClientComponent, runClientComponent } from "./helpers.js";
@@ -1981,6 +1983,91 @@ export function App() { const { [key.get()]: [first] } = state.get(); return <ma
     node.querySelectorAll("button")[1]?.click();
     await flushEffects();
     expect(node.querySelector("span")?.textContent).toBe("3");
+  });
+
+  test.each(
+    [false, true].flatMap((imperative) =>
+      [false, true].flatMap((generator) =>
+        [0, 1, 2].flatMap((chained) =>
+          [false, true].map((parentEffect) => ({ imperative, generator, chained, parentEffect })),
+        ),
+      ),
+    ),
+  )(
+    "native destructuring preserves imperative ownership: %j",
+    async ({ imperative, generator, chained, parentEffect }) => {
+      const log: number[] = [];
+      (globalThis as typeof globalThis & { __review4AliasLog?: number[] }).__review4AliasLog = log;
+      const output = transform({
+        code: `import { cell } from "@reckona/mreact-reactive-core";
+function* pair(a, b) { yield a; yield b; }
+function* values(a, b) { ${chained === 2 ? "yield pair(a, b);" : "yield a; yield b;"} }
+const state = cell(${generator ? "values(1, 2)" : chained === 2 ? "[[1, 2]]" : "[1, 2]"});
+export function App() { ${chained === 2 ? "const [inner] = state.get(); const [first, second] = inner; const forwarded = first;" : chained ? "const source = state.get(); const [first, second] = source; const forwarded = first;" : "const [first, second] = state.get();"} globalThis.__review4AliasLog.push(${imperative ? (chained ? "forwarded" : "first") : "0"}); return <main><button onClick={() => state.set(${generator ? "values(3, 4)" : chained === 2 ? "[[3, 4]]" : "[3, 4]"})}>Update</button><span>{first}:{second}</span></main>; }`,
+        filename: "native-pattern-ownership.tsx",
+        target: "client",
+        dev: false,
+      });
+      expect(output.diagnostics).toEqual([]);
+      const App = compileClientComponent(output.code)!;
+      let node: HTMLElement | undefined;
+      const host = document.createElement("div");
+      const mount = () =>
+        createRoot(host, () => {
+          node = App() as HTMLElement;
+          return node;
+        });
+      const dispose = parentEffect ? effect(mount) : mount();
+      try {
+        expect(node?.querySelector("span")?.textContent).toBe("1:2");
+        expect(log).toEqual(imperative ? [1] : [0]);
+        node?.querySelector("button")?.click();
+        await flushEffects();
+        expect(node?.querySelector("span")?.textContent).toBe("3:4");
+        expect(log).toEqual(imperative ? (parentEffect ? [1, 3] : [1]) : [0]);
+      } finally {
+        dispose();
+      }
+      delete (globalThis as typeof globalThis & { __review4AliasLog?: number[] }).__review4AliasLog;
+    },
+  );
+
+  test("independent destructuring caches retain distinct sources", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+const left = cell([1]); const right = cell([2]);
+export function App() { const [first] = left.get(); const [second] = right.get(); return <main><button onClick={() => left.set([3])}>Left</button><button onClick={() => right.set([4])}>Right</button><span>{first}:{second}</span></main>; }`,
+      filename: "independent-patterns.tsx",
+      target: "client",
+      dev: false,
+    });
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    expect(node.querySelector("span")?.textContent).toBe("1:2");
+    node.querySelectorAll("button")[0]?.click();
+    await flushEffects();
+    expect(node.querySelector("span")?.textContent).toBe("3:2");
+    node.querySelectorAll("button")[1]?.click();
+    await flushEffects();
+    expect(node.querySelector("span")?.textContent).toBe("3:4");
+  });
+
+  test("native nested patterns preserve multiple computed key positions", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+const state = cell({ label: "A", values: [{ short: 1, longer: 2 }] });
+function shortKey() { return "short"; } function significantlyLongerKey() { return "longer"; }
+export function App() { const { label, values: [{ [shortKey()]: first, [significantlyLongerKey()]: second }] = [] } = state.get(); return <main><button onClick={() => state.set({ label: "B", values: [{ short: 3, longer: 4 }] })}>Update</button><span>{label}:{first}:{second}</span></main>; }`,
+      filename: "multiple-nested-keys.tsx",
+      target: "client",
+      dev: false,
+    });
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    expect(node.querySelector("span")?.textContent).toBe("A:1:2");
+    node.querySelector("button")?.click();
+    await flushEffects();
+    expect(node.querySelector("span")?.textContent).toBe("B:3:4");
   });
 
   test.each([

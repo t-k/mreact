@@ -1193,7 +1193,7 @@ function emitBoundSelectExpression(
   const innerHtml =
     emitDangerouslySetInnerHtmlExpression(node.attributes, childrenHtml) ?? childrenHtml;
   const isAsync = containsAsyncServerOperationInChildren(node.children, asyncComponentNames);
-  const invocation = `${isAsync ? "(async () =>" : "(() =>"} { ${attributeSetup} const ${selectValueName} = (${selectionCode}); return ${joinHtmlExpressions([`${stringLiteral("<select")} + ${currentOptionSelectedLocalNames.attributes} + ">"`, `(${innerHtml})`, stringLiteral("</select>")])}; })()`;
+  const invocation = `${isAsync ? "(async () =>" : "(() =>"} { ${attributeSetup} const ${selectValueName} = (${selectionCode}); return ${joinHtmlExpressions([`${stringLiteral("<select")} + ${currentOptionSelectedLocalNames.attributes} + ">"`, `(${innerHtml})`, stringLiteral("</select>")], mayRenderDeferredChildren(node))}; })()`;
   return isAsync ? `(await ${invocation})` : invocation;
 }
 
@@ -1323,7 +1323,7 @@ function emitBoundOptionValueExpression(
     );
   const optionTextDeclaration = capturedOptionText?.declaration ?? "";
   const isAsync = containsAsyncServerOperationInChildren(node.children, asyncComponentNames);
-  const invocation = `${isAsync ? "(async () =>" : "(() =>"} { let ${boundValueName}; const ${currentOptionSelectedLocalNames.attributes} = ${attributesCode}; ${boundValueInitialization} ${optionTextDeclaration} return ${joinHtmlExpressions([stringLiteral("<option"), currentOptionSelectedLocalNames.attributes, `(${selectedAttribute})`, stringLiteral(">"), `(${innerHtml})`, stringLiteral("</option>")])}; })()`;
+  const invocation = `${isAsync ? "(async () =>" : "(() =>"} { let ${boundValueName}; const ${currentOptionSelectedLocalNames.attributes} = ${attributesCode}; ${boundValueInitialization} ${optionTextDeclaration} return ${joinHtmlExpressions([stringLiteral("<option"), currentOptionSelectedLocalNames.attributes, `(${selectedAttribute})`, stringLiteral(">"), `(${innerHtml})`, stringLiteral("</option>")], mayRenderDeferredChildren(node))}; })()`;
   return isAsync ? `(await ${invocation})` : invocation;
 }
 
@@ -2696,7 +2696,7 @@ function emitSyncListIife(
       ? ""
       : ` ${node.bodyStatements.join(" ")}`;
 
-  return `(() => { let _o = ""; const _arr = (${node.itemsCode}); for (let _i = 0, _len = _arr.length; _i < _len; _i++) { ${itemBinding}${indexBinding}${arrayBinding}${bodyStatements} ${currentPromiseAwareComposition ? `_o = ${currentJoinServerHtmlHelperName}([_o, ${valueExpression}]);` : `_o += ${valueExpression};`} } return _o; })()`;
+  return `(() => { let _o = ""; const _arr = (${node.itemsCode}); for (let _i = 0, _len = _arr.length; _i < _len; _i++) { ${itemBinding}${indexBinding}${arrayBinding}${bodyStatements} ${node.children.some(mayRenderDeferredChildren) ? `_o = ${currentAppendServerHtmlHelperName}(_o, ${valueExpression});` : `_o += ${valueExpression};`} } return _o; })()`;
 }
 
 function emitListRenderer(
@@ -2850,6 +2850,7 @@ function isRouterLinkComponentName(name: string | undefined): name is string {
 }
 
 function needsLazyServerChildren(node: JsxNodeIr): boolean {
+  if (node.kind === "expr" && node.renderMode === "server-render-value") return true;
   if (node.kind === "component" || node.kind === "element") {
     return true;
   }
@@ -2918,11 +2919,9 @@ function joinHtmlExpressions(
   parts: string[],
   promiseAware = currentPromiseAwareComposition,
 ): string {
-  if (parts.length === 1) return parts[0] ?? '""';
-  if (promiseAware && parts.length <= 3)
-    return parts.reduce((left, right) => `${currentAppendServerHtmlHelperName}(${left}, ${right})`);
+  if (parts.length === 0) return '""';
   return promiseAware
-    ? `${currentJoinServerHtmlHelperName}([${parts.join(", ")}])`
+    ? parts.reduce((left, right) => `${currentAppendServerHtmlHelperName}(${left}, ${right})`)
     : parts.join(" + ");
 }
 

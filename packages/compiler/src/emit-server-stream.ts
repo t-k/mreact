@@ -4177,6 +4177,7 @@ function isRouterLinkComponentName(name: string | undefined): name is string {
 }
 
 function needsLazyServerChildren(node: JsxNodeIr): boolean {
+  if (node.kind === "expr" && node.renderMode === "server-render-value") return true;
   if (node.kind === "component" || node.kind === "element") {
     return true;
   }
