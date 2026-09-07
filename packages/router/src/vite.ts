@@ -48,6 +48,11 @@ import {
 import { nodeRequestToWebRequest, sendResponse } from "./http.js";
 import type { AppRouterLogger } from "./logger.js";
 import { renderAppRequest } from "./render.js";
+import {
+  routeHydrationRuntimeModuleFor,
+  routeHydrationRuntimeSource,
+  routeHydrationRuntimeSpecifierFilter,
+} from "./route-hydration-runtime.js";
 import { stripRouteClientOnlyExports } from "./route-source.js";
 import {
   collectRouteCssHrefs,
@@ -130,6 +135,7 @@ const clientRouteModuleQuery = "mreact-router-client-route";
 const virtualClientPrefix = "\0mreact-router-client:";
 const virtualReactiveCoreId = "\0mreact-router-reactive-core";
 const virtualReactiveDevtoolsId = "\0mreact-router-reactive-devtools";
+const virtualRouteHydrationRuntimePrefix = "\0mreact-router-route-hydration-runtime:";
 const mreactRouterConfigKey = "__mreactRouterConfig";
 
 type MreactRouterPluginConfig = ResolvedAppRouterProject & {
@@ -375,6 +381,16 @@ export function cell(initial) {
         return reactiveDevtoolsStubSource;
       }
 
+      if (id.startsWith(virtualRouteHydrationRuntimePrefix)) {
+        const runtimeModule = routeHydrationRuntimeModuleFor(
+          id.slice(virtualRouteHydrationRuntimePrefix.length),
+        );
+
+        return runtimeModule === undefined
+          ? undefined
+          : routeHydrationRuntimeSource(runtimeModule);
+      }
+
       if (id.startsWith(virtualClientPrefix)) {
         return renderAppRouterClientAsset(project.routesDir, id.slice(virtualClientPrefix.length), {
           dev: true,
@@ -458,6 +474,16 @@ export function cell(initial) {
         importerInRuntimePackage(importer, [reactiveCoreDir], ["@reckona/mreact-reactive-core"])
       ) {
         return virtualReactiveDevtoolsId;
+      }
+
+      // Dev serves the generated route entry unbundled, so the shared hydration runtime has to
+      // resolve to a virtual module the browser can fetch instead of a bare specifier.
+      if (routeHydrationRuntimeSpecifierFilter.test(id)) {
+        const routeHydrationRuntimeModule = routeHydrationRuntimeModuleFor(id);
+
+        if (routeHydrationRuntimeModule !== undefined) {
+          return `${virtualRouteHydrationRuntimePrefix}${routeHydrationRuntimeModule}`;
+        }
       }
 
       if (runtimePath !== undefined) {

@@ -57,7 +57,7 @@ describe("shared route hydration runtime", () => {
       routePath: "/",
     });
 
-    expect(entry.code).toContain("mreact:route-hydration-runtime/resume");
+    expect(entry.code).toContain("mreact-route-hydration-runtime/resume");
     expect(entry.code).not.toContain("function __mreactResumeChildren(");
     expect(entry.code).not.toContain("function __mreactResumeNode(");
     expect(entry.code).not.toContain("function __mreactUnmountCompatBoundaries(");
@@ -82,9 +82,18 @@ describe("shared route hydration runtime", () => {
       routePath: "/",
     });
 
-    expect(streaming.code).toContain("mreact:route-hydration-runtime/fragments");
-    expect(staticRoute.code).not.toContain("mreact:route-hydration-runtime/fragments");
+    expect(streaming.code).toContain("mreact-route-hydration-runtime/fragments");
+    expect(staticRoute.code).not.toContain("mreact-route-hydration-runtime/fragments");
     expect(staticRoute.code).not.toContain("__mreactApplyOutOfOrderFragments");
+
+    const staticBundle = await buildClientRouteBundle({
+      code: interactiveRouteCode,
+      clientNavigation: false,
+      filename,
+      routePath: "/",
+    });
+
+    expect(staticBundle).not.toContain(fragmentRuntimeMarker);
   });
 
   test("routes without client references never import the client boundary runtime", async () => {
@@ -98,7 +107,7 @@ describe("shared route hydration runtime", () => {
       routePath: "/",
     });
 
-    expect(entry.code).not.toContain("mreact:route-hydration-runtime/boundaries");
+    expect(entry.code).not.toContain("mreact-route-hydration-runtime/boundaries");
     expect(entry.code).not.toContain("__mreactHydrateClientBoundaries");
     expect(entry.code).not.toContain(clientBoundaryRuntimeMarker);
   });
@@ -136,7 +145,7 @@ export default function Page() {
       routePath: "/",
     });
 
-    expect(entry.code).toContain("mreact:route-hydration-runtime/boundaries");
+    expect(entry.code).toContain("mreact-route-hydration-runtime/boundaries");
     expect(entry.code).toContain("__mreactCreateClientBoundaryRuntime(");
     expect(entry.code).not.toContain("function __mreactHydrateClientBoundaries(");
   });
@@ -193,9 +202,13 @@ export default function Page() {
       projectRoot: appDir,
       routes,
     });
+    const resumeRuntimeChunk = output.chunks.find(
+      (chunk) => !chunk.isEntry && chunk.code.includes(resumeRuntimeMarker),
+    );
 
+    expect(resumeRuntimeChunk).toBeDefined();
     for (const route of output.routes) {
-      expect(route.chunk.code.length).toBeLessThan(3_000);
+      expect(route.chunk.code.length).toBeLessThan(resumeRuntimeChunk?.code.length ?? 0);
     }
   });
 
