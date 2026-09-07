@@ -934,6 +934,9 @@ async function renderAppRouterClientRouteDevModule(
     filename: route.file,
     routeMayUseOutOfOrderFragments: true,
     routePath: route.path,
+    // Dev serves every route as its own module in one Vite graph, so the browser fetches the
+    // shared hydration runtime once and reuses it across route modules.
+    shareHydrationRuntime: true,
     vitePlugins: options.vitePlugins,
   });
 

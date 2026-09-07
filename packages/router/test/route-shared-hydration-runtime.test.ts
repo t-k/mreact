@@ -9,6 +9,7 @@ import {
   buildClientRouteBundle,
   buildClientRouteEntrySource,
 } from "../src/client.js";
+import { startDevServer } from "../src/dev-server.js";
 
 /** A DOM fragment marker that only the shared resume runtime emits. */
 const resumeRuntimeMarker = "data-mreact-layout-boundary";
@@ -33,6 +34,8 @@ export default function Page() {
   return <button type="button" onClick={() => count.set(value => value + 1)}>{count.get()}</button>;
 }`;
 
+const devServers: Array<{ close(): Promise<void> }> = [];
+
 describe("shared route hydration runtime", () => {
   beforeEach(() => {
     document.head.innerHTML = "";
@@ -40,10 +43,35 @@ describe("shared route hydration runtime", () => {
     document.documentElement.removeAttribute("data-mreact-hydrated");
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     delete (globalThis as { __mreactRouteStates?: unknown }).__mreactRouteStates;
     delete (globalThis as { __mreactRouteDisposers?: unknown }).__mreactRouteDisposers;
     delete (globalThis as { __mreactRouteCell?: unknown }).__mreactRouteCell;
+    await Promise.all(devServers.splice(0).map((server) => server.close()));
+  });
+
+  test("the dev server resolves the shared runtime the unbundled route module imports", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-shared-resume-dev-"));
+    await writeFile(join(appDir, "page.tsx"), interactiveRouteCode);
+    const server = await startDevServer({ appDir, port: 0 });
+    devServers.push(server);
+
+    const moduleResponse = await fetch(`${server.url}/_mreact/client/routes/index.js`);
+    const moduleSource = await moduleResponse.text();
+    const runtimeSpecifiers = [...moduleSource.matchAll(/from\s+"([^"]+)"/gu)]
+      .map((match) => match[1] ?? "")
+      .filter((specifier) => specifier.includes("route-hydration-runtime"));
+
+    expect(moduleResponse.status).toBe(200);
+    expect(runtimeSpecifiers.length).toBeGreaterThan(0);
+
+    for (const specifier of runtimeSpecifiers) {
+      const runtimeResponse = await fetch(new URL(specifier, server.url));
+
+      expect(runtimeResponse.status, specifier).toBe(200);
+      expect(runtimeResponse.headers.get("content-type"), specifier).toContain("javascript");
+      expect((await runtimeResponse.text()).length, specifier).toBeGreaterThan(0);
+    }
   });
 
   test("route entries import the resume runtime instead of inlining its helpers", async () => {
