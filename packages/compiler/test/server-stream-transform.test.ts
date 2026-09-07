@@ -1086,6 +1086,36 @@ export function App() {
     expect(output.code).not.toContain("_renderCompatToString(Link,");
   });
 
+  test("emitted server stream component writes an async Link-named component through the sink", () => {
+    const output = transform({
+      code: `async function Link(props) {
+  const label = await Promise.resolve(props.href);
+  return <a href={props.href}>{label}</a>;
+}
+
+export function App() {
+  const user = Promise.resolve({ name: "Ada" });
+
+  return (
+    <Await value={user} placeholder={<span>Loading</span>}>
+      {(value) => <p>{value.name ? <Link href={\`/user/\${value.name}\`} /> : "unknown"}</p>}
+    </Await>
+  );
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    // Only the router Link returns its markup from a one-argument call. An async
+    // component returns a promise, so it keeps the sink convention even when its
+    // name matches the router Link.
+    expect(output.code).toContain("await Link($sink, { href: (`/user/${value.name}`) })");
+    expect(output.code).not.toContain("(Link({ href:");
+  });
+
   test("emitted server stream component renders same-module component references inside Await renderers", async () => {
     const output = transform({
       code: `function BatchContent(props) {

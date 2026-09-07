@@ -49,6 +49,8 @@ export default createStrykerConfig({
     "packages/compiler/src/oxc.ts:583-588",
     // 20260907-compiler-intermediate-computed-fusion
     "packages/compiler/src/oxc-render-values.ts:232-246",
+    // 20260907-server-stream-select-option-calling-convention
+    "packages/compiler/src/emit-server-stream.ts:1253-1256",
   ],
   testFiles: [
     "packages/compiler/test/expression-facts.test.ts",
@@ -77,5 +79,6 @@ export default createStrykerConfig({
     "packages/compiler/test/intermediate-computed.test.ts",
     "packages/compiler/test/oxc-internals.test.ts",
     "packages/compiler/test/server-emit-shared.test.ts",
+    "packages/compiler/test/server-stream-transform.test.ts",
   ],
 });

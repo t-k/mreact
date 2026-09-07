@@ -957,6 +957,39 @@ export function App(props) {
     );
   });
 
+  test("string and stream emitters call an option component with their own convention", () => {
+    const compiled = compileServerPair(`function StatusOption(props) {
+  return <option value={props.value}>{props.value}</option>;
+}
+export function App(props) {
+  return <select value={props.status}><StatusOption value="open" /></select>;
+}`);
+
+    // The string emitter returns markup from a one-argument call; the stream
+    // emitter writes through the sink it passes first. Emitting the string
+    // convention into stream output would hand the props object over as the sink
+    // and leave the callee without props.
+    expect(compiled.string).toContain("StatusOption(Object.defineProperty(");
+    expect(compiled.stream).toContain("await StatusOption($sink, Object.defineProperty(");
+    expect(compiled.stream).not.toContain("(StatusOption(Object.defineProperty(");
+  });
+
+  test("string and stream emitters carry select value into an option component taking spread props", async () => {
+    await expectServerPairHtml(
+      `function StatusOption(props) {
+  return <option value={props.value}>{props.value}</option>;
+}
+export function App(props) {
+  return <select value={props.status}>
+    <StatusOption {...props.open} />
+    <StatusOption {...props.done} />
+  </select>;
+}`,
+      '<select><option value="open">open</option><option value="done" selected="">done</option></select>',
+      { status: "done", open: { value: "open" }, done: { value: "done" } },
+    );
+  });
+
   test("string and stream emitters carry select value through imported wrapper components", async () => {
     await expectImportedServerPairHtml(
       '<select><option value="open">open</option><option value="done" selected="">done</option></select>',
@@ -1332,6 +1365,22 @@ export function App() {
   return <PanelSlot open={ticket !== null}><TicketPanel /></PanelSlot>;
 }`,
       '<section data-slot=""></section>',
+    );
+  });
+
+  test("string and stream emitters call a component child of an open children thunk with their own convention", async () => {
+    await expectServerPairHtml(
+      `function TicketPanel() {
+  return <aside data-panel>ok</aside>;
+}
+function PanelSlot(props) {
+  return <section data-slot>{props.open ? props.children : null}</section>;
+}
+export function App(props) {
+  return <PanelSlot open={props.open}><TicketPanel /></PanelSlot>;
+}`,
+      '<section data-slot=""><aside data-panel="">ok</aside></section>',
+      { open: true },
     );
   });
 

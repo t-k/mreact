@@ -1242,7 +1242,15 @@ function tryEmitPartAsStringExpression(
 
     return `${stringLiteral(`<!--mreact-h:start:${encodeURIComponent(part.hydrationId)}-->`)} + ${rendered} + ${stringLiteral(`<!--mreact-h:end:${encodeURIComponent(part.hydrationId)}-->`)}`;
   }
-  if (part.kind === "component" && part.async !== true && part.hydrationId === undefined) {
+  // The router Link keeps a single-argument overload that returns its markup as
+  // a string, so it is the one component this emitter can inline. Every other
+  // component in stream output is compiled as `Name($sink, props)`: it writes to
+  // the sink and returns nothing, so calling it with the string convention would
+  // hand the props object over as the sink and leave `props` undefined. An async
+  // component returns a promise rather than markup, so it stays on the sink path
+  // too. `hydrationId` needs no check: it is only set for the compat runtime,
+  // which the branch above already returned for.
+  if (part.kind === "component" && isRouterLinkComponentName(part.name) && part.async !== true) {
     return emitRenderableHtmlExpression(
       `${part.name}(${emitPropsObject(part.props, part.children, part.escapeHelperName, part.name, undefined, part.selectedValueCode, part.selectedMultipleCode, part.selectionContextActive)})`,
     );
