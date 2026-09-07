@@ -198,6 +198,73 @@ describe("effect manual disposal", () => {
     expect(events).toEqual(["cleanup"]);
   });
 
+  test("drops the registration of an effect its owner disposes during registration", () => {
+    const count = cell(0);
+    const events: string[] = [];
+
+    const stop = withCleanupScope(
+      (dispose) => {
+        dispose();
+        return () => {
+          events.push("unregister");
+        };
+      },
+      () =>
+        effect(() => {
+          count.get();
+          events.push("run");
+        }),
+    );
+
+    expect(events).toEqual(["run", "unregister"]);
+    expect(subscriberCount(count)).toBe(0);
+
+    stop();
+
+    expect(events).toEqual(["run", "unregister"]);
+  });
+
+  test("stops an effect whose owner disposes it without returning a handle", () => {
+    const count = cell(0);
+    const runs: number[] = [];
+
+    const stop = withCleanupScope(
+      (dispose) => {
+        dispose();
+      },
+      () =>
+        effect(() => {
+          runs.push(count.get());
+        }),
+    );
+
+    expect(runs).toEqual([0]);
+    expect(subscriberCount(count)).toBe(0);
+    expect(() => stop()).not.toThrow();
+  });
+
+  test("ignores an owner registration result that is not an unregister handle", () => {
+    const count = cell(0);
+    const disposers: Array<() => void> = [];
+    const events: string[] = [];
+
+    const stop = withCleanupScope(
+      (dispose) => disposers.push(dispose),
+      () =>
+        effect(() => {
+          count.get();
+          return () => {
+            events.push("cleanup");
+          };
+        }),
+    );
+
+    expect(disposers).toHaveLength(1);
+    expect(() => stop()).not.toThrow();
+    expect(events).toEqual(["cleanup"]);
+    expect(subscriberCount(count)).toBe(0);
+  });
+
   test("prevents a queued effect from running after it is stopped", () => {
     const runtime = createReactiveTestRuntime();
 
