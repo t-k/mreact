@@ -28,6 +28,11 @@ import {
 import { assetPath } from "./assets.js";
 import { reactiveDevtoolsStubSource } from "./reactive-devtools-stub.js";
 import {
+  collectClientRouteCapabilityFacts,
+  type ClientCapabilityFact,
+  type ClientRouteCapabilityFacts,
+} from "./route-client-capabilities.js";
+import {
   bundleRouterModule,
   bundleRouterModules,
   type RouterCompatBuildApi,
@@ -2962,14 +2967,29 @@ export async function buildClientRouteEntrySource(
   );
 
   const routeId = routeIdForPath(options.routePath);
+  const capabilityFacts = await collectRouteClientCapabilityFacts(options);
   const restoreRequestUrl =
-    options.restoreRequestUrl ?? (options.debugLabels === true || /\brequest\b/.test(options.code));
-  const routeUsesCells = detectRouteCellStateHint(compiled.code);
-  const routeUsesReactiveEffect = detectRouteReactiveEffectHint(compiled.code);
-  const routeUsesDomRefs = compiled.metadata.imports.some(
+    options.restoreRequestUrl ??
+    (options.debugLabels === true || capabilityFacts.requestLocation !== "known-unused");
+  const routeUsesCells = resolveCapability({
+    compiledEvidence: detectRouteImportedCellCallHint(compiled.code),
+    conservativeSignal: detectRouteCellStateHint(compiled.code),
+    fact: capabilityFacts.cells,
+  });
+  const routeUsesReactiveEffect = resolveCapability({
+    compiledEvidence: detectRouteReactiveEffectHint(compiled.code),
+    conservativeSignal: detectRouteReactiveEffectHint(compiled.code),
+    fact: capabilityFacts.reactiveEffect,
+  });
+  const routeCompilesDomRefBinding = compiled.metadata.imports.some(
     (entry) =>
       entry.source === "@reckona/mreact-reactive-dom" && entry.specifiers.includes("bindDomRef"),
   );
+  const routeUsesDomRefs = resolveCapability({
+    compiledEvidence: routeCompilesDomRefBinding,
+    conservativeSignal: routeCompilesDomRefBinding,
+    fact: capabilityFacts.domRefs,
+  });
   const routeUsesCleanupScope = routeUsesCells || routeUsesReactiveEffect || routeUsesDomRefs;
   const routeExplicitlyRequiresHydration = isExplicitClientRouteSource(
     routeSourceAnalysis,
@@ -2980,8 +3000,7 @@ export async function buildClientRouteEntrySource(
   const routeMayCaptureEventBindings =
     routeHasEventBindings ||
     routeCapturesEventBindings ||
-    /\bon[A-Z][\w$]*\s*=/.test(options.code) ||
-    routeSourceAnalysis.staticImports.length > 0;
+    capabilityFacts.eventBindings !== "known-unused";
   const routeRequiresFullHydration =
     routeExplicitlyRequiresHydration ||
     routeUsesCells ||
@@ -6126,12 +6145,71 @@ export function detectNavigationRuntimeOverride(source: string): boolean | undef
   return readTopLevelBooleanExport({ code: source, name: "navigationRuntime" });
 }
 
+/**
+ * Combines a capability fact from the route's reachable source graph with what the compiled route
+ * module shows. The fact can only turn a capability off, never on.
+ *
+ * `compiledEvidence` is proof the capability is used - the compiler can lower a JSX attribute into
+ * a runtime call the source never wrote - so it always wins. A child that needs client interactivity
+ * is already promoted to its own client reference boundary and hydrates through that bundle, so
+ * `known-used` in the reachable graph is not evidence that this route entry needs the capability;
+ * only `known-unused` is actionable, and it may overrule the weaker `conservativeSignal`, which is a
+ * name-shaped guess over the compiled output.
+ */
+function resolveCapability(options: {
+  compiledEvidence: boolean;
+  conservativeSignal: boolean;
+  fact: ClientCapabilityFact;
+}): boolean {
+  if (options.compiledEvidence) {
+    return true;
+  }
+
+  return options.fact === "known-unused" ? false : options.conservativeSignal;
+}
+
+async function collectRouteClientCapabilityFacts(
+  options: BuildClientRouteOutputOptions,
+): Promise<ClientRouteCapabilityFacts> {
+  const cache = createClientRouteInferenceCache();
+
+  return await collectClientRouteCapabilityFacts({
+    code: options.code,
+    filename: options.filename,
+    // A client boundary ships and hydrates through its own reference bundle, so its capabilities
+    // belong to that bundle rather than to this route entry.
+    isExcludedModule: (file) => isClientBoundaryFilename(file),
+    resolveImport: async (reference) =>
+      await resolveAppLocalModule({
+        allowExplicitNonSource: true,
+        cache,
+        importer: reference.importer,
+        specifier: reference.specifier,
+        tolerateUnresolved: true,
+      }),
+  });
+}
+
 function detectRouteCellStateHint(code: string): boolean {
   const callExpression = routeCellCallExpressionSource(code);
 
   return callExpression === undefined
     ? /\bcell\d*\s*\(/.test(code)
     : new RegExp(`(?:${callExpression})\\s*\\(`).test(code);
+}
+
+/**
+ * True only when the compiled module imports `cell` from reactive-core and calls that binding.
+ *
+ * Unlike {@link detectRouteCellStateHint} this never fires on an unrelated local named `cell`, so a
+ * `known-unused` capability fact is allowed to overrule the looser hint but never this one.
+ */
+function detectRouteImportedCellCallHint(code: string): boolean {
+  const callExpression = routeCellCallExpressionSource(code);
+
+  return (
+    callExpression !== undefined && new RegExp(`(?:${callExpression})\\s*\\(`).test(code)
+  );
 }
 
 function detectRouteReactiveEffectHint(code: string): boolean {
