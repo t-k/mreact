@@ -229,12 +229,20 @@ export function formatOxcUntrackedReactiveAliasDeclaration(
           `(${cacheName}Ready ? ${keyName} : (${keyName} = ${OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER}(() => (${readSource(code, key)}))))` +
           patternCode.slice(keyEnd - offset);
       }
-      patternDeclarations.push(`let ${cacheName}Ready = false;`);
+      // The readiness flag only exists so a computed key inside the pattern is
+      // evaluated once and reused on every recomputation. Without a computed
+      // key nothing reads it, so emitting it would be dead code.
+      const tracksReadiness = keys.size > 0;
+
+      if (tracksReadiness) {
+        patternDeclarations.push(`let ${cacheName}Ready = false;`);
+      }
+
       const initializerCode =
         rewriteOxcReactiveAliasExpressionCode(code, initializer, aliases) ??
         readSource(code, initializer);
       patternDeclarations.push(
-        `const ${cacheName} = ${OXC_COMPUTED_REACTIVE_ALIAS_PLACEHOLDER}(() => { const ${patternCode} = (${initializerCode}); ${cacheName}Ready = true; return { ${names.join(", ")} }; });`,
+        `const ${cacheName} = ${OXC_COMPUTED_REACTIVE_ALIAS_PLACEHOLDER}(() => { const ${patternCode} = (${initializerCode}); ${tracksReadiness ? `${cacheName}Ready = true; ` : ""}return { ${names.join(", ")} }; });`,
       );
       replacements.push({
         start: readNumber(id.start) ?? start,
