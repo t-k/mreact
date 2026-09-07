@@ -101,6 +101,35 @@ describe("form cache ownership", () => {
     expect(rows.map((row) => row.key)).toEqual([initialKeys[2], initialKeys[0]]);
   });
 
+  it("returns one cached cell per field name for every consumer", () => {
+    const form = createForm({ initialValues: { email: "", tags: ["alpha"] } });
+    const consumer = createCleanupScope();
+
+    const scopedFieldCell = runWithCleanupScope(consumer, () => form.field("email").state);
+    const scopedArrayCell = runWithCleanupScope(consumer, () => form.fieldArray("tags").fields);
+    consumer.dispose();
+
+    expect(form.field("email").state).toBe(scopedFieldCell);
+    expect(form.fieldArray("tags").fields).toBe(scopedArrayCell);
+    expect(form.fieldArray("tags").fields).toBe(form.fieldArray("tags").fields);
+  });
+
+  it("trims cached array row keys when the array field is shortened through setValue", async () => {
+    const form = createForm({ initialValues: { tags: ["alpha", "beta", "gamma"] } });
+    const tags = form.fieldArray("tags");
+    const initialKeys = tags.fields.get().map((row) => row.key);
+
+    await form.setValue("tags", ["alpha"]);
+    const shortened = tags.fields.get().map((row) => row.key);
+    await form.setValue("tags", ["alpha", "delta"]);
+    const regrown = tags.fields.get().map((row) => row.key);
+
+    expect(initialKeys).toHaveLength(3);
+    expect(shortened).toEqual([initialKeys[0]]);
+    expect(regrown[0]).toBe(initialKeys[0]);
+    expect(regrown[1]).not.toBe(initialKeys[1]);
+  });
+
   it("releases field subscriptions when the form creation owner is disposed", async () => {
     const owner = createCleanupScope();
     const form = runWithCleanupScope(owner, () => createForm({ initialValues: { email: "" } }));
