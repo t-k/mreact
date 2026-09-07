@@ -58,6 +58,7 @@
     "test:mutation:core": "stryker run stryker.core.config.mjs",
     "test:mutation:compiler": "stryker run stryker.compiler.config.mjs",
     "test:mutation:lifecycle": "stryker run stryker.lifecycle.config.mjs",
+    "test:mutation:size": "stryker run stryker.size.config.mjs",
     "test:mutation:all": "pnpm test:mutation:security && pnpm test:mutation:core && pnpm test:mutation:compiler",
     "test:mutation:all:force": "stryker run stryker.security.config.mjs --force && stryker run stryker.core.config.mjs --force && stryker run stryker.compiler.config.mjs --force",
     "test:mutation:dry": "pnpm test:mutation:security --dryRunOnly && pnpm test:mutation:core --dryRunOnly && pnpm test:mutation:compiler --dryRunOnly",

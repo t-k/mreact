@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 import {
   evaluateClientDeliveryBudgets,
@@ -64,6 +65,34 @@ describe("client delivery budget gate", () => {
   test("passes when every measured fixture stays inside its recorded ceiling", () => {
     expect(evaluateClientDeliveryBudgets(createReport([createFixtureReport()]), createBudgets()))
       .toEqual([]);
+  });
+
+  test("passes when a fixture sits exactly on every ceiling it has", () => {
+    const budgets = createBudgets({
+      "native-counter": {
+        initialBrotliBytes: 900,
+        initialGzipBytes: 1000,
+        measuredBaseline: {
+          initialBrotliBytes: 900,
+          initialGzipBytes: 1000,
+          sessionCumulativeGzipBytes: 1700,
+        },
+        sessionCumulativeGzipBytes: 1700,
+      },
+    });
+    const report = createReport([
+      createFixtureReport({
+        routeVisitCount: 2,
+        sessionCumulative: {
+          brotliEstimateBytes: 1500,
+          gzipEstimateBytes: 1700,
+          paths: ["entry.js", "about.js"],
+          rawBytes: 5000,
+        },
+      }),
+    ]);
+
+    expect(evaluateClientDeliveryBudgets(report, budgets)).toEqual([]);
   });
 
   test("fails when a fixture exceeds its gzip ceiling by a single byte", () => {
@@ -233,6 +262,86 @@ describe("client delivery budget gate", () => {
     ]);
   });
 
+  test("fails when a cumulative ceiling records no baseline of its own", () => {
+    const budgets = createBudgets({
+      "native-counter": {
+        initialBrotliBytes: 1000,
+        initialGzipBytes: 1100,
+        measuredBaseline: { initialBrotliBytes: 900, initialGzipBytes: 1000 },
+        sessionCumulativeGzipBytes: 1800,
+      },
+    });
+    const report = createReport([
+      createFixtureReport({
+        routeVisitCount: 2,
+        sessionCumulative: {
+          brotliEstimateBytes: 1500,
+          gzipEstimateBytes: 1700,
+          paths: ["entry.js", "about.js"],
+          rawBytes: 5000,
+        },
+      }),
+    ]);
+
+    expect(evaluateClientDeliveryBudgets(report, budgets)).toEqual([
+      "native-counter cumulative session gzip budget and recorded baseline must both be present or both be absent",
+    ]);
+  });
+
+  test("fails when a recorded cumulative baseline has no ceiling to enforce", () => {
+    const budgets = createBudgets({
+      "native-counter": {
+        initialBrotliBytes: 1000,
+        initialGzipBytes: 1100,
+        measuredBaseline: {
+          initialBrotliBytes: 900,
+          initialGzipBytes: 1000,
+          sessionCumulativeGzipBytes: 1700,
+        },
+      },
+    });
+
+    expect(evaluateClientDeliveryBudgets(createReport([createFixtureReport()]), budgets)).toEqual([
+      "native-counter cumulative session gzip budget and recorded baseline must both be present or both be absent",
+    ]);
+  });
+
+  test("accepts a ceiling that equals the baseline it records", () => {
+    const budgets = createBudgets({
+      "native-counter": {
+        initialBrotliBytes: 900,
+        initialGzipBytes: 1000,
+        measuredBaseline: { initialBrotliBytes: 900, initialGzipBytes: 1000 },
+      },
+    });
+
+    expect(evaluateClientDeliveryBudgets(createReport([createFixtureReport()]), budgets)).toEqual(
+      [],
+    );
+  });
+
+  test("checks the checked-in budgets file against its own headroom policy", async () => {
+    const budgets = JSON.parse(
+      await readFile(new URL("./client-delivery-budgets.json", import.meta.url), "utf8"),
+    ) as ClientDeliveryBudgets;
+
+    expect(budgets.headroomRatio).toBeGreaterThan(0);
+    for (const [name, budget] of Object.entries(budgets.fixtures)) {
+      expect(budget.initialGzipBytes, name).toBeLessThanOrEqual(
+        maxBudgetBytes(budget.measuredBaseline.initialGzipBytes, budgets.headroomRatio),
+      );
+      expect(budget.initialBrotliBytes, name).toBeLessThanOrEqual(
+        maxBudgetBytes(budget.measuredBaseline.initialBrotliBytes, budgets.headroomRatio),
+      );
+      expect(budget.initialGzipBytes, name).toBeGreaterThanOrEqual(
+        budget.measuredBaseline.initialGzipBytes,
+      );
+    }
+    expect(Object.keys(budgets.fixtures).sort()).toEqual(
+      clientDeliveryFixtures.map((fixture) => fixture.name).sort(),
+    );
+  });
+
   test("rounds each ceiling up to a whole hundred bytes above its baseline", () => {
     expect(maxBudgetBytes(1000, 0.05)).toBe(1100);
     expect(maxBudgetBytes(16_409, 0.05)).toBe(17_300);
@@ -338,6 +447,85 @@ describe("client delivery markdown report", () => {
     expect(markdown).toContain("| native-counter | /query | 917 | 445 | 341 | 126 | 130 | 78 | 0 |");
     expect(markdown).toContain("| native-counter | 1 | /about | 2000 | 700 | 600 | about.js |");
     expect(markdown).toContain("gzip level -1, Brotli quality 11 lgwin 22");
+  });
+
+  test("renders the complete report document a reviewer reads", () => {
+    const markdown = formatClientDeliveryMarkdown(
+      createReport([
+        createFixtureReport({
+          html: [
+            {
+              brotliEstimateBytes: 341,
+              gzipEstimateBytes: 445,
+              inlineScriptRawBytes: 0,
+              path: "/",
+              queryDataRawBytes: 130,
+              rawBytes: 917,
+              restorationRawBytes: 126,
+              routerMetadataRawBytes: 78,
+            },
+          ],
+          routeVisitCount: 2,
+          sessionCumulative: {
+            brotliEstimateBytes: 1500,
+            gzipEstimateBytes: 1700,
+            paths: ["about.js", "entry.js"],
+            rawBytes: 5000,
+          },
+          visits: [
+            {
+              brotliEstimateBytes: 600,
+              fetchedPaths: ["about.js"],
+              gzipEstimateBytes: 700,
+              path: "/about",
+              paths: ["about.js"],
+              rawBytes: 2000,
+            },
+          ],
+        }),
+      ]),
+    );
+
+    expect(markdown).toBe(
+      [
+        "# Client delivery size",
+        "",
+        "Commit: `0000000000000000000000000000000000000000`",
+        "Created: 2026-09-07T00:00:00.000Z",
+        "Environment: Node v24.14.0 on darwin/arm64",
+        "Build: NODE_ENV=production, target node, minify true",
+        "Compression: gzip level -1, Brotli quality 11 lgwin 22",
+        "",
+        "Initial columns are the JavaScript closure the browser fetches for the first page. Cumulative columns are the unique JavaScript fetched across the whole navigation session, counting each chunk once.",
+        "",
+        "| fixture | route visits | initial raw | initial gzip | initial brotli | cumulative raw | cumulative gzip | cumulative brotli |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| native-counter | 2 | 3000 | 1000 | 900 | 5000 | 1700 | 1500 |",
+        "",
+        "## HTML payload categories",
+        "",
+        "Raw byte counts of the inline JSON the server writes into the document. These are not part of the external JavaScript totals above.",
+        "",
+        "| fixture | path | html raw | html gzip | html brotli | restoration | query state | router metadata | other inline |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| native-counter | / | 917 | 445 | 341 | 126 | 130 | 78 | 0 |",
+        "",
+        "## Navigation session",
+        "",
+        "| fixture | visit | path | fetched raw | fetched gzip | fetched brotli | newly fetched files |",
+        "| --- | ---: | --- | ---: | ---: | ---: | --- |",
+        "| native-counter | 1 | /about | 2000 | 700 | 600 | about.js |",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  test("says so explicitly when no fixture declared navigation visits", () => {
+    const markdown = formatClientDeliveryMarkdown(createReport([createFixtureReport()]));
+
+    expect(markdown).toContain("## Navigation session\n\nNo fixture declared navigation visits.\n");
+    expect(markdown).not.toContain("newly fetched files");
+    expect(markdown).toContain("| native-counter | 1 | 3000 | 1000 | 900 | - | - | - |");
   });
 
   test("marks a revisit that fetched nothing instead of leaving the row blank", () => {
