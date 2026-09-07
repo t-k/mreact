@@ -42,6 +42,11 @@ import {
 } from "./oxc-body-lowering.js";
 import { collectOxcVariableInitializers } from "./oxc-await-analysis.js";
 import {
+  collectOxcModuleExpressionFacts,
+  resolveOxcComponentNativeCellBindings,
+  type OxcModuleExpressionFacts,
+} from "./oxc-expression-facts.js";
+import {
   collectOxcAsyncComponentNames,
   collectOxcExportedComponents,
   collectOxcExportedFunctionNames,
@@ -109,6 +114,7 @@ import {
   rewriteOxcReactiveAliasExpressionCode,
 } from "./oxc-render-values.js";
 import { containsRawJsxInIr } from "./oxc-raw-jsx.js";
+import type { ResolvedBindingIr } from "./expression-facts.js";
 import type { AnalyzeModuleOptions, CompileTarget, Diagnostic } from "./types.js";
 
 export type { AnalyzeToIrInput, AnalyzeToIrOutput } from "./internal.js";
@@ -223,6 +229,7 @@ function createOxcChildAnalysisContext(
   bodyLowerers: OxcBodyLowerers = oxcBodyLowerers,
   serverRenderValueWrapper?: string,
   serverRenderValueCallNames?: ReadonlySet<string>,
+  nativeCellBindings?: ReadonlyMap<string, ResolvedBindingIr>,
 ): OxcChildAnalysisContext {
   return {
     componentNames,
@@ -240,6 +247,7 @@ function createOxcChildAnalysisContext(
     ...(serverRenderValueCallNames === undefined ? {} : { serverRenderValueCallNames }),
     ...(reactiveAliasBindings === undefined ? {} : { reactiveAliasBindings }),
     ...(lazyRenderValueBindings === undefined ? {} : { lazyRenderValueBindings }),
+    ...(nativeCellBindings === undefined ? {} : { nativeCellBindings }),
     bodyLowerers,
     lowerNestedJsxExpression: lowerOxcNestedJsxExpression,
   };
@@ -432,6 +440,7 @@ function analyzeOxcToIr(
       : undefined;
   const moduleConstBindings = collectOxcConstBindingNames(body);
   const reactiveDerivedFunctionNames = collectOxcReactiveDerivedFunctionNames(body);
+  const moduleExpressionFacts = collectOxcModuleExpressionFacts(program, body);
 
   for (const statement of body) {
     const object = readObject(statement);
@@ -548,6 +557,7 @@ function analyzeOxcToIr(
       reactiveDerivedFunctionNames,
       localJsxReturnFunctionNames,
       localJsxHelperHtmlParameters,
+      moduleExpressionFacts,
     ),
   );
 
@@ -1527,6 +1537,7 @@ function analyzeOxcComponent(
   reactiveDerivedFunctionNames: ReadonlySet<string>,
   localJsxReturnFunctionNames: ReadonlySet<string>,
   localJsxHelperHtmlParameters: ReadonlyMap<string, ReadonlySet<number>>,
+  moduleExpressionFacts: OxcModuleExpressionFacts,
 ): ComponentIr[] {
   const object = readObject(statement);
 
@@ -1571,6 +1582,7 @@ function analyzeOxcComponent(
         reactiveDerivedFunctionNames,
         localJsxReturnFunctionNames,
         localJsxHelperHtmlParameters,
+        moduleExpressionFacts,
         true,
       ),
     ];
@@ -1622,6 +1634,7 @@ function analyzeOxcComponent(
             reactiveDerivedFunctionNames,
             localJsxReturnFunctionNames,
             localJsxHelperHtmlParameters,
+            moduleExpressionFacts,
           ),
           exported: false,
         },
@@ -1670,6 +1683,7 @@ function analyzeOxcComponent(
           reactiveDerivedFunctionNames,
           localJsxReturnFunctionNames,
           localJsxHelperHtmlParameters,
+          moduleExpressionFacts,
         ),
         variableComponent,
       ),
@@ -1720,6 +1734,7 @@ function analyzeOxcComponent(
       reactiveDerivedFunctionNames,
       localJsxReturnFunctionNames,
       localJsxHelperHtmlParameters,
+      moduleExpressionFacts,
     ),
   ];
 }
@@ -1817,6 +1832,7 @@ function analyzeOxcFunctionLikeComponent(
   reactiveDerivedFunctionNames: ReadonlySet<string>,
   localJsxReturnFunctionNames: ReadonlySet<string>,
   localJsxHelperHtmlParameters: ReadonlyMap<string, ReadonlySet<number>>,
+  moduleExpressionFacts?: OxcModuleExpressionFacts,
   exportDefault = false,
 ): ComponentIr {
   const functionBody = readObject(functionLike.body);
@@ -1935,6 +1951,11 @@ function analyzeOxcFunctionLikeComponent(
     ),
     ...collectOxcConstBindingNames(body),
   ]);
+  const nativeCellBindings = resolveOxcComponentNativeCellBindings(
+    moduleExpressionFacts,
+    body,
+    [...parameters, ...reactiveAliasBindings.keys()],
+  );
   const childAnalysisContext = createOxcChildAnalysisContext(
     unshadowedBodyComponentNames,
     target,
@@ -1952,6 +1973,7 @@ function analyzeOxcFunctionLikeComponent(
     bodyLowerers,
     serverRenderValuePlaceholder,
     unshadowedLocalJsxReturnFunctionNames,
+    nativeCellBindings,
   );
   const root =
     analyzeOxcEarlyIfRootReturn(code, earlyIfRootReturn, childAnalysisContext, bodyStatementJsx) ??

@@ -68,6 +68,8 @@ import {
   markOxcRenderValueExpressions,
   rewriteOxcReactiveAliasExpressionCode,
 } from "./oxc-render-values.js";
+import type { ResolvedBindingIr } from "./expression-facts.js";
+import { analyzeOxcExpressionFacts } from "./oxc-expression-facts.js";
 import { transformJsxWithOxc } from "./oxc-transform.js";
 import type { CompileTarget, Diagnostic, ServerOutputMode } from "./types.js";
 
@@ -89,6 +91,7 @@ export interface OxcChildAnalysisContext {
   jsxNamespace?: "html" | "svg";
   reactiveAliasBindings?: ReadonlyMap<string, string>;
   lazyRenderValueBindings?: ReadonlySet<string>;
+  nativeCellBindings?: ReadonlyMap<string, ResolvedBindingIr>;
   bodyLowerers: OxcBodyLowerers;
   lowerNestedJsxExpression: (
     code: string,
@@ -678,6 +681,11 @@ export function analyzeOxcExpressionChild(
                   ? ("dynamic" as const)
                   : undefined;
 
+  const facts =
+    sameModuleComponentStreamCall === undefined && !containsNestedJsx
+      ? analyzeOxcExpressionFacts(unwrappedExpression, context.nativeCellBindings)
+      : undefined;
+
   return [
     {
       kind: "expr",
@@ -691,6 +699,7 @@ export function analyzeOxcExpressionChild(
                   : readOxcReactiveExpressionCode(code, expression, context)),
             )
           : readOxcReactiveExpressionCode(code, expression, context)),
+      ...(facts === undefined ? {} : { facts }),
       ...(renderMode === undefined ? {} : { renderMode }),
       ...(isLazyRenderValueBinding ? { deferRenderValue: true as const } : {}),
     },
@@ -1877,12 +1886,19 @@ function shadowOxcContextBindings(
     context.lazyRenderValueBindings === undefined
       ? undefined
       : new Set([...context.lazyRenderValueBindings].filter((name) => !shadowed.has(name)));
+  const nativeCellBindings =
+    context.nativeCellBindings === undefined
+      ? undefined
+      : new Map(
+          [...context.nativeCellBindings].filter(([bindingName]) => !shadowed.has(bindingName)),
+        );
   return {
     ...context,
     componentNames,
     ...(componentCallNames === undefined ? {} : { componentCallNames }),
     ...(serverRenderValueCallNames === undefined ? {} : { serverRenderValueCallNames }),
     ...(lazyRenderValueBindings === undefined ? {} : { lazyRenderValueBindings }),
+    ...(nativeCellBindings === undefined ? {} : { nativeCellBindings }),
     ...(aliases === undefined ? {} : { reactiveAliasBindings: aliases }),
   };
 }

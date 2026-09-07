@@ -1,3 +1,4 @@
+import type { ExpressionFactsIr } from "./expression-facts.js";
 import type { SourceLocation } from "./types.js";
 
 /** Represents the compiler intermediate representation for one module. */
@@ -167,6 +168,8 @@ export interface TextIr {
 export interface ExprIr {
   kind: "expr";
   code: string;
+  /** Conservative facts proven about `code`; absent means every fact is unknown. */
+  facts?: ExpressionFactsIr;
   deferRenderValue?: true;
   compilerKeyedProperty?: string;
   renderMode?:
