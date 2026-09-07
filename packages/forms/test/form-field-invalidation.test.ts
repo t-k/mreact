@@ -362,6 +362,97 @@ describe("field invalidation", () => {
     ]);
   });
 
+  it("shares one invalidation source between a field and its field array view", async () => {
+    const form = createForm({ initialValues: { tags: ["alpha"] } });
+    const tagsField = form.field("tags");
+    const tagsArray = form.fieldArray("tags");
+    const dispose = effect(() => {
+      tagsField.state.get();
+      tagsArray.fields.get();
+    });
+
+    try {
+      await flushEffects();
+      await tagsArray.append("beta");
+      await flushEffects();
+
+      expect(tagsField.state.get().value).toEqual(["alpha", "beta"]);
+      expect(tagsArray.fields.get().map((row) => String(row.value))).toEqual(["alpha", "beta"]);
+    } finally {
+      dispose();
+    }
+  });
+
+  it("keeps a field snapshot whose messages a form-wide error write leaves unchanged", async () => {
+    const form = createForm({ initialValues: { email: "", name: "" } });
+    const email = form.field("email");
+    const name = form.field("name");
+    const dispose = effect(() => {
+      email.state.get();
+      name.state.get();
+    });
+
+    try {
+      form.setErrors({ email: ["Invalid"], name: ["Required"] });
+      await flushEffects();
+      const nameBefore = name.state.get();
+      form.setErrors({ email: ["Still invalid"], name: ["Required"] });
+      await flushEffects();
+
+      expect(email.state.get().errors).toEqual(["Still invalid"]);
+      expect(name.state.get()).toBe(nameBefore);
+    } finally {
+      dispose();
+    }
+  });
+
+  it("keeps another field's validating flag when one field's validation is invalidated", async () => {
+    const pending = new Promise<string[]>(() => {});
+    const form = createForm({
+      initialValues: { first: "", second: "" },
+      validate: { first: () => pending, second: () => pending },
+      validateOn: "change",
+    });
+    const first = form.field("first");
+    const second = form.field("second");
+
+    void first.setValue("a");
+    void second.setValue("b");
+    await flushEffects();
+    expect(first.state.get().validating).toBe(true);
+    expect(second.state.get().validating).toBe(true);
+
+    void first.setValue("c");
+    await flushEffects();
+
+    expect(second.state.get().validating).toBe(true);
+    expect(form.state.get().validating).toEqual({ first: true, second: true });
+  });
+
+  it("does not notify field subscribers when a reset leaves every snapshot unchanged", async () => {
+    const form = createForm({ initialValues: { email: "ada@example.test", name: "Ada" } });
+    const email = form.field("email");
+    const name = form.field("name");
+    let notifications = 0;
+    const dispose = effect(() => {
+      email.state.get();
+      name.state.get();
+      notifications += 1;
+    });
+
+    try {
+      await flushEffects();
+      form.reset();
+      await flushEffects();
+
+      expect(notifications).toBe(1);
+      expect(email.state.get().value).toBe("ada@example.test");
+      expect(name.state.get().value).toBe("Ada");
+    } finally {
+      dispose();
+    }
+  });
+
   it("keeps the form state and a field snapshot coherent for one reader", async () => {
     const form = createForm({ initialValues: { email: "" } });
     const email = form.field("email");

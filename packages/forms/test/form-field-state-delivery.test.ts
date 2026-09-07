@@ -116,6 +116,26 @@ describe("field state delivery", () => {
     }
   });
 
+  it("does not validate a field on blur when validation runs on submit", async () => {
+    let calls = 0;
+    const form = createForm({
+      initialValues: { email: "" },
+      validate: {
+        email: () => {
+          calls += 1;
+          return ["Required"];
+        },
+      },
+    });
+    const email = form.field("email");
+
+    await email.blur();
+    await flushEffects();
+
+    expect(calls).toBe(0);
+    expect(email.state.get()).toMatchObject({ errors: [], touched: true });
+  });
+
   it("notifies an array subscriber when row values are reordered", async () => {
     const form = createForm({ initialValues: { tags: ["alpha", "beta"] } });
     const tags = form.fieldArray("tags");
