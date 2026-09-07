@@ -22,32 +22,20 @@ export function collectOxcEscapedComponentNames(
     return escaped;
   }
 
+  // readObject yields an empty record for primitives, so arrays and scalars
+  // need no separate branch: arrays enumerate their elements by index.
   const visit = (value: unknown, parentKey: string | undefined): void => {
-    if (Array.isArray(value)) {
-      for (const item of value) visit(item, parentKey);
-      return;
-    }
-
-    if (typeof value !== "object" || value === null) {
-      return;
-    }
-
     const node = readObject(value);
 
     if (
       node.type === "Identifier" &&
       parentKey !== "id" &&
-      typeof node.name === "string" &&
-      componentNames.has(node.name)
+      componentNames.has(node.name as string)
     ) {
-      escaped.add(node.name);
+      escaped.add(node.name as string);
     }
 
     for (const [key, child] of Object.entries(node)) {
-      if (key === "type" || key === "start" || key === "end") {
-        continue;
-      }
-
       visit(child, key);
     }
   };
@@ -76,69 +64,73 @@ export function lowerProvenTextComponentProps(
   components: readonly ComponentIr[],
   escapedComponentNames: ReadonlySet<string>,
 ): void {
-  const callSites = collectComponentCallSites(components);
+  const callSites = new Map<string, ComponentRefIr[]>();
+
+  for (const component of components) {
+    visitJsxTree(component.root, (node) => {
+      if (node.kind === "component") {
+        const existing = callSites.get(node.name);
+
+        if (existing === undefined) {
+          callSites.set(node.name, [node]);
+        } else {
+          existing.push(node);
+        }
+      }
+    });
+  }
 
   for (const component of components) {
     if (!isTextOnlyCallee(component, callSites.get(component.name), escapedComponentNames)) {
       continue;
     }
 
-    lowerPropReadRenderValues(component.root);
+    visitJsxTree(component.root, (node) => {
+      if (
+        node.kind === "expr" &&
+        readExpressionFacts(node).value.kind === "component-prop-read" &&
+        (node.renderMode === "render-value" || node.renderMode === "server-render-value")
+      ) {
+        delete node.renderMode;
+      }
+    });
   }
 }
 
-function collectComponentCallSites(
-  components: readonly ComponentIr[],
-): Map<string, ComponentRefIr[]> {
-  const callSites = new Map<string, ComponentRefIr[]>();
-  const visit = (node: JsxNodeIr): void => {
-    if (node.kind === "component") {
-      const existing = callSites.get(node.name);
+/** Visits every node of one lowered JSX tree, including render-prop children. */
+function visitJsxTree(node: JsxNodeIr, visitor: (node: JsxNodeIr) => void): void {
+  visitor(node);
 
-      if (existing === undefined) {
-        callSites.set(node.name, [node]);
-      } else {
-        existing.push(node);
-      }
+  for (const child of childNodesOf(node)) {
+    visitJsxTree(child, visitor);
+  }
+}
 
-      for (const prop of node.props) {
-        if (prop.kind === "render-prop") {
-          for (const child of prop.children) visit(child);
-        }
-      }
-    }
-
-    if (node.kind === "conditional") {
-      for (const child of [...node.whenTrue, ...node.whenFalse]) visit(child);
-      return;
-    }
-
-    if (node.kind === "async-boundary") {
-      for (const child of [
-        ...node.children,
-        ...(node.placeholderChildren ?? []),
-        ...(node.catchChildren ?? []),
-      ]) {
-        visit(child);
-      }
-      return;
-    }
-
-    if (
-      node.kind === "element" ||
-      node.kind === "fragment" ||
-      node.kind === "list" ||
-      node.kind === "component"
-    ) {
-      for (const child of node.children) visit(child);
-    }
-  };
-
-  for (const component of components) {
-    visit(component.root);
+function childNodesOf(node: JsxNodeIr): readonly JsxNodeIr[] {
+  if (node.kind === "conditional") {
+    return [...node.whenTrue, ...node.whenFalse];
   }
 
-  return callSites;
+  if (node.kind === "async-boundary") {
+    return [
+      ...node.children,
+      ...(node.placeholderChildren ?? []),
+      ...(node.catchChildren ?? []),
+    ];
+  }
+
+  if (node.kind === "component") {
+    return [
+      ...node.props.flatMap((prop) => (prop.kind === "render-prop" ? prop.children : [])),
+      ...node.children,
+    ];
+  }
+
+  if (node.kind === "element" || node.kind === "fragment" || node.kind === "list") {
+    return node.children;
+  }
+
+  return [];
 }
 
 function isTextOnlyCallee(
@@ -159,11 +151,7 @@ function isTextOnlyCallee(
     return false;
   }
 
-  if (callSites === undefined || callSites.length === 0) {
-    return false;
-  }
-
-  return callSites.every(isTextOnlyCallSite);
+  return callSites !== undefined && callSites.length > 0 && callSites.every(isTextOnlyCallSite);
 }
 
 function isTextOnlyCallSite(node: ComponentRefIr): boolean {
@@ -185,50 +173,4 @@ function isTextOnlyCallSite(node: ComponentRefIr): boolean {
 
     return value.kind === "renderable-primitive" || value.kind === "native-cell-read";
   });
-}
-
-function lowerPropReadRenderValues(node: JsxNodeIr): void {
-  if (node.kind === "expr") {
-    if (
-      readExpressionFacts(node).value.kind === "component-prop-read" &&
-      (node.renderMode === "render-value" || node.renderMode === "server-render-value")
-    ) {
-      delete node.renderMode;
-    }
-
-    return;
-  }
-
-  if (node.kind === "conditional") {
-    for (const child of [...node.whenTrue, ...node.whenFalse]) lowerPropReadRenderValues(child);
-    return;
-  }
-
-  if (node.kind === "async-boundary") {
-    for (const child of [
-      ...node.children,
-      ...(node.placeholderChildren ?? []),
-      ...(node.catchChildren ?? []),
-    ]) {
-      lowerPropReadRenderValues(child);
-    }
-    return;
-  }
-
-  if (node.kind === "component") {
-    for (const prop of node.props) {
-      if (prop.kind === "render-prop") {
-        for (const child of prop.children) lowerPropReadRenderValues(child);
-      }
-    }
-  }
-
-  if (
-    node.kind === "element" ||
-    node.kind === "fragment" ||
-    node.kind === "list" ||
-    node.kind === "component"
-  ) {
-    for (const child of node.children) lowerPropReadRenderValues(child);
-  }
 }

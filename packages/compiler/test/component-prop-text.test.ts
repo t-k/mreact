@@ -95,6 +95,51 @@ export function App() { return <main><Badge label="alpha" />{registry.Badge === 
     expect(code).toContain("insertRenderValue");
   });
 
+  test("keeps one shared component function for repeated lowered call sites", () => {
+    const code = compile(`function Badge(props) { return <span class="badge">{props.label}</span>; }
+export function App() {
+  return <main><Badge label="a" /><Badge label="b" /><Badge label="c" /><Badge label="d" /></main>;
+}`);
+
+    expect(code.match(/function Badge\(/g)).toHaveLength(1);
+    expect(code.match(/_tmpl_Badge/g)?.length).toBeGreaterThan(0);
+    expect(code).not.toContain("insertRenderValue");
+  });
+
+  test("finds call sites through every lowered tree shape", () => {
+    const shapes: [string, string][] = [
+      ["conditional branch", "{props.open ? <Badge label={props.node} /> : null}"],
+      ["list row", "{props.rows.map((row) => <Badge label={props.node} />)}"],
+      ["fragment", "<><Badge label={props.node} /></>"],
+      ["render prop", "<Shell slot={<Badge label={props.node} />} />"],
+    ];
+
+    for (const [scenario, body] of shapes) {
+      const code = compile(`import { Shell } from "./Shell";
+function Badge(props) { return <span>{props.label}</span>; }
+export function App(props) { return <main>${body}</main>; }`);
+
+      // The call site passes an unprovable value, so finding it must keep the
+      // callee on the generic render value insertion.
+      expect(code, scenario).toContain("insertRenderValue");
+    }
+  });
+
+  test("keeps the render value insertion for a call site with children", () => {
+    const code = compile(`function Badge(props) { return <span>{props.label}</span>; }
+export function App() { return <main><Badge label="alpha">child</Badge></main>; }`);
+
+    expect(code).toContain("insertRenderValue");
+  });
+
+  test("lowers a callee reached only through a nested tree shape", () => {
+    const code = compile(`function Badge(props) { return <span>{props.label}</span>; }
+export function App(props) { return <main>{props.open ? <Badge label="alpha" /> : null}</main>; }`);
+
+    expect(code).not.toContain("insertRenderValue");
+    expect(code).toContain("bindText(");
+  });
+
   test("renders and updates a lowered component prop child", async () => {
     const code = compile(primitiveCallSites);
     const host = globalThis as PropHost;
