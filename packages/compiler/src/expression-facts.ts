@@ -102,14 +102,11 @@ export function sameResolvedBinding(left: ResolvedBindingIr, right: ResolvedBind
 }
 
 function sameExpressionValue(left: ExpressionValueIr, right: ExpressionValueIr): boolean {
-  if (left.kind !== right.kind) {
-    return false;
+  if (left.kind === "native-cell-read" && right.kind === "native-cell-read") {
+    return sameResolvedBinding(left.binding, right.binding);
   }
 
-  return (
-    left.kind !== "native-cell-read" ||
-    (right.kind === "native-cell-read" && sameResolvedBinding(left.binding, right.binding))
-  );
+  return false;
 }
 
 function unionBindings(

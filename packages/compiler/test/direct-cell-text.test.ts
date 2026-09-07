@@ -199,6 +199,15 @@ export function App() {
     expect(code).toContain("bindText(_text_0, count)");
   });
 
+  test("leaves a keyed row initial text child without any bindText call", () => {
+    const code = compile(`export function App(props) {
+  return <ul>{props.rows.map((row) => <li key={row.id}>{row.id}</li>)}</ul>;
+}`);
+
+    expect(code).toContain("_textValue_");
+    expect(code).not.toContain("bindText(");
+  });
+
   test("keeps a list row on its existing keyed cell text specialization", () => {
     const code = compile(`export function App(props) {
   return <ul>{props.rows.map((row) => <li key={row.id}>{row.label.get()}</li>)}</ul>;

@@ -21,11 +21,8 @@ export function collectOxcNativeCellFactoryNames(statements: readonly unknown[])
 
     for (const specifierValue of readArray(object.specifiers)) {
       const specifier = readObject(specifierValue);
-
-      if (specifier.type !== "ImportSpecifier") {
-        continue;
-      }
-
+      // Default and namespace specifiers carry no `imported` node, so the name
+      // check below already rejects them.
       const imported = readObject(specifier.imported);
       const local = readObject(specifier.local);
 
@@ -100,18 +97,9 @@ export function collectOxcMutatedBindingNames(node: unknown): Set<string> {
   const pending: unknown[] = [node];
 
   while (pending.length > 0) {
-    const current = pending.pop();
-
-    if (Array.isArray(current)) {
-      for (const value of current) pending.push(value);
-      continue;
-    }
-
-    if (typeof current !== "object" || current === null) {
-      continue;
-    }
-
-    const object = readObject(current);
+    // readObject yields an empty record for primitives, so arrays and scalars
+    // need no separate branch: arrays enumerate their elements by index.
+    const object = readObject(pending.pop());
 
     if (object.type === "AssignmentExpression") {
       collectOxcWrittenBindingName(readObject(object.left), names);
@@ -125,11 +113,7 @@ export function collectOxcMutatedBindingNames(node: unknown): Set<string> {
       collectOxcWrittenBindingName(readObject(object.argument), names);
     }
 
-    for (const [key, value] of Object.entries(object)) {
-      if (key === "type" || key === "start" || key === "end") {
-        continue;
-      }
-
+    for (const value of Object.values(object)) {
       pending.push(value);
     }
   }
@@ -147,10 +131,6 @@ export function analyzeOxcExpressionFacts(
   expression: Record<string, unknown>,
   nativeCellBindings: ReadonlyMap<string, ResolvedBindingIr> | undefined,
 ): ExpressionFactsIr | undefined {
-  if (nativeCellBindings === undefined || nativeCellBindings.size === 0) {
-    return undefined;
-  }
-
   const binding = readOxcNativeCellReadBinding(expression, nativeCellBindings);
 
   if (binding === undefined) {
@@ -167,15 +147,17 @@ export function analyzeOxcExpressionFacts(
 
 function readOxcNativeCellReadBinding(
   expression: Record<string, unknown>,
-  nativeCellBindings: ReadonlyMap<string, ResolvedBindingIr>,
+  nativeCellBindings: ReadonlyMap<string, ResolvedBindingIr> | undefined,
 ): ResolvedBindingIr | undefined {
+  // Optional calls and optional member access parse as ChainExpression, which
+  // the CallExpression and MemberExpression checks already reject.
   const call = unwrapOxcParentheses(expression);
 
-  if (call.type !== "CallExpression" || call.optional === true) {
+  if (call.type !== "CallExpression") {
     return undefined;
   }
 
-  if (readArray(call.arguments).length !== 0 || readArray(call.typeArguments).length !== 0) {
+  if (readArray(call.arguments).length !== 0) {
     return undefined;
   }
 
@@ -184,7 +166,6 @@ function readOxcNativeCellReadBinding(
   if (
     callee.type !== "MemberExpression" ||
     callee.computed === true ||
-    callee.optional === true ||
     readObject(callee.property).name !== "get"
   ) {
     return undefined;
@@ -196,20 +177,20 @@ function readOxcNativeCellReadBinding(
     return undefined;
   }
 
-  return nativeCellBindings.get(receiver.name);
+  return nativeCellBindings?.get(receiver.name);
 }
 
 function isOxcNativeCellFactoryCall(
   initializer: Record<string, unknown>,
   factoryNames: ReadonlySet<string>,
 ): boolean {
-  if (initializer.type !== "CallExpression" || initializer.optional === true) {
+  if (initializer.type !== "CallExpression") {
     return false;
   }
 
   const callee = unwrapOxcParentheses(readObject(initializer.callee));
 
-  return callee.type === "Identifier" && factoryNames.has(String(callee.name ?? ""));
+  return callee.type === "Identifier" && factoryNames.has(callee.name as string);
 }
 
 function collectOxcWrittenBindingName(target: Record<string, unknown>, names: Set<string>): void {

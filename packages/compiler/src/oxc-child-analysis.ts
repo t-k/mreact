@@ -681,10 +681,10 @@ export function analyzeOxcExpressionChild(
                   ? ("dynamic" as const)
                   : undefined;
 
-  const facts =
-    sameModuleComponentStreamCall === undefined && !containsNestedJsx
-      ? analyzeOxcExpressionFacts(unwrappedExpression, context.nativeCellBindings)
-      : undefined;
+  // Only the narrow `binding.get()` shape can carry facts, and that shape is
+  // never a same-module stream call and never contains JSX, so the analyzer
+  // needs no extra guard against the rewritten emission paths below.
+  const facts = analyzeOxcExpressionFacts(unwrappedExpression, context.nativeCellBindings);
 
   return [
     {

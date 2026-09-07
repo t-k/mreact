@@ -92,6 +92,38 @@ export function App() {
     expect(facts).toEqual(UNKNOWN_EXPRESSION_FACTS);
   });
 
+  test("still proves a module cell read inside a list renderer that shadows other names", () => {
+    const root = analyzeClientRoot(`import { cell } from "@reckona/mreact-reactive-core";
+const count = cell(0);
+export function App(props) {
+  return <ul>{props.rows.map((row) => <li>{count.get()}</li>)}</ul>;
+}`);
+
+    expect(onlyExpressionFacts(root).value.kind).toBe("native-cell-read");
+  });
+
+  test("keeps a component parameter that shadows a module cell unknown", () => {
+    const root = analyzeClientRoot(`import { cell } from "@reckona/mreact-reactive-core";
+const count = cell(0);
+export function App(count) {
+  return <main>{count.get()}</main>;
+}`);
+
+    expect(onlyExpressionFacts(root)).toEqual(UNKNOWN_EXPRESSION_FACTS);
+  });
+
+  test("keeps a reactive alias that shadows a module cell unknown", () => {
+    const root = analyzeClientRoot(`import { cell } from "@reckona/mreact-reactive-core";
+const source = cell(0);
+const count = cell(1);
+export function App() {
+  const count = source.get();
+  return <main>{count.get()}</main>;
+}`);
+
+    expect(onlyExpressionFacts(root)).toEqual(UNKNOWN_EXPRESSION_FACTS);
+  });
+
   test("resolves a list parameter that shadows a module cell to the shadowing binding", () => {
     const root = analyzeClientRoot(`import { cell } from "@reckona/mreact-reactive-core";
 const count = cell(0);
@@ -196,13 +228,15 @@ export function App(props) {
       escape: "unknown",
     };
 
-    expect(mergeExpressionFacts(left, right)).toEqual({
+    expect(mergeExpressionFacts(left, right)).toStrictEqual({
       value: { kind: "native-cell-read", binding },
       dependencies: [binding, other],
       effectFree: "proven",
       escape: "unknown",
     });
-    expect(mergeExpressionFacts(left, UNKNOWN_EXPRESSION_FACTS)).toEqual(UNKNOWN_EXPRESSION_FACTS);
+    expect(mergeExpressionFacts(left, UNKNOWN_EXPRESSION_FACTS)).toStrictEqual(
+      UNKNOWN_EXPRESSION_FACTS,
+    );
   });
 
   test("produces the same facts for equivalent client and server analyses", () => {
