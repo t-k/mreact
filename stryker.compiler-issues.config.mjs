@@ -16,8 +16,15 @@ export default createStrykerConfig({
     "packages/compiler/src/oxc.ts:250-250",
     "packages/compiler/src/oxc.ts:1954-1958",
     // 20260907-compiler-direct-cell-text
-    "packages/compiler/src/emit-client.ts:918-923",
-    "packages/compiler/src/emit-client.ts:1579-1584",
+    "packages/compiler/src/emit-client.ts:934-939",
+    "packages/compiler/src/emit-client.ts:1655-1659",
+    // 20260907-compiler-select-binding
+    "packages/reactive-dom/src/bind-select-value.ts",
+    "packages/compiler/src/emit-client.ts:289-302",
+    "packages/compiler/src/emit-client.ts:726-727",
+    "packages/compiler/src/emit-client.ts:736-757",
+    "packages/compiler/src/emit-client.ts:799-813",
+    "packages/compiler/src/emit-client.ts:1045-1104",
   ],
   testFiles: [
     "packages/compiler/test/expression-facts.test.ts",
@@ -28,5 +35,8 @@ export default createStrykerConfig({
     "packages/compiler/test/conformance.test.ts",
     "packages/compiler/test/client-runtime-dynamic.test.ts",
     "packages/compiler/test/text-separator.test.ts",
+    "packages/compiler/test/select-binding.test.ts",
+    "packages/reactive-dom/test/bind-select-value.test.ts",
+    "packages/reactive-dom/test/bind-spread-props.test.ts",
   ],
 });

@@ -5,6 +5,8 @@ export {
   bindCompilerKeyedSingleNodeList,
   bindCompilerKeyedText,
 } from "./bind-static-keyed-single-node-list.js";
+export { bindSelectValue } from "./bind-select-value.js";
+export type { SelectControlProps } from "./bind-select-value.js";
 export { markCompilerKeyedEventSlot } from "./compiler-keyed-events.js";
 export { createMemo } from "./create-memo.js";
 export { createListWithRenderArity } from "./create-list.js";

@@ -62,6 +62,7 @@ import {
 } from "@reckona/mreact-server";
 import { stripTypeScriptWithOxc } from "../src/oxc-transform.js";
 import {
+  bindSelectValue,
   bindCompilerKeyedCellText,
   bindCompilerKeyedPropertyText,
   bindCompilerKeyedSingleNodeList,
@@ -499,7 +500,7 @@ function extractClientInternalRuntimeEntries(
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>bindCompilerKeyedCellText|bindCompilerKeyedPropertyText|bindCompilerKeyedSingleNodeList|bindCompilerKeyedText|bindListWithRenderArity|createCompilerListBindingCache|createListWithRenderArity|createMemo|createSvgTemplate|createSvgTemplateElement|insertMemo|insertMemoDynamic|installMemoRenderValueNormalizer|markCompilerKeyedEventSlot|trackCompilerKeyedItem)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+      /^(?<importedName>bindCompilerKeyedCellText|bindCompilerKeyedPropertyText|bindCompilerKeyedSingleNodeList|bindCompilerKeyedText|bindListWithRenderArity|bindSelectValue|createCompilerListBindingCache|createListWithRenderArity|createMemo|createSvgTemplate|createSvgTemplateElement|insertMemo|insertMemoDynamic|installMemoRenderValueNormalizer|markCompilerKeyedEventSlot|trackCompilerKeyedItem)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
     );
 
     if (match?.groups === undefined) {
@@ -509,8 +510,10 @@ function extractClientInternalRuntimeEntries(
     return {
       localName: match.groups.localName ?? match.groups.importedName,
       value:
-        match.groups.importedName === "bindListWithRenderArity"
-          ? bindListWithRenderArity
+        match.groups.importedName === "bindSelectValue"
+          ? bindSelectValue
+          : match.groups.importedName === "bindListWithRenderArity"
+            ? bindListWithRenderArity
           : match.groups.importedName === "createCompilerListBindingCache"
             ? createCompilerListBindingCache
             : match.groups.importedName === "createListWithRenderArity"

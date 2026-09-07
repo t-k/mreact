@@ -81,6 +81,7 @@ type RuntimeHelperName =
   | "bindDomRef"
   | "bindEvent"
   | "bindProp"
+  | "bindSelectValue"
   | "bindSpreadProps"
   | "bindText"
   | "createListWithRenderArity"
@@ -127,6 +128,7 @@ function allocateRuntimeHelperNames(
     bindDomRef: "bindDomRef",
     bindEvent: "bindEvent",
     bindProp: "bindProp",
+    bindSelectValue: "bindSelectValue",
     bindSpreadProps: "bindSpreadProps",
     bindText: "bindText",
     createListWithRenderArity: "createListWithRenderArity",
@@ -284,22 +286,24 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
         if (node.namespace === "svg" && context === "render-value") {
           internalSpecifiers.add("createSvgTemplate");
         }
+        const dedicatedSelect = usesDedicatedSelectBinding(node);
         for (const attr of node.attributes) {
-          if (
+          const selectControlAttribute =
             node.tagName === "select" &&
-            ((attr.kind === "static-attr" && isSelectControlAttributeName(attr.name)) ||
-              attr.kind === "spread-attr" ||
-              (attr.kind === "dynamic-attr" && isSelectControlAttributeName(attr.name)))
-          ) {
-            specifiers.add("bindSpreadProps");
+            (attr.kind === "static-attr" || attr.kind === "dynamic-attr") &&
+            isSelectControlAttributeName(attr.name);
+
+          if (selectControlAttribute) {
+            if (dedicatedSelect) {
+              internalSpecifiers.add("bindSelectValue");
+            } else {
+              specifiers.add("bindSpreadProps");
+            }
+            continue;
           }
 
           if (attr.kind === "dynamic-attr") {
-            specifiers.add(
-              node.tagName === "select" && isSelectControlAttributeName(attr.name)
-                ? "bindSpreadProps"
-                : "bindProp",
-            );
+            specifiers.add("bindProp");
           }
 
           if (attr.kind === "dom-ref") {
@@ -310,10 +314,8 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
             specifiers.add("bindSpreadProps");
           }
 
-          if (attr.kind === "event") {
-            if (attr.compilerKeyedSlot === undefined) {
-              specifiers.add("bindEvent");
-            }
+          if (attr.kind === "event" && attr.compilerKeyedSlot === undefined) {
+            specifiers.add("bindEvent");
           }
         }
       }
@@ -721,6 +723,8 @@ function emitSetup(
 
   const postChildBindingLines: string[] = [];
   const selectBindingSources: string[] = [];
+  const selectControlEntries: string[] = [];
+  const dedicatedSelectBinding = node.kind === "element" && usesDedicatedSelectBinding(node);
 
   if (node.kind === "element") {
     for (const attr of node.attributes) {
@@ -729,15 +733,25 @@ function emitSetup(
         attr.kind === "static-attr" &&
         isSelectControlAttributeName(attr.name)
       ) {
-        selectBindingSources.push(
-          `{ ${JSON.stringify(attr.name)}: ${JSON.stringify(attr.value)} }`,
-        );
+        if (!dedicatedSelectBinding) {
+          selectBindingSources.push(
+            `{ ${JSON.stringify(attr.name)}: ${JSON.stringify(attr.value)} }`,
+          );
+        } else if (attr.name !== "multiple") {
+          // A static multiple attribute is already in the emitted template, so
+          // the dedicated binding never has to reapply it.
+          selectControlEntries.push(`${attr.name}: ${JSON.stringify(attr.value)}`);
+        }
         continue;
       }
 
       if (attr.kind === "dynamic-attr") {
         if (node.tagName === "select" && isSelectControlAttributeName(attr.name)) {
-          selectBindingSources.push(`{ ${JSON.stringify(attr.name)}: (${attr.code}) }`);
+          if (dedicatedSelectBinding) {
+            selectControlEntries.push(`${attr.name}: (${attr.code})`);
+          } else {
+            selectBindingSources.push(`{ ${JSON.stringify(attr.name)}: (${attr.code}) }`);
+          }
           continue;
         }
 
@@ -782,12 +796,14 @@ function emitSetup(
       }
     }
 
-    if (selectBindingSources.length > 0) {
-      const selectPropsName = state.allocateName("_selectProps");
-      const selectAssignments = selectBindingSources
-        .map((source) => `Object.assign(${selectPropsName}, ${source});`)
-        .join(" ");
-      const selectBindingLine = `  ${state.helperNames.bindSpreadProps}(${currentPath}, () => { const ${selectPropsName} = {}; ${selectAssignments} return ${selectPropsName}; });`;
+    const selectBindingLine = emitSelectBindingLine(
+      currentPath,
+      selectControlEntries,
+      selectBindingSources,
+      state,
+    );
+
+    if (selectBindingLine !== undefined) {
       if (hasDirectDangerouslySetInnerHtml(node)) {
         lines.push(selectBindingLine);
         return lines.join("\n");
@@ -1024,6 +1040,66 @@ function emitSetup(
   lines.push(...postChildBindingLines);
 
   return lines.filter(Boolean).join("\n");
+}
+
+/**
+ * Reports whether a select can use the dedicated control binding.
+ *
+ * A real spread prop or a dynamic `multiple` keeps the generic spread binding,
+ * because both can add, remove or reorder arbitrary props and the selection
+ * has to be re-applied whenever `multiple` changes.
+ */
+function usesDedicatedSelectBinding(node: Extract<JsxNodeIr, { kind: "element" }>): boolean {
+  if (node.tagName !== "select") {
+    return false;
+  }
+
+  let hasControlProp = false;
+
+  for (const attribute of node.attributes) {
+    if (attribute.kind === "spread-attr") {
+      return false;
+    }
+
+    if (attribute.kind !== "static-attr" && attribute.kind !== "dynamic-attr") {
+      continue;
+    }
+
+    if (attribute.name === "multiple") {
+      if (attribute.kind === "dynamic-attr") {
+        return false;
+      }
+      continue;
+    }
+
+    if (isSelectControlAttributeName(attribute.name)) {
+      hasControlProp = true;
+    }
+  }
+
+  return hasControlProp;
+}
+
+function emitSelectBindingLine(
+  currentPath: string,
+  selectControlEntries: readonly string[],
+  selectBindingSources: readonly string[],
+  state: EmitSetupState,
+): string | undefined {
+  if (selectControlEntries.length > 0) {
+    return `  ${state.helperNames.bindSelectValue}(${currentPath}, () => ({ ${selectControlEntries.join(", ")} }));`;
+  }
+
+  if (selectBindingSources.length === 0) {
+    return undefined;
+  }
+
+  const selectPropsName = state.allocateName("_selectProps");
+  const selectAssignments = selectBindingSources
+    .map((source) => `Object.assign(${selectPropsName}, ${source});`)
+    .join(" ");
+
+  return `  ${state.helperNames.bindSpreadProps}(${currentPath}, () => { const ${selectPropsName} = {}; ${selectAssignments} return ${selectPropsName}; });`;
 }
 
 function isSelectControlAttributeName(name: string): boolean {
