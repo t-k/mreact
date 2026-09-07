@@ -298,6 +298,7 @@ describe("inactive entry cap reentrancy", () => {
   });
 
   it("keeps counts consistent when a notification cancels an in-flight query", async () => {
+    vi.useFakeTimers();
     const client = createQueryClient({ maxInactiveEntries: 1 });
     const deferred = createDeferred<string>();
     let canceled = false;
@@ -308,6 +309,9 @@ describe("inactive entry cap reentrancy", () => {
     const release = client.subscribe(["trigger"], () => {
       if (!canceled) {
         canceled = true;
+        // Cancelling restamps updatedAt, so advancing first makes the canceled
+        // entry unambiguously newer than the subscribed one.
+        vi.advanceTimersByTime(10);
         client.cancelQueries({ queryKey: ["cancel-me"] });
       }
     });
@@ -315,9 +319,18 @@ describe("inactive entry cap reentrancy", () => {
     client.setQueryData(["trigger"], "trigger");
     deferred.resolve("late");
     await pending;
+
+    // The canceled entry is inactive again but still within the cap.
+    expect(cachedKeys(client)).toEqual(["cancel-me", "trigger"]);
+
     release();
 
-    expect(cachedKeys(client)).toEqual(["trigger"]);
+    expect(cachedKeys(client)).toEqual(["cancel-me"]);
+
+    vi.advanceTimersByTime(10);
+    client.setQueryData(["after"], "after");
+
+    expect(cachedKeys(client)).toEqual(["after"]);
   });
 
   it("keeps counts consistent when a notification re-subscribes to an evicted key", () => {
