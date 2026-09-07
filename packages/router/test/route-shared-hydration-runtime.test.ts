@@ -55,6 +55,7 @@ describe("shared route hydration runtime", () => {
       clientNavigation: false,
       filename,
       routePath: "/",
+      shareHydrationRuntime: true,
     });
 
     expect(entry.code).toContain("mreact-route-hydration-runtime/resume");
@@ -74,12 +75,14 @@ describe("shared route hydration runtime", () => {
       filename,
       routeMayUseOutOfOrderFragments: true,
       routePath: "/",
+      shareHydrationRuntime: true,
     });
     const staticRoute = await buildClientRouteEntrySource({
       code: interactiveRouteCode,
       clientNavigation: false,
       filename,
       routePath: "/",
+      shareHydrationRuntime: true,
     });
 
     expect(streaming.code).toContain("mreact-route-hydration-runtime/fragments");
@@ -105,6 +108,7 @@ describe("shared route hydration runtime", () => {
       clientNavigation: false,
       filename,
       routePath: "/",
+      shareHydrationRuntime: true,
     });
 
     expect(entry.code).not.toContain("mreact-route-hydration-runtime/boundaries");
@@ -143,11 +147,90 @@ export default function Page() {
       clientNavigation: false,
       filename,
       routePath: "/",
+      shareHydrationRuntime: true,
     });
 
     expect(entry.code).toContain("mreact-route-hydration-runtime/boundaries");
     expect(entry.code).toContain("__mreactCreateClientBoundaryRuntime(");
     expect(entry.code).not.toContain("function __mreactHydrateClientBoundaries(");
+  });
+
+  test("single bundle route entries inline the runtime instead of importing it", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-shared-resume-inline-"));
+    const filename = await writeRoute(appDir, "index", interactiveRouteCode);
+
+    const entry = await buildClientRouteEntrySource({
+      code: interactiveRouteCode,
+      clientNavigation: false,
+      filename,
+      routePath: "/",
+    });
+
+    expect(entry.code).not.toContain("mreact-route-hydration-runtime/");
+    expect(entry.code).toContain("function __mreactResumeChildren(");
+    expect(entry.code).toContain("function __mreactRunLifecycleTasks(");
+  });
+
+  test("a single route batch build keeps the inline runtime it cannot share", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-shared-resume-single-batch-"));
+    const filename = await writeRoute(appDir, "index", interactiveRouteCode);
+
+    const output = await buildClientRouteBatchOutput({
+      minify: true,
+      projectRoot: appDir,
+      routes: [
+        { code: interactiveRouteCode, clientNavigation: false, filename, minify: true, routePath: "/" },
+      ],
+    });
+
+    expect(output.chunks.filter((chunk) => !chunk.isEntry)).toHaveLength(0);
+    expect(output.routes[0]?.chunk.code).toContain(resumeRuntimeMarker);
+  });
+
+  test("boundary only routes carry no resume walk in either emission shape", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-shared-resume-boundary-only-"));
+    await writeFile(
+      join(appDir, "Counter.tsx"),
+      `"use client";
+import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set(value => value + 1)}>{count.get()}</button>;
+}`,
+    );
+    const code = `import { Counter } from "./Counter";
+
+export const clientNavigation = false;
+
+export default function Page() {
+  return <main><Counter /></main>;
+}`;
+    const filename = await writeRoute(appDir, "index", code);
+    const boundaryOnlyOptions = {
+      clientBoundaryImports: ["./Counter"],
+      clientReferenceImports: [{ name: "Counter", source: "./Counter", exportName: "Counter" }],
+      clientReferenceManifest: [
+        { name: "Counter", moduleId: "./Counter.js", exportName: "Counter" },
+      ],
+      code,
+      clientNavigation: false,
+      filename,
+      routePath: "/",
+    };
+
+    const inline = await buildClientRouteEntrySource(boundaryOnlyOptions);
+    const shared = await buildClientRouteEntrySource({
+      ...boundaryOnlyOptions,
+      shareHydrationRuntime: true,
+    });
+
+    expect(inline.code).not.toContain(resumeRuntimeMarker);
+    expect(inline.code).not.toContain("__mreactResumeRoute");
+    expect(shared.code).not.toContain("mreact-route-hydration-runtime/resume");
+    expect(shared.code).not.toContain("__mreactResumeRoute");
+    expect(inline.code).toContain("__mreactHydrateClientBoundaries");
+    expect(shared.code).toContain("mreact-route-hydration-runtime/boundaries");
   });
 
   test("a multi-route build emits the resume runtime in exactly one shared chunk", async () => {

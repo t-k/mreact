@@ -48,6 +48,7 @@ import {
   routeHydrationContract,
 } from "./route-hydration-contract.js";
 import {
+  routeHydrationRuntimeInlineSource,
   routeHydrationRuntimeModuleFor,
   routeHydrationRuntimeNamespace,
   routeHydrationRuntimeSource,
@@ -99,6 +100,12 @@ export interface BuildClientRouteOutputOptions {
   clientNavigation?: boolean | undefined;
   forceInlineNavigationRuntime?: boolean | undefined;
   routeMayUseOutOfOrderFragments?: boolean | undefined;
+  /**
+   * Import the route-independent hydration helpers from shared virtual modules instead of
+   * inlining them. Only a build that emits more than one chunk can hoist them, so the batch
+   * build opts in and every single-bundle path keeps the inline shape.
+   */
+  shareHydrationRuntime?: boolean | undefined;
 }
 
 export interface BuildClientRouteBatchOutput {
@@ -2863,6 +2870,10 @@ export async function buildClientRouteBatchOutput(options: {
       source: await buildClientRouteEntrySource({
         ...route,
         minify: options.minify ?? route.minify,
+        // Only a build with more than one entry can hoist the hydration helpers into a shared
+        // chunk. A single entry would inline the same modules and pay the factory indirection
+        // for nothing, so it keeps the inline shape.
+        shareHydrationRuntime: options.routes.length > 1,
         sourceMap: options.sourceMap ?? route.sourceMap,
         vitePlugins: options.vitePlugins ?? route.vitePlugins,
       }),
@@ -3480,30 +3491,60 @@ ${routeCellHydrationIndent}}
     options.routeMayUseOutOfOrderFragments === true
       ? "  __mreactApplyOutOfOrderFragments(document);\n"
       : "";
+  const shareHydrationRuntime = options.shareHydrationRuntime === true;
   const routeUsesOutOfOrderFragments =
     options.routeMayUseOutOfOrderFragments === true || inlineClientNavigation;
   const routeUsesClientBoundaryRuntime = clientReferenceManifest.length > 0;
-  const routeHydrationRuntimeImportBlock = [
-    `import { __mreactRunLifecycleTasks } from ${JSON.stringify(routeHydrationRuntimeSpecifier("lifecycle"))};\n`,
-    `import { __mreactCreateRouteResumeRuntime } from ${JSON.stringify(routeHydrationRuntimeSpecifier("resume"))};\n`,
-    routeUsesOutOfOrderFragments
-      ? `import { __mreactApplyOutOfOrderFragments } from ${JSON.stringify(routeHydrationRuntimeSpecifier("fragments"))};\n`
-      : "",
-    routeUsesClientBoundaryRuntime
-      ? `import { __mreactCreateClientBoundaryRuntime } from ${JSON.stringify(routeHydrationRuntimeSpecifier("boundaries"))};\n`
-      : "",
-  ].join("");
-  // The resume walk is shared, but the two binding synchronisers it calls stay generated per
-  // route, so the route hands them to the factory instead of the module importing them.
-  const routeResumeRuntimeBindings = `const {
+  // A boundary-only route hydrates its client references and returns at the component guard,
+  // so its resume walk is unreachable. Emitting it would make a minimal route pay for a
+  // capability it cannot use.
+  const routeUsesResumeRuntime = inlineClientNavigation || !routeUsesOnlyClientReferenceBoundaries;
+  const routeHydrationRuntimeImportBlock = shareHydrationRuntime
+    ? [
+        `import { __mreactRunLifecycleTasks } from ${JSON.stringify(routeHydrationRuntimeSpecifier("lifecycle"))};\n`,
+        routeUsesResumeRuntime
+          ? `import { __mreactCreateRouteResumeRuntime } from ${JSON.stringify(routeHydrationRuntimeSpecifier("resume"))};\n`
+          : "",
+        routeUsesOutOfOrderFragments
+          ? `import { __mreactApplyOutOfOrderFragments } from ${JSON.stringify(routeHydrationRuntimeSpecifier("fragments"))};\n`
+          : "",
+        routeUsesClientBoundaryRuntime
+          ? `import { __mreactCreateClientBoundaryRuntime } from ${JSON.stringify(routeHydrationRuntimeSpecifier("boundaries"))};\n`
+          : "",
+      ].join("")
+    : "";
+  // The resume walk is route independent, but the two binding synchronisers it calls are not, so
+  // the shared factory takes them as arguments instead of importing them.
+  const routeResumeRuntimeBindings =
+    shareHydrationRuntime && routeUsesResumeRuntime
+      ? `const {
 ${inlineClientNavigation ? "  resumeNode: __mreactResumeNode,\n" : ""}  resumeRoute: __mreactResumeRoute,${inlineClientNavigation ? "\n  unmountCompatBoundaries: __mreactUnmountCompatBoundaries," : ""}
 } = __mreactCreateRouteResumeRuntime(__mreactSyncEventBindings, __mreactSyncDomRefBindings);
-`;
-  const routeClientBoundaryRuntimeBindings = routeUsesClientBoundaryRuntime
-    ? `const {
+`
+      : "";
+  const routeClientBoundaryRuntimeBindings =
+    shareHydrationRuntime && routeUsesClientBoundaryRuntime
+      ? `const {
   hasNonSerializableClientBoundaries: __mreactHasNonSerializableClientBoundaries,
   hydrateClientBoundaries: __mreactHydrateClientBoundaries,
 } = __mreactCreateClientBoundaryRuntime(${compatClientReferenceNames.size === 0 ? "undefined, undefined" : "__mreactCompatCreateRoot, __mreactCompatCreateElement"});
+`
+      : "";
+  const routeInlineHydrationRuntime = shareHydrationRuntime
+    ? ""
+    : [
+        routeUsesOutOfOrderFragments ? routeHydrationRuntimeInlineSource("fragments") : "",
+        routeUsesClientBoundaryRuntime ? routeHydrationRuntimeInlineSource("boundaries") : "",
+        routeUsesResumeRuntime ? routeHydrationRuntimeInlineSource("resume") : "",
+      ]
+        .filter((source) => source !== "")
+        .join("\n");
+  const routeInlineLifecycleRuntime = shareHydrationRuntime
+    ? ""
+    : `\n${routeHydrationRuntimeInlineSource("lifecycle")}`;
+  const routeResumeCall = routeUsesResumeRuntime
+    ? `${routeCellHydrationIndent}const __mreactNode = ${routeHydrationNodeExpression};
+${routeCellHydrationIndent}__mreactResumeRoute(__mreactMarker, __mreactNode);
 `
     : "";
   const routeComponentGuard = `${routeCellHydrationIndent}if (__mreactComponent === undefined) {
@@ -3557,12 +3598,10 @@ ${
   if (__mreactMarker === null) {
     return;
   }
-${routeCellHydrationStart}${routeCleanupHydrationStart}${boundaryOnlyHydrationBlock}${routeComponentGuard}${routeCellHydrationIndent}const __mreactNode = ${routeHydrationNodeExpression};
-${routeCellHydrationIndent}__mreactResumeRoute(__mreactMarker, __mreactNode);
-${clientReferenceManifest.length === 0 ? "" : `${routeCellHydrationIndent}__mreactHydrateClientBoundaries(document, __mreactClientReferences, __mreactClientReferenceComponents);\n`}${routeCellHydrationIndent}__mreactMarker.setAttribute(__mreactRouteHydratedAttribute, "true");
+${routeCellHydrationStart}${routeCleanupHydrationStart}${boundaryOnlyHydrationBlock}${routeComponentGuard}${routeResumeCall}${clientReferenceManifest.length === 0 ? "" : `${routeCellHydrationIndent}__mreactHydrateClientBoundaries(document, __mreactClientReferences, __mreactClientReferenceComponents);\n`}${routeCellHydrationIndent}__mreactMarker.setAttribute(__mreactRouteHydratedAttribute, "true");
 ${routeCellHydrationIndent}__mreactMarkRouteHydrated();
 ${routeCellHydrationEnd}}
-${routeCellDropFunction}
+${routeCellDropFunction}${routeInlineLifecycleRuntime}
 ${routeCleanupFunction}
 
 function __mreactMarkRouteHydrated() {
@@ -5336,7 +5375,7 @@ function __mreactForgetViewportPrefetchAnchor(anchor) {
 
 ${routeEventBindingSyncFunction}
 ${routeDomRefBindingSyncFunction}
-`;
+${routeInlineHydrationRuntime}`;
   return {
     code: stripTypeScriptWithOxc(entry),
   };
