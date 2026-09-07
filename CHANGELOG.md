@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.0.213 - 2026-09-07
+
+### Fixed
+
+- Fixed compiler lowering for JSX expressions, reactive aliases, mixed declarations, destructured bindings, and deferred component render values so evaluation order, ownership, and synchronous SSR behavior remain stable across nested children and render props.
+- Fixed server and streaming rendering of `<select>` and `<option>` children across components, fragments, spreads, client boundaries, and multiple-value selections, including option text separators and nullish fallback behavior.
+- Fixed controlled select updates in the reactive DOM and React-compatible runtimes so value normalization, fallback selection, and selected option state stay consistent between client rendering and SSR.
+- Fixed client navigation to reject cross-origin and non-HTTP(S) URLs and fixed viewport prefetch lifecycle handling for anchors that are added, removed, or updated after hydration.
+
 ## 0.0.212 - 2026-09-06
 
 ### Fixed

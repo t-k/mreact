@@ -294,6 +294,8 @@ export interface ExprIr {
     // (undocumented)
     compilerKeyedProperty?: string;
     // (undocumented)
+    deferRenderValue?: true;
+    // (undocumented)
     kind: "expr";
     // (undocumented)
     renderMode?: "dynamic" | "render-value" | "html" | "server-render-value" | "react-node" | "stream-node" | "compat-child" | "compiler-keyed-initial-text" | "compiler-keyed-cell-text" | "compiler-keyed-text";
