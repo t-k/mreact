@@ -437,10 +437,19 @@ export default function Next() {
     await page.goto(url);
     await expect(page.locator('link[rel="modulepreload"][href*="/routes/about."]')).toHaveCount(1);
     await expect(page.getByTestId("target")).toHaveAttribute("href", "/about");
+    const anchorBefore = await page.getByTestId("target").elementHandle();
+    expect(anchorBefore).not.toBeNull();
 
     await page.getByTestId("change").click();
     await expect(page.getByTestId("target")).toHaveAttribute("href", "/next");
     await expect(page.locator('link[rel="modulepreload"][href*="/routes/next."]')).toHaveCount(1);
+    if (anchorBefore === null) throw new Error("target anchor was not found");
+    await expect(
+      page.evaluate(
+        (anchor) => document.querySelector('[data-testid="target"]') === anchor,
+        anchorBefore,
+      ),
+    ).resolves.toBe(true);
     expect(navigationRequests).toEqual([]);
   } finally {
     await close();
@@ -2467,7 +2476,7 @@ export default function Page() {
 test("PanelSlot route module conditional child hydrates, unmounts and remounts", async ({
   page,
 }) => {
-  const { close, url } = await startFixtureServer({
+  const { close, url } = await startWorkspaceFixtureServer({
     "state.ts": `import { cell } from "@reckona/mreact-reactive-core";
 
 export const panelTicket = cell(null);
@@ -2480,20 +2489,32 @@ export function PanelSlot(props) {
     "ticket-panel.tsx": `"use client";
 
 import { computed } from "@reckona/mreact-reactive-core";
+import { registerCleanup } from "@reckona/mreact-reactive-core/internal";
 import { panelNoise, panelTicket } from "./state";
 
 const diagnostics = globalThis;
 
-function itemFor(number) {
-  diagnostics.__panelItemReads = (diagnostics.__panelItemReads ?? 0) + 1;
+function itemFor(number, generation) {
+  generation.itemReads += 1;
   panelNoise.get();
   const ticket = panelTicket.get();
   return ticket === null ? null : { title: "Ticket " + number };
 }
 
 export function TicketPanel(props) {
+  const generation = {
+    id: (diagnostics.__panelGenerations?.length ?? 0) + 1,
+    runs: 0,
+    itemReads: 0,
+    cleanups: 0,
+  };
+  (diagnostics.__panelGenerations ??= []).push(generation);
+  registerCleanup(() => {
+    generation.cleanups += 1;
+  });
   const viewModel = computed(() => {
-    const item = itemFor(props.number);
+    generation.runs += 1;
+    const item = itemFor(props.number, generation);
     return item === null ? null : { item };
   });
 
@@ -2547,23 +2568,84 @@ export default function Page() {
     await page.getByTestId("close").click();
     await expect(page.getByTestId("panel")).toHaveCount(0);
     await expect(page.getByTestId("panel-slot")).toHaveCount(1);
-    const readsAfterClose = await page.evaluate(
-      () => (globalThis as typeof globalThis & { __panelItemReads?: number }).__panelItemReads ?? 0,
+    const generationsAfterClose = await page.evaluate(
+      () =>
+        (
+          globalThis as typeof globalThis & {
+            __panelGenerations?: Array<{
+              id: number;
+              runs: number;
+              itemReads: number;
+              cleanups: number;
+            }>;
+          }
+        ).__panelGenerations ?? [],
     );
+    expect(generationsAfterClose.length).toBeGreaterThan(0);
+    expect(generationsAfterClose.every((generation) => generation.cleanups === 1)).toBe(true);
 
     await page.getByTestId("noise").click();
     await expect
       .poll(() =>
-        page.evaluate(
-          () =>
-            (globalThis as typeof globalThis & { __panelItemReads?: number }).__panelItemReads ?? 0,
+        page.evaluate(() =>
+          JSON.stringify(
+            (
+              globalThis as typeof globalThis & {
+                __panelGenerations?: Array<{
+                  id: number;
+                  runs: number;
+                  itemReads: number;
+                  cleanups: number;
+                }>;
+              }
+            ).__panelGenerations ?? [],
+          ),
         ),
       )
-      .toBe(readsAfterClose);
+      .toBe(JSON.stringify(generationsAfterClose));
 
     await page.getByTestId("open").click();
     await expect(page.getByTestId("panel")).toHaveText("Ticket 1");
     await expect(page.getByTestId("panel")).toHaveCount(1);
+    const generationsAfterReopen = await page.evaluate(
+      () =>
+        (
+          globalThis as typeof globalThis & {
+            __panelGenerations?: Array<{
+              id: number;
+              runs: number;
+              itemReads: number;
+              cleanups: number;
+            }>;
+          }
+        ).__panelGenerations ?? [],
+    );
+    expect(generationsAfterReopen.length).toBeGreaterThan(generationsAfterClose.length);
+    expect(generationsAfterReopen.slice(0, generationsAfterClose.length)).toEqual(
+      generationsAfterClose,
+    );
+    expect(generationsAfterReopen.at(-1)?.cleanups).toBe(0);
+
+    await page.getByTestId("close").click();
+    await expect(page.getByTestId("panel")).toHaveCount(0);
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          (
+            (
+              globalThis as typeof globalThis & {
+                __panelGenerations?: Array<{
+                  id: number;
+                  runs: number;
+                  itemReads: number;
+                  cleanups: number;
+                }>;
+              }
+            ).__panelGenerations ?? []
+          ).map(({ id, cleanups }) => ({ id, cleanups })),
+        ),
+      )
+      .toEqual(generationsAfterReopen.map(({ id }) => ({ id, cleanups: 1 })));
     expect(pageErrors).toEqual([]);
   } finally {
     await close();
@@ -2712,6 +2794,11 @@ async function startWorkspaceFixtureServer(files: Record<string, string>): Promi
   await symlink(
     fileURLToPath(new URL("..", import.meta.url)),
     join(scopeDir, "mreact-router"),
+    "dir",
+  );
+  await symlink(
+    fileURLToPath(new URL("../../reactive-core", import.meta.url)),
+    join(scopeDir, "mreact-reactive-core"),
     "dir",
   );
 
