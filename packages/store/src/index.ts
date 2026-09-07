@@ -571,6 +571,8 @@ export function createRequestStoreFactory<T extends object, TPersisted extends o
 
 /**
  * Compares two plain objects by own enumerable keys with `Object.is` value equality.
+ *
+ * Both operands must be inert while the comparison runs. Own keys are captured once per call and values are read afterwards, so an accessor or proxy trap that adds or removes an own key on either operand during the call leaves the result unspecified.
  */
 export function shallowEqual<T>(left: T, right: T): boolean {
   if (Object.is(left, right)) {
