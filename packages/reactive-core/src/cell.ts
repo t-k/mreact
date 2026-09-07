@@ -148,6 +148,7 @@ export function cell<T>(initial: T): Cell<T> {
   const source: CellSource<T> = {
     subscribers: null,
     value: initial,
+    version: 0,
   };
 
   const value: SourceBackedCell<T> = {

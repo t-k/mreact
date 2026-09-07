@@ -84,6 +84,7 @@ function createComputed<T>(
     // Preserve the dormant transitive dependencies through that transition.
     onNoSubscribers: () => suspendIfUnobserved(true),
     subscribers: null,
+    version: 0,
   };
 
   const computation: ReactiveComputation = {

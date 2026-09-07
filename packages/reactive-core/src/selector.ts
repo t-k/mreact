@@ -67,6 +67,7 @@ export function selector<TValue, TKey = TValue>(
         owner: sources,
         selected: equals(current, key) === true,
         subscribers: null,
+        version: 0,
       };
       sources.set(key, selectorSource);
     }

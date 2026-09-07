@@ -11,6 +11,10 @@ export interface Source {
   // empties back to null). Most sources never allocate a Set at all, and hot
   // write sites can gate on a null check instead of a Set.size accessor.
   subscribers: ReactiveComputation | Set<ReactiveComputation> | null;
+  // Snapshot counter owned by the reactive runtime and advanced through
+  // bumpSourceVersion(). Sources created by other packages may omit it; they
+  // are treated as version 0 until the runtime first advances them.
+  version?: number | undefined;
   onFirstSubscriber?: (() => void) | undefined;
   onNoSubscribers?: (() => void) | undefined;
   /** Returns false when a dormant source has stale dormant dependencies. */
@@ -78,14 +82,12 @@ export const runtimeState: {
   pendingComputed: new Set(),
 };
 
-const sourceVersions = new WeakMap<Source, number>();
-
 export function sourceVersion(source: Source): number {
-  return sourceVersions.get(source) ?? 0;
+  return source.version ?? 0;
 }
 
 export function bumpSourceVersion(source: Source): void {
-  sourceVersions.set(source, sourceVersion(source) + 1);
+  source.version = (source.version ?? 0) + 1;
 }
 
 export function createUntrackedDependency(source: Source): UntrackedDependency | undefined {
