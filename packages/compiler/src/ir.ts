@@ -17,6 +17,8 @@ export interface ComponentIr {
   exported?: boolean;
   exportDefault?: boolean;
   async?: boolean;
+  /** Set when the module assigns to the component binding, so call sites stay generic. */
+  reassigned?: true;
   parameters: string[];
   parameterPropAliases?: PropAliasIr[];
   bodyStatements: string[];

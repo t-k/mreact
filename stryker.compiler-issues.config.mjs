@@ -29,6 +29,11 @@ export default createStrykerConfig({
     // 20260907-compiler-unused-component-initialization
     "packages/compiler/src/emit-client.ts:497-502",
     "packages/compiler/src/emit-client.ts:581-594",
+    // 20260907-compiler-native-component-specialization
+    "packages/compiler/src/emit-client.ts:57-67",
+    "packages/compiler/src/emit-client.ts:723-735",
+    "packages/compiler/src/emit-client.ts:770-775",
+    "packages/compiler/src/oxc.ts:564-570",
     // 20260907-compiler-specialized-dom-props
     "packages/reactive-dom/src/bind-element-property.ts",
     "packages/compiler/src/emit-client.ts:316-322",
@@ -59,5 +64,7 @@ export default createStrykerConfig({
     "packages/reactive-dom/test/bind-element-property.test.ts",
     "packages/reactive-dom/test/dom-prop-application.test.ts",
     "packages/reactive-dom/test/bind-prop.test.ts",
+    "packages/compiler/test/native-component-calls.test.ts",
+    "packages/compiler/test/runtime-smoke.test.ts",
   ],
 });

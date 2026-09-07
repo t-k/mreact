@@ -561,6 +561,14 @@ function analyzeOxcToIr(
     ),
   );
 
+  const reassignedComponentNames = collectOxcReassignedNames(program, componentNames);
+
+  for (const component of components) {
+    if (reassignedComponentNames.has(component.name)) {
+      component.reassigned = true;
+    }
+  }
+
   if (options?.serverOutput === "stream") {
     for (const component of components) {
       markOxcClientReferences(component.root, clientBoundaryImports);

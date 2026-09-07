@@ -52,6 +52,19 @@ export function emitClient(
       return inlineMemo === undefined ? [] : ([[component.name, inlineMemo]] as const);
     }),
   );
+  // Every component this emitter lowers returns a DOM node or a fragment, so a
+  // call site can skip the generic nullish render-value guard for it.
+  const nonNullishComponents = new Set(
+    ir.components
+      .filter(
+        (component) =>
+          component.root.kind !== "component" &&
+          component.async !== true &&
+          component.reassigned !== true &&
+          getCompatInlineMemo(component) === undefined,
+      )
+      .map((component) => component.name),
+  );
   const components = ir.components
     .map((component) =>
       emitComponent(
@@ -60,6 +73,7 @@ export function emitClient(
         helperNames,
         clientBoundaryHelperName,
         inlineMemoComponents,
+        nonNullishComponents,
         options,
       ),
     )
@@ -493,6 +507,7 @@ function emitComponent(
   helperNames: RuntimeHelperNames,
   clientBoundaryHelperName: string | undefined,
   inlineMemoComponents: ReadonlyMap<string, CompatInlineMemo>,
+  nonNullishComponents: ReadonlySet<string>,
   options: { dev?: boolean; filename?: string },
 ): string {
   const templateName = moduleAllocator("_tmpl_" + component.name, component.bindingNames);
@@ -521,6 +536,7 @@ function emitComponent(
       helperNames,
       clientBoundaryHelperName,
       inlineMemoComponents,
+      nonNullishComponents,
       debugLabel,
       ownerDeclarations: [],
       listBindingCaches: new Map(),
@@ -550,6 +566,7 @@ function emitComponent(
       helperNames,
       clientBoundaryHelperName,
       inlineMemoComponents,
+      nonNullishComponents,
       debugLabel,
       ownerDeclarations: [],
       listBindingCaches: new Map(),
@@ -580,6 +597,7 @@ function emitComponent(
     helperNames,
     clientBoundaryHelperName,
     inlineMemoComponents,
+    nonNullishComponents,
     debugLabel,
     ownerDeclarations: [],
     listBindingCaches: new Map(),
@@ -693,12 +711,27 @@ interface EmitSetupState {
   helperNames: RuntimeHelperNames;
   clientBoundaryHelperName?: string | undefined;
   inlineMemoComponents: ReadonlyMap<string, CompatInlineMemo>;
+  nonNullishComponents: ReadonlySet<string>;
   debugLabel?: string | undefined;
   compilerKeyedEventSlotKeys?: ReadonlyMap<string, string> | undefined;
   compilerKeyedElementPath?: string | undefined;
   compilerKeyedRowContext?: string | undefined;
   ownerDeclarations: string[];
   listBindingCaches: Map<Extract<JsxNodeIr, { kind: "list" }>, string>;
+}
+
+/** Reports whether a component call is proven to return a DOM node rather than a render value. */
+function returnsRenderedNode(
+  node: Extract<JsxNodeIr, { kind: "component" }>,
+  state: EmitSetupState,
+): boolean {
+  return (
+    node.clientReference === undefined &&
+    node.runtime !== "compat" &&
+    node.async !== true &&
+    !state.inlineMemoComponents.has(node.name) &&
+    state.nonNullishComponents.has(node.name)
+  );
 }
 
 function emitDynamicOptions(debugLabel: string | undefined, memo = false): string {
@@ -724,18 +757,25 @@ function emitSetup(
   }
 
   if (node.kind === "component") {
-    const componentVar = state.allocateName("_component");
-    lines.push(
-      `  const ${componentVar} = ${emitComponentCall(
-        node.name,
-        node.props,
-        node.children,
-        state,
-        node.clientReference === undefined
-          ? undefined
-          : { moduleId: node.clientReference.moduleId, name: node.name },
-      )};`,
+    const componentCall = emitComponentCall(
+      node.name,
+      node.props,
+      node.children,
+      state,
+      node.clientReference === undefined
+        ? undefined
+        : { moduleId: node.clientReference.moduleId, name: node.name },
     );
+
+    // A same-module component the emitter itself lowers always returns a node,
+    // so the nullish and boolean render-value guard around its call is dead.
+    if (returnsRenderedNode(node, state)) {
+      lines.push(`  ${path}.replaceWith(${componentCall});`);
+      return lines.join("\n");
+    }
+
+    const componentVar = state.allocateName("_component");
+    lines.push(`  const ${componentVar} = ${componentCall};`);
     lines.push(`  if (${componentVar} == null || typeof ${componentVar} === "boolean") {`);
     lines.push(`    ${path}.remove();`);
     lines.push(`  } else {`);
