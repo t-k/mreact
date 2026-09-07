@@ -50,6 +50,50 @@ describe("bindProp", () => {
     dispose();
   });
 
+  test("retargets a bound defaultValue onto the element default without touching a dirty value", () => {
+    const seed = cell("server-seed");
+    const client = document.createElement("input") as HTMLInputElement & {
+      __mreactPropBindings?: Array<{ retarget(element: Element): void }>;
+    };
+    const server = document.createElement("input");
+    server.setAttribute("value", "stale-default");
+    server.value = "typed by the user before hydration";
+
+    const dispose = withPropBindingMetadata(() =>
+      bindProp(client, "defaultValue", () => seed.get()),
+    );
+    client.__mreactPropBindings?.[0]?.retarget(server);
+
+    // The retarget does write, but `defaultValue` resolves to the element
+    // default, which a dirty input no longer mirrors, so it cannot overwrite
+    // what the user typed.
+    expect(server.getAttribute("value")).toBe("server-seed");
+    expect(server.value).toBe("typed by the user before hydration");
+
+    dispose();
+  });
+
+  test("retargets a bound value onto the live value so controlled inputs stay authoritative", () => {
+    const controlled = cell("server-controlled");
+    const client = document.createElement("input") as HTMLInputElement & {
+      __mreactPropBindings?: Array<{ retarget(element: Element): void }>;
+    };
+    const server = document.createElement("input");
+    server.setAttribute("value", "server-controlled");
+    server.value = "typed by the user before hydration";
+
+    const dispose = withPropBindingMetadata(() =>
+      bindProp(client, "value", () => controlled.get()),
+    );
+    client.__mreactPropBindings?.[0]?.retarget(server);
+
+    // The bound value owns a controlled input, so discarding pre-hydration
+    // keystrokes here is the contract rather than a defect.
+    expect(server.value).toBe("server-controlled");
+
+    dispose();
+  });
+
   test("updates DOM properties", async () => {
     const disabled = cell(false);
     const button = document.createElement("button");
