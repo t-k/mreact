@@ -1,4 +1,5 @@
 import {
+  batch,
   cell,
   computed,
   createCleanupScope,
@@ -346,14 +347,19 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     const ownedValue = cloneValue(value);
     updateDirtyField(name, value);
     const valueChanged = !Object.is(previous.values[name], ownedValue);
-    if (valueChanged) {
-      invalidateFieldValidations([name, ...dependentFieldsFor(name)]);
-    }
-    commit({
-      values: {
-        ...previous.values,
-        [name]: ownedValue,
-      },
+    // Both writes land before any subscriber derives. An array field writes its row
+    // keys before its values, so a derivation between these two commits would see the
+    // new keys against the old value length and drop a live row's key.
+    batch(() => {
+      if (valueChanged) {
+        invalidateFieldValidations([name, ...dependentFieldsFor(name)]);
+      }
+      commit({
+        values: {
+          ...previous.values,
+          [name]: ownedValue,
+        },
+      });
     });
 
     if (validateOn.has("change")) {
