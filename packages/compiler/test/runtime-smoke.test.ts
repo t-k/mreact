@@ -1911,6 +1911,89 @@ export function App() {
     expect(calls()).toEqual(["key"]);
   });
 
+  test("client transform memoizes every computed destructuring key", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const state = cell({ label: undefined, other: "B" });
+const calls = globalThis.__computedKeyNames ??= [];
+function key(name) {
+  calls.push(name);
+  return name;
+}
+
+export function App() {
+  const { [key("label")]: label = "fallback", [key("other")]: other } = state.get();
+  return <main>
+    <button type="button" onClick={() => state.set({ label: "C", other: "D" })}>Update</button>
+    <span>{label}:{other}</span>
+  </main>;
+}`,
+      filename: "computed-keys-evaluated-once.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code.match(/let __mreactComputedKey_\d+;/g)).toHaveLength(2);
+    (globalThis as typeof globalThis & { __computedKeyNames?: string[] }).__computedKeyNames = [];
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const calls = () =>
+      (globalThis as typeof globalThis & { __computedKeyNames?: string[] }).__computedKeyNames ??
+      [];
+
+    expect(node.querySelector("span")?.textContent).toBe("fallback:B");
+    expect(calls()).toEqual(["label", "other"]);
+
+    node.querySelector("button")?.click();
+    await flushEffects();
+
+    expect(node.querySelector("span")?.textContent).toBe("C:D");
+    expect(calls()).toEqual(["label", "other"]);
+  });
+
+  test("client transform preserves computed keys inside array destructuring", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const state = cell([{ label: "A", other: "B" }]);
+const calls = globalThis.__nestedComputedKeyCalls ??= [];
+function key() {
+  calls.push("key");
+  return "label";
+}
+
+export function App() {
+  const [{ [key()]: label, ...rest }] = state.get();
+  return <main>
+    <button type="button" onClick={() => state.set([{ label: "C", other: "D" }])}>Update</button>
+    <span>{label}:{rest.other}</span>
+  </main>;
+}`,
+      filename: "nested-computed-key-array-destructuring.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    (
+      globalThis as typeof globalThis & { __nestedComputedKeyCalls?: string[] }
+    ).__nestedComputedKeyCalls = [];
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const calls = () =>
+      (globalThis as typeof globalThis & { __nestedComputedKeyCalls?: string[] })
+        .__nestedComputedKeyCalls ?? [];
+
+    expect(node.querySelector("span")?.textContent).toBe("A:B");
+    expect(calls()).toEqual(["key"]);
+
+    node.querySelector("button")?.click();
+    await flushEffects();
+
+    expect(node.querySelector("span")?.textContent).toBe("C:D");
+    expect(calls()).toEqual(["key"]);
+  });
+
   test("client transform tracks computed object aliases of reactive reads", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";
@@ -2098,6 +2181,33 @@ export function App() {
     expect(node.textContent).toContain("B");
   });
 
+  test("client and server assign the correct render mode to lazy JSX aliases", () => {
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+const state = cell("A");
+export function App() {
+  const node = <span>{state.get()}</span>;
+  return <div>{node}</div>;
+}`;
+    const client = transform({
+      code,
+      filename: "lazy-render-mode.tsx",
+      target: "client",
+      dev: false,
+    });
+    const server = transform({
+      code,
+      filename: "lazy-render-mode.tsx",
+      target: "server",
+      dev: false,
+    });
+
+    expect(client.diagnostics).toEqual([]);
+    expect(server.diagnostics).toEqual([]);
+    expect(client.code).toContain("insertDynamic(");
+    expect(client.code).not.toContain("_renderServerValue(node)");
+    expect(server.code).toContain("_renderServerValue(node)");
+  });
+
   test("client transform keeps fragment child positions after a dynamic sibling", async () => {
     const output = transform({
       code: `export function App() {
@@ -2114,6 +2224,34 @@ export function App() {
     expect(node.querySelector("i")?.textContent).toBe("A");
     expect(node.querySelector("span")?.textContent).toBe("B");
     expect(node.textContent).toBe("AB");
+  });
+
+  test("client transform uses the live anchor before a later component child", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const value = cell(1);
+
+function Child() {
+  return <button type="button" onClick={() => value.set(2)}>B</button>;
+}
+
+export function App() {
+  return <div>{value.get() && <i>{value.get()}</i>}<Child /></div>;
+}`,
+      filename: "live-anchor-before-component.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("insertDynamic(_root, _root.childNodes[0]");
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+
+    expect(node.textContent).toBe("1B");
+    node.querySelector("button")?.click();
+    await flushEffects();
+    expect(node.textContent).toBe("2B");
   });
 
   test("client transform preserves select attribute evaluation order across spreads", async () => {
@@ -2363,6 +2501,54 @@ export function App() {
     node.querySelector("button")?.click();
     await flushEffects();
     expect(node.querySelector("[data-testid='slot'] b")?.textContent).toBe("P");
+  });
+
+  test("client transform evaluates ordinary component child expressions at the call site", async () => {
+    const output = transform({
+      code: `const calls = globalThis.__ordinaryChildCalls ??= [];
+function value() {
+  calls.push("value");
+  return "child";
+}
+
+function PanelSlot(props) {
+  return <section>{props.open ? props.children : null}</section>;
+}
+
+export function App() {
+  return <PanelSlot open={false}>{value()}</PanelSlot>;
+}`,
+      filename: "ordinary-component-child-expression.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    (globalThis as typeof globalThis & { __ordinaryChildCalls?: string[] }).__ordinaryChildCalls =
+      [];
+    await runClientComponent(output.code);
+
+    expect(
+      (globalThis as typeof globalThis & { __ordinaryChildCalls?: string[] }).__ordinaryChildCalls,
+    ).toEqual(["value"]);
+  });
+
+  test("client transform leaves ordinary identifier component children eager", () => {
+    const output = transform({
+      code: `const label = "child";
+function PanelSlot(props) {
+  return <section>{props.open ? props.children : null}</section>;
+}
+export function App() {
+  return <PanelSlot open={false}>{label}</PanelSlot>;
+}`,
+      filename: "ordinary-identifier-component-child.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("createMemo(null, null");
   });
 
   test("client transform defers component children into the branch owner", async () => {

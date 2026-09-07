@@ -184,15 +184,17 @@ export function formatOxcUntrackedReactiveAliasDeclaration(
       (typeof id.name === "string" && aliases.has(id.name)) ||
       (id.type !== "Identifier" && hasOxcReactiveAliasBinding(id, aliases));
 
-    if (hasAlias && start !== undefined && end !== undefined) {
-      collectOxcComputedKeyNodes(id, computedKeys);
-      replacements.push({
-        start,
-        end,
-        name: typeof id.name === "string" ? id.name : "pattern",
-        text: `${OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER}(() => (${readSource(code, initializer)}))`,
-      });
+    if (!hasAlias || start === undefined || end === undefined) {
+      continue;
     }
+
+    collectOxcComputedKeyNodes(id, computedKeys);
+    replacements.push({
+      start,
+      end,
+      name: typeof id.name === "string" ? id.name : "pattern",
+      text: `${OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER}(() => (${readSource(code, initializer)}))`,
+    });
   }
 
   for (const [start, key] of computedKeys) {
@@ -226,7 +228,6 @@ export function formatOxcUntrackedReactiveAliasDeclaration(
   }
 
   const computedKeyDeclarations = [...computedKeys.keys()]
-    .sort((left, right) => left - right)
     .map((start) => `let ${computedKeyBindingName(start)};`)
     .join("\n");
 
@@ -312,7 +313,7 @@ function collectOxcPatternReactiveAliases(
   code: string,
   pattern: Record<string, unknown>,
   initializerCode: string,
-  memoizeComputedKeys = false,
+  memoizeComputedKeys: boolean,
 ): Map<string, string> {
   const aliases = new Map<string, string>();
 
@@ -331,7 +332,7 @@ function collectOxcPatternReactiveAliasesInto(
   sourceCode: string,
   aliases: Map<string, string>,
   code: string,
-  memoizeComputedKeys = false,
+  memoizeComputedKeys: boolean,
 ): void {
   if (pattern.type === "Identifier" && typeof pattern.name === "string") {
     aliases.set(pattern.name, sourceCode);
@@ -414,7 +415,7 @@ function collectOxcPatternReactiveAliasesInto(
 function readPropertyKeyCode(
   property: Record<string, unknown>,
   code: string,
-  memoizeComputedKeys = false,
+  memoizeComputedKeys: boolean,
 ): string | undefined {
   const key = readObject(property.key);
 
@@ -440,7 +441,7 @@ function readPropertyKeyCode(
 function readPropertyAccess(
   property: Record<string, unknown>,
   code: string,
-  memoizeComputedKeys = false,
+  memoizeComputedKeys: boolean,
 ): string | undefined {
   const key = readPropertyKeyCode(property, code, memoizeComputedKeys);
   if (key === undefined) return undefined;
@@ -450,7 +451,7 @@ function readPropertyAccess(
 function readExcludedProperty(
   property: Record<string, unknown>,
   code: string,
-  memoizeComputedKeys = false,
+  memoizeComputedKeys: boolean,
 ): string | undefined {
   const key = readPropertyKeyCode(property, code, memoizeComputedKeys);
   if (key === undefined) return undefined;
@@ -496,10 +497,7 @@ function collectOxcComputedKeyNodes(
 
   if (pattern.type === "ArrayPattern") {
     for (const elementValue of readArray(pattern.elements)) {
-      const element = readObject(elementValue);
-      if (Object.keys(element).length > 0) {
-        collectOxcComputedKeyNodes(element, keys);
-      }
+      collectOxcComputedKeyNodes(readObject(elementValue), keys);
     }
   }
 }

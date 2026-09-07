@@ -807,8 +807,7 @@ function emitSetup(
 
   let sawStaticText = false;
   let sawComponentMutation = false;
-  const ownsStableChildrenSnapshot =
-    stableChildrenName !== undefined && inheritedStableChildrenName === undefined;
+  const ownsStableChildrenSnapshot = inheritedStableChildrenName === undefined;
 
   for (let sourceChildIndex = 0; sourceChildIndex < children.length; sourceChildIndex += 1) {
     const child = children[sourceChildIndex] as JsxNodeIr;

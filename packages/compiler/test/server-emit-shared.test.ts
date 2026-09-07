@@ -715,6 +715,76 @@ export function App(props) {
     );
   });
 
+  test("string and stream emitters keep computed destructuring aliases executable", async () => {
+    const compiled =
+      compileServerPair(`const state = { get() { return { label: "A", other: "B" }; } };
+const calls = globalThis.__serverComputedKeyCalls ??= [];
+function key() {
+  calls.push("key");
+  return "label";
+}
+export function App() {
+  const { [key()]: label, ...rest } = state.get();
+  return <main><span>{label}:{rest.other}</span></main>;
+}`);
+    expect(runServerComponent(compiled.string)).toBe(
+      "<main><span>A<!-- -->:<!-- -->B</span></main>",
+    );
+
+    await expect(runServerStreamComponent(compiled.stream)).resolves.toBe(
+      "<main><span>A<!-- -->:<!-- -->B</span></main>",
+    );
+  });
+
+  test("string and stream emitters only collapse direct children expressions", () => {
+    const ordinary = compileServerPair(`function Shell(props) {
+  return <div>{props.children}</div>;
+}
+export function App(props) {
+  return <Shell>{props.label}</Shell>;
+}`);
+    expect(ordinary.string).not.toContain("children: props.label");
+    expect(ordinary.stream).not.toContain("children: props.label");
+
+    const multiple = compileServerPair(`function Shell(props) {
+  return <div>{props.children}{"!"}</div>;
+}
+export function App(props) {
+  return <Shell>{props.children}{"!"}</Shell>;
+}`);
+    expect(multiple.string).not.toContain("children: props.children");
+    expect(multiple.stream).not.toContain("children: props.children");
+
+    const routerLink = compileServerPair(`import { Link } from "@reckona/mreact-router/link";
+export function App(props) {
+  return <Link href="/next">{props.children}</Link>;
+}`);
+    expect(routerLink.string).toContain("Link.trustedHtml(");
+    expect(routerLink.stream).toContain("Link.trustedHtml(");
+  });
+
+  test("string and stream client boundary fallbacks preserve the supplied children override", () => {
+    const source = `import { AppShell } from "./AppShell";
+export function App(props) {
+  return <AppShell>{props.children}</AppShell>;
+}`;
+    for (const serverOutput of ["string", "stream"] as const) {
+      const output = transform({
+        code: source,
+        filename: "App.tsx",
+        target: "server",
+        serverOutput,
+        dev: true,
+        clientBoundaryImports: ["./AppShell"],
+        clientBoundaryFallbackImports: ["./AppShell"],
+      });
+
+      expect(output.diagnostics).toEqual([]);
+      expect(output.code).toContain("children: _childrenHtml");
+      expect(output.code).not.toContain("children: props.children");
+    }
+  });
+
   test("string and stream emitters carry select value through an option component", async () => {
     await expectServerPairHtml(
       `function StatusOption(props) {
