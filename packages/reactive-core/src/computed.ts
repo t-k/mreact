@@ -49,6 +49,11 @@ function createComputed<T>(
 ): ReadonlyCell<T> {
   let hasValue = false;
   let value: T;
+  // The value the current subscribers last heard about. It lags behind the
+  // cache when a downstream reader recomputes this computed before its own
+  // queued publish runs, so the publish still sees the change to announce.
+  let publishedHasValue = false;
+  let publishedValue: T;
   let dirty = true;
   let untrackedDependencies: Array<NonNullable<ReturnType<typeof createUntrackedDependency>>> = [];
   const equals = typeof options === "function" ? options : (options?.equals ?? Object.is);
@@ -133,6 +138,8 @@ function createComputed<T>(
       source.onNoSubscribers = undefined;
       hasValue = false;
       value = undefined as T;
+      publishedHasValue = false;
+      publishedValue = undefined as T;
       dirty = true;
       untrackedDependencies = [];
       resource.dispose();
@@ -143,16 +150,20 @@ function createComputed<T>(
   registerCleanup(computation.dispose);
 
   function publishIfChanged(): void {
-    const previousHasValue = hasValue;
-    const previousValue = value;
+    const previousHasValue = publishedHasValue;
+    const previousValue = publishedValue;
 
     try {
       const nextValue = recompute();
+      publishedValue = nextValue;
+      publishedHasValue = true;
 
       if (!previousHasValue || !equals(previousValue, nextValue)) {
         notifySubscribers(source);
       }
     } catch {
+      publishedHasValue = false;
+      publishedValue = undefined as T;
       runtimeState.batchDepth += 1;
 
       try {
@@ -331,6 +342,13 @@ function createComputed<T>(
         // readers observe the refreshed value through their snapshots. The
         // current reader publishes its own result after this nested read.
         bumpSourceVersion(source);
+      }
+
+      if (!computation.queued) {
+        // No publish is pending, so nobody is owed a notification for this
+        // value: a queued publish keeps its own baseline until it runs.
+        publishedValue = nextValue;
+        publishedHasValue = true;
       }
 
       return nextValue;

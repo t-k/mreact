@@ -113,9 +113,25 @@ function effectRun(this: ReactiveComputation): void {
   }
 
   if (computation.cleanup !== undefined) {
+    // Drop the reference before calling so a cleanup that disposes this effect
+    // or its owning scope cannot run the same cleanup a second time.
     const currentCleanup = computation.cleanup;
-    currentCleanup();
     computation.cleanup = undefined;
+
+    try {
+      currentCleanup();
+    } catch (error) {
+      // A failed cleanup keeps its subscriptions and is retried on the next
+      // update, so restore it unless the cleanup itself stopped the effect.
+      if (!computation.disposed) {
+        computation.cleanup = currentCleanup;
+      }
+      throw error;
+    }
+
+    if (computation.disposed) {
+      return;
+    }
   }
 
   const previousDepsSize = computation.deps.size;
