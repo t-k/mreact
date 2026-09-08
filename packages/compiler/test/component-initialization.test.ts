@@ -150,8 +150,9 @@ export function App() {
   return <main>{label.get()}</main>;
 }`);
 
-    expect(code).toContain('import { bindText, createTemplate } from "@reckona/mreact-reactive-dom";');
-    expect(code).toContain("bindText(_text_0, label)");
+    expect(code).toContain('import { bindCellText } from "@reckona/mreact-reactive-dom/internal";');
+    expect(code).toContain("bindCellText(_text_0, label)");
+    expect(code).not.toContain("bindText,");
   });
 
   test("keeps the text binding import for text inside a conditional element branch", () => {
@@ -162,7 +163,7 @@ export function App() {
   return <main>{open.get() ? <span>{label.get()}</span> : null}</main>;
 }`);
 
-    expect(code).toContain("bindText");
+    expect(code).toContain("bindCellText");
     const node = compileClientComponent(code)() as HTMLElement;
 
     expect(node.textContent).toBe("");

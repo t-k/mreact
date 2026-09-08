@@ -6,6 +6,7 @@ export {
   bindCompilerKeyedText,
 } from "./bind-static-keyed-single-node-list.js";
 export { bindElementProperty } from "./bind-element-property.js";
+export { bindCellText } from "./bind-text.js";
 export { bindSelectValue } from "./bind-select-value.js";
 export type { SelectControlProps } from "./bind-select-value.js";
 export { markCompilerKeyedEventSlot } from "./compiler-keyed-events.js";

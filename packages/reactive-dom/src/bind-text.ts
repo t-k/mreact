@@ -71,6 +71,32 @@ export function bindText(
   return registerIdempotentDispose(dispose);
 }
 
+/**
+ * @internal Binds a text node straight to a native cell the compiler proved.
+ *
+ * The compiler emits this only for a `const name = cell(...)` binding whose
+ * identifier is never aliased, passed on or mutated, so the cell's own source
+ * can be subscribed without a tracked effect. Keeping this apart from bindText
+ * lets a page whose dynamic text is all proven cells drop the effect-backed
+ * generic path from its bundle.
+ */
+export function bindCellText(node: Text, cell: ReadonlyCell<unknown>): Dispose {
+  const reactiveText = node as Text & { __mreactReactiveText?: true };
+  reactiveText.__mreactReactiveText = true;
+
+  const dispose = subscribeCell(cell, (nextValue) => {
+    node.data = normalizeText(nextValue);
+  });
+
+  if (dispose === undefined) {
+    throw new Error("bindCellText expects a native reactive-core cell.");
+  }
+
+  node.data = normalizeText(untrack(() => cell.get()));
+
+  return registerIdempotentDispose(dispose);
+}
+
 /** @internal Binds compiler-owned text to a source while preserving additional dependencies. */
 export function bindTextWithAdaptiveSource(
   node: Text,

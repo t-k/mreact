@@ -62,6 +62,7 @@ import {
 } from "@reckona/mreact-server";
 import { stripTypeScriptWithOxc } from "../src/oxc-transform.js";
 import {
+  bindCellText,
   bindElementProperty,
   bindSelectValue,
   bindCompilerKeyedCellText,
@@ -502,7 +503,7 @@ function extractClientInternalRuntimeEntries(
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>bindCompilerKeyedCellText|bindCompilerKeyedPropertyText|bindCompilerKeyedSingleNodeList|bindCompilerKeyedText|bindListWithRenderArity|bindElementProperty|bindSelectValue|createCompilerListBindingCache|insertBranch|createListWithRenderArity|createMemo|createSvgTemplate|createSvgTemplateElement|insertMemo|insertMemoDynamic|installMemoRenderValueNormalizer|markCompilerKeyedEventSlot|trackCompilerKeyedItem)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+      /^(?<importedName>bindCellText|bindCompilerKeyedCellText|bindCompilerKeyedPropertyText|bindCompilerKeyedSingleNodeList|bindCompilerKeyedText|bindListWithRenderArity|bindElementProperty|bindSelectValue|createCompilerListBindingCache|insertBranch|createListWithRenderArity|createMemo|createSvgTemplate|createSvgTemplateElement|insertMemo|insertMemoDynamic|installMemoRenderValueNormalizer|markCompilerKeyedEventSlot|trackCompilerKeyedItem)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
     );
 
     if (match?.groups === undefined) {
@@ -514,6 +515,8 @@ function extractClientInternalRuntimeEntries(
       value:
         match.groups.importedName === "bindElementProperty"
           ? bindElementProperty
+          : match.groups.importedName === "bindCellText"
+            ? bindCellText
           : match.groups.importedName === "insertBranch"
             ? insertBranch
           : match.groups.importedName === "bindSelectValue"

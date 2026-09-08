@@ -32,7 +32,7 @@ export function App() {
   return <main>{value.get()}</main>;
 }`);
 
-  expect(code).toContain("bindText(_text_0, value)");
+  expect(code).toContain("bindCellText(_text_0, value)");
   const App = compileClientComponent(code);
   const host = document.createElement("div");
   const dispose = createRoot(host, App);
@@ -60,7 +60,7 @@ export function App() {
   return <main><span>{count.get()}</span><button onClick={() => count.setValue(2)}>+</button></main>;
 }`);
 
-    expect(code).not.toContain("bindText(_text_0, count)");
+    expect(code).not.toContain("bindCellText(_text_0, count)");
     const host = document.createElement("div");
     const dispose = createRoot(host, compileClientComponent(code));
 
@@ -86,7 +86,7 @@ export function App() {
   return <main>{count.get()}</main>;
 }`);
 
-    expect(code).not.toContain("bindText(_text_0, count)");
+    expect(code).not.toContain("bindCellText(_text_0, count)");
     expect(code).toContain("count.get()");
   });
 
@@ -97,7 +97,7 @@ export function App() {
   return <main>{count.get()}</main>;
 }`);
 
-    expect(code).toContain("bindText(_text_0, count)");
+    expect(code).toContain("bindCellText(_text_0, count)");
     expect(code).not.toContain("() => (count.get())");
   });
 
@@ -143,7 +143,7 @@ export function App() {
   return <main><span>{count.get()}</span><button onClick={() => count.set(count.get() + 1)}>+</button></main>;
 }`);
 
-    expect(code).toContain("bindText(_text_0, count)");
+    expect(code).toContain("bindCellText(_text_0, count)");
     const host = document.createElement("div");
     const dispose = createRoot(host, compileClientComponent(code));
 
@@ -235,7 +235,7 @@ export function App() {
   return <main>Count: {count.get()} items</main>;
 }`);
 
-    expect(code).toContain("bindText(_text_0, count)");
+    expect(code).toContain("bindCellText(_text_0, count)");
   });
 
   test("leaves a keyed row initial text child without any bindText call", () => {
@@ -256,19 +256,26 @@ export function App() {
     expect(code).not.toContain("bindText(");
   });
 
-  test("emits fewer bytes than the equivalent generic thunk", () => {
+  test("drops the generic text binding import when every text binding is a proven cell", () => {
     const code = compile(`import { cell } from "@reckona/mreact-reactive-core";
 export function App() {
   const count = cell(0);
   return <main><span>{count.get()}</span><button onClick={() => count.set(count.get() + 1)}>+</button></main>;
 }`);
-    const genericEquivalent = code.replace(
-      "bindText(_text_0, count)",
-      "bindText(_text_0, () => (count.get()))",
-    );
 
-    expect(genericEquivalent).not.toBe(code);
-    expect(code.length).toBeLessThan(genericEquivalent.length);
-    expect(code).not.toContain("@reckona/mreact-reactive-dom/internal");
+    expect(code).toContain('import { bindCellText } from "@reckona/mreact-reactive-dom/internal";');
+    expect(code).not.toMatch(/import \{[^}]*\bbindText\b[^}]*\} from "@reckona\/mreact-reactive-dom"/u);
+  });
+
+  test("keeps the generic text binding import beside the cell binding for an unproven sibling", () => {
+    const code = compile(`import { cell } from "@reckona/mreact-reactive-core";
+export function App() {
+  const count = cell(0);
+  return <main><span>{count.get()}</span><em>{count.get() * 2}</em></main>;
+}`);
+
+    expect(code).toContain("bindCellText(_text_0, count)");
+    expect(code).toContain("bindText(_text_1, () => (count.get() * 2))");
+    expect(code).toMatch(/import \{[^}]*\bbindText\b[^}]*\} from "@reckona\/mreact-reactive-dom"/u);
   });
 });

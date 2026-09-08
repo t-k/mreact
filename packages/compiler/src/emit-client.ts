@@ -103,6 +103,7 @@ type RuntimeHelperName =
   | "bindElementProperty"
   | "bindSelectValue"
   | "bindSpreadProps"
+  | "bindCellText"
   | "bindText"
   | "createListWithRenderArity"
   | "createMemo"
@@ -152,6 +153,7 @@ function allocateRuntimeHelperNames(
     bindElementProperty: "bindElementProperty",
     bindSelectValue: "bindSelectValue",
     bindSpreadProps: "bindSpreadProps",
+    bindCellText: "bindCellText",
     bindText: "bindText",
     createListWithRenderArity: "createListWithRenderArity",
     createMemo: "createMemo",
@@ -275,7 +277,11 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
         } else if (context === "setup" && node.renderMode !== "compiler-keyed-initial-text") {
           // Render-value expressions are inlined into the branch expression, so
           // they never produce a text binding of their own.
-          specifiers.add("bindText");
+          if (provenNativeCellTextBinding(node) === undefined) {
+            specifiers.add("bindText");
+          } else {
+            internalSpecifiers.add("bindCellText");
+          }
         }
       }
 
@@ -1049,7 +1055,9 @@ function emitSetup(
       } else if (child.renderMode !== "compiler-keyed-initial-text") {
         const provenCell = provenNativeCellTextBinding(child);
         lines.push(
-          `  ${state.helperNames.bindText}(${textVar}, ${provenCell ?? `() => (${child.code})`});`,
+          provenCell === undefined
+            ? `  ${state.helperNames.bindText}(${textVar}, () => (${child.code}));`
+            : `  ${state.helperNames.bindCellText}(${textVar}, ${provenCell});`,
         );
       }
       childIndex += 1;
