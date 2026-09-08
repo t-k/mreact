@@ -29,11 +29,11 @@
       }
     },
     "forms": {
-      "initialBrotliBytes": 11200,
-      "initialGzipBytes": 12400,
+      "initialBrotliBytes": 11900,
+      "initialGzipBytes": 13200,
       "measuredBaseline": {
-        "initialBrotliBytes": 11031,
-        "initialGzipBytes": 12235
+        "initialBrotliBytes": 11419,
+        "initialGzipBytes": 12658
       }
     },
     "query": {
