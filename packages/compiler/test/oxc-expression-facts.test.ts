@@ -66,7 +66,7 @@ describe("native cell factory import collection", () => {
       'import * as cell from "@reckona/mreact-reactive-core";',
       'export { cell } from "@reckona/mreact-reactive-core";',
       'export * from "@reckona/mreact-reactive-core";',
-      'export const cell = 1;',
+      "export const cell = 1;",
     ];
 
     for (const source of sources) {
@@ -98,8 +98,10 @@ describe("native cell binding collection", () => {
 
   test("returns nothing when no factory name is known", () => {
     expect(
-      collectOxcNativeCellBindings(parseStatements(`${cellImport}const count = cell(0);`), new Set())
-        .size,
+      collectOxcNativeCellBindings(
+        parseStatements(`${cellImport}const count = cell(0);`),
+        new Set(),
+      ).size,
     ).toBe(0);
   });
 
@@ -128,10 +130,9 @@ describe("native cell binding collection", () => {
 
   test("keeps the last declaration when a name is declared twice", () => {
     const code = `${cellImport}const count = cell(0);\nconst count = cell(1);`;
-    const binding = collectOxcNativeCellBindings(
-      parseStatements(code),
-      factories,
-    ).get("count") as ResolvedBindingIr;
+    const binding = collectOxcNativeCellBindings(parseStatements(code), factories).get(
+      "count",
+    ) as ResolvedBindingIr;
 
     expect(code.slice(binding.start, binding.end)).toBe("count = cell(1)");
   });
@@ -271,6 +272,33 @@ describe("expression facts analysis", () => {
 });
 
 describe("component-scoped native cell resolution", () => {
+  test.each([
+    ["const count = { get: () => 7 };", [], false],
+    ["class count { static get() { return 7; } }", [], false],
+    ["let count = { get: () => 7 };", [], false],
+    ["var count = { get: () => 7 };", [], false],
+    ["const [count] = [{ get: () => 7 }];", [], false],
+    ["const make = () => ({ get: () => 7 }); const count = make();", [], false],
+    ["const count = make();", ["make"], false],
+    ["{ var make = () => ({ get: () => 7 }); } const count = make();", [], false],
+    ["const count = make(7);", [], true],
+    ["{ const make = () => 7; } const count = make(7);", [], true],
+    ["function unrelated() { const make = () => 7; } const count = make(7);", [], true],
+    ["{ const count = 7; }", [], true],
+  ])("resolves declaration scope for %s", (local, parameters, native) => {
+    const code = `import { cell as make } from "@reckona/mreact-reactive-core";
+const count = make(0); export function App() { ${local} return null; }`;
+    const { body, program } = parseProgram(code);
+    const componentBody = (body[2] as { declaration: { body: { body: unknown[] } } }).declaration
+      .body.body;
+    const resolved = resolveOxcComponentNativeCellBindings(
+      collectOxcModuleExpressionFacts(program, body),
+      componentBody,
+      parameters,
+    );
+    expect(resolved?.has("count") ?? false).toBe(native);
+  });
+
   test("returns nothing when the module never imports the cell factory", () => {
     const { body, program } = parseProgram("export function App() { return null; }");
     const moduleFacts = collectOxcModuleExpressionFacts(program, body);
@@ -304,9 +332,9 @@ describe("component-scoped native cell resolution", () => {
     const { body, program } = parseProgram(code);
     const moduleFacts = collectOxcModuleExpressionFacts(program, body);
 
-    expect([...(resolveOxcComponentNativeCellBindings(moduleFacts, [], []) ?? [])].map(
-      ([name]) => name,
-    )).toEqual(["count"]);
+    expect(
+      [...(resolveOxcComponentNativeCellBindings(moduleFacts, [], []) ?? [])].map(([name]) => name),
+    ).toEqual(["count"]);
     expect(resolveOxcComponentNativeCellBindings(moduleFacts, [], ["count"])).toBeUndefined();
   });
 });
@@ -368,8 +396,12 @@ describe("expression facts contract", () => {
   });
 
   test("merging with the unknown fact set erases every proven fact", () => {
-    expect(mergeExpressionFacts(proven, UNKNOWN_EXPRESSION_FACTS)).toEqual(UNKNOWN_EXPRESSION_FACTS);
-    expect(mergeExpressionFacts(UNKNOWN_EXPRESSION_FACTS, proven)).toEqual(UNKNOWN_EXPRESSION_FACTS);
+    expect(mergeExpressionFacts(proven, UNKNOWN_EXPRESSION_FACTS)).toEqual(
+      UNKNOWN_EXPRESSION_FACTS,
+    );
+    expect(mergeExpressionFacts(UNKNOWN_EXPRESSION_FACTS, proven)).toEqual(
+      UNKNOWN_EXPRESSION_FACTS,
+    );
   });
 });
 
@@ -383,7 +415,9 @@ describe("exported cell escape", () => {
     ];
 
     for (const source of cases) {
-      expect([...collectOxcEscapedBindingNames(parseStatements(source))], source).toContain("count");
+      expect([...collectOxcEscapedBindingNames(parseStatements(source))], source).toContain(
+        "count",
+      );
     }
   });
 

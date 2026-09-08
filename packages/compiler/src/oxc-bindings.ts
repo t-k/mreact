@@ -103,3 +103,51 @@ export function readOxcParameterName(code: string, parameter: unknown): string {
 
   return readSource(code, parameter);
 }
+
+/** Collects declarations visible throughout a function body, excluding nested lexical scopes. */
+export function collectOxcFunctionBodyBindingNames(statements: readonly unknown[]): Set<string> {
+  const names = new Set<string>();
+  for (const statement of statements) {
+    const object = readObject(statement);
+    if (
+      object.type === "VariableDeclaration" ||
+      object.type === "FunctionDeclaration" ||
+      object.type === "ClassDeclaration"
+    ) {
+      for (const name of collectBindingNames(object)) names.add(name);
+    }
+  }
+  collectOxcScopedVarBindingNames({ type: "BlockStatement", body: statements }, names);
+  return names;
+}
+
+export function collectOxcScopedVarBindingNames(
+  root: Record<string, unknown>,
+  names: Set<string>,
+): void {
+  const pending: unknown[] = [root];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (Array.isArray(current)) {
+      for (const value of current) pending.push(value);
+      continue;
+    }
+    if (typeof current !== "object" || current === null) continue;
+    const object = readObject(current);
+    if (
+      object !== root &&
+      (object.type === "FunctionDeclaration" ||
+        object.type === "FunctionExpression" ||
+        object.type === "ArrowFunctionExpression" ||
+        object.type === "ClassDeclaration" ||
+        object.type === "ClassExpression" ||
+        object.type === "StaticBlock")
+    ) {
+      continue;
+    }
+    if (object.type === "VariableDeclaration" && object.kind === "var") {
+      for (const name of collectBindingNames(object)) names.add(name);
+    }
+    for (const value of Object.values(object)) pending.push(value);
+  }
+}

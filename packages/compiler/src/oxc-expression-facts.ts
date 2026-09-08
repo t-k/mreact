@@ -1,3 +1,4 @@
+import { collectOxcFunctionBodyBindingNames } from "./oxc-bindings.js";
 import type { ExpressionFactsIr, ResolvedBindingIr } from "./expression-facts.js";
 import { readArray, readObject, unwrapOxcParentheses } from "./oxc-node-utils.js";
 
@@ -395,10 +396,15 @@ export function resolveOxcComponentNativeCellBindings(
 
   const bindings = new Map<string, ResolvedBindingIr>(moduleFacts.moduleNativeCellBindings);
 
-  for (const [name, binding] of collectOxcNativeCellBindings(
-    bodyStatements,
-    moduleFacts.nativeCellFactoryNames,
-  )) {
+  const localNames = collectOxcFunctionBodyBindingNames(bodyStatements);
+  const factoryNames = new Set(moduleFacts.nativeCellFactoryNames);
+  for (const name of localNames) {
+    bindings.delete(name);
+    factoryNames.delete(name);
+  }
+  for (const name of shadowingNames) factoryNames.delete(name);
+
+  for (const [name, binding] of collectOxcNativeCellBindings(bodyStatements, factoryNames)) {
     bindings.set(name, binding);
   }
 

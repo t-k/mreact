@@ -30,6 +30,8 @@ import {
   collectBindingNames,
   collectBindingNamesFromPattern,
   collectImportBindingNames,
+  collectOxcScopedVarBindingNames,
+  collectOxcFunctionBodyBindingNames,
   formatStatement,
   readOxcParameterName,
 } from "./oxc-bindings.js";
@@ -1072,19 +1074,9 @@ function collectOxcFunctionLocalShadowedNames(
     inheritedShadowedNames,
   );
   const body = readObject(functionLike.body);
-  if (body.type === "BlockStatement") {
-    for (const statement of readArray(body.body)) {
-      const object = readObject(statement);
-      if (
-        object.type === "VariableDeclaration" ||
-        object.type === "FunctionDeclaration" ||
-        object.type === "ClassDeclaration"
-      ) {
-        for (const name of collectBindingNames(object)) shadowedNames.add(name);
-      }
-    }
+  for (const name of collectOxcFunctionBodyBindingNames(readArray(body.body))) {
+    shadowedNames.add(name);
   }
-  collectOxcScopedVarBindingNames(body, shadowedNames);
   return shadowedNames;
 }
 
@@ -1104,34 +1096,6 @@ function collectOxcFunctionParameterShadowedNames(
     }
   }
   return shadowedNames;
-}
-
-function collectOxcScopedVarBindingNames(root: Record<string, unknown>, names: Set<string>): void {
-  const pending: unknown[] = [root];
-  while (pending.length > 0) {
-    const current = pending.pop();
-    if (Array.isArray(current)) {
-      for (const value of current) pending.push(value);
-      continue;
-    }
-    if (typeof current !== "object" || current === null) continue;
-    const object = readObject(current);
-    if (
-      object !== root &&
-      (object.type === "FunctionDeclaration" ||
-        object.type === "FunctionExpression" ||
-        object.type === "ArrowFunctionExpression" ||
-        object.type === "ClassDeclaration" ||
-        object.type === "ClassExpression" ||
-        object.type === "StaticBlock")
-    ) {
-      continue;
-    }
-    if (object.type === "VariableDeclaration" && object.kind === "var") {
-      for (const name of collectBindingNames(object)) names.add(name);
-    }
-    for (const value of Object.values(object)) pending.push(value);
-  }
 }
 
 function collectOxcStaticBlockShadowedNames(
@@ -1997,7 +1961,10 @@ function analyzeOxcFunctionLikeComponent(
   const nativeCellBindings = resolveOxcComponentNativeCellBindings(
     moduleExpressionFacts,
     body,
-    [...parameters, ...reactiveAliasBindings.keys()],
+    [
+      ...collectOxcFunctionParameterShadowedNames(functionLike, new Set()),
+      ...reactiveAliasBindings.keys(),
+    ],
   );
   const childAnalysisContext = createOxcChildAnalysisContext(
     unshadowedBodyComponentNames,

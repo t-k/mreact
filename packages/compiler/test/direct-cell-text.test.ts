@@ -50,6 +50,68 @@ afterEach(() => {
 });
 
 describe("compiler direct cell text binding", () => {
+  test.each(["[cell]", "{ factory: cell }"])(
+    "resolves destructured factory parameter %s",
+    (parameter) => {
+      const source = `import { cell } from "@reckona/mreact-reactive-core";
+export function App(${parameter}) { const count = cell(); return <span>{count.get()}</span>; }`;
+      for (const directCellText of [true, false]) {
+        const output = transform({
+          code: source,
+          filename: "App.tsx",
+          target: "client",
+          dev: false,
+          clientSpecializations: { directCellText },
+        });
+        expect(output.diagnostics).toEqual([]);
+        expect(output.code).not.toContain("bindCellText(");
+        const factory = () => ({ get: () => 7 });
+        const props = parameter.startsWith("[") ? [factory] : { factory };
+        const App = compileClientComponent(output.code) as (props: unknown) => Node;
+        const host = document.createElement("div");
+        const dispose = createRoot(host, () => App(props));
+        try {
+          expect(host.textContent).toBe("7");
+        } finally {
+          dispose();
+        }
+      }
+    },
+  );
+
+  test.each([
+    ["local object", "const count = { get: () => 7 };"],
+    ["destructured object", "const { count } = { count: { get: () => 7 } };"],
+    ["local factory", "const cell = () => ({ get: () => 7 }); const count = cell();"],
+    ["factory declaration", "function cell() { return { get: () => 7 }; } const count = cell();"],
+    ["hoisted factory", "{ var cell = () => ({ get: () => 7 }); } const count = cell();"],
+  ])(
+    "resolves %s identically with direct text optimization enabled and disabled",
+    (_name, body) => {
+      const source = `import { cell } from "@reckona/mreact-reactive-core";
+const count = cell(0);
+export function App() { ${body} return <span>{count.get()}</span>; }`;
+      for (const enabled of [true, false]) {
+        const output = transform({
+          code: source,
+          filename: "App.tsx",
+          target: "client",
+          dev: false,
+          clientSpecializations: { directCellText: enabled },
+        });
+        expect(output.diagnostics).toEqual([]);
+        expect(output.code).not.toContain("bindCellText(");
+        const host = document.createElement("div");
+        const dispose = createRoot(host, compileClientComponent(output.code));
+        try {
+          expect(host.textContent).toBe("7");
+        } finally {
+          dispose();
+        }
+      }
+    },
+  );
+
   test("falls back to the getter thunk when the cell escapes through an alias", async () => {
     const code = compile(`import { cell } from "@reckona/mreact-reactive-core";
 export function App() {
@@ -94,16 +156,19 @@ export function App() {
     ["export const", "export const count = cell(0);"],
     ["export { name }", "const count = cell(0);\nexport { count };"],
     ["export { name as alias }", "const count = cell(0);\nexport { count as total };"],
-  ])("falls back to the getter thunk when the module cell is exported via %s", (_label, declaration) => {
-    const code = compile(`import { cell } from "@reckona/mreact-reactive-core";
+  ])(
+    "falls back to the getter thunk when the module cell is exported via %s",
+    (_label, declaration) => {
+      const code = compile(`import { cell } from "@reckona/mreact-reactive-core";
 ${declaration}
 export function App() {
   return <main>{count.get()}</main>;
 }`);
 
-    expect(code).not.toContain("bindCellText(_text_0, count)");
-    expect(code).toContain("count.get()");
-  });
+      expect(code).not.toContain("bindCellText(_text_0, count)");
+      expect(code).toContain("count.get()");
+    },
+  );
 
   test("still binds a module cell that is not exported straight to the text node", () => {
     const code = compile(`import { cell } from "@reckona/mreact-reactive-core";
@@ -289,7 +354,9 @@ export function App() {
 }`);
 
     expect(code).toContain('import { bindCellText } from "@reckona/mreact-reactive-dom/internal";');
-    expect(code).not.toMatch(/import \{[^}]*\bbindText\b[^}]*\} from "@reckona\/mreact-reactive-dom"/u);
+    expect(code).not.toMatch(
+      /import \{[^}]*\bbindText\b[^}]*\} from "@reckona\/mreact-reactive-dom"/u,
+    );
   });
 
   test("keeps the generic text binding import beside the cell binding for an unproven sibling", () => {
