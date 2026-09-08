@@ -186,6 +186,7 @@ function createComputed<T>(
 
   runtimeState.nextComputationId += 1;
   registerCleanup(computation.dispose);
+  source.computation = computation;
   if (!deferred) {
     source.publisher = computation;
   }
@@ -194,14 +195,14 @@ function createComputed<T>(
     if (runtimeState.pull?.checked.has(computation)) return;
     // Cell-only dependencies cannot hide a queued computed. Keep this common
     // clean-read path allocation-free during a wide computed flush.
-    let hasPublisher = false;
+    let hasComputation = false;
     for (const dependency of computation.deps) {
-      if (dependency.publisher !== undefined) {
-        hasPublisher = true;
+      if (dependency.computation !== undefined) {
+        hasComputation = true;
         break;
       }
     }
-    if (!hasPublisher) return;
+    if (!hasComputation) return;
 
     const previousContext = runtimeState.pull;
     const context = (runtimeState.pull ??= { checked: new Set(), active: new Set() });
@@ -227,9 +228,12 @@ function createComputed<T>(
       try {
         // An unqueued direct dependency can hide a queued ancestor. Walk in
         // dependency order, sharing proofs across diamonds and nested reads.
+        // Deferred computeds never queue a publish, but they forward the
+        // invalidation of an ancestor that does, so walk through them too.
         for (const dependency of current.deps) {
-          if (dependency.publisher !== undefined) {
-            pull(dependency.publisher, true);
+          const upstream = dependency.computation;
+          if (upstream !== undefined) {
+            pull(upstream, dependency.publisher !== undefined);
           }
         }
         if (publish && current.queued) {

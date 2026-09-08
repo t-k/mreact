@@ -1,13 +1,14 @@
 import { describe, expect, test } from "vitest";
 import {
   batch,
+  computed,
   cell,
   createCleanupScope,
   effect,
   runWithCleanupScope,
   untrack,
 } from "../src/index.js";
-import { deferredComputed } from "../src/internal.js";
+import { deferredComputed, setScheduler } from "../src/internal.js";
 import { flushEffects } from "../src/testing.js";
 
 describe("compiler deferred computed", () => {
@@ -119,3 +120,95 @@ describe("compiler deferred computed", () => {
     dispose();
   });
 });
+
+describe.each(["microtask", "sync", "queued"] as const)(
+  "batched reads across deferred computeds (%s scheduler)",
+  (scheduler) => {
+    function withScheduler(run: (drain: () => void) => Promise<void>): Promise<void> {
+      const callbacks: Array<() => void> = [];
+      const restore =
+        scheduler === "microtask"
+          ? () => {}
+          : setScheduler({
+              schedule: (callback) =>
+                scheduler === "sync" ? callback() : void callbacks.push(callback),
+            });
+      const drain = () => {
+        while (callbacks.length > 0) callbacks.shift()!();
+      };
+      return run(drain).finally(restore);
+    }
+
+    test.each([
+      ["computed -> deferred -> computed", false],
+      ["computed -> deferred -> deferred", true],
+    ])("reads the latest value through %s", (_, lastDeferred) =>
+      withScheduler(async (drain) => {
+        const source = cell(0);
+        const first = computed(() => source.get() + 1);
+        const middle = deferredComputed(() => first.get() + 1);
+        const last = lastDeferred
+          ? deferredComputed(() => middle.get() + 1)
+          : computed(() => middle.get() + 1);
+        const seen: number[] = [];
+        const stop = effect(() => {
+          seen.push(last.get());
+        });
+        try {
+          batch(() => {
+            source.setValue(1);
+            expect(last.get()).toBe(4);
+            expect(seen).toEqual([3]);
+            source.setValue(2);
+            expect(last.get()).toBe(5);
+            expect(seen).toEqual([3]);
+          });
+          expect(last.get()).toBe(5);
+          drain();
+          await flushEffects();
+          expect(seen).toEqual([3, 5]);
+        } finally {
+          stop();
+        }
+      }),
+    );
+
+    test("leaves unread consuming branches untouched while refreshing a read branch", () =>
+      withScheduler(async (drain) => {
+        const consumed: number[] = [];
+        function* values(value: number) {
+          consumed.push(value);
+          yield value;
+        }
+        const count = cell(0);
+        const items = cell(values(1));
+        const first = computed(() => count.get() + 1);
+        const middle = deferredComputed(() => first.get() + 1);
+        const last = computed(() => middle.get() + 1);
+        const consumer = deferredComputed(() => {
+          const [value] = items.get();
+          return value!;
+        });
+        const seen: number[] = [];
+        const stop = effect(() => {
+          seen.push(last.get() * 100 + consumer.get());
+        });
+        expect(consumed).toEqual([1]);
+        try {
+          batch(() => {
+            count.setValue(1);
+            items.set(values(2));
+            expect(last.get()).toBe(4);
+            expect(consumed).toEqual([1]);
+            expect(seen).toEqual([301]);
+          });
+          drain();
+          await flushEffects();
+          expect(consumed).toEqual([1, 2]);
+          expect(seen).toEqual([301, 402]);
+        } finally {
+          stop();
+        }
+      }));
+  },
+);

@@ -24,6 +24,12 @@ export interface Source {
   debugWriters?: Map<number, string> | undefined;
   /** The computed that publishes this source, so readers can flush its queued publish first. */
   publisher?: ReactiveComputation | undefined;
+  /**
+   * The computed behind this source, publishing or not. Readers walk it to
+   * find queued ancestors hidden behind a deferred computed without running
+   * the deferred computation itself.
+   */
+  computation?: ReactiveComputation | undefined;
 }
 
 export interface ReactiveComputation {
