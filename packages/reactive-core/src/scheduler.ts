@@ -69,7 +69,17 @@ export function queueComputation(computation: ReactiveComputation): void {
 
 /** Requests a flush of queued reactive computations. */
 export function schedulePendingFlush(): void {
-  if (queue.length === 0 || scheduled || flushing || runtimeState.flushingComputed) {
+  // A synchronous scheduler would otherwise run effects while a cell is still
+  // notifying its remaining subscribers or while computed work is draining,
+  // letting an effect observe a source ahead of a computed derived from it.
+  // Both notifySubscribers() and flushPendingComputed() hand off on exit.
+  if (
+    queue.length === 0 ||
+    scheduled ||
+    flushing ||
+    runtimeState.flushingComputed ||
+    runtimeState.notificationDepth > 0
+  ) {
     return;
   }
 

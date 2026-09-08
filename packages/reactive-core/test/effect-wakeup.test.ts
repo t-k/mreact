@@ -138,6 +138,52 @@ describe("effect wakeup after computed publication", () => {
     }
   });
 
+  test("finishes notifying every subscriber before invoking a synchronous scheduler", () => {
+    const restore = setScheduler({ schedule: (flush) => flush() });
+    const source = cell(0);
+    const seen: number[][] = [];
+    // The effect is created before the computed so the cell notifies it first.
+    const stopView = effect(() => {
+      const value = source.get();
+      if (value > 0) {
+        seen.push([value, mirrored.get()]);
+      }
+    });
+    const mirrored = computed(() => source.get());
+    const stopMirror = effect(() => {
+      mirrored.get();
+    });
+    try {
+      source.setValue(1);
+      expect(seen).toEqual([[1, 1]]);
+      source.setValue(2);
+      expect(seen).toEqual([
+        [1, 1],
+        [2, 2],
+      ]);
+    } finally {
+      stopView();
+      stopMirror();
+      restore();
+    }
+  });
+
+  test("wakes a cell-only effect through a synchronous scheduler", () => {
+    const restore = setScheduler({ schedule: (flush) => flush() });
+    const source = cell(0);
+    const seen: number[] = [];
+    const stop = effect(() => {
+      seen.push(source.get());
+    });
+    try {
+      source.setValue(1);
+      expect(seen).toEqual([0, 1]);
+    } finally {
+      stop();
+      restore();
+    }
+  });
+
   test("finishes computed work before invoking a synchronous scheduler", () => {
     const restore = setScheduler({ schedule: (flush) => flush() });
     const source = cell(2);

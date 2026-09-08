@@ -278,6 +278,7 @@ export function notifySubscribers(source: Source, skip?: ReactiveComputation): v
 
       if (runtimeState.notificationDepth === 0 && runtimeState.batchDepth === 0) {
         flushPendingComputed();
+        schedulePendingFlush();
       }
     }
     return;
@@ -304,6 +305,7 @@ export function notifySubscribers(source: Source, skip?: ReactiveComputation): v
 
     if (runtimeState.notificationDepth === 0 && runtimeState.batchDepth === 0) {
       flushPendingComputed();
+      schedulePendingFlush();
     }
   }
 }

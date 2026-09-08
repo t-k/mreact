@@ -118566,9 +118566,9 @@
 							"sources": [
 								{
 									"fileName": "tracking.ts",
-									"line": 332,
+									"line": 334,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/tracking.ts#L332"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/tracking.ts#L334"
 								}
 							],
 							"signatures": [
@@ -118589,9 +118589,9 @@
 									"sources": [
 										{
 											"fileName": "tracking.ts",
-											"line": 332,
+											"line": 334,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/tracking.ts#L332"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/tracking.ts#L334"
 										}
 									],
 									"type": {
@@ -118618,9 +118618,9 @@
 							"sources": [
 								{
 									"fileName": "scheduler.ts",
-									"line": 88,
+									"line": 98,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/scheduler.ts#L88"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/scheduler.ts#L98"
 								}
 							],
 							"signatures": [
@@ -118641,9 +118641,9 @@
 									"sources": [
 										{
 											"fileName": "scheduler.ts",
-											"line": 88,
+											"line": 98,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/scheduler.ts#L88"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/scheduler.ts#L98"
 										}
 									],
 									"type": {
