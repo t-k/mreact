@@ -1086,7 +1086,7 @@ export function App() {
     expect(output.code).not.toContain("_renderCompatToString(Link,");
   });
 
-  test("emitted server stream component writes an async Link-named component through the sink", () => {
+  test("emitted server stream component writes a module-local Link through the sink", () => {
     const output = transform({
       code: `async function Link(props) {
   const label = await Promise.resolve(props.href);
@@ -1109,10 +1109,10 @@ export function App() {
     });
 
     expect(output.diagnostics).toEqual([]);
-    // Only the router Link returns its markup from a one-argument call. An async
-    // component returns a promise, so it keeps the sink convention even when its
-    // name matches the router Link.
-    expect(output.code).toContain("await Link($sink, { href: (`/user/${value.name}`) })");
+    // Only the router Link returns its markup from a one-argument call, and this
+    // Link is a module-local declaration, so it keeps the sink convention no
+    // matter what it is called.
+    expect(output.code).toContain("await Link($sink, Object.defineProperty(");
     expect(output.code).not.toContain("(Link({ href:");
   });
 

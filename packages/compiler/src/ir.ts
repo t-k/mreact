@@ -7,6 +7,8 @@ export interface ModuleIr {
   moduleStatements: string[];
   serverRenderValuePlaceholder?: string;
   moduleBindingNames: string[];
+  /** JSX tag names proven to resolve to the router `Link` export in this module. */
+  routerLinkComponentNames?: string[];
   components: ComponentIr[];
 }
 

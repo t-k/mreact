@@ -75,6 +75,7 @@ import {
   collectOxcClientBoundaryImportComponents,
   collectOxcCompatReactNodeComponentReferences,
   collectOxcCompatRuntimeImportComponents,
+  collectOxcRouterLinkComponentNames,
   markOxcAsyncComponentReferences,
   markOxcClientReferences,
   markOxcCompatReactNodeReferences,
@@ -581,6 +582,20 @@ function analyzeOxcToIr(
     }
   }
 
+  // A local binding of the same name shadows the import inside its own scope, and
+  // the emitters read a bare tag name, so a shadowed name drops out of the set
+  // rather than being resolved per scope. That costs the router `Link` its fast
+  // paths in a module that shadows it and never puts a local component on them.
+  const routerLinkComponentNames = new Set(
+    [...collectOxcRouterLinkComponentNames(program)].filter((name) => {
+      const rootName = name.split(".")[0] ?? name;
+
+      return !components.some(
+        (component) =>
+          component.name === rootName || component.bindingNames.includes(rootName),
+      );
+    }),
+  );
   const escapedComponentNames = collectOxcEscapedComponentNames(program, componentNames);
 
   inlineConstantComponentCalls(components, escapedComponentNames);
@@ -632,6 +647,9 @@ function analyzeOxcToIr(
       ? {}
       : { serverRenderValuePlaceholder: moduleServerRenderValuePlaceholder }),
     moduleBindingNames: Array.from(moduleBindingNames),
+    ...(routerLinkComponentNames.size === 0
+      ? {}
+      : { routerLinkComponentNames: Array.from(routerLinkComponentNames) }),
     components,
   };
 

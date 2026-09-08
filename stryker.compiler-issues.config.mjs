@@ -13,8 +13,8 @@ export default createStrykerConfig({
     "packages/compiler/src/oxc-child-analysis.ts:694-696",
     "packages/compiler/src/oxc-child-analysis.ts:1898-1903",
     "packages/compiler/src/oxc-child-analysis.ts:1910-1910",
-    "packages/compiler/src/oxc.ts:262-262",
-    "packages/compiler/src/oxc.ts:1979-1983",
+    "packages/compiler/src/oxc.ts:263-263",
+    "packages/compiler/src/oxc.ts:1997-2001",
     // Decision and emission helpers for all three client specializations.
     "packages/compiler/src/emit-client-specialization.ts",
     // Their call sites inside the client emitter.
@@ -33,7 +33,7 @@ export default createStrykerConfig({
     "packages/compiler/src/emit-client.ts:61-71",
     "packages/compiler/src/emit-client.ts:762-774",
     "packages/compiler/src/emit-client.ts:809-814",
-    "packages/compiler/src/oxc.ts:576-582",
+    "packages/compiler/src/oxc.ts:577-583",
     // 20260907-compiler-specialized-dom-props
     "packages/reactive-dom/src/bind-element-property.ts",
     "packages/compiler/src/emit-client.ts:334-341",
@@ -46,13 +46,18 @@ export default createStrykerConfig({
     "packages/compiler/src/component-prop-text.ts",
     "packages/compiler/src/oxc-component-props.ts:119-127",
     "packages/compiler/src/oxc-child-analysis.ts:228-229",
-    "packages/compiler/src/oxc.ts:584-587",
+    "packages/compiler/src/oxc.ts:599-602",
     // 20260907-compiler-intermediate-computed-fusion
     "packages/compiler/src/oxc-render-values.ts:232-246",
     // 20260907-server-stream-select-option-calling-convention
-    "packages/compiler/src/emit-server-stream.ts:1253-1256",
+    "packages/compiler/src/emit-server-stream.ts:1257-1260",
     // 20260907-compiler-native-component-specialization constant folding
     "packages/compiler/src/component-constant-inline.ts",
+    // 20260908-server-emitters-identify-link-by-name
+    "packages/compiler/src/oxc-component-references.ts:99-140",
+    "packages/compiler/src/emit-server.ts:2844-2846",
+    "packages/compiler/src/emit-server-stream.ts:4181-4183",
+    "packages/compiler/src/oxc.ts:589-598",
     // 20260907-static-jsx-prop-names-unmapped-in-client-template
     "packages/compiler/src/emit-server-shared.ts:332-344",
     "packages/compiler/src/emit-client.ts:671-693",
@@ -84,6 +89,7 @@ export default createStrykerConfig({
     "packages/compiler/test/component-prop-text.test.ts",
     "packages/compiler/test/component-constant-inline.test.ts",
     "packages/compiler/test/static-attribute-names.test.ts",
+    "packages/compiler/test/router-link-binding.test.ts",
     "packages/compiler/test/intermediate-computed.test.ts",
     "packages/compiler/test/oxc-internals.test.ts",
     "packages/compiler/test/server-emit-shared.test.ts",

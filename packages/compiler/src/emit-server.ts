@@ -37,6 +37,7 @@ export interface EmitServerOptions {
 // Module-local handle to the URL-safety helper name for the current emit
 // call. Used by deeply-nested attribute emitters to avoid threading the
 // name through every signature. Reset at the top of `emitServer`.
+let currentRouterLinkComponentNames: ReadonlySet<string> = new Set();
 let currentUrlSafeHelperName: string = "_urlAttrSafe";
 let currentClientBoundaryHelperName: string | undefined;
 let currentCompatChildHelperName: string | undefined;
@@ -108,6 +109,7 @@ function withSelectedValueCode<T>(
 }
 
 export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitResult {
+  currentRouterLinkComponentNames = new Set(ir.routerLinkComponentNames ?? []);
   currentSelectedValueCode = undefined;
   currentSelectedMultipleCode = undefined;
   currentSelectionContextActive = false;
@@ -2831,8 +2833,16 @@ function emitPropsObject(
     : `Object.defineProperty(Object.defineProperty(${object}, Symbol.for(${JSON.stringify(serverSelectionContextKey)}), { value: ${currentSelectedValueCode} }), Symbol.for(${JSON.stringify(serverSelectionMultipleContextKey)}), { value: ${currentSelectedMultipleCode} })`;
 }
 
+/**
+ * Reports whether a tag name is bound to the router `Link` export in this module.
+ *
+ * The set comes from the module's import declarations, so a renamed import still
+ * answers yes and a module-local component named `Link` answers no. Spelling
+ * cannot decide this: the paths gated on it require the export's own
+ * `trustedHtml` helper and its single-argument overload.
+ */
 function isRouterLinkComponentName(name: string | undefined): name is string {
-  return name !== undefined && (name === "Link" || name.endsWith(".Link"));
+  return name !== undefined && currentRouterLinkComponentNames.has(name);
 }
 
 function needsLazyServerChildren(node: JsxNodeIr): boolean {

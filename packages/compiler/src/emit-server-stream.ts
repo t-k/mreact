@@ -52,6 +52,7 @@ export interface EmitServerStreamOptions {
   reactSuspenseRevealScriptSrc?: string;
 }
 
+let currentRouterLinkComponentNames: ReadonlySet<string> = new Set();
 let currentUrlSafeHelperName: string = "_urlAttrSafe";
 let currentClientBoundaryHelperName: string | undefined;
 let currentClientBoundaryFallbackSinkName: string = "_clientBoundaryFallbackSink";
@@ -99,6 +100,7 @@ export function emitServerStream(
   ir: ModuleIr,
   options: EmitServerStreamOptions = {},
 ): EmitServerStreamResult {
+  currentRouterLinkComponentNames = new Set(ir.routerLinkComponentNames ?? []);
   const serverBootstrap = options.serverBootstrap ?? "none";
   const escapeHelperName = allocateHelperName(ir, "_escapeHtml");
   const escapeBatchHelperName =
@@ -1246,11 +1248,13 @@ function tryEmitPartAsStringExpression(
   // a string, so it is the one component this emitter can inline. Every other
   // component in stream output is compiled as `Name($sink, props)`: it writes to
   // the sink and returns nothing, so calling it with the string convention would
-  // hand the props object over as the sink and leave `props` undefined. An async
-  // component returns a promise rather than markup, so it stays on the sink path
-  // too. `hydrationId` needs no check: it is only set for the compat runtime,
-  // which the branch above already returned for.
-  if (part.kind === "component" && isRouterLinkComponentName(part.name) && part.async !== true) {
+  // hand the props object over as the sink and leave `props` undefined.
+  //
+  // Neither `async` nor `hydrationId` needs a check here. Only a module-local
+  // declaration is ever marked async and the router Link is imported, and
+  // `hydrationId` is only set for the compat runtime, which the branch above
+  // already returned for.
+  if (part.kind === "component" && isRouterLinkComponentName(part.name)) {
     return emitRenderableHtmlExpression(
       `${part.name}(${emitPropsObject(part.props, part.children, part.escapeHelperName, part.name, undefined, part.selectedValueCode, part.selectedMultipleCode, part.selectionContextActive)})`,
     );
@@ -4166,8 +4170,16 @@ function emitPropsObject(
     : `Object.defineProperty(Object.defineProperty(${object}, Symbol.for(${JSON.stringify(serverSelectionContextKey)}), { value: ${selectedValueCode} }), Symbol.for(${JSON.stringify(serverSelectionMultipleContextKey)}), { value: ${selectedMultipleCode} })`;
 }
 
+/**
+ * Reports whether a tag name is bound to the router `Link` export in this module.
+ *
+ * The set comes from the module's import declarations, so a renamed import still
+ * answers yes and a module-local component named `Link` answers no. Spelling
+ * cannot decide this: the paths gated on it require the export's own
+ * `trustedHtml` helper and its single-argument overload.
+ */
 function isRouterLinkComponentName(name: string | undefined): name is string {
-  return name !== undefined && (name === "Link" || name.endsWith(".Link"));
+  return name !== undefined && currentRouterLinkComponentNames.has(name);
 }
 
 function needsLazyServerChildren(node: JsxNodeIr): boolean {

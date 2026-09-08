@@ -81,6 +81,64 @@ function clientReference(
   };
 }
 
+/** The module specifiers that re-export the router `Link` this compiler special-cases. */
+const routerLinkModuleIds = new Set(["@reckona/mreact-router", "@reckona/mreact-router/link"]);
+
+/**
+ * Collects the JSX tag names that resolve to the router `Link` export.
+ *
+ * Both server emitters give `Link` paths no other component can take: they wrap
+ * its children in `Link.trustedHtml`, which the router attaches to its own
+ * export, and the stream emitter inlines it with the string calling convention,
+ * which only its single-argument overload supports. Deciding that by spelling
+ * puts a module-local component named `Link` on both paths, and it can satisfy
+ * neither. The binding is what distinguishes them, so this reads the import
+ * declarations: a renamed import is still the router `Link`, and a local
+ * declaration never is, whatever either one is called.
+ */
+export function collectOxcRouterLinkComponentNames(program: unknown): Set<string> {
+  const names = new Set<string>();
+
+  for (const statement of readArray(readObject(program).body)) {
+    const object = readObject(statement);
+
+    if (object.type !== "ImportDeclaration" || object.importKind === "type") {
+      continue;
+    }
+
+    if (!routerLinkModuleIds.has(String(readObject(object.source).value ?? ""))) {
+      continue;
+    }
+
+    for (const specifier of readArray(object.specifiers)) {
+      const specifierObject = readObject(specifier);
+      const local = readObject(specifierObject.local);
+      const localName = typeof local.name === "string" ? local.name : undefined;
+
+      if (localName === undefined) {
+        continue;
+      }
+
+      // A namespace import reaches the export through a member expression, which
+      // the JSX tag name carries verbatim.
+      if (specifierObject.type === "ImportNamespaceSpecifier") {
+        names.add(`${localName}.Link`);
+        continue;
+      }
+
+      if (
+        specifierObject.type === "ImportSpecifier" &&
+        specifierObject.importKind !== "type" &&
+        String(readObject(specifierObject.imported).name ?? localName) === "Link"
+      ) {
+        names.add(localName);
+      }
+    }
+  }
+
+  return names;
+}
+
 export function collectOxcCompatRuntimeImportComponents(
   program: unknown,
 ): Map<string, ClientReferenceIr> {
