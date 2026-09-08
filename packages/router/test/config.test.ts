@@ -1,10 +1,33 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { resolveAppRouterProjectOptions, resolveBuildTargets } from "../src/config.js";
 
 describe("router project config", () => {
+  test("accepts a routesDir spelled through a symlinked project root", async () => {
+    const realRoot = await realpath(await mkdtemp(join(tmpdir(), "mreact-router-config-real-")));
+    const linkParent = await realpath(await mkdtemp(join(tmpdir(), "mreact-router-config-link-")));
+    const linkedRoot = join(linkParent, "project");
+    await symlink(realRoot, linkedRoot, "dir");
+    await mkdir(join(realRoot, "src", "app"), { recursive: true });
+
+    // Vite resolves its root, so the routes directory can come back resolved
+    // while the project root is still the spelling the user configured.
+    const resolved = resolveAppRouterProjectOptions({
+      projectRoot: linkedRoot,
+      routesDir: join(realRoot, "src", "app"),
+    });
+
+    expect(resolved.routesDir).toBe(join(realRoot, "src", "app"));
+    expect(() =>
+      resolveAppRouterProjectOptions({
+        projectRoot: linkedRoot,
+        routesDir: join(linkParent, "elsewhere"),
+      }),
+    ).toThrow("must resolve inside projectRoot");
+  });
+
   test("defaults build targets to node only", () => {
     expect(resolveBuildTargets(undefined)).toEqual(["node"]);
   });

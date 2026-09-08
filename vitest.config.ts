@@ -169,6 +169,7 @@ export default defineConfig({
     // Running hundreds of integration-heavy test files at the host CPU count makes
     // module imports contend for the event loop and causes nondeterministic timeouts.
     maxWorkers: 4,
+    setupFiles: ["./scripts/vitest-setup-tmpdir.ts"],
     include: [
       "packages/*/test/**/*.test.ts",
       "scripts/**/*.test.ts",

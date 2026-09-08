@@ -1,4 +1,5 @@
-import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
+import { realpathSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 /**
  * Selects the deployment runtime artifacts emitted by an app-router build.
@@ -294,7 +295,44 @@ function resolvePath(root: string, path: string): string {
 }
 
 function isInsideDirectory(root: string, path: string): boolean {
+  if (isLexicallyInside(root, path)) {
+    return true;
+  }
+
+  // A root handed back through a realpath-resolving tool (Vite resolves its
+  // root, macOS keeps /var as a link to /private/var) can spell the same
+  // directory differently from the options configured relative to it. Only
+  // then compare the resolved forms; a symlink that lexically sits inside the
+  // project is still accepted here and handled by the later symlink checks.
+  return isLexicallyInside(canonicalizePath(root), canonicalizePath(path));
+}
+
+function isLexicallyInside(root: string, path: string): boolean {
   const relativePath = relative(root, path);
 
   return relativePath === "" || (!relativePath.startsWith("..") && !isAbsolute(relativePath));
+}
+
+/**
+ * Resolves symlinks in the longest existing prefix of a path so directories
+ * created later still canonicalize under their resolved parent.
+ */
+function canonicalizePath(path: string): string {
+  let existing = path;
+  let trailing = "";
+
+  for (;;) {
+    try {
+      return trailing === "" ? realpathSync(existing) : join(realpathSync(existing), trailing);
+    } catch {
+      const parent = dirname(existing);
+
+      if (parent === existing) {
+        return path;
+      }
+
+      trailing = trailing === "" ? basename(existing) : join(basename(existing), trailing);
+      existing = parent;
+    }
+  }
 }
