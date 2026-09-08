@@ -39,7 +39,7 @@ export function Counter() {
     expect(domCode).toContain("// @ts-nocheck");
     expect(domCode).toContain("export function Counter()");
     expect(domCode).toContain("bindEvent(");
-    expect(domCode).toContain("bindText(");
+    expect(domCode).toContain("bindCellText(");
   });
 
   test("turns default exported .mreact.tsx page modules into Next page modules", async () => {
