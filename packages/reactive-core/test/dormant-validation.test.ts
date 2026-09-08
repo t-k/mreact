@@ -1,6 +1,11 @@
 import { describe, expect, test } from "vitest";
 import { cell, computed } from "../src/index.js";
-import { createCurrentCheckContext, untrackedDependencyIsCurrent } from "../src/state.js";
+import {
+  bumpSourceVersion,
+  runtimeState,
+  createCurrentCheckContext,
+  untrackedDependencyIsCurrent,
+} from "../src/state.js";
 import type { CurrentCheckContext, Source } from "../src/state.js";
 
 type DependencyProbe = {
@@ -15,6 +20,47 @@ const checkDependency = untrackedDependencyIsCurrent as unknown as (
 ) => boolean;
 
 describe("dormant dependency validation", () => {
+  test("invalidates attachment proofs after a transitive version change", () => {
+    const upstream: Source = { subscribers: null, version: 0 };
+    const source: Source = { subscribers: null, isCurrent: () => upstream.version === 0 };
+    const context = createCurrentCheckContext();
+    const dependency = { ref: new WeakRef(source), requiresCurrentCheckContext: true, version: 0 };
+    runtimeState.attachmentCheckContext = context;
+    try {
+      expect(checkDependency(dependency, context)).toBe(true);
+      bumpSourceVersion(upstream);
+      expect(checkDependency(dependency, context)).toBe(false);
+    } finally {
+      runtimeState.attachmentCheckContext = undefined;
+    }
+  });
+
+  test("does not memoize a proof across reentrant attachment invalidation", () => {
+    const upstream: Source = { subscribers: null };
+    let checks = 0;
+    const source: Source = {
+      subscribers: null,
+      isCurrent: () => {
+        checks += 1;
+        if (checks === 1) {
+          bumpSourceVersion(upstream);
+          return true;
+        }
+        return false;
+      },
+    };
+    const context = createCurrentCheckContext();
+    const dependency = { ref: new WeakRef(source), requiresCurrentCheckContext: true, version: 0 };
+    runtimeState.attachmentCheckContext = context;
+    try {
+      expect(checkDependency(dependency, context)).toBe(true);
+      expect(checkDependency(dependency, context)).toBe(false);
+      expect(checks).toBe(2);
+    } finally {
+      runtimeState.attachmentCheckContext = undefined;
+    }
+  });
+
   test("does not reuse a current result for an edge with an older snapshot version", () => {
     let currentChecks = 0;
     const source: Source = {
@@ -27,15 +73,15 @@ describe("dormant dependency validation", () => {
     const context = createCurrentCheckContext();
     const ref = new WeakRef(source);
 
-    expect(
-      checkDependency({ ref, requiresCurrentCheckContext: true, version: 0 }, context),
-    ).toBe(true);
-    expect(
-      checkDependency({ ref, requiresCurrentCheckContext: true, version: 1 }, context),
-    ).toBe(false);
-    expect(
-      checkDependency({ ref, requiresCurrentCheckContext: true, version: 0 }, context),
-    ).toBe(true);
+    expect(checkDependency({ ref, requiresCurrentCheckContext: true, version: 0 }, context)).toBe(
+      true,
+    );
+    expect(checkDependency({ ref, requiresCurrentCheckContext: true, version: 1 }, context)).toBe(
+      false,
+    );
+    expect(checkDependency({ ref, requiresCurrentCheckContext: true, version: 0 }, context)).toBe(
+      true,
+    );
     expect(currentChecks).toBe(1);
   });
 
@@ -51,12 +97,12 @@ describe("dormant dependency validation", () => {
     const context = createCurrentCheckContext();
     const ref = new WeakRef(source);
 
-    expect(
-      checkDependency({ ref, requiresCurrentCheckContext: true, version: 0 }, context),
-    ).toBe(false);
-    expect(
-      checkDependency({ ref, requiresCurrentCheckContext: true, version: 0 }, context),
-    ).toBe(false);
+    expect(checkDependency({ ref, requiresCurrentCheckContext: true, version: 0 }, context)).toBe(
+      false,
+    );
+    expect(checkDependency({ ref, requiresCurrentCheckContext: true, version: 0 }, context)).toBe(
+      false,
+    );
     expect(currentChecks).toBe(1);
   });
 
@@ -69,9 +115,9 @@ describe("dormant dependency validation", () => {
     expect(
       checkDependency({ ref: collected, requiresCurrentCheckContext: true, version: 0 }, context),
     ).toBe(false);
-    expect(
-      checkDependency({ ref: collected, requiresCurrentCheckContext: true, version: 0 }),
-    ).toBe(false);
+    expect(checkDependency({ ref: collected, requiresCurrentCheckContext: true, version: 0 })).toBe(
+      false,
+    );
   });
 
   test("invokes a source check with the source as its receiver", () => {

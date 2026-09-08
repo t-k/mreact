@@ -4,6 +4,7 @@ import {
   bumpSourceVersion,
   createCurrentCheckContext,
   createUntrackedDependency,
+  invalidateAttachmentCheckContext,
   runtimeState,
   untrackedDependencyIsCurrent,
 } from "./state.js";
@@ -98,6 +99,7 @@ function createComputed<T>(
     disposed: false,
     queued: false,
     markDirty() {
+      invalidateAttachmentCheckContext();
       if (dirty) {
         if (source.subscribers === null || computation.queued) {
           return;
@@ -128,6 +130,7 @@ function createComputed<T>(
         return;
       }
 
+      invalidateAttachmentCheckContext();
       computation.disposed = true;
       computation.queued = false;
       runtimeState.pendingComputed.delete(computation);
@@ -188,6 +191,7 @@ function createComputed<T>(
       return value;
     }
 
+    invalidateAttachmentCheckContext();
     const previousTracker = runtimeState.activeTracker;
     const previousDepsSize = computation.deps.size;
     const nextTrackingVersion = nextTrackingVersionFor(computation);
@@ -386,20 +390,26 @@ function createComputed<T>(
       return;
     }
 
-    // A subscriber may attach this computed without reading it, for example
-    // while restoring its own dormant graph. The snapshots taken at the last
-    // suspend are the only proof the cache is fresh: if any of them is stale,
-    // the value must stay invalid so a later suspend cannot re-stamp it with
-    // the current versions and revive an outdated cache.
-    if (!dirty && source.isCurrent?.() === false) {
-      dirty = true;
-    }
+    const previousContext = runtimeState.attachmentCheckContext;
+    runtimeState.attachmentCheckContext ??= createCurrentCheckContext();
+    try {
+      // A subscriber may attach this computed without reading it, for example
+      // while restoring its own dormant graph. The snapshots taken at the last
+      // suspend are the only proof the cache is fresh: if any of them is stale,
+      // the value must stay invalid so a later suspend cannot re-stamp it with
+      // the current versions and revive an outdated cache.
+      if (!dirty && source.isCurrent?.(runtimeState.attachmentCheckContext) === false) {
+        dirty = true;
+      }
 
-    for (const dependency of dependencies as Source[]) {
-      addSourceSubscriber(dependency, computation);
-      computation.deps.add(dependency);
+      for (const dependency of dependencies as Source[]) {
+        addSourceSubscriber(dependency, computation);
+        computation.deps.add(dependency);
+      }
+      computation.orderedDeps = dependencies as Source[];
+    } finally {
+      runtimeState.attachmentCheckContext = previousContext;
     }
-    computation.orderedDeps = dependencies as Source[];
   }
 
   function liveUntrackedDependencies(): Array<Source | undefined> {

@@ -1,10 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
-import { cell, computed } from "../src/index.js";
-import {
-  createCurrentCheckContext,
-  untrackedDependencyIsCurrent,
-} from "../src/state.js";
+import { flushEffects } from "../src/testing.js";
+import { getCellSource } from "../src/cell.js";
+import { runtimeState } from "../src/state.js";
+import { cell, computed, effect } from "../src/index.js";
+import { createCurrentCheckContext, untrackedDependencyIsCurrent } from "../src/state.js";
 import type { CurrentCheckContext, Source } from "../src/state.js";
 
 describe("reactive-core tracking hot path", () => {
@@ -225,4 +225,75 @@ describe("reactive-core tracking hot path", () => {
       });
     }
   });
+  test.each(["chain", "diamond"])(
+    "attaches dormant %s graphs within a linear traversal bound",
+    async (shape) => {
+      const originalDeref = WeakRef.prototype.deref;
+      let dereferences = 0;
+      WeakRef.prototype.deref = function () {
+        dereferences += 1;
+        return originalDeref.call(this);
+      };
+      try {
+        for (const depth of [16, 64, 128, 256]) {
+          let runs = 0;
+          const base = cell(0);
+          let current = base as import("../src/index.js").ReadonlyCell<number>;
+          for (let level = 0; level < depth; level += 1) {
+            const previous = current;
+            if (shape === "diamond") {
+              const left = computed(() => {
+                runs += 1;
+                return previous.get() + 1;
+              });
+              const right = computed(() => {
+                runs += 1;
+                return previous.get() + 2;
+              });
+              current = computed(() => {
+                runs += 1;
+                return (left.get() + right.get()) / 2;
+              });
+            } else {
+              current = computed(() => {
+                runs += 1;
+                return previous.get() + 1;
+              });
+            }
+          }
+          const expected = current.get();
+          for (let subscription = 0; subscription < 2; subscription += 1) {
+            runs = 0;
+            dereferences = 0;
+            let observed: number | undefined;
+            const stop = effect(() => {
+              observed = current.get();
+            });
+            const count = dereferences;
+            expect(runtimeState.attachmentCheckContext).toBeUndefined();
+            expect(observed).toBe(expected + (depth === 16 ? subscription : 0));
+            expect(runs).toBe(0);
+            expect(
+              count,
+              `${shape} depth ${depth}, subscription ${subscription}`,
+            ).toBeLessThanOrEqual(depth * 24);
+            try {
+              // Keep updates below the runtime's 100-round cycle guard; deeper
+              // graphs above exercise attachment without triggering propagation.
+              if (depth === 16) {
+                base.set(subscription + 1);
+                await flushEffects();
+                expect(observed).toBe(expected + subscription + 1);
+              }
+            } finally {
+              stop();
+            }
+            expect(getCellSource(base)?.subscribers).toBeNull();
+          }
+        }
+      } finally {
+        WeakRef.prototype.deref = originalDeref;
+      }
+    },
+  );
 });

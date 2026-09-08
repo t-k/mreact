@@ -52,7 +52,7 @@ export interface CurrentCheckContext {
   // Memoizes only the recursive validity of a shared source for one traversal.
   // Each edge still compares its own snapshot version before this is consulted,
   // so one entry per source is enough and no per-version map is allocated.
-  readonly results: WeakMap<Source, boolean>;
+  results: WeakMap<Source, boolean>;
 }
 
 export type Tracker = ReactiveComputation | null;
@@ -65,6 +65,7 @@ export type Tracker = ReactiveComputation | null;
 export type CleanupOwner = (dispose: () => void) => unknown;
 
 export const runtimeState: {
+  attachmentCheckContext: CurrentCheckContext | undefined;
   activeTracker: Tracker;
   batchDepth: number;
   cleanupOwner: CleanupOwner | undefined;
@@ -73,6 +74,7 @@ export const runtimeState: {
   notificationDepth: number;
   pendingComputed: Set<ReactiveComputation>;
 } = {
+  attachmentCheckContext: undefined,
   activeTracker: null,
   batchDepth: 0,
   cleanupOwner: undefined,
@@ -88,6 +90,13 @@ export function sourceVersion(source: Source): number {
 
 export function bumpSourceVersion(source: Source): void {
   source.version = (source.version ?? 0) + 1;
+  invalidateAttachmentCheckContext();
+}
+
+/** Discards proofs when reentrant work changes the graph during attachment. */
+export function invalidateAttachmentCheckContext(): void {
+  const context = runtimeState.attachmentCheckContext;
+  if (context !== undefined) context.results = new WeakMap();
 }
 
 export function createUntrackedDependency(source: Source): UntrackedDependency | undefined {
@@ -131,7 +140,9 @@ export function untrackedDependencyIsCurrent(
     return cachedResult;
   }
 
+  const results = context.results;
   const current = isCurrent.call(source, context) !== false;
-  context.results.set(source, current);
+  // Reentrant invalidation replaces the map; write only into the map this check started with.
+  results.set(source, current);
   return current;
 }
