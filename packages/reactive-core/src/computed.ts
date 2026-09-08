@@ -162,8 +162,9 @@ function createComputed<T>(
         notifySubscribers(source);
       }
     } catch {
+      // The error itself is announced below, so the next successful value
+      // must publish again even when it equals the last one consumers saw.
       publishedHasValue = false;
-      publishedValue = undefined as T;
       runtimeState.batchDepth += 1;
 
       try {

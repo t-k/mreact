@@ -107,3 +107,57 @@ describe("computed notification completeness", () => {
     }
   });
 });
+
+describe("computed publish baseline", () => {
+  test("does not renotify consumers when a later publish yields an equal value", async () => {
+    const x = cell(2);
+    const magnitude = computed(() => Math.abs(x.get()));
+    const seen: number[] = [];
+    const dispose = effect(() => {
+      seen.push(magnitude.get());
+    });
+
+    try {
+      x.setValue(-2);
+      await flushEffects();
+      x.setValue(2);
+      await flushEffects();
+      x.setValue(3);
+      await flushEffects();
+
+      expect(seen).toEqual([2, 3]);
+    } finally {
+      dispose();
+    }
+  });
+
+  test("renotifies consumers after a throwing recompute recovers to the previous value", async () => {
+    const x = cell(5);
+    const guarded = computed(() => {
+      const current = x.get();
+      if (current === 1) {
+        throw new Error("boom");
+      }
+      return current;
+    });
+    const seen: Array<number | "error"> = [];
+    const dispose = effect(() => {
+      try {
+        seen.push(guarded.get());
+      } catch {
+        seen.push("error");
+      }
+    });
+
+    try {
+      x.setValue(1);
+      await flushEffects();
+      x.setValue(5);
+      await flushEffects();
+
+      expect(seen).toEqual([5, "error", 5]);
+    } finally {
+      dispose();
+    }
+  });
+});

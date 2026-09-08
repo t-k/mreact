@@ -6,7 +6,10 @@ export default createStrykerConfig({
   mutate: [
     "packages/reactive-core/src/effect.ts:21-25",
     "packages/reactive-core/src/effect.ts:70-95",
-    "packages/reactive-core/src/effect.ts:155-176",
+    "packages/reactive-core/src/effect.ts:115-135",
+    "packages/reactive-core/src/effect.ts:171-192",
+    "packages/reactive-core/src/computed.ts:152-180",
+    "packages/reactive-core/src/computed.ts:335-355",
     "packages/reactive-core/src/cleanup-scope.ts:102-105",
     "packages/reactive-core/src/cleanup-scope.ts:119-133",
     "packages/reactive-core/src/state.ts:85-91",
@@ -16,6 +19,8 @@ export default createStrykerConfig({
   testFiles: [
     "packages/reactive-core/test/effect.test.ts",
     "packages/reactive-core/test/effect-manual-dispose.test.ts",
+    "packages/reactive-core/test/effect-cleanup-reentry.test.ts",
+    "packages/reactive-core/test/computed-notification-completeness.test.ts",
     "packages/reactive-core/test/cleanup-scope.test.ts",
     "packages/reactive-core/test/error.test.ts",
     "packages/reactive-core/test/coverage-fill.test.ts",
