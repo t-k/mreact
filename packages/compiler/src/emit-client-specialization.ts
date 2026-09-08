@@ -1,5 +1,39 @@
 import type { JsxNodeIr } from "./ir.js";
 import { readExpressionFacts } from "./expression-facts.js";
+import type { ClientSpecializationFlags } from "./types.js";
+
+const DEFAULT_CLIENT_SPECIALIZATIONS: ClientSpecializationFlags = Object.freeze({
+  branchInsertion: true,
+  directCellText: true,
+  elementProperty: true,
+  selectBinding: true,
+});
+
+let activeSpecializations: ClientSpecializationFlags = DEFAULT_CLIENT_SPECIALIZATIONS;
+
+/**
+ * Runs one synchronous client emit with the given specializations switched
+ * off. The emitter is synchronous, so a module-level flag set is restored
+ * before this returns and never leaks into another transform.
+ */
+export function withClientSpecializations<T>(
+  overrides: Partial<ClientSpecializationFlags> | undefined,
+  run: () => T,
+): T {
+  if (overrides === undefined) {
+    return run();
+  }
+
+  const previous = activeSpecializations;
+  activeSpecializations = { ...previous, ...overrides };
+
+  try {
+    return run();
+  } finally {
+    activeSpecializations = previous;
+  }
+}
+
 
 /** The slice of the client emitter state that select binding emission needs. */
 export interface SelectBindingEmitState {
@@ -15,7 +49,7 @@ export interface SelectBindingEmitState {
  * has to be re-applied whenever `multiple` changes.
  */
 export function usesDedicatedSelectBinding(node: Extract<JsxNodeIr, { kind: "element" }>): boolean {
-  if (node.tagName !== "select") {
+  if (!activeSpecializations.selectBinding || node.tagName !== "select") {
     return false;
   }
 
@@ -78,6 +112,10 @@ export function isSelectControlAttributeName(name: string): boolean {
  * observable value, normalization and disposal contract are unchanged.
  */
 export function provenNativeCellTextBinding(child: Extract<JsxNodeIr, { kind: "expr" }>): string | undefined {
+  if (!activeSpecializations.directCellText) {
+    return undefined;
+  }
+
   const value = readExpressionFacts(child).value;
 
   return value.kind === "native-cell-read" ? value.binding.name : undefined;
@@ -89,7 +127,11 @@ export function provenNativeCellTextBinding(child: Extract<JsxNodeIr, { kind: "e
  * generic dynamic insertion and keep the keyed list runtime out of the graph.
  */
 export function usesBranchInsertion(node: Extract<JsxNodeIr, { kind: "conditional" }>): boolean {
-  return isNonListBranch(node.whenTrue) && isNonListBranch(node.whenFalse);
+  return (
+    activeSpecializations.branchInsertion &&
+    isNonListBranch(node.whenTrue) &&
+    isNonListBranch(node.whenFalse)
+  );
 }
 
 function isNonListBranch(nodes: readonly JsxNodeIr[]): boolean {
@@ -135,7 +177,7 @@ export function specializedElementProperty(
   node: Extract<JsxNodeIr, { kind: "element" }>,
   name: string,
 ): { attribute: string; property: string } | undefined {
-  if (node.namespace === "svg") {
+  if (!activeSpecializations.elementProperty || node.namespace === "svg") {
     return undefined;
   }
 

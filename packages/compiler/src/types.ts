@@ -64,6 +64,27 @@ export interface TransformInput {
   clientBoundaryFallbackImports?: readonly string[];
   serverEscape?: ServerEscapeOptions;
   reactSuspenseRevealScriptSrc?: string;
+  /**
+   * @internal Disables individual client emit specializations. Every flag
+   * defaults to on; tests switch one off to compare the specialized output
+   * against the generic runtime path it replaces.
+   */
+  clientSpecializations?: Partial<ClientSpecializationFlags>;
+}
+
+/**
+ * @internal Names the client emit specializations that replace a generic
+ * runtime helper with a narrower one when the compiler can prove it safe.
+ */
+export interface ClientSpecializationFlags {
+  /** Bind a proven native cell text child through bindCellText instead of a bindText thunk. */
+  directCellText: boolean;
+  /** Insert non-list conditional branches through insertBranch instead of insertDynamic. */
+  branchInsertion: boolean;
+  /** Bind allowlisted string attributes through bindElementProperty instead of bindProp. */
+  elementProperty: boolean;
+  /** Bind select control props through bindSelectValue instead of spread props. */
+  selectBinding: boolean;
 }
 
 /** Configures imports for the server HTML escape helper emitted by the compiler. */

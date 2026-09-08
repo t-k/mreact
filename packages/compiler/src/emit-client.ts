@@ -6,8 +6,9 @@ import {
   specializedElementProperty,
   usesBranchInsertion,
   usesDedicatedSelectBinding,
+  withClientSpecializations,
 } from "./emit-client-specialization.js";
-import type { RuntimeImport } from "./types.js";
+import type { ClientSpecializationFlags, RuntimeImport } from "./types.js";
 import { listReadsNestedItemObject } from "./ir-nested-object-read.js";
 import { OXC_BIND_DOM_REF_PLACEHOLDER } from "./oxc-dom-lowering.js";
 import {
@@ -29,7 +30,18 @@ export interface EmitResult {
 
 export function emitClient(
   ir: ModuleIr,
-  options: { dev?: boolean; filename?: string } = {},
+  options: {
+    dev?: boolean;
+    filename?: string;
+    specializations?: Partial<ClientSpecializationFlags> | undefined;
+  } = {},
+): EmitResult {
+  return withClientSpecializations(options.specializations, () => emitClientModule(ir, options));
+}
+
+function emitClientModule(
+  ir: ModuleIr,
+  options: { dev?: boolean; filename?: string },
 ): EmitResult {
   const imports = collectImports(ir);
   const helperNames = allocateRuntimeHelperNames(

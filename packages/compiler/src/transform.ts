@@ -111,7 +111,11 @@ function transformWithAnalyzer(
               dynamicAttributes: mode === "compat" ? "drop" : "emit",
               escape: input.serverEscape,
             })
-        : emitClient(analyzed.ir, { dev: input.dev, filename: input.filename });
+        : emitClient(analyzed.ir, {
+            dev: input.dev,
+            filename: input.filename,
+            specializations: input.clientSpecializations,
+          });
 
   const metadata: ModuleMetadata = {
     filename: input.filename,
