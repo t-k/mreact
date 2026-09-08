@@ -406,6 +406,7 @@ export interface ModuleIr {
     moduleBindingNames: string[];
     // (undocumented)
     moduleStatements: string[];
+    routerLinkComponentNames?: string[];
     // (undocumented)
     serverRenderValuePlaceholder?: string;
     // (undocumented)
