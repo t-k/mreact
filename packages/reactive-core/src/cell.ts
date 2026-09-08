@@ -133,7 +133,7 @@ function writeResolvedCellValue<T>(source: CellSource<T>, resolved: T): void {
   if (runtimeState.batchDepth > 0 && !(subscribers instanceof Set)) {
     bumpSourceVersion(source);
 
-    if (!subscribers.disposed && !subscribers.queued) {
+    if (!subscribers.disposed) {
       subscribers.markDirty();
     }
     return;

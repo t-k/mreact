@@ -23,6 +23,13 @@ import {
 } from "./tracking.js";
 import type { ReadonlyCell } from "./types.js";
 
+function invalidatePullContext(computation: ReactiveComputation): void {
+  const context = runtimeState.pull;
+  if (context?.checked.has(computation)) {
+    context.checked = new Set();
+  }
+}
+
 /** Equality function used to decide whether a computed value changed. */
 export type ComputedEquality<T> = (previous: T, next: T) => boolean;
 
@@ -88,6 +95,22 @@ function createComputed<T>(
         }
       }
 
+      if (runtimeState.flushingComputed || runtimeState.pendingComputed.size > 0) {
+        // An observed clean dependency can still hide a queued ancestor from
+        // dormant readers. Validate without evaluating user computations.
+        for (const dependency of computation.deps) {
+          if (dependency.isCurrent === undefined) continue;
+          currentCheckContext ??= createCurrentCheckContext();
+          const results = currentCheckContext.results;
+          let current = results.get(dependency);
+          if (current === undefined) {
+            current = dependency.isCurrent(currentCheckContext);
+            results.set(dependency, current);
+          }
+          if (!current) return false;
+        }
+      }
+
       return true;
     },
     onFirstSubscriber: () => restoreUntrackedDependencies(true),
@@ -107,6 +130,7 @@ function createComputed<T>(
     flushToken: undefined,
     flushRuns: 0,
     markDirty() {
+      invalidatePullContext(computation);
       invalidateAttachmentCheckContext();
       if (recomputing) {
         invalidatedWhileRecomputing = true;
@@ -141,6 +165,7 @@ function createComputed<T>(
       }
 
       invalidateAttachmentCheckContext();
+      invalidatePullContext(computation);
       computation.disposed = true;
       computation.queued = false;
       runtimeState.pendingComputed.delete(computation);
@@ -166,31 +191,55 @@ function createComputed<T>(
   }
 
   function pullQueuedDependencies(): void {
-    // A clean cache can still be stale while a dependency's own publish is
-    // queued behind this read, for example when this computed was created
-    // before that dependency. Publish it first so the read is glitch-free and
-    // this computed is dirtied through the normal path. Publishing inside a
-    // batch keeps the cascade queued instead of re-entering readers upstream.
-    let pulled = false;
+    if (runtimeState.pull?.checked.has(computation)) return;
+    // Cell-only dependencies cannot hide a queued computed. Keep this common
+    // clean-read path allocation-free during a wide computed flush.
+    let hasPublisher = false;
     for (const dependency of computation.deps) {
-      const publisher = dependency.publisher;
-      if (publisher !== undefined && publisher.queued) {
-        if (!pulled) {
-          pulled = true;
-          // The pulled recompute re-stamps any source it shares with the
-          // reader that is still tracking on the stack, so snapshot what that
-          // reader has touched so far before its cleanup consults the stamps.
-          const activeTracker = runtimeState.activeTracker;
-          if (activeTracker !== null && activeTracker !== computation) {
-            preserveIncrementalTracking(activeTracker);
-          }
-          runtimeState.batchDepth += 1;
-        }
-        publisher.run();
+      if (dependency.publisher !== undefined) {
+        hasPublisher = true;
+        break;
       }
     }
-    if (pulled) {
+    if (!hasPublisher) return;
+
+    const previousContext = runtimeState.pull;
+    const context = (runtimeState.pull ??= { checked: new Set(), active: new Set() });
+    // A nested publish can re-stamp dependencies already read by the caller.
+    const activeTracker = runtimeState.activeTracker;
+    if (activeTracker !== null && activeTracker !== computation) {
+      preserveIncrementalTracking(activeTracker);
+    }
+    runtimeState.batchDepth += 1;
+    try {
+      pull(computation, false);
+    } finally {
       runtimeState.batchDepth -= 1;
+      if (!runtimeState.flushingComputed) runtimeState.pull = previousContext;
+    }
+
+    function pull(current: ReactiveComputation, publish: boolean): void {
+      if (context.checked.has(current) || context.active.has(current) || current.disposed) {
+        return;
+      }
+      const completed = context.checked;
+      context.active.add(current);
+      try {
+        // An unqueued direct dependency can hide a queued ancestor. Walk in
+        // dependency order, sharing proofs across diamonds and nested reads.
+        for (const dependency of current.deps) {
+          if (dependency.publisher !== undefined) {
+            pull(dependency.publisher, true);
+          }
+        }
+        if (publish && current.queued) {
+          current.run();
+        }
+        // Reentrant writes replace the proofs; never revive that old map.
+        completed.add(current);
+      } finally {
+        context.active.delete(current);
+      }
     }
   }
 
@@ -246,6 +295,9 @@ function createComputed<T>(
     runtimeState.activeTracker = computation;
     recomputing = true;
 
+    // Only extend the proof set that existed before user code ran. Reentrant
+    // writes may replace it while fn() is evaluating earlier dependencies.
+    const checked = runtimeState.pull?.checked;
     try {
       const nextValue = fn();
 
@@ -293,6 +345,7 @@ function createComputed<T>(
         suspendIfUnobserved();
       } else {
         untrackedDependencies = [];
+        if (!dirty) checked?.add(computation);
       }
 
       return nextValue;

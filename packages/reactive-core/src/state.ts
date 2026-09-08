@@ -47,6 +47,11 @@ export interface ReactiveComputation {
   dispose(): void;
 }
 
+interface PullContext {
+  checked: Set<ReactiveComputation>;
+  active: Set<ReactiveComputation>;
+}
+
 interface UntrackedDependency {
   ref: WeakRef<Source>;
   requiresCurrentCheckContext: boolean;
@@ -72,6 +77,8 @@ export type CleanupOwner = (dispose: () => void) => unknown;
 export const runtimeState: {
   attachmentCheckContext: CurrentCheckContext | undefined;
   activeTracker: Tracker;
+  // Lazily shared by nested reads and by the enclosing computed flush.
+  pull: PullContext | undefined;
   batchDepth: number;
   cleanupOwner: CleanupOwner | undefined;
   flushingComputed: boolean;
@@ -84,6 +91,7 @@ export const runtimeState: {
 } = {
   attachmentCheckContext: undefined,
   activeTracker: null,
+  pull: undefined,
   batchDepth: 0,
   cleanupOwner: undefined,
   flushingComputed: false,

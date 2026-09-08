@@ -336,6 +336,7 @@ export function flushPendingComputed(): void {
     return;
   }
 
+  const previousPullContext = runtimeState.pull;
   runtimeState.flushingComputed = true;
   let completed = false;
   let computations: ReactiveComputation[] = [];
@@ -429,6 +430,7 @@ export function flushPendingComputed(): void {
       }
       discardPendingComputed();
     }
+    runtimeState.pull = previousPullContext;
     runtimeState.flushingComputed = false;
     // Nested reads can queue effects inside an internal batch without another
     // changed computed publishing afterward. Hand them off only after draining.

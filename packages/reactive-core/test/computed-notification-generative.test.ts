@@ -121,7 +121,11 @@ function evaluate(graph: Graph, values: number[]): number[] {
   return results;
 }
 
-async function runScenario(seed: number, randomCreation = false): Promise<void> {
+async function runScenario(
+  seed: number,
+  randomCreation = false,
+  batchReads = false,
+): Promise<void> {
   const runtime = randomCreation ? createReactiveTestRuntime() : undefined;
   const random = createRandom(seed);
   const graph = generateGraph(random);
@@ -227,9 +231,18 @@ async function runScenario(seed: number, randomCreation = false): Promise<void> 
         for (const [index, value] of writes) {
           values[index] = value;
           cells[index]?.setValue(value);
+          if (batchReads) {
+            const expected = evaluate(graph, values);
+            // Read consumers first so an upstream read cannot repair stale caches.
+            for (const node of [...computedIndexes].reverse()) {
+              expect(live[node]!.get(), `${label} batch node ${node}`).toBe(expected[node]);
+            }
+            values[index] = value + 1;
+            cells[index]?.setValue(value + 1);
+          }
         }
       };
-      if (randomCreation && step % 2 === 0) write();
+      if (randomCreation && !batchReads && step % 2 === 0) write();
       else batch(write);
       const previous = reference;
       reference = evaluate(graph, values);
@@ -303,6 +316,12 @@ describe("computed notification generative model", () => {
   test(`delivers through scheduled callbacks for ${seedCount} randomly created graphs`, async () => {
     for (let seed = 1; seed <= seedCount; seed++) {
       await runScenario(seed, true);
+    }
+  });
+
+  test(`keeps batch reads and subsequent writes fresh for ${seedCount} random graphs`, async () => {
+    for (let seed = 1; seed <= seedCount; seed++) {
+      await runScenario(seed, true, true);
     }
   });
 
