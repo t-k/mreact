@@ -12,6 +12,7 @@ import {
 import {
   analyzeOxcExpressionFacts,
   collectOxcModuleExpressionFacts,
+  collectOxcEscapedBindingNames,
   collectOxcMutatedBindingNames,
   collectOxcNativeCellBindings,
   collectOxcNativeCellFactoryNames,
@@ -173,6 +174,50 @@ describe("mutated binding collection", () => {
     );
 
     expect([...names]).toEqual([]);
+  });
+});
+
+describe("escaped binding collection", () => {
+  test("records every use that could hand the cell to code replacing its methods", () => {
+    const cases: [string, string][] = [
+      ["const alias = count;", "count"],
+      ["helper(count);", "count"],
+      ["Object.assign(count, { get: other });", "count"],
+      ["const read = count.get;", "count"],
+      ["const list = [count];", "count"],
+      ["const bag = { count };", "count"],
+      ["const bag = { value: count };", "count"],
+      ["function inner() { return count; }", "count"],
+      ["count.get = other;", "count"],
+      ["count[name]();", "count"],
+      ["count.get.call(other);", "count"],
+    ];
+
+    for (const [source, expected] of cases) {
+      expect([...collectOxcEscapedBindingNames(parseStatements(source))], source).toContain(
+        expected,
+      );
+    }
+  });
+
+  test("keeps a cell that is only ever a method call receiver", () => {
+    const names = collectOxcEscapedBindingNames(
+      parseStatements(
+        [
+          'import { cell } from "@reckona/mreact-reactive-core";',
+          "const count = cell(0);",
+          "count.get();",
+          "count.set(count.get() + 1);",
+          "const onClick = () => count.setValue(2);",
+          "const bag = { count: 1 };",
+          "other.count = 2;",
+          "other.count();",
+        ].join("\n"),
+      ),
+    );
+
+    expect(names.has("count")).toBe(false);
+    expect(names.has("other")).toBe(true);
   });
 });
 

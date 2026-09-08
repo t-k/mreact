@@ -7,11 +7,10 @@ import { transform } from "../src/index.js";
 import { compileClientComponent } from "./helpers.js";
 
 interface TestCell {
-  get(): unknown;
   set(value: unknown): void;
 }
 
-type CellHost = typeof globalThis & { __directCellTextValue?: TestCell };
+type CellHost = typeof globalThis & { __setDirectCellTextValue?: (value: unknown) => void };
 
 function compile(code: string): string {
   const output = transform({ code, filename: "App.tsx", target: "client", dev: false });
@@ -29,7 +28,7 @@ function mountPublishedCell(initialValue: string): {
   const code = compile(`import { cell } from "@reckona/mreact-reactive-core";
 export function App() {
   const value = cell(${initialValue});
-  globalThis.__directCellTextValue = value;
+  globalThis.__setDirectCellTextValue = (next) => value.set(next);
   return <main>{value.get()}</main>;
 }`);
 
@@ -37,20 +36,60 @@ export function App() {
   const App = compileClientComponent(code);
   const host = document.createElement("div");
   const dispose = createRoot(host, App);
-  const value = (globalThis as CellHost).__directCellTextValue;
+  const set = (globalThis as CellHost).__setDirectCellTextValue;
 
-  if (value === undefined) {
-    throw new Error("Expected the compiled component to publish its cell.");
+  if (set === undefined) {
+    throw new Error("Expected the compiled component to publish its cell setter.");
   }
 
-  return { dispose, host, value };
+  return { dispose, host, value: { set } };
 }
 
 afterEach(() => {
-  delete (globalThis as CellHost).__directCellTextValue;
+  delete (globalThis as CellHost).__setDirectCellTextValue;
 });
 
 describe("compiler direct cell text binding", () => {
+  test("falls back to the getter thunk when the cell escapes through an alias", async () => {
+    const code = compile(`import { cell } from "@reckona/mreact-reactive-core";
+export function App() {
+  const count = cell(1);
+  const originalGet = count.get;
+  const alias = count;
+  alias.get = () => originalGet() * 10;
+  return <main><span>{count.get()}</span><button onClick={() => count.setValue(2)}>+</button></main>;
+}`);
+
+    expect(code).not.toContain("bindText(_text_0, count)");
+    const host = document.createElement("div");
+    const dispose = createRoot(host, compileClientComponent(code));
+
+    try {
+      expect(host.querySelector("span")?.textContent).toBe("10");
+      host.querySelector("button")?.click();
+      await flushEffects();
+      expect(host.querySelector("span")?.textContent).toBe("20");
+    } finally {
+      dispose();
+    }
+  });
+
+  test.each([
+    ["a helper argument", "patch(count);"],
+    ["Object.assign", "Object.assign(count, { get: () => 1 });"],
+  ])("falls back to the getter thunk when the cell escapes through %s", (_label, statement) => {
+    const code = compile(`import { cell } from "@reckona/mreact-reactive-core";
+declare function patch(target: unknown): void;
+export function App() {
+  const count = cell(0);
+  ${statement}
+  return <main>{count.get()}</main>;
+}`);
+
+    expect(code).not.toContain("bindText(_text_0, count)");
+    expect(code).toContain("count.get()");
+  });
+
   test("binds a proven native cell straight to the text node", () => {
     const code = compile(`import { cell } from "@reckona/mreact-reactive-core";
 export function App() {

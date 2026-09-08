@@ -56,7 +56,7 @@ const primitiveCallSites = `import { cell } from "@reckona/mreact-reactive-core"
 function Badge(props) { return <span class="badge">{props.label}</span>; }
 export function App() {
   const count = cell(0);
-  globalThis.__badgeLabel = count;
+  globalThis.__badgeLabel = { set: (next) => count.set(next) };
   return <main><Badge label="alpha" /><Badge label={count.get()} /></main>;
 }`;
 

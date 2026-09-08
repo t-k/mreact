@@ -122,6 +122,77 @@ export function collectOxcMutatedBindingNames(node: unknown): Set<string> {
 }
 
 /**
+ * Collects identifier names that are used anywhere other than as the receiver
+ * of a plain method call such as `name.get()` or `name.set(value)`.
+ *
+ * Such a use may hand the cell to code that replaces its methods later, for
+ * example through an alias, a helper argument or `Object.assign()`, so the
+ * binding can no longer be trusted for a direct subscription. The check is
+ * deliberately syntactic and conservative: over-reporting only costs the
+ * optimization, never correctness.
+ */
+export function collectOxcEscapedBindingNames(node: unknown): Set<string> {
+  const names = new Set<string>();
+  const pending: unknown[] = [node];
+
+  while (pending.length > 0) {
+    const object = readObject(pending.pop());
+
+    if (object.type === "Identifier") {
+      if (typeof object.name === "string") {
+        names.add(object.name);
+      }
+      continue;
+    }
+
+    for (const [key, value] of Object.entries(object)) {
+      if (isOxcNonEscapingIdentifierSlot(object, key)) {
+        continue;
+      }
+
+      pending.push(value);
+    }
+  }
+
+  return names;
+}
+
+function isOxcNonEscapingIdentifierSlot(object: Record<string, unknown>, key: string): boolean {
+  switch (object.type) {
+    case "CallExpression": {
+      if (key !== "callee") {
+        return false;
+      }
+
+      // `name.method(...)`: the receiver identifier stays put, but the callee
+      // member expression still has to be visited for computed properties.
+      const callee = unwrapOxcParentheses(readObject(object.callee));
+      return (
+        callee.type === "MemberExpression" &&
+        callee.computed !== true &&
+        unwrapOxcParentheses(readObject(callee.object)).type === "Identifier" &&
+        readObject(callee.property).type === "Identifier"
+      );
+    }
+    case "MemberExpression":
+      return key === "property" && object.computed !== true;
+    case "Property":
+    case "MethodDefinition":
+    case "PropertyDefinition":
+      return key === "key" && object.computed !== true;
+    case "VariableDeclarator":
+      return key === "id" && readObject(object.id).type === "Identifier";
+    case "ImportSpecifier":
+    case "ImportDefaultSpecifier":
+    case "ImportNamespaceSpecifier":
+    case "ExportSpecifier":
+      return true;
+    default:
+      return false;
+  }
+}
+
+/**
  * Analyzes one lowered JSX expression against the supported facts subset.
  *
  * Returns `undefined` when nothing could be proven, so unsupported inputs keep
@@ -253,6 +324,7 @@ export interface OxcModuleExpressionFacts {
   nativeCellFactoryNames: ReadonlySet<string>;
   moduleNativeCellBindings: ReadonlyMap<string, ResolvedBindingIr>;
   mutatedBindingNames: ReadonlySet<string>;
+  escapedBindingNames: ReadonlySet<string>;
 }
 
 /** Collects the module-wide facts inputs once per analyzed program. */
@@ -272,6 +344,10 @@ export function collectOxcModuleExpressionFacts(
       nativeCellFactoryNames.size === 0
         ? new Set<string>()
         : collectOxcMutatedBindingNames(program),
+    escapedBindingNames:
+      nativeCellFactoryNames.size === 0
+        ? new Set<string>()
+        : collectOxcEscapedBindingNames(program),
   };
 }
 
@@ -279,7 +355,8 @@ export function collectOxcModuleExpressionFacts(
  * Resolves the cell bindings visible inside one component body.
  *
  * Component-local declarations win over module-level ones, parameters shadow
- * both, and any binding written anywhere in the module is dropped.
+ * both, and any binding written or passed around anywhere in the module is
+ * dropped: only a cell used purely as a method call receiver keeps its facts.
  */
 export function resolveOxcComponentNativeCellBindings(
   moduleFacts: OxcModuleExpressionFacts | undefined,
@@ -304,6 +381,10 @@ export function resolveOxcComponentNativeCellBindings(
   }
 
   for (const name of moduleFacts.mutatedBindingNames) {
+    bindings.delete(name);
+  }
+
+  for (const name of moduleFacts.escapedBindingNames) {
     bindings.delete(name);
   }
 
