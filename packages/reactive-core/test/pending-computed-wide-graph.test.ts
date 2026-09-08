@@ -93,3 +93,29 @@ describe("pending computed flush on wide graphs", () => {
     expect(large).toBeLessThan(Math.max(small, 0.5) * 10);
   });
 });
+
+describe("pending computed flush on deep chains", () => {
+  test("a subscribed chain deeper than the flush iteration limit updates in one flush", async () => {
+    const source = cell(0);
+    let node: { get(): number } = source;
+    for (let depth = 0; depth < 300; depth += 1) {
+      const previous = node;
+      node = computed(() => previous.get() + 1);
+    }
+    let last = -1;
+    const stop = effect(() => {
+      last = node.get();
+    });
+    await flushEffects();
+
+    try {
+      expect(last).toBe(300);
+      source.setValue(5);
+      await flushEffects();
+      expect(last).toBe(305);
+      expect(node.get()).toBe(305);
+    } finally {
+      stop();
+    }
+  });
+});

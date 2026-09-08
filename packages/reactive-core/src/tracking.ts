@@ -337,28 +337,51 @@ export function flushPendingComputed(): void {
   let completed = false;
 
   try {
-    for (let iteration = 0; runtimeState.pendingComputed.size > 0; iteration += 1) {
+    let iteration = 0;
+    // Passes and mid-pass merges both count: a computed that keeps re-queueing
+    // itself must hit the limit whether it does so alone or behind a later
+    // computed that forces a merge back to the start of the pass.
+    const beginIteration = () => {
       if (iteration >= maxPendingComputedFlushIterations) {
         discardPendingComputed();
         throw new Error(
           `Reactive computed flush limit exceeded after ${maxPendingComputedFlushIterations} iterations; a computed likely writes a value it also reads. Check for cell.set() inside a computation that reads the same cell.`,
         );
       }
+      iteration += 1;
+    };
 
+    while (runtimeState.pendingComputed.size > 0) {
+      beginIteration();
       let computations = takePendingComputed();
 
-      for (let index = 0; index < computations.length; index += 1) {
+      for (let index = 0; ; index += 1) {
         // A publish in this pass can queue a computed created earlier than the
         // rest of the pass, and a later computed may read through it while it
         // is still clean. Merge such work back in creation order so consumers
         // run after the publishes they depend on instead of seeing a glitch.
         // The tracked low bound avoids rescanning the queue per computation
-        // when a wide pass only queues later consumers.
-        if (runtimeState.pendingComputedMinId < (computations[index] as ReactiveComputation).id) {
-          computations = orderedComputations(
-            new Set([...computations.slice(index), ...takePendingComputed()]),
-          );
-          index = 0;
+        // when a wide pass only queues later consumers. Work that sorts after
+        // the whole pass, such as the next link of a chain, is appended so a
+        // deep chain drains in one pass instead of one iteration per link.
+        if (runtimeState.pendingComputed.size > 0) {
+          const pendingMinId = runtimeState.pendingComputedMinId;
+          if (pendingMinId > (computations[computations.length - 1] as ReactiveComputation).id) {
+            computations.push(...takePendingComputed());
+          } else if (
+            index < computations.length &&
+            pendingMinId < (computations[index] as ReactiveComputation).id
+          ) {
+            beginIteration();
+            computations = orderedComputations(
+              new Set([...computations.slice(index), ...takePendingComputed()]),
+            );
+            index = 0;
+          }
+        }
+
+        if (index >= computations.length) {
+          break;
         }
 
         const computation = computations[index];

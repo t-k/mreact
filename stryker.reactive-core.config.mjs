@@ -16,7 +16,7 @@ export default createStrykerConfig({
     "packages/reactive-core/src/computed.ts:442-480",
     "packages/reactive-core/src/tracking.ts:253-309",
     "packages/reactive-core/src/tracking.ts:311-329",
-    "packages/reactive-core/src/tracking.ts:355-362",
+    "packages/reactive-core/src/tracking.ts:340-380",
     "packages/reactive-core/src/cleanup-scope.ts:102-105",
     "packages/reactive-core/src/cleanup-scope.ts:119-133",
     "packages/reactive-core/src/state.ts:87-100",

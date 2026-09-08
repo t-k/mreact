@@ -4,7 +4,7 @@ import { batch, cell, computed, effect, untrack } from "../src/index.js";
 import { subscribeCell } from "../src/internal.js";
 import { resetSchedulerStateForTesting, setScheduler } from "../src/scheduler.js";
 import { runtimeState, type ReactiveComputation, type Source } from "../src/state.js";
-import { flushPendingComputed, notifySubscribers } from "../src/tracking.js";
+import { flushPendingComputed, notifySubscribers, queuePendingComputed } from "../src/tracking.js";
 
 describe("reactive-core: coverage fill for the remaining branches", () => {
   test("batch nests without triggering schedulePendingFlush until the outer batch closes", () => {
@@ -217,10 +217,10 @@ describe("reactive-core: coverage fill for the remaining branches", () => {
       queued: true,
       run() {
         this.queued = true;
-        runtimeState.pendingComputed.add(this);
+        queuePendingComputed(this);
       },
     };
-    runtimeState.pendingComputed.add(computation);
+    queuePendingComputed(computation);
 
     try {
       expect(() => flushPendingComputed()).toThrow(/computed flush limit exceeded/i);
@@ -256,8 +256,8 @@ describe("reactive-core: coverage fill for the remaining branches", () => {
         laterRuns += 1;
       },
     };
-    runtimeState.pendingComputed.add(first);
-    runtimeState.pendingComputed.add(later);
+    queuePendingComputed(first);
+    queuePendingComputed(later);
 
     try {
       expect(() => flushPendingComputed()).toThrow("first computed failed");
@@ -400,7 +400,7 @@ describe("reactive-core: coverage fill for the remaining branches", () => {
       subscribers: new Set([queuedComputation]),
     };
 
-    runtimeState.pendingComputed.add(queuedComputation);
+    queuePendingComputed(queuedComputation);
 
     try {
       notifySubscribers(source);
