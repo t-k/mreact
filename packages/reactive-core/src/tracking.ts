@@ -248,6 +248,8 @@ function cleanupAddedDependency(dep: Source, computation: ReactiveComputation): 
   computation.deps.delete(dep);
 }
 
+// Queued subscribers are still marked: a read may have recomputed one since it
+// was queued, and markDirty itself returns early when it is dirty and queued.
 export function notifySubscribers(source: Source, skip?: ReactiveComputation): void {
   bumpSourceVersion(source);
   const subscribers = source.subscribers;
@@ -258,7 +260,7 @@ export function notifySubscribers(source: Source, skip?: ReactiveComputation): v
 
   if (!(subscribers instanceof Set)) {
     if (runtimeState.batchDepth > 0) {
-      if (!subscribers.disposed && !subscribers.queued && subscribers !== skip) {
+      if (!subscribers.disposed && subscribers !== skip) {
         subscribers.markDirty();
       }
       return;
@@ -267,7 +269,7 @@ export function notifySubscribers(source: Source, skip?: ReactiveComputation): v
     runtimeState.notificationDepth += 1;
 
     try {
-      if (!subscribers.disposed && !subscribers.queued && subscribers !== skip) {
+      if (!subscribers.disposed && subscribers !== skip) {
         subscribers.markDirty();
       }
     } finally {
@@ -286,12 +288,12 @@ export function notifySubscribers(source: Source, skip?: ReactiveComputation): v
     const singleSubscriber = subscribers.size === 1 ? subscribers.values().next().value : undefined;
 
     if (singleSubscriber !== undefined) {
-      if (!singleSubscriber.disposed && !singleSubscriber.queued && singleSubscriber !== skip) {
+      if (!singleSubscriber.disposed && singleSubscriber !== skip) {
         singleSubscriber.markDirty();
       }
     } else {
       for (const subscriber of orderedComputations(subscribers)) {
-        if (!subscriber.disposed && !subscriber.queued && subscriber !== skip) {
+        if (!subscriber.disposed && subscriber !== skip) {
           subscriber.markDirty();
         }
       }
@@ -323,13 +325,31 @@ export function flushPendingComputed(): void {
         );
       }
 
-      const computations =
+      let computations =
         runtimeState.pendingComputed.size === 1
           ? [runtimeState.pendingComputed.values().next().value as ReactiveComputation]
           : orderedComputations(runtimeState.pendingComputed);
       runtimeState.pendingComputed.clear();
 
       for (let index = 0; index < computations.length; index += 1) {
+        // A publish in this pass can queue a computed created earlier than the
+        // rest of the pass, and a later computed may read through it while it
+        // is still clean. Merge such work back in creation order so consumers
+        // run after the publishes they depend on instead of seeing a glitch.
+        if (runtimeState.pendingComputed.size > 0) {
+          const nextId = (computations[index] as ReactiveComputation).id;
+          for (const pending of runtimeState.pendingComputed) {
+            if (pending.id < nextId) {
+              computations = orderedComputations(
+                new Set([...computations.slice(index), ...runtimeState.pendingComputed]),
+              );
+              runtimeState.pendingComputed.clear();
+              index = 0;
+              break;
+            }
+          }
+        }
+
         const computation = computations[index];
         if (computation === undefined) {
           continue;

@@ -22,6 +22,8 @@ export interface Source {
   trackedBy?: ReactiveComputation | undefined;
   trackedVersion?: number | undefined;
   debugWriters?: Map<number, string> | undefined;
+  /** The computed that publishes this source, so readers can flush its queued publish first. */
+  publisher?: ReactiveComputation | undefined;
 }
 
 export interface ReactiveComputation {

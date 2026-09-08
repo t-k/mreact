@@ -378,13 +378,16 @@ describe("reactive-core: coverage fill for the remaining branches", () => {
 
   test("notifySubscribers still flushes pending computed when cached subscriber is queued", () => {
     let runs = 0;
+    let marks = 0;
     const queuedComputation: ReactiveComputation = {
       id: -1,
       deps: new Set(),
       disposed: false,
       queued: true,
       markDirty() {
-        throw new Error("queued subscriber should be skipped");
+        // A queued subscriber may have been recomputed by a read since it was
+        // queued, so it is marked again and must treat the call as idempotent.
+        marks += 1;
       },
       run() {
         runs += 1;
@@ -404,6 +407,7 @@ describe("reactive-core: coverage fill for the remaining branches", () => {
 
       expect(runtimeState.pendingComputed.has(queuedComputation)).toBe(false);
       expect(queuedComputation.queued).toBe(false);
+      expect(marks).toBe(1);
       expect(runs).toBe(1);
     } finally {
       runtimeState.pendingComputed.delete(queuedComputation);

@@ -151,6 +151,31 @@ function createComputed<T>(
 
   runtimeState.nextComputationId += 1;
   registerCleanup(computation.dispose);
+  if (!deferred) {
+    source.publisher = computation;
+  }
+
+  function pullQueuedDependencies(): void {
+    // A clean cache can still be stale while a dependency's own publish is
+    // queued behind this read, for example when this computed was created
+    // before that dependency. Publish it first so the read is glitch-free and
+    // this computed is dirtied through the normal path. Publishing inside a
+    // batch keeps the cascade queued instead of re-entering readers upstream.
+    let pulled = false;
+    for (const dependency of computation.deps) {
+      const publisher = dependency.publisher;
+      if (publisher !== undefined && publisher.queued) {
+        if (!pulled) {
+          pulled = true;
+          runtimeState.batchDepth += 1;
+        }
+        publisher.run();
+      }
+    }
+    if (pulled) {
+      runtimeState.batchDepth -= 1;
+    }
+  }
 
   function publishIfChanged(): void {
     const previousHasValue = publishedHasValue;
@@ -336,6 +361,14 @@ function createComputed<T>(
         }
       }
 
+      if (
+        !dirty &&
+        source.subscribers !== null &&
+        (runtimeState.flushingComputed || runtimeState.pendingComputed.size > 0)
+      ) {
+        pullQueuedDependencies();
+      }
+
       const wasDirty = dirty;
       const previousHasValue = hasValue;
       const previousValue = value;
@@ -369,7 +402,16 @@ function createComputed<T>(
         publishedHasValue = true;
 
         if (owed) {
-          notifySubscribers(source, runtimeState.activeTracker ?? undefined);
+          // Only mark and queue: a synchronous publish here could cascade back
+          // into a computed that is still mid-recompute on the reader stack.
+          // The enclosing flush, batch, or notification drains the queue once
+          // this read returns.
+          runtimeState.batchDepth += 1;
+          try {
+            notifySubscribers(source, runtimeState.activeTracker ?? undefined);
+          } finally {
+            runtimeState.batchDepth -= 1;
+          }
         }
       }
 

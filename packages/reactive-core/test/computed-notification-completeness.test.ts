@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { cell, computed, effect } from "../src/index.js";
+import { cell, computed, effect, untrack } from "../src/index.js";
 import { flushEffects } from "../src/testing.js";
 
 describe("computed notification completeness", () => {
@@ -216,4 +216,73 @@ describe("computed publish baseline before queueing", () => {
       }
     },
   );
+});
+
+describe("computed publish deferral during reads", () => {
+  test("attaching a dormant graph with stale caches publishes once and keeps later updates", async () => {
+    const x = cell(3);
+    const n1 = computed(() => x.get());
+    const n2 = computed(() => x.get());
+    const n3 = computed(() => n1.get() + n2.get());
+    const n4 = computed(() => n2.get() + n3.get() + n1.get());
+    const n6 = computed(() => n4.get());
+    untrack(() => [n1, n2, n3, n4, n6].map((node) => node.get()));
+
+    const stopFirst = effect(() => {
+      n1.get();
+    });
+    x.setValue(2);
+    await flushEffects();
+
+    const seen: number[] = [];
+    const stopSecond = effect(() => {
+      seen.push(n6.get());
+    });
+
+    try {
+      // The stale dormant chain refreshed while the effect attached: nobody
+      // else is owed that value, so the effect must not run again for it.
+      await flushEffects();
+      expect(seen).toEqual([8]);
+
+      x.setValue(1);
+      expect(untrack(() => n6.get())).toBe(4);
+      await flushEffects();
+      expect(seen).toEqual([8, 4]);
+
+      x.setValue(3);
+      expect(untrack(() => n6.get())).toBe(12);
+      await flushEffects();
+      expect(seen).toEqual([8, 4, 12]);
+    } finally {
+      stopFirst();
+      stopSecond();
+    }
+  });
+
+  test("a publish that queues an earlier computed runs it before later consumers in the same pass", async () => {
+    const x = cell(2);
+    const a = computed(() => x.get());
+    const b = computed(() => a.get());
+    // c subscribes to x directly and is created after b, so an x write queues
+    // a and c while b only becomes pending once a publishes.
+    const c = computed(() => x.get() + a.get() + b.get());
+    const seen: number[] = [];
+    const stop = effect(() => {
+      seen.push(c.get());
+    });
+
+    try {
+      x.setValue(1);
+      expect(untrack(() => c.get())).toBe(3);
+      await flushEffects();
+      expect(seen).toEqual([6, 3]);
+
+      x.setValue(4);
+      await flushEffects();
+      expect(seen).toEqual([6, 3, 12]);
+    } finally {
+      stop();
+    }
+  });
 });
