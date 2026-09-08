@@ -371,6 +371,11 @@ export function flushPendingComputed(): void {
             (index < computations.length &&
               pendingMinId < (computations[index] as ReactiveComputation).id)
           ) {
+            // Move the rest of the pass into the heap once, then every later
+            // merge in this pass is a logarithmic push per queued computation.
+            for (; index < computations.length; index += 1) {
+              heapPush(merged, computations[index] as ReactiveComputation);
+            }
             for (const computation of takePendingComputed()) {
               heapPush(merged, computation);
             }
@@ -379,24 +384,11 @@ export function flushPendingComputed(): void {
 
         let computation: ReactiveComputation;
         if (merged.length > 0) {
-          const next = merged[0] as ReactiveComputation;
-          if (
-            index < computations.length &&
-            (computations[index] as ReactiveComputation).id < next.id
-          ) {
-            computation = computations[index] as ReactiveComputation;
-            index += 1;
-          } else {
+          computation = heapPop(merged);
+          // The same computation can be queued again while it still waits in
+          // the heap. Run it once, like the set-based merge did.
+          while (merged[0] === computation) {
             heapPop(merged);
-            computation = next;
-            // The same computation can be queued again while it still waits in
-            // the pass or the heap. Run it once, like the set-based merge did.
-            if (index < computations.length && computations[index] === computation) {
-              index += 1;
-            }
-            while (merged.length > 0 && merged[0] === computation) {
-              heapPop(merged);
-            }
           }
         } else if (index < computations.length) {
           computation = computations[index] as ReactiveComputation;
@@ -438,53 +430,47 @@ export function flushPendingComputed(): void {
   }
 }
 
-function heapPush(heap: ReactiveComputation[], computation: ReactiveComputation): void {
-  let child = heap.length;
-  heap.push(computation);
-  while (child > 0) {
-    const parent = (child - 1) >> 1;
-    if ((heap[parent] as ReactiveComputation).id <= computation.id) {
-      break;
-    }
-    heap[child] = heap[parent] as ReactiveComputation;
-    child = parent;
-  }
-  heap[child] = computation;
-}
-
-function heapPop(heap: ReactiveComputation[]): void {
-  const last = heap.pop() as ReactiveComputation;
-  const size = heap.length;
-  if (size === 0) {
-    return;
-  }
-  let parent = 0;
-  for (;;) {
-    let child = parent * 2 + 1;
-    if (child >= size) {
-      break;
-    }
-    if (
-      child + 1 < size &&
-      (heap[child + 1] as ReactiveComputation).id < (heap[child] as ReactiveComputation).id
-    ) {
-      child += 1;
-    }
-    if ((heap[child] as ReactiveComputation).id >= last.id) {
-      break;
-    }
-    heap[parent] = heap[child] as ReactiveComputation;
-    parent = child;
-  }
-  heap[parent] = last;
-}
-
 function discardPendingComputed(): void {
   for (const computation of takePendingComputed()) {
     computation.queued = false;
   }
 }
 
+function heapPush(heap: ReactiveComputation[], computation: ReactiveComputation): void {
+  let child = heap.length;
+  heap.push(computation);
+  for (let parent; child > 0; child = parent) {
+    parent = (child - 1) >> 1;
+    if ((heap[parent] as ReactiveComputation).id <= computation.id) {
+      break;
+    }
+    heap[child] = heap[parent] as ReactiveComputation;
+  }
+  heap[child] = computation;
+}
+
+function heapPop(heap: ReactiveComputation[]): ReactiveComputation {
+  const top = heap[0] as ReactiveComputation;
+  const last = heap.pop() as ReactiveComputation;
+  const size = heap.length;
+  if (size > 0) {
+    let parent = 0;
+    for (let child; (child = parent * 2 + 1) < size; parent = child) {
+      if (
+        child + 1 < size &&
+        (heap[child + 1] as ReactiveComputation).id < (heap[child] as ReactiveComputation).id
+      ) {
+        child += 1;
+      }
+      if ((heap[child] as ReactiveComputation).id >= last.id) {
+        break;
+      }
+      heap[parent] = heap[child] as ReactiveComputation;
+    }
+    heap[parent] = last;
+  }
+  return top;
+}
 function orderedComputations(
   computations: ReadonlySet<ReactiveComputation>,
 ): ReactiveComputation[] {
