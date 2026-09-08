@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { cell, computed, effect, untrack } from "../src/index.js";
+import { batch, cell, computed, effect, untrack } from "../src/index.js";
 import { flushEffects } from "../src/testing.js";
 
 describe("computed notification completeness", () => {
@@ -281,6 +281,83 @@ describe("computed publish deferral during reads", () => {
       x.setValue(4);
       await flushEffects();
       expect(seen).toEqual([6, 3, 12]);
+    } finally {
+      stop();
+    }
+  });
+});
+
+describe("early-read publish skips the reader", () => {
+  test.each([
+    ["outside a batch", false],
+    ["inside a batch", true],
+  ] as const)("does not recompute the sole reader again (%s)", async (_label, inBatch) => {
+    const x = cell(1);
+    const shared = computed(() => x.get());
+    let readerRuns = 0;
+    const reader = computed(() => {
+      readerRuns += 1;
+      return shared.get() * 10;
+    });
+    untrack(() => reader.get());
+    x.setValue(2);
+
+    const seen: number[] = [];
+    let stop = () => {};
+    const subscribe = () => {
+      stop = effect(() => {
+        seen.push(reader.get());
+      });
+    };
+    if (inBatch) {
+      batch(subscribe);
+    } else {
+      subscribe();
+    }
+
+    try {
+      await flushEffects();
+      // The stale dormant chain refreshed while the reader attached, and the
+      // reader is the only subscriber of the shared computed: it already holds
+      // the value, so nothing may schedule it again.
+      expect(seen).toEqual([20]);
+      expect(readerRuns).toBe(2);
+
+      x.setValue(3);
+      await flushEffects();
+      expect(seen).toEqual([20, 30]);
+      expect(readerRuns).toBe(3);
+    } finally {
+      stop();
+    }
+  });
+
+  test("does not recompute the reader among several subscribers again", async () => {
+    const x = cell(1);
+    const shared = computed(() => x.get());
+    const sibling = computed(() => shared.get() + 1);
+    let readerRuns = 0;
+    const reader = computed(() => {
+      readerRuns += 1;
+      return shared.get() * 10 + sibling.get();
+    });
+    untrack(() => reader.get());
+    x.setValue(2);
+
+    const seen: number[] = [];
+    const stop = effect(() => {
+      seen.push(reader.get());
+    });
+
+    try {
+      await flushEffects();
+      expect(seen).toEqual([23]);
+      expect(readerRuns).toBe(2);
+
+      x.setValue(3);
+      await flushEffects();
+      expect(seen).toEqual([23, 34]);
+      expect(readerRuns).toBe(3);
     } finally {
       stop();
     }
