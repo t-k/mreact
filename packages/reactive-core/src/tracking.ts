@@ -307,6 +307,26 @@ export function notifySubscribers(source: Source, skip?: ReactiveComputation): v
   }
 }
 
+/** Queues a computed publish for the next flush of batched notifications. */
+export function queuePendingComputed(computation: ReactiveComputation): void {
+  computation.queued = true;
+  runtimeState.pendingComputed.add(computation);
+  if (computation.id < runtimeState.pendingComputedMinId) {
+    runtimeState.pendingComputedMinId = computation.id;
+  }
+}
+
+function takePendingComputed(): ReactiveComputation[] {
+  const pending = runtimeState.pendingComputed;
+  const taken =
+    pending.size === 1
+      ? [pending.values().next().value as ReactiveComputation]
+      : orderedComputations(pending);
+  pending.clear();
+  runtimeState.pendingComputedMinId = Number.POSITIVE_INFINITY;
+  return taken;
+}
+
 /** Flushes computed values that were dirtied during batched notifications. */
 export function flushPendingComputed(): void {
   if (runtimeState.flushingComputed) {
@@ -325,29 +345,20 @@ export function flushPendingComputed(): void {
         );
       }
 
-      let computations =
-        runtimeState.pendingComputed.size === 1
-          ? [runtimeState.pendingComputed.values().next().value as ReactiveComputation]
-          : orderedComputations(runtimeState.pendingComputed);
-      runtimeState.pendingComputed.clear();
+      let computations = takePendingComputed();
 
       for (let index = 0; index < computations.length; index += 1) {
         // A publish in this pass can queue a computed created earlier than the
         // rest of the pass, and a later computed may read through it while it
         // is still clean. Merge such work back in creation order so consumers
         // run after the publishes they depend on instead of seeing a glitch.
-        if (runtimeState.pendingComputed.size > 0) {
-          const nextId = (computations[index] as ReactiveComputation).id;
-          for (const pending of runtimeState.pendingComputed) {
-            if (pending.id < nextId) {
-              computations = orderedComputations(
-                new Set([...computations.slice(index), ...runtimeState.pendingComputed]),
-              );
-              runtimeState.pendingComputed.clear();
-              index = 0;
-              break;
-            }
-          }
+        // The tracked low bound avoids rescanning the queue per computation
+        // when a wide pass only queues later consumers.
+        if (runtimeState.pendingComputedMinId < (computations[index] as ReactiveComputation).id) {
+          computations = orderedComputations(
+            new Set([...computations.slice(index), ...takePendingComputed()]),
+          );
+          index = 0;
         }
 
         const computation = computations[index];
@@ -385,11 +396,9 @@ export function flushPendingComputed(): void {
 }
 
 function discardPendingComputed(): void {
-  for (const computation of runtimeState.pendingComputed) {
+  for (const computation of takePendingComputed()) {
     computation.queued = false;
   }
-
-  runtimeState.pendingComputed.clear();
 }
 
 function orderedComputations(

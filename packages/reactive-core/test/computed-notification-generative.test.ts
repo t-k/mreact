@@ -288,9 +288,16 @@ describe("computed notification generative model", () => {
   // Seeds that each fail when one of the publish safeguards is removed:
   // 30 needs the early-read publish to existing subscribers, 688 needs a
   // reader to flush a queued dependency first, 1964 needs that pull to run
-  // inside a batch, and 10097 needs the flush to merge a lower-id computed
-  // queued mid-pass ahead of later consumers.
-  test.each([30, 688, 1964, 10097])("keeps the reference model on pinned seed %d", async (seed) => {
-    await runScenario(seed);
-  });
+  // inside a batch, 10097 and 63509 need the flush to merge a lower-id
+  // computed queued mid-pass ahead of later consumers, 30830 needs a pull to
+  // preserve the outer reader's stamped dependencies, 28090 needs an
+  // invalidation that arrives mid-recompute to survive that recompute, and
+  // 20199 and 40270 need the read of a queued computed to refresh its
+  // publish baseline.
+  test.each([30, 688, 1964, 10097, 63509, 30830, 28090, 20199, 40270])(
+    "keeps the reference model on pinned seed %d",
+    async (seed) => {
+      await runScenario(seed);
+    },
+  );
 });

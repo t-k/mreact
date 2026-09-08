@@ -15,6 +15,7 @@ import {
   cleanupDeps,
   cleanupUntrackedDeps,
   nextTrackingVersionFor,
+  queuePendingComputed,
   notifySubscribers,
   preserveIncrementalTracking,
   addSourceSubscriber,
@@ -56,6 +57,11 @@ function createComputed<T>(
   let publishedHasValue = false;
   let publishedValue: T;
   let dirty = true;
+  // Set while fn() runs. A publish cascade started by a nested read can
+  // reach this computed before its own recompute returns; the invalidation
+  // must survive that recompute instead of being overwritten by its result.
+  let recomputing = false;
+  let invalidatedWhileRecomputing = false;
   let untrackedDependencies: Array<NonNullable<ReturnType<typeof createUntrackedDependency>>> = [];
   const equals = typeof options === "function" ? options : (options?.equals ?? Object.is);
   const resource = registerReactiveDevtoolsResource("computed");
@@ -100,6 +106,9 @@ function createComputed<T>(
     queued: false,
     markDirty() {
       invalidateAttachmentCheckContext();
+      if (recomputing) {
+        invalidatedWhileRecomputing = true;
+      }
       if (dirty) {
         if (source.subscribers === null || computation.queued) {
           return;
@@ -114,8 +123,7 @@ function createComputed<T>(
           return;
         }
         if (runtimeState.notificationDepth > 0 || runtimeState.batchDepth > 0) {
-          computation.queued = true;
-          runtimeState.pendingComputed.add(computation);
+          queuePendingComputed(computation);
           return;
         }
 
@@ -167,6 +175,13 @@ function createComputed<T>(
       if (publisher !== undefined && publisher.queued) {
         if (!pulled) {
           pulled = true;
+          // The pulled recompute re-stamps any source it shares with the
+          // reader that is still tracking on the stack, so snapshot what that
+          // reader has touched so far before its cleanup consults the stamps.
+          const activeTracker = runtimeState.activeTracker;
+          if (activeTracker !== null && activeTracker !== computation) {
+            preserveIncrementalTracking(activeTracker);
+          }
           runtimeState.batchDepth += 1;
         }
         publisher.run();
@@ -227,6 +242,7 @@ function createComputed<T>(
     computation.trackingOrderedMismatch = false;
     computation.trackingVersion = nextTrackingVersion;
     runtimeState.activeTracker = computation;
+    recomputing = true;
 
     try {
       const nextValue = fn();
@@ -266,7 +282,10 @@ function createComputed<T>(
 
       value = nextValue;
       hasValue = true;
-      dirty = false;
+      // A dependency published a newer value while fn() was still reading
+      // the old one. Keep the cache invalid so the publish that was queued
+      // for this computed recomputes it instead of announcing this value.
+      dirty = invalidatedWhileRecomputing;
 
       if (source.subscribers === null) {
         suspendIfUnobserved();
@@ -291,6 +310,8 @@ function createComputed<T>(
       computation.trackingOrderedMismatch = undefined;
       computation.trackingTouchedDeps = undefined;
       runtimeState.activeTracker = previousTracker;
+      recomputing = false;
+      invalidatedWhileRecomputing = false;
     }
   }
 
@@ -382,36 +403,35 @@ function createComputed<T>(
         bumpSourceVersion(source);
       }
 
-      if (!computation.queued) {
-        // A queued publish keeps its own baseline until it runs. Without one,
-        // this read may still have refreshed a value that existing subscribers
-        // never heard about, for example when a sibling reader reaches this
-        // computed through a dirty dependency before that dependency publishes.
-        // Announce it now so the later upstream publish, which compares against
-        // this baseline, cannot swallow the change. The reader that triggered
-        // this recompute already holds the fresh value, so it is skipped.
-        // Deferred computeds forward dirtiness eagerly instead of publishing
-        // values, so their subscribers were already told.
-        const owed =
-          !deferred &&
-          source.subscribers !== null &&
-          wasDirty &&
-          publishedHasValue &&
-          !equals(publishedValue, nextValue);
-        publishedValue = nextValue;
-        publishedHasValue = true;
+      // This read may have refreshed a value that existing subscribers never
+      // heard about, for example when a sibling reader reaches this computed
+      // through a dirty dependency before that dependency publishes, or when
+      // a nested publish queued this computed while its recompute was on the
+      // stack. Announce it now so a later publish, which compares against
+      // this baseline, cannot swallow the change. The reader that triggered
+      // this recompute already holds the fresh value, so it is skipped. A
+      // clean read leaves the baseline as it is: it already equals the cache.
+      // Deferred computeds forward dirtiness eagerly instead of publishing
+      // values, so their subscribers were already told.
+      const owed =
+        !deferred &&
+        source.subscribers !== null &&
+        wasDirty &&
+        publishedHasValue &&
+        !equals(publishedValue, nextValue);
+      publishedValue = nextValue;
+      publishedHasValue = true;
 
-        if (owed) {
-          // Only mark and queue: a synchronous publish here could cascade back
-          // into a computed that is still mid-recompute on the reader stack.
-          // The enclosing flush, batch, or notification drains the queue once
-          // this read returns.
-          runtimeState.batchDepth += 1;
-          try {
-            notifySubscribers(source, runtimeState.activeTracker ?? undefined);
-          } finally {
-            runtimeState.batchDepth -= 1;
-          }
+      if (owed) {
+        // Only mark and queue: a synchronous publish here could cascade back
+        // into a computed that is still mid-recompute on the reader stack.
+        // The enclosing flush, batch, or notification drains the queue once
+        // this read returns.
+        runtimeState.batchDepth += 1;
+        try {
+          notifySubscribers(source, runtimeState.activeTracker ?? undefined);
+        } finally {
+          runtimeState.batchDepth -= 1;
         }
       }
 

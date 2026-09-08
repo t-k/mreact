@@ -363,3 +363,195 @@ describe("early-read publish skips the reader", () => {
     }
   });
 });
+
+describe("computed notification baseline after subscriber turnover", () => {
+  test("a new subscriber that read a value the old baseline never announced still hears the next change", async () => {
+    const flag = cell(false);
+    const amount = cell(3);
+    const first = computed(() => (flag.get() ? amount.get() + 8 : 8));
+    const second = computed(() => (first.get() % 2 === 0 ? first.get() + 8 : amount.get() + 8));
+    const result = computed(() => (second.get() % 3 === 0 ? 8 : first.get()));
+    const view = computed(() => result.get());
+    const seen: number[] = [];
+
+    const stopFirstObserver = effect(() => {
+      second.get();
+    });
+    expect(result.get()).toBe(8);
+    stopFirstObserver();
+
+    flag.setValue(true);
+
+    const stop = effect(() => {
+      seen.push(view.get());
+    });
+
+    try {
+      expect(seen).toEqual([11]);
+
+      amount.setValue(2);
+      await flushEffects();
+
+      expect(result.get()).toBe(8);
+      expect(view.get()).toBe(8);
+      expect(seen).toEqual([11, 8]);
+    } finally {
+      stop();
+    }
+  });
+
+  test("keeps the early-read baseline and the turnover baseline consistent when the value returns to its old published value", async () => {
+    for (const primeBeforeSubscribe of [false, true]) {
+      const x = cell(1);
+      const a = computed(() => x.get());
+      const b = computed(() => a.get() * 2);
+      const seen: number[] = [];
+
+      const stopA = effect(() => {
+        a.get();
+      });
+      if (primeBeforeSubscribe) {
+        expect(b.get()).toBe(2);
+      }
+      stopA();
+
+      x.setValue(5);
+      const stopB = effect(() => {
+        seen.push(b.get());
+      });
+
+      try {
+        expect(seen).toEqual([10]);
+
+        x.setValue(1);
+        await flushEffects();
+
+        expect(b.get()).toBe(2);
+        expect(seen).toEqual([10, 2]);
+      } finally {
+        stopB();
+      }
+    }
+  });
+});
+
+describe("pulling a queued dependency inside a tracked recompute", () => {
+  test("keeps the reader's earlier stamped dependencies when the pulled publish reads the same cell", async () => {
+    const a = cell(1);
+    const x = cell(10);
+    const y = cell(0);
+    let p: ReturnType<typeof computed<number>> | undefined;
+    // m forward-references p, so m is created before the computed it depends on,
+    // and it never changes, so o can only learn about a through its own edge.
+    const m = computed(() => ((p as ReturnType<typeof computed<number>>).get(), 1));
+    // o reads a first, then x on odd values, then m; the parity switch defeats the
+    // ordered fast path so a is tracked through the per-source stamp instead.
+    const o = computed(() => a.get() + (a.get() % 2 === 1 ? x.get() : 0) + m.get());
+    // p reads a and y in a parity-dependent order, so its own ordered fast path is
+    // gone by the third run and it stamps a while o is still mid-recompute.
+    p = computed(() => (a.get() % 2 === 1 ? a.get() * 100 + y.get() : y.get() + a.get() * 100));
+    const seen: number[] = [];
+    const stop = effect(() => {
+      seen.push(o.get());
+    });
+
+    try {
+      expect(seen).toEqual([12]);
+
+      a.setValue(2);
+      await flushEffects();
+      expect(o.get()).toBe(3);
+
+      a.setValue(3);
+      await flushEffects();
+      expect(o.get()).toBe(14);
+
+      a.setValue(4);
+      await flushEffects();
+      expect(o.get()).toBe(5);
+
+      a.setValue(5);
+      await flushEffects();
+      expect(o.get()).toBe(16);
+      expect(seen).toEqual([12, 3, 14, 5, 16]);
+    } finally {
+      stop();
+    }
+  });
+});
+
+describe("computed invalidated while its own recompute is on the stack", () => {
+  test("keeps the invalidation when a nested read publishes a dependency it already read", async () => {
+    const x = cell(1);
+    const y = cell(1);
+    // `a` is created before `late`, so the flush order by id runs `reader`
+    // before `late` even though `reader` depends on it transitively.
+    let late!: ReturnType<typeof computed<number>>;
+    const a = computed(() => x.get() + late.get());
+    const b = computed(() => a.get());
+    const d = computed(() => b.get());
+    const reader = computed(() => b.get() + a.get() + d.get() + y.get());
+    late = computed(() => y.get() * 2);
+    const seen: number[] = [];
+    const stops = [a, b, d, late].map((node) =>
+      effect(() => {
+        node.get();
+      }),
+    );
+    stops.push(
+      effect(() => {
+        seen.push(reader.get());
+      }),
+    );
+
+    try {
+      expect(seen).toEqual([10]);
+
+      // `reader` reads the stale `b` first, then `a`, whose read pulls the
+      // queued `late`, refreshes `a`, and queues `b`. Reading `d` then runs
+      // that queued publish of `b`, which marks `reader` dirty while its own
+      // recompute is still running. That invalidation must survive.
+      y.setValue(2);
+      await flushEffects();
+
+      expect(reader.get()).toBe(17);
+      expect(seen).toEqual([10, 17]);
+    } finally {
+      for (const stop of stops) stop();
+    }
+  });
+});
+
+describe("reading a clean intermediate whose dependency is queued during a flush", () => {
+  test("a consumer created before that dependency recomputes once per update", async () => {
+    const x = cell(1);
+    let consumerRuns = 0;
+    let intermediate: { get(): number } = { get: () => 0 };
+    const consumer = computed(() => {
+      consumerRuns += 1;
+      return x.get() + intermediate.get();
+    });
+    let late: { get(): number } = { get: () => 0 };
+    intermediate = computed(() => late.get());
+    late = computed(() => x.get() * 2);
+    const seen: number[] = [];
+    const stop = effect(() => {
+      seen.push(consumer.get());
+    });
+
+    try {
+      expect(seen).toEqual([3]);
+      consumerRuns = 0;
+
+      x.setValue(2);
+      await flushEffects();
+
+      expect(seen).toEqual([3, 6]);
+      // Without pulling the queued publish behind the clean intermediate, the
+      // consumer would first read the stale intermediate and run a second time.
+      expect(consumerRuns).toBe(1);
+    } finally {
+      stop();
+    }
+  });
+});

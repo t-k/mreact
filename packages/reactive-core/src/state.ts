@@ -75,6 +75,9 @@ export const runtimeState: {
   nextComputationId: number;
   notificationDepth: number;
   pendingComputed: Set<ReactiveComputation>;
+  // Lowest id queued in pendingComputed since it was last cleared. Deletes
+  // leave it as is: a stale low bound only costs one extra merge in a flush.
+  pendingComputedMinId: number;
 } = {
   attachmentCheckContext: undefined,
   activeTracker: null,
@@ -84,6 +87,7 @@ export const runtimeState: {
   nextComputationId: 0,
   notificationDepth: 0,
   pendingComputed: new Set(),
+  pendingComputedMinId: Number.POSITIVE_INFINITY,
 };
 
 export function sourceVersion(source: Source): number {
