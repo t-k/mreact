@@ -528,15 +528,31 @@ function __mreactShouldReplaceNode(current, next) {
 }
 
 function __mreactSyncAttributes(current, next) {
-  for (const attribute of Array.from(current.attributes)) {
-    if (!next.hasAttribute(attribute.name)) {
-      current.removeAttribute(attribute.name);
+  // Both loops read names out of the element before walking them. The first has
+  // to: it removes from the live attribute list it is iterating, so an index walk
+  // over that list skips the attribute after every removal. The second does not,
+  // because it only reads next and only writes to current, but getAttributeNames
+  // is what makes either affordable - it yields plain strings, where iterating
+  // attributes forces the DOM to materialise an Attr node per attribute, which
+  // measured as the larger half of this function's cost.
+  const currentNames = current.getAttributeNames();
+
+  for (let index = 0; index < currentNames.length; index += 1) {
+    const name = currentNames[index];
+
+    if (!next.hasAttribute(name)) {
+      current.removeAttribute(name);
     }
   }
 
-  for (const attribute of Array.from(next.attributes)) {
-    if (current.getAttribute(attribute.name) !== attribute.value) {
-      current.setAttribute(attribute.name, attribute.value);
+  const nextNames = next.getAttributeNames();
+
+  for (let index = 0; index < nextNames.length; index += 1) {
+    const name = nextNames[index];
+    const value = next.getAttribute(name);
+
+    if (current.getAttribute(name) !== value) {
+      current.setAttribute(name, value);
     }
   }
 }
@@ -565,41 +581,46 @@ function __mreactSyncPropBindings(current, next) {
 }
 
 function __mreactResumeChildren(current, next) {
-  const nextChildren = Array.from(next.childNodes);
   const refreshTextBindings = next.__mreactHasEvents === true;
-  let index = 0;
+  // Resuming a child can move it out of next - appendChild and replaceWith both
+  // do, and so does the replace branch of __mreactResumeNode - while the branches
+  // that keep the server DOM leave it in place. next.childNodes is live, so it
+  // shrinks unevenly under the walk and cannot be indexed. Reading each sibling
+  // before its child is consumed is exact, and costs no array per element.
+  let nextChild = next.firstChild;
+  let resumed = 0;
 
-  while (index < nextChildren.length) {
-    const currentChild = current.childNodes[index];
-    const nextChild = nextChildren[index];
+  while (nextChild !== null) {
+    const followingChild = nextChild.nextSibling;
+    const currentChild = current.childNodes[resumed];
 
     if (currentChild === undefined) {
       current.appendChild(nextChild);
-      index += 1;
-      continue;
-    }
-
-    // Nodes owned by insertDynamic/bindText must replace the matching server
-    // DOM so subsequent reactive updates mutate the live node/range instead of
-    // appending beside stale SSR fallback content.
-    const isDynamicNode = nextChild.__mreactDynamicNode === true;
-    const isReactiveText = nextChild.__mreactReactiveText === true;
-
-    if (isDynamicNode) {
-      currentChild.replaceWith(nextChild);
-    } else if (
-      (refreshTextBindings || isReactiveText) &&
-      currentChild.nodeType === Node.TEXT_NODE &&
-      nextChild.nodeType === Node.TEXT_NODE
-    ) {
-      currentChild.replaceWith(nextChild);
     } else {
-      __mreactResumeNode(currentChild, nextChild);
+      // Nodes owned by insertDynamic/bindText must replace the matching server
+      // DOM so subsequent reactive updates mutate the live node/range instead of
+      // appending beside stale SSR fallback content.
+      const isDynamicNode = nextChild.__mreactDynamicNode === true;
+      const isReactiveText = nextChild.__mreactReactiveText === true;
+
+      if (isDynamicNode) {
+        currentChild.replaceWith(nextChild);
+      } else if (
+        (refreshTextBindings || isReactiveText) &&
+        currentChild.nodeType === Node.TEXT_NODE &&
+        nextChild.nodeType === Node.TEXT_NODE
+      ) {
+        currentChild.replaceWith(nextChild);
+      } else {
+        __mreactResumeNode(currentChild, nextChild);
+      }
     }
-    index += 1;
+
+    nextChild = followingChild;
+    resumed += 1;
   }
 
-  while (current.childNodes.length > nextChildren.length) {
+  while (current.childNodes.length > resumed) {
     const lastChild = current.lastChild;
     if (lastChild === null) {
       break;
