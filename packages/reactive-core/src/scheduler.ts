@@ -69,7 +69,7 @@ export function queueComputation(computation: ReactiveComputation): void {
 
 /** Requests a flush of queued reactive computations. */
 export function schedulePendingFlush(): void {
-  if (queue.length === 0 || scheduled || flushing) {
+  if (queue.length === 0 || scheduled || flushing || runtimeState.flushingComputed) {
     return;
   }
 

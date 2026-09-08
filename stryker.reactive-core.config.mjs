@@ -16,7 +16,8 @@ export default createStrykerConfig({
     "packages/reactive-core/src/computed.ts:444-482",
     "packages/reactive-core/src/tracking.ts:253-309",
     "packages/reactive-core/src/tracking.ts:311-329",
-    "packages/reactive-core/src/tracking.ts:330-473",
+    "packages/reactive-core/src/tracking.ts:330-479",
+    "packages/reactive-core/src/scheduler.ts:71-74",
     "packages/reactive-core/src/cleanup-scope.ts:102-105",
     "packages/reactive-core/src/cleanup-scope.ts:119-133",
     "packages/reactive-core/src/state.ts:90-103",
@@ -24,6 +25,7 @@ export default createStrykerConfig({
     "packages/reactive-core/src/cell.ts:102-145",
   ],
   testFiles: [
+    "packages/reactive-core/test/effect-wakeup.test.ts",
     "packages/reactive-core/test/effect.test.ts",
     "packages/reactive-core/test/effect-manual-dispose.test.ts",
     "packages/reactive-core/test/effect-cleanup-reentry.test.ts",

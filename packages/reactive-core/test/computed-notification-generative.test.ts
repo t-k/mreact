@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { batch, cell, computed, effect, untrack } from "../src/index.js";
-import { flushEffects } from "../src/testing.js";
+import { createReactiveTestRuntime, flushEffects } from "../src/testing.js";
 
 // Seeded generator: random DAGs of cells and computeds, including branch
 // computeds that switch dependencies, primed while unobserved, subscribed in
@@ -121,7 +121,8 @@ function evaluate(graph: Graph, values: number[]): number[] {
   return results;
 }
 
-async function runScenario(seed: number): Promise<void> {
+async function runScenario(seed: number, randomCreation = false): Promise<void> {
+  const runtime = randomCreation ? createReactiveTestRuntime() : undefined;
   const random = createRandom(seed);
   const graph = generateGraph(random);
   const label = `seed ${seed}`;
@@ -133,28 +134,31 @@ async function runScenario(seed: number): Promise<void> {
   const values = Array.from({ length: graph.cellCount }, () => pick(random, 5));
   const cells = values.map((value) => cell(value));
   const live: Array<{ get(): number }> = [];
-  for (const node of graph.nodes) {
+  const creationOrder = graph.nodes.map((_, index) => index);
+  if (randomCreation) {
+    for (let i = creationOrder.length - 1; i > 0; i--) {
+      const j = pick(random, i + 1);
+      [creationOrder[i], creationOrder[j]] = [creationOrder[j]!, creationOrder[i]!];
+    }
+  }
+  for (const index of creationOrder) {
+    const node = graph.nodes[index] as Node;
+    const read = (dep: number) => (live[dep] as { get(): number }).get();
     switch (node.kind) {
       case "cell":
-        live.push(cells[node.index] as { get(): number });
+        live[index] = cells[node.index] as { get(): number };
         break;
-      case "sum": {
-        const deps = node.deps.map((dep) => live[dep] as { get(): number });
-        live.push(computed(() => deps.reduce((sum, dep) => sum + dep.get(), 0)));
+      case "sum":
+        live[index] = computed(() => node.deps.reduce((sum, dep) => sum + read(dep), 0));
         break;
-      }
-      case "branch": {
-        const guard = live[node.guard] as { get(): number };
-        const thenNode = live[node.then] as { get(): number };
-        const elseNode = live[node.else] as { get(): number };
-        live.push(computed(() => (guard.get() > node.threshold ? thenNode.get() : elseNode.get())));
+      case "branch":
+        live[index] = computed(() =>
+          read(node.guard) > node.threshold ? read(node.then) : read(node.else),
+        );
         break;
-      }
-      case "forward": {
-        const dep = live[node.dep] as { get(): number };
-        live.push(computed(() => dep.get() + (live[node.target] as { get(): number }).get()));
+      case "forward":
+        live[index] = computed(() => read(node.dep) + read(node.target));
         break;
-      }
     }
   }
 
@@ -219,17 +223,19 @@ async function runScenario(seed: number): Promise<void> {
       }
       trace.push(`write ${JSON.stringify(writes)} -> values ${JSON.stringify(values)}`);
       if ((globalThis as any).__trace) console.log("--- write", JSON.stringify(writes));
-      batch(() => {
+      const write = () => {
         for (const [index, value] of writes) {
           values[index] = value;
           cells[index]?.setValue(value);
         }
-      });
+      };
+      if (randomCreation && step % 2 === 0) write();
+      else batch(write);
       const previous = reference;
       reference = evaluate(graph, values);
 
       // Pull reads before the flush must already be fresh.
-      if (random() < 0.5) {
+      if (random() < 0.5 && !randomCreation) {
         const index = computedIndexes[pick(random, computedIndexes.length)] as number;
         trace.push(`preread ${index}`);
         expect(
@@ -238,7 +244,15 @@ async function runScenario(seed: number): Promise<void> {
         ).toBe(reference[index]);
       }
 
-      await flushEffects();
+      if (runtime) runtime.flushAll();
+      else await flushEffects();
+
+      // Check delivery before any pull read can repair a missed notification.
+      for (const index of disposers.keys()) {
+        expect(seen.get(index)?.at(-1), `${label} observer ${index} step ${step}`).toBe(
+          reference[index],
+        );
+      }
 
       for (const index of computedIndexes) {
         expect(
@@ -262,7 +276,7 @@ async function runScenario(seed: number): Promise<void> {
     const hasForward = graph.nodes.some((node) => node.kind === "forward");
     const normalize = (history: number[]) =>
       hasForward ? history.filter((value, i) => i === 0 || value !== history[i - 1]) : history;
-    for (const [index, history] of seen) {
+    for (const [index, history] of randomCreation ? [] : seen) {
       expect(normalize(history), `${label} node ${index}`).toEqual(
         normalize(expectedHistories.get(index) as number[]),
       );
@@ -274,6 +288,7 @@ async function runScenario(seed: number): Promise<void> {
     for (const dispose of disposers.values()) {
       dispose();
     }
+    runtime?.dispose();
   }
 }
 
@@ -282,6 +297,12 @@ describe("computed notification generative model", () => {
   test(`matches the reference model for ${seedCount} random graphs`, async () => {
     for (let seed = 1; seed <= seedCount; seed++) {
       await runScenario(seed);
+    }
+  });
+
+  test(`delivers through scheduled callbacks for ${seedCount} randomly created graphs`, async () => {
+    for (let seed = 1; seed <= seedCount; seed++) {
+      await runScenario(seed, true);
     }
   });
 

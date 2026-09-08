@@ -1,3 +1,4 @@
+import { schedulePendingFlush } from "./scheduler.js";
 import { bumpSourceVersion, runtimeState, type ReactiveComputation, type Source } from "./state.js";
 
 const maxPendingComputedFlushIterations = 100;
@@ -427,6 +428,11 @@ export function flushPendingComputed(): void {
       discardPendingComputed();
     }
     runtimeState.flushingComputed = false;
+    // Nested reads can queue effects inside an internal batch without another
+    // changed computed publishing afterward. Hand them off only after draining.
+    if (runtimeState.batchDepth === 0) {
+      schedulePendingFlush();
+    }
   }
 }
 
