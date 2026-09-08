@@ -64,6 +64,8 @@ function createComputed<T>(
   let publishedHasValue = false;
   let publishedValue: T;
   let dirty = true;
+  // Dormant snapshots can be stale even after markDirty forwarded invalidation.
+  let deferredInvalidationNotified = false;
   // Set while fn() runs. A publish cascade started by a nested read can
   // reach this computed before its own recompute returns; the invalidation
   // must survive that recompute instead of being overwritten by its result.
@@ -145,6 +147,7 @@ function createComputed<T>(
 
       if (source.subscribers !== null) {
         if (deferred) {
+          deferredInvalidationNotified = true;
           notifySubscribers(source);
           return;
         }
@@ -385,6 +388,8 @@ function createComputed<T>(
       return;
     }
 
+    // A future subscriber cannot rely on invalidation sent to detached readers.
+    deferredInvalidationNotified = false;
     if (capturedDependencies.some((dependency) => dependency === undefined)) {
       untrackedDependencies = [];
       hasValue = false;
@@ -471,9 +476,10 @@ function createComputed<T>(
       // this recompute already holds the fresh value, so it is skipped. A
       // clean read leaves the baseline as it is: it already equals the cache.
       // Deferred computeds forward dirtiness eagerly instead of publishing
-      // values, so their subscribers were already told.
+      // values, so their subscribers were already told unless this read
+      // discovered stale dormant dependencies without a markDirty notification.
       const owed =
-        !deferred &&
+        (!deferred || (dependenciesChanged && !deferredInvalidationNotified)) &&
         source.subscribers !== null &&
         wasDirty &&
         publishedHasValue &&

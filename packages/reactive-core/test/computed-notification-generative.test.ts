@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { batch, cell, computed, effect, untrack } from "../src/index.js";
+import { deferredComputed } from "../src/internal.js";
 import { createReactiveTestRuntime, flushEffects } from "../src/testing.js";
 
 // Seeded generator: random DAGs of cells and computeds, including branch
@@ -125,6 +126,7 @@ async function runScenario(
   seed: number,
   randomCreation = false,
   batchReads = false,
+  mixedDeferred = false,
 ): Promise<void> {
   const runtime = randomCreation ? createReactiveTestRuntime() : undefined;
   const random = createRandom(seed);
@@ -147,21 +149,22 @@ async function runScenario(
   }
   for (const index of creationOrder) {
     const node = graph.nodes[index] as Node;
+    const derive = mixedDeferred && random() < 0.5 ? deferredComputed : computed;
     const read = (dep: number) => (live[dep] as { get(): number }).get();
     switch (node.kind) {
       case "cell":
         live[index] = cells[node.index] as { get(): number };
         break;
       case "sum":
-        live[index] = computed(() => node.deps.reduce((sum, dep) => sum + read(dep), 0));
+        live[index] = derive(() => node.deps.reduce((sum, dep) => sum + read(dep), 0));
         break;
       case "branch":
-        live[index] = computed(() =>
+        live[index] = derive(() =>
           read(node.guard) > node.threshold ? read(node.then) : read(node.else),
         );
         break;
       case "forward":
-        live[index] = computed(() => read(node.dep) + read(node.target));
+        live[index] = derive(() => read(node.dep) + read(node.target));
         break;
     }
   }
@@ -322,6 +325,12 @@ describe("computed notification generative model", () => {
   test(`keeps batch reads and subsequent writes fresh for ${seedCount} random graphs`, async () => {
     for (let seed = 1; seed <= seedCount; seed++) {
       await runScenario(seed, true, true);
+    }
+  });
+
+  test(`keeps shared dormant mixed graphs fresh for ${seedCount} random graphs`, async () => {
+    for (let seed = 1; seed <= seedCount; seed++) {
+      await runScenario(seed, true, true, true);
     }
   });
 
