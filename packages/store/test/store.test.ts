@@ -1001,13 +1001,15 @@ describe("shallowEqual", () => {
   });
 
   it("compares null-prototype peers by their own keys", () => {
-    const left = Object.assign(Object.create(null) as Record<string, unknown>, { a: undefined });
-    const right = Object.assign(Object.create(null) as Record<string, unknown>, { b: undefined });
-    const sameKey = Object.assign(Object.create(null) as Record<string, unknown>, { a: undefined });
+    const nullPrototypeRecord = (fields: Record<string, unknown>): Record<string, unknown> =>
+      Object.assign(Object.create(null) as Record<string, unknown>, fields);
+    const left = nullPrototypeRecord({ a: undefined });
+    const right = nullPrototypeRecord({ b: undefined });
+    const sameKey = nullPrototypeRecord({ a: undefined });
 
-    expect(shallowEqual(left, right)).toBe(false);
-    expect(shallowEqual(left, sameKey)).toBe(true);
-    expect(shallowEqual(left, { a: undefined } as Record<string, unknown>)).toBe(false);
+    expect(shallowEqual<Record<string, unknown>>(left, right)).toBe(false);
+    expect(shallowEqual<Record<string, unknown>>(left, sameKey)).toBe(true);
+    expect(shallowEqual<Record<string, unknown>>(left, { a: undefined })).toBe(false);
   });
 
   it("does not let inherited Object.prototype members stand in for a missing own key", () => {

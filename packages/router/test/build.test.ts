@@ -23,6 +23,7 @@ import { describe, expect, test, vi } from "vitest";
 import {
   __bundleRouteRequestModuleBatchForTests,
   __buildCloudflareRouteLoaderModuleBatchForTests,
+  __collectRuntimeOptionalPackagesForTests,
   __mapWithBuildConcurrencyForTests,
   __mapServerOutputsWithBuildConcurrencyForTests,
   __resolveBuildConcurrencyForTests,
@@ -1287,7 +1288,90 @@ export default function Page() {
     expect(policy.byRoute?.["/"]).toEqual(["db-client"]);
   });
 
-  test("warns when optional runtime package manifest scanning reaches the cap", async () => {
+  test("warns when optional runtime package manifest scanning reaches an injected cap", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-runtime-optional-small-cap-"));
+    const optionalNames = ["optional-runtime-0", "optional-runtime-1", "optional-runtime-2"];
+    await writeFakePackageWithJson(
+      rootDir,
+      "db-client",
+      {
+        exports: "./index.js",
+        name: "db-client",
+        optionalDependencies: Object.fromEntries(optionalNames.map((name) => [name, "1.0.0"])),
+        type: "module",
+      },
+      `export default "db";`,
+    );
+    for (const packageName of optionalNames) {
+      await writeFakePackageWithJson(
+        rootDir,
+        packageName,
+        { exports: "./index.js", name: packageName, type: "module" },
+        `export default ${JSON.stringify(packageName)};`,
+      );
+    }
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      const packages = await __collectRuntimeOptionalPackagesForTests({
+        maxManifestReads: 2,
+        packageJsonLookupCache: new Map(),
+        packageName: "db-client",
+        projectRoot: rootDir,
+      });
+
+      expect(packages).toEqual(["optional-runtime-0"]);
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("MR_RUNTIME_PACKAGE_MANIFEST_SCAN_LIMIT"),
+      );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("after 2 files"));
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("db-client"));
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  test("does not warn when the scan finishes below the cap", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-runtime-optional-below-cap-"));
+    await writeFakePackageWithJson(
+      rootDir,
+      "db-client",
+      {
+        exports: "./index.js",
+        name: "db-client",
+        optionalDependencies: { "optional-runtime-0": "1.0.0" },
+        type: "module",
+      },
+      `export default "db";`,
+    );
+    await writeFakePackageWithJson(
+      rootDir,
+      "optional-runtime-0",
+      { exports: "./index.js", name: "optional-runtime-0", type: "module" },
+      `export default "optional";`,
+    );
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      const packages = await __collectRuntimeOptionalPackagesForTests({
+        maxManifestReads: 2,
+        packageJsonLookupCache: new Map(),
+        packageName: "db-client",
+        projectRoot: rootDir,
+      });
+
+      expect(packages).toEqual(["optional-runtime-0"]);
+      expect(warnSpy).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  // Integration coverage for the production cap. The fixture materializes a
+  // thousand package manifests, so it carries its own timeout instead of
+  // sharing the default with the fast unit tests above.
+  test("warns when optional runtime package manifest scanning reaches the production cap", { timeout: 60_000 }, async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-runtime-optional-cap-"));
     const appDir = join(rootDir, "app");
     const outDir = join(rootDir, ".mreact");

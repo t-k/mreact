@@ -2529,11 +2529,18 @@ type RuntimePackageManifestCache = Map<
   Promise<(RuntimePackageManifest & { packageJsonPath: string }) | undefined>
 >;
 
+/** @internal Exposes the manifest scan with an injectable cap for tests. */
+export const __collectRuntimeOptionalPackagesForTests = (
+  options: Parameters<typeof collectRuntimeOptionalPackages>[0],
+): Promise<string[]> => collectRuntimeOptionalPackages(options);
+
 async function collectRuntimeOptionalPackages(options: {
+  maxManifestReads?: number | undefined;
   packageJsonLookupCache: RuntimePackageManifestCache;
   packageName: string;
   projectRoot: string;
 }): Promise<string[]> {
+  const maxManifestReads = options.maxManifestReads ?? maxRuntimePackageManifestReads;
   const optionalPackages = new Set<string>();
   const seenPackageJson = new Set<string>();
   const queue: Array<{ packageName: string; optional: boolean; startDir: string }> = [
@@ -2542,7 +2549,7 @@ async function collectRuntimeOptionalPackages(options: {
   let stoppedAtManifestReadCap = false;
 
   for (let index = 0; index < queue.length; index += 1) {
-    if (seenPackageJson.size >= maxRuntimePackageManifestReads) {
+    if (seenPackageJson.size >= maxManifestReads) {
       stoppedAtManifestReadCap = true;
       break;
     }
@@ -2585,7 +2592,7 @@ async function collectRuntimeOptionalPackages(options: {
     console.warn(
       [
         "MR_RUNTIME_PACKAGE_MANIFEST_SCAN_LIMIT:",
-        `stopped scanning optional runtime package manifests after ${maxRuntimePackageManifestReads} files`,
+        `stopped scanning optional runtime package manifests after ${maxManifestReads} files`,
         `while collecting transitive optional dependencies for ${options.packageName}.`,
         "Generated import-policy.json may omit deeper optional runtime packages.",
       ].join(" "),
