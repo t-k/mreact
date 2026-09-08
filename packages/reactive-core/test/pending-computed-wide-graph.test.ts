@@ -50,10 +50,27 @@ async function measureWideGraph(width: number): Promise<number> {
   }
 }
 
-async function timeWideGraphUpdates(width: number, updates: number): Promise<number> {
+async function timeWideGraphUpdates(
+  width: number,
+  updates: number,
+  order: "layered" | "paired" = "layered",
+): Promise<number> {
   const source = cell(0);
-  const first = Array.from({ length: width }, (_, index) => computed(() => source.get() + index));
-  const second = first.map((node) => computed(() => node.get() * 2));
+  const first: Array<{ get(): number }> = [];
+  const second: Array<{ get(): number }> = [];
+  if (order === "layered") {
+    for (let index = 0; index < width; index += 1)
+      first[index] = computed(() => source.get() + index);
+    for (let index = 0; index < width; index += 1)
+      second[index] = computed(() => first[index]!.get() * 2);
+  } else {
+    // Creating each pair together gives every second stage a smaller id than
+    // the next first stage, so each publish merges work back into the pass.
+    for (let index = 0; index < width; index += 1) {
+      first[index] = computed(() => source.get() + index);
+      second[index] = computed(() => first[index]!.get() * 2);
+    }
+  }
   const stop = effect(() => {
     second.reduce((sum, node) => sum + node.get(), 0);
   });
@@ -91,6 +108,17 @@ describe("pending computed flush on wide graphs", () => {
     const large = await timeWideGraphUpdates(2048, 20);
 
     expect(large).toBeLessThan(Math.max(small, 0.5) * 10);
+  });
+
+  test("pairs created together merge each publish without copying the remaining pass", async () => {
+    // Rebuilding the remaining pass on every merge costs the square of the
+    // width. Pairwise creation must scale like layered creation.
+    const small = await timeWideGraphUpdates(256, 20, "paired");
+    const large = await timeWideGraphUpdates(1024, 20, "paired");
+    const layered = await timeWideGraphUpdates(1024, 20, "layered");
+
+    expect(large).toBeLessThan(Math.max(small, 0.5) * 10);
+    expect(large).toBeLessThan(Math.max(layered, 0.5) * 6);
   });
 });
 
