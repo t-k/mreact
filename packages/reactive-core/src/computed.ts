@@ -386,6 +386,15 @@ function createComputed<T>(
       return;
     }
 
+    // A subscriber may attach this computed without reading it, for example
+    // while restoring its own dormant graph. The snapshots taken at the last
+    // suspend are the only proof the cache is fresh: if any of them is stale,
+    // the value must stay invalid so a later suspend cannot re-stamp it with
+    // the current versions and revive an outdated cache.
+    if (!dirty && source.isCurrent?.() === false) {
+      dirty = true;
+    }
+
     for (const dependency of dependencies as Source[]) {
       addSourceSubscriber(dependency, computation);
       computation.deps.add(dependency);
