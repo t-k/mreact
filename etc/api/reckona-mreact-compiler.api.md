@@ -187,6 +187,16 @@ export interface ClientRouteStaticImportReference extends StaticImportReference 
     specifiers: StaticImportSpecifierReference[];
 }
 
+// Warning: (ae-internal-missing-underscore) The name "ClientSpecializationFlags" should be prefixed with an underscore because the declaration is marked as @internal
+//
+// @internal
+export interface ClientSpecializationFlags {
+    branchInsertion: boolean;
+    directCellText: boolean;
+    elementProperty: boolean;
+    selectBinding: boolean;
+}
+
 // @public
 export function collectClientRouteModuleAnalysis(input: {
     code: string;
@@ -424,6 +434,8 @@ export interface TransformInput {
     clientBoundaryFallbackImports?: readonly string[];
     // (undocumented)
     clientBoundaryImports?: readonly string[];
+    // @internal
+    clientSpecializations?: Partial<ClientSpecializationFlags>;
     // (undocumented)
     code: string;
     // (undocumented)

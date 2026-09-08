@@ -61,6 +61,7 @@ export type {
   RuntimeImport,
   ServerOutputMode,
   SourceLocation,
+  ClientSpecializationFlags,
   TransformInput,
   TransformOutput,
 } from "./types.js";
