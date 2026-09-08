@@ -39,6 +39,9 @@ export interface ReactiveComputation {
   trackingVersion?: number | undefined;
   disposed: boolean;
   queued: boolean;
+  // Identity and execution count of the last computed flush; the token holds no graph references.
+  flushToken?: object | undefined;
+  flushRuns?: number | undefined;
   markDirty(): void;
   run(): void;
   dispose(): void;

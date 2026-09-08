@@ -118182,9 +118182,9 @@
 							"sources": [
 								{
 									"fileName": "state.ts",
-									"line": 69,
+									"line": 72,
 									"character": 13,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/state.ts#L69"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/state.ts#L72"
 								}
 							],
 							"type": {
@@ -118205,9 +118205,9 @@
 											"sources": [
 												{
 													"fileName": "state.ts",
-													"line": 71,
+													"line": 74,
 													"character": 2,
-													"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/state.ts#L71"
+													"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/state.ts#L74"
 												}
 											],
 											"type": {
@@ -118230,9 +118230,9 @@
 											"sources": [
 												{
 													"fileName": "state.ts",
-													"line": 70,
+													"line": 73,
 													"character": 2,
-													"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/state.ts#L70"
+													"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/state.ts#L73"
 												}
 											],
 											"type": {
@@ -118264,9 +118264,9 @@
 											"sources": [
 												{
 													"fileName": "state.ts",
-													"line": 72,
+													"line": 75,
 													"character": 2,
-													"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/state.ts#L72"
+													"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/state.ts#L75"
 												}
 											],
 											"type": {
@@ -118283,9 +118283,9 @@
 											"sources": [
 												{
 													"fileName": "state.ts",
-													"line": 73,
+													"line": 76,
 													"character": 2,
-													"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/state.ts#L73"
+													"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/state.ts#L76"
 												}
 											],
 											"type": {
@@ -118317,9 +118317,9 @@
 											"sources": [
 												{
 													"fileName": "state.ts",
-													"line": 74,
+													"line": 77,
 													"character": 2,
-													"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/state.ts#L74"
+													"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/state.ts#L77"
 												}
 											],
 											"type": {
@@ -118336,9 +118336,9 @@
 											"sources": [
 												{
 													"fileName": "state.ts",
-													"line": 75,
+													"line": 78,
 													"character": 2,
-													"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/state.ts#L75"
+													"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/state.ts#L78"
 												}
 											],
 											"type": {
@@ -118355,9 +118355,9 @@
 											"sources": [
 												{
 													"fileName": "state.ts",
-													"line": 76,
+													"line": 79,
 													"character": 2,
-													"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/state.ts#L76"
+													"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/state.ts#L79"
 												}
 											],
 											"type": {
@@ -118374,9 +118374,9 @@
 											"sources": [
 												{
 													"fileName": "state.ts",
-													"line": 77,
+													"line": 80,
 													"character": 2,
-													"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/state.ts#L77"
+													"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/state.ts#L80"
 												}
 											],
 											"type": {
@@ -118411,9 +118411,9 @@
 											"sources": [
 												{
 													"fileName": "state.ts",
-													"line": 80,
+													"line": 83,
 													"character": 2,
-													"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/state.ts#L80"
+													"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/state.ts#L83"
 												}
 											],
 											"type": {

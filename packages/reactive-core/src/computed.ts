@@ -104,6 +104,8 @@ function createComputed<T>(
     deps: new Set(),
     disposed: false,
     queued: false,
+    flushToken: undefined,
+    flushRuns: 0,
     markDirty() {
       invalidateAttachmentCheckContext();
       if (recomputing) {

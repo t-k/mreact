@@ -329,33 +329,24 @@ function takePendingComputed(): ReactiveComputation[] {
 
 /** Flushes computed values that were dirtied during batched notifications. */
 export function flushPendingComputed(): void {
-  if (runtimeState.flushingComputed) {
+  if (runtimeState.flushingComputed || runtimeState.pendingComputed.size === 0) {
     return;
   }
 
   runtimeState.flushingComputed = true;
   let completed = false;
+  let computations: ReactiveComputation[] = [];
+  let index = 0;
 
   try {
-    let iteration = 0;
-    // Passes and mid-pass merges both count: a computed that keeps re-queueing
-    // itself must hit the limit whether it does so alone or behind a later
-    // computed that forces a merge back to the start of the pass.
-    const beginIteration = () => {
-      if (iteration >= maxPendingComputedFlushIterations) {
-        discardPendingComputed();
-        throw new Error(
-          `Reactive computed flush limit exceeded after ${maxPendingComputedFlushIterations} iterations; a computed likely writes a value it also reads. Check for cell.set() inside a computation that reads the same cell.`,
-        );
-      }
-      iteration += 1;
-    };
+    // Count executions per computation, not queue merges: independent branches
+    // may need arbitrarily many merges without repeating any computation.
+    const flushToken = {};
 
     while (runtimeState.pendingComputed.size > 0) {
-      beginIteration();
-      let computations = takePendingComputed();
+      computations = takePendingComputed();
 
-      for (let index = 0; ; index += 1) {
+      for (index = 0; ; index += 1) {
         // A publish in this pass can queue a computed created earlier than the
         // rest of the pass, and a later computed may read through it while it
         // is still clean. Merge such work back in creation order so consumers
@@ -372,7 +363,6 @@ export function flushPendingComputed(): void {
             index < computations.length &&
             pendingMinId < (computations[index] as ReactiveComputation).id
           ) {
-            beginIteration();
             computations = orderedComputations(
               new Set([...computations.slice(index), ...takePendingComputed()]),
             );
@@ -384,27 +374,19 @@ export function flushPendingComputed(): void {
           break;
         }
 
-        const computation = computations[index];
-        if (computation === undefined) {
-          continue;
-        }
+        const computation = computations[index] as ReactiveComputation;
         computation.queued = false;
 
-        try {
-          if (!computation.disposed) {
-            computation.run();
+        if (!computation.disposed) {
+          const count = computation.flushToken === flushToken ? (computation.flushRuns ?? 0) : 0;
+          if (count >= maxPendingComputedFlushIterations) {
+            throw new Error(
+              `Reactive computed flush limit exceeded after ${maxPendingComputedFlushIterations} iterations; a computed likely writes a value it also reads. Check for cell.set() inside a computation that reads the same cell.`,
+            );
           }
-        } catch (error) {
-          // The snapshot is detached from pendingComputed while it runs. Clear
-          // queued flags for work that was in the same snapshot so recovery can
-          // schedule it again after the caller handles the failure.
-          for (let remaining = index + 1; remaining < computations.length; remaining += 1) {
-            const pending = computations[remaining];
-            if (pending !== undefined) {
-              pending.queued = false;
-            }
-          }
-          throw error;
+          computation.flushToken = flushToken;
+          computation.flushRuns = count + 1;
+          computation.run();
         }
       }
     }
@@ -412,6 +394,11 @@ export function flushPendingComputed(): void {
     completed = true;
   } finally {
     if (!completed) {
+      // The active snapshot is detached from pendingComputed. Any failure,
+      // including the execution limit, must release its remaining entries.
+      for (; index < computations.length; index += 1) {
+        (computations[index] as ReactiveComputation).queued = false;
+      }
       discardPendingComputed();
     }
     runtimeState.flushingComputed = false;
