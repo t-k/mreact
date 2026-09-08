@@ -90,6 +90,31 @@ export function App() {
     expect(code).toContain("count.get()");
   });
 
+  test.each([
+    ["export const", "export const count = cell(0);"],
+    ["export { name }", "const count = cell(0);\nexport { count };"],
+    ["export { name as alias }", "const count = cell(0);\nexport { count as total };"],
+  ])("falls back to the getter thunk when the module cell is exported via %s", (_label, declaration) => {
+    const code = compile(`import { cell } from "@reckona/mreact-reactive-core";
+${declaration}
+export function App() {
+  return <main>{count.get()}</main>;
+}`);
+
+    expect(code).not.toContain("bindCellText(_text_0, count)");
+    expect(code).toContain("count.get()");
+  });
+
+  test("still binds a module cell that is not exported straight to the text node", () => {
+    const code = compile(`import { cell } from "@reckona/mreact-reactive-core";
+const count = cell(0);
+export function App() {
+  return <main>{count.get()}</main>;
+}`);
+
+    expect(code).toContain("bindCellText(_text_0, count)");
+  });
+
   test("binds a proven native cell straight to the text node", () => {
     const code = compile(`import { cell } from "@reckona/mreact-reactive-core";
 export function App() {

@@ -145,6 +145,14 @@ export function collectOxcEscapedBindingNames(node: unknown): Set<string> {
       continue;
     }
 
+    // An exported cell can be rewired by any importing module, which this
+    // single-module analysis cannot see, so `export const name = cell()` is
+    // treated as an escape. `export { name }` escapes through its `local`
+    // identifier, which is visited like any other use below.
+    if (object.type === "ExportNamedDeclaration") {
+      collectOxcExportedDeclarationNames(readObject(object.declaration), names);
+    }
+
     for (const [key, value] of Object.entries(object)) {
       if (isOxcNonEscapingIdentifierSlot(object, key)) {
         continue;
@@ -155,6 +163,23 @@ export function collectOxcEscapedBindingNames(node: unknown): Set<string> {
   }
 
   return names;
+}
+
+function collectOxcExportedDeclarationNames(
+  declaration: Record<string, unknown>,
+  names: Set<string>,
+): void {
+  if (declaration.type !== "VariableDeclaration" || !Array.isArray(declaration.declarations)) {
+    return;
+  }
+
+  for (const declarator of declaration.declarations) {
+    const id = readObject(readObject(declarator).id);
+
+    if (id.type === "Identifier" && typeof id.name === "string") {
+      names.add(id.name);
+    }
+  }
 }
 
 function isOxcNonEscapingIdentifierSlot(object: Record<string, unknown>, key: string): boolean {
@@ -185,8 +210,9 @@ function isOxcNonEscapingIdentifierSlot(object: Record<string, unknown>, key: st
     case "ImportSpecifier":
     case "ImportDefaultSpecifier":
     case "ImportNamespaceSpecifier":
-    case "ExportSpecifier":
       return true;
+    case "ExportSpecifier":
+      return key !== "local";
     default:
       return false;
   }

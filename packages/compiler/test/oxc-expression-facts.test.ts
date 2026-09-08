@@ -372,3 +372,34 @@ describe("expression facts contract", () => {
     expect(mergeExpressionFacts(UNKNOWN_EXPRESSION_FACTS, proven)).toEqual(UNKNOWN_EXPRESSION_FACTS);
   });
 });
+
+describe("exported cell escape", () => {
+  test("treats a cell exported by name as escaped", () => {
+    const cases = [
+      'import { cell } from "@reckona/mreact-reactive-core";\nexport const count = cell(1);\ncount.get();',
+      'import { cell } from "@reckona/mreact-reactive-core";\nconst count = cell(1);\nexport { count };\ncount.get();',
+      'import { cell } from "@reckona/mreact-reactive-core";\nconst count = cell(1);\nexport { count as total };\ncount.get();',
+      'import { cell } from "@reckona/mreact-reactive-core";\nexport const count = cell(1), other = cell(2);',
+    ];
+
+    for (const source of cases) {
+      expect([...collectOxcEscapedBindingNames(parseStatements(source))], source).toContain("count");
+    }
+  });
+
+  test("drops an exported cell from the resolved component bindings", () => {
+    const { body, program } = parseProgram(
+      [
+        'import { cell } from "@reckona/mreact-reactive-core";',
+        "export const count = cell(1);",
+        "const local = cell(2);",
+        "export function Counter() { return count.get() + local.get(); }",
+      ].join("\n"),
+    );
+    const facts = collectOxcModuleExpressionFacts(program, body);
+    const bindings = resolveOxcComponentNativeCellBindings(facts, [], []);
+
+    expect(bindings?.has("count")).toBe(false);
+    expect(bindings?.has("local")).toBe(true);
+  });
+});
