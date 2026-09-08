@@ -143,22 +143,26 @@ function effectRun(this: ReactiveComputation): void {
   computation.trackingVersion = nextTrackingVersion;
   runtimeState.activeTracker = computation;
 
+  // A body that stops its own effect (or disposes the owning scope) returns a
+  // cleanup after disposal already ran. It cannot be stored, because dispose
+  // will never look at it again, so it runs once tracking is restored.
+  let orphanedCleanup: (() => void) | undefined;
+
   if (clientDevtoolsDisabled) {
     try {
-      const result = computation.fn();
-      computation.cleanup = typeof result === "function" ? result : undefined;
+      orphanedCleanup = storeEffectCleanup(computation, computation.fn());
     } finally {
       finishIncrementalTracking(computation, previousDepsSize, nextTrackingVersion);
       runtimeState.activeTracker = previousTracker;
     }
+    orphanedCleanup?.();
     return;
   }
 
   const devtoolsEvent = prepareReactiveEffectRunDevtoolsEvent();
 
   try {
-    const result = computation.fn();
-    computation.cleanup = typeof result === "function" ? result : undefined;
+    orphanedCleanup = storeEffectCleanup(computation, computation.fn());
   } finally {
     finishIncrementalTracking(computation, previousDepsSize, nextTrackingVersion);
     runtimeState.activeTracker = previousTracker;
@@ -166,6 +170,25 @@ function effectRun(this: ReactiveComputation): void {
       emitReactiveEffectRunDevtoolsEvent(devtoolsEvent, computation.id);
     }
   }
+  orphanedCleanup?.();
+}
+
+/**
+ * Keeps the cleanup returned by an effect body on a live effect, or hands it
+ * back when the body disposed the effect while it was running.
+ */
+function storeEffectCleanup(
+  computation: EffectComputation,
+  result: void | (() => void),
+): (() => void) | undefined {
+  const cleanup = typeof result === "function" ? result : undefined;
+
+  if (computation.disposed) {
+    return cleanup;
+  }
+
+  computation.cleanup = cleanup;
+  return undefined;
 }
 
 function effectDispose(this: ReactiveComputation): void {
