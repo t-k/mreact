@@ -76,11 +76,15 @@ describe("GitHub workflows", () => {
     expect(workflow).toContain("          - name: Download Windows native artifact");
   });
 
-  test("runs Pages configuration while installing docs dependencies", async () => {
+  test("configures Pages sequentially before installing docs dependencies", async () => {
     const workflow = await readWorkflow("docs-pages.yml");
 
-    expect(workflow).toContain("- parallel:\n          - id: pages");
-    expect(workflow).toContain("          - run: pnpm install --frozen-lockfile");
+    const configureIndex = workflow.indexOf(
+      "      - id: pages\n        uses: actions/configure-pages@v6",
+    );
+    const installIndex = workflow.indexOf("      - run: pnpm install --frozen-lockfile");
+    expect(configureIndex).toBeGreaterThan(-1);
+    expect(installIndex).toBeGreaterThan(configureIndex);
     expect(workflow).toContain("MREACT_DOCS_BASE_PATH: ${{ steps.pages.outputs.base_path }}");
   });
 
