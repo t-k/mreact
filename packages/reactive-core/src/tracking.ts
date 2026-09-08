@@ -248,7 +248,7 @@ function cleanupAddedDependency(dep: Source, computation: ReactiveComputation): 
   computation.deps.delete(dep);
 }
 
-export function notifySubscribers(source: Source): void {
+export function notifySubscribers(source: Source, skip?: ReactiveComputation): void {
   bumpSourceVersion(source);
   const subscribers = source.subscribers;
 
@@ -258,7 +258,7 @@ export function notifySubscribers(source: Source): void {
 
   if (!(subscribers instanceof Set)) {
     if (runtimeState.batchDepth > 0) {
-      if (!subscribers.disposed && !subscribers.queued) {
+      if (!subscribers.disposed && !subscribers.queued && subscribers !== skip) {
         subscribers.markDirty();
       }
       return;
@@ -267,7 +267,7 @@ export function notifySubscribers(source: Source): void {
     runtimeState.notificationDepth += 1;
 
     try {
-      if (!subscribers.disposed && !subscribers.queued) {
+      if (!subscribers.disposed && !subscribers.queued && subscribers !== skip) {
         subscribers.markDirty();
       }
     } finally {
@@ -286,12 +286,12 @@ export function notifySubscribers(source: Source): void {
     const singleSubscriber = subscribers.size === 1 ? subscribers.values().next().value : undefined;
 
     if (singleSubscriber !== undefined) {
-      if (!singleSubscriber.disposed && !singleSubscriber.queued) {
+      if (!singleSubscriber.disposed && !singleSubscriber.queued && singleSubscriber !== skip) {
         singleSubscriber.markDirty();
       }
     } else {
       for (const subscriber of orderedComputations(subscribers)) {
-        if (!subscriber.disposed && !subscriber.queued) {
+        if (!subscriber.disposed && !subscriber.queued && subscriber !== skip) {
           subscriber.markDirty();
         }
       }

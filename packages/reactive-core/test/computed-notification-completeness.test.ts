@@ -161,3 +161,59 @@ describe("computed publish baseline", () => {
     }
   });
 });
+
+describe("computed publish baseline before queueing", () => {
+  test.each([
+    ["value effect first", "value"],
+    ["total effect first", "total"],
+  ] as const)(
+    "an early read of a shared computed that is not yet queued does not swallow the change (%s)",
+    async (_label, first) => {
+      const x = cell(0);
+
+      const a = computed(() => x.get());
+      const b = computed(() => a.get());
+      const c = computed(() => b.get());
+      const value = computed(() => c.get());
+      const branch = computed(() => (x.get() > 0 ? c.get() : x.get()));
+      const total = computed(() => value.get() + branch.get());
+
+      // Build the cache while nothing subscribes.
+      total.get();
+
+      const seen: number[] = [];
+      const totals: number[] = [];
+      const subscribeValue = () =>
+        effect(() => {
+          seen.push(value.get());
+        });
+      const subscribeTotal = () =>
+        effect(() => {
+          totals.push(total.get());
+        });
+      const stopFirst = first === "value" ? subscribeValue() : subscribeTotal();
+      const stopSecond = first === "value" ? subscribeTotal() : subscribeValue();
+
+      try {
+        x.setValue(3);
+        await flushEffects();
+
+        expect(value.get()).toBe(3);
+        expect(total.get()).toBe(6);
+        expect(seen).toEqual([0, 3]);
+        expect(totals).toEqual([0, 6]);
+
+        x.setValue(0);
+        await flushEffects();
+
+        expect(value.get()).toBe(0);
+        expect(total.get()).toBe(0);
+        expect(seen).toEqual([0, 3, 0]);
+        expect(totals).toEqual([0, 6, 0]);
+      } finally {
+        stopFirst();
+        stopSecond();
+      }
+    },
+  );
+});

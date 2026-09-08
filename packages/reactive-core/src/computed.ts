@@ -350,10 +350,27 @@ function createComputed<T>(
       }
 
       if (!computation.queued) {
-        // No publish is pending, so nobody is owed a notification for this
-        // value: a queued publish keeps its own baseline until it runs.
+        // A queued publish keeps its own baseline until it runs. Without one,
+        // this read may still have refreshed a value that existing subscribers
+        // never heard about, for example when a sibling reader reaches this
+        // computed through a dirty dependency before that dependency publishes.
+        // Announce it now so the later upstream publish, which compares against
+        // this baseline, cannot swallow the change. The reader that triggered
+        // this recompute already holds the fresh value, so it is skipped.
+        // Deferred computeds forward dirtiness eagerly instead of publishing
+        // values, so their subscribers were already told.
+        const owed =
+          !deferred &&
+          source.subscribers !== null &&
+          wasDirty &&
+          publishedHasValue &&
+          !equals(publishedValue, nextValue);
         publishedValue = nextValue;
         publishedHasValue = true;
+
+        if (owed) {
+          notifySubscribers(source, runtimeState.activeTracker ?? undefined);
+        }
       }
 
       return nextValue;
