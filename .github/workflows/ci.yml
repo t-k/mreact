@@ -102,10 +102,11 @@ jobs:
       # Builds the fixed production client fixtures and compares initial, cumulative and HTML
       # delivery bytes against size/client-delivery-budgets.json. Local only: no network access.
       - name: Client delivery size gate
+        id: client_delivery_size
         run: pnpm size:client:check
 
       - name: Upload client delivery size reports
-        if: ${{ always() }}
+        if: ${{ always() && steps.client_delivery_size.outcome != 'skipped' }}
         uses: actions/upload-artifact@v4
         with:
           name: client-delivery-size-${{ github.run_id }}-${{ github.run_attempt }}
