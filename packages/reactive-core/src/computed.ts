@@ -84,7 +84,7 @@ function createComputed<T>(
 
       return true;
     },
-    onFirstSubscriber: () => attachUntrackedDependencies(),
+    onFirstSubscriber: () => restoreUntrackedDependencies(true),
     // Reattaching a cached computed can briefly remove its last direct
     // subscriber while a sibling reader is still restoring the same graph.
     // Preserve the dormant transitive dependencies through that transition.
@@ -360,45 +360,32 @@ function createComputed<T>(
     },
   };
 
-  function restoreUntrackedDependencies(): void {
+  function restoreUntrackedDependencies(preserveSnapshots = false): void {
     if (untrackedDependencies.length === 0) {
       return;
     }
 
-    const dependencies = liveUntrackedDependencies();
-    if (dependencies.some((dependency) => dependency === undefined)) {
-      untrackedDependencies = [];
-      return;
-    }
-
-    for (const dependency of dependencies as Source[]) {
-      addSourceSubscriber(dependency, computation);
-      computation.deps.add(dependency);
-    }
-    computation.orderedDeps = dependencies as Source[];
-    untrackedDependencies = [];
-  }
-
-  function attachUntrackedDependencies(): void {
-    if (untrackedDependencies.length === 0) {
-      return;
-    }
-
-    const dependencies = liveUntrackedDependencies();
+    const dependencies = untrackedDependencies.map((dependency) => dependency.ref.deref());
     if (dependencies.some((dependency) => dependency === undefined)) {
       untrackedDependencies = [];
       return;
     }
 
     const previousContext = runtimeState.attachmentCheckContext;
-    runtimeState.attachmentCheckContext ??= createCurrentCheckContext();
+    if (preserveSnapshots) {
+      runtimeState.attachmentCheckContext ??= createCurrentCheckContext();
+    }
     try {
       // A subscriber may attach this computed without reading it, for example
       // while restoring its own dormant graph. The snapshots taken at the last
       // suspend are the only proof the cache is fresh: if any of them is stale,
       // the value must stay invalid so a later suspend cannot re-stamp it with
       // the current versions and revive an outdated cache.
-      if (!dirty && source.isCurrent?.(runtimeState.attachmentCheckContext) === false) {
+      if (
+        preserveSnapshots &&
+        !dirty &&
+        source.isCurrent?.(runtimeState.attachmentCheckContext) === false
+      ) {
         dirty = true;
       }
 
@@ -407,12 +394,9 @@ function createComputed<T>(
         computation.deps.add(dependency);
       }
       computation.orderedDeps = dependencies as Source[];
+      if (!preserveSnapshots) untrackedDependencies = [];
     } finally {
       runtimeState.attachmentCheckContext = previousContext;
     }
-  }
-
-  function liveUntrackedDependencies(): Array<Source | undefined> {
-    return untrackedDependencies.map((dependency) => dependency.ref.deref());
   }
 }

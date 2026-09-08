@@ -4,7 +4,7 @@ export default createStrykerConfig({
   name: "review-transitions",
   breakThreshold: 80,
   mutate: [
-    "packages/reactive-core/src/computed.ts:393-412",
+    "packages/reactive-core/src/computed.ts:374-400",
     "packages/reactive-core/src/state.ts:91-100",
     "packages/reactive-core/src/state.ts:138-147",
     "packages/compiler/src/oxc-expression-facts.ts:399-415",

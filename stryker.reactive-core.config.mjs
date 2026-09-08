@@ -11,7 +11,7 @@ export default createStrykerConfig({
     "packages/reactive-core/src/effect.ts:194-215",
     "packages/reactive-core/src/computed.ts:155-183",
     "packages/reactive-core/src/computed.ts:339-359",
-    "packages/reactive-core/src/computed.ts:382-412",
+    "packages/reactive-core/src/computed.ts:363-400",
     "packages/reactive-core/src/cleanup-scope.ts:102-105",
     "packages/reactive-core/src/cleanup-scope.ts:119-133",
     "packages/reactive-core/src/state.ts:87-100",
