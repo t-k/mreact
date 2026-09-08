@@ -3856,7 +3856,10 @@ export default function MDXContent() {
     expect(manifest.prerenderedRoutes?.["/"]?.html).toContain("<h1>Hello MDX</h1>");
   });
 
-  test("prerenders MDX routes that import frontmatter named exports", async () => {
+  // A full MDX build plus prerender takes over a second on a quiet machine
+  // and shares the CI runner with the rest of the verify parallel group, so
+  // it carries its own timeout instead of the 5s default.
+  test("prerenders MDX routes that import frontmatter named exports", { timeout: 30_000 }, async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-build-mdx-frontmatter-prerender-"));
     const appDir = join(rootDir, "src", "app", "$...slug");
     const outDir = join(rootDir, ".mreact");
