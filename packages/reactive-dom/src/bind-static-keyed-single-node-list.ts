@@ -1387,7 +1387,10 @@ function refreshCompilerStaticPropertyText(
     activeCompilerTextContext = context;
 
     try {
-      node.data = normalizeText((context.item as Record<PropertyKey, unknown>)[property]);
+      const nextText = normalizeText((context.item as Record<PropertyKey, unknown>)[property]);
+      if (node.data !== nextText) {
+        node.data = nextText;
+      }
     } finally {
       activeCompilerTextContext = previousContext;
     }
