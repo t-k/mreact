@@ -1,0 +1,1 @@
+{"framework":"svelte-v5.57.0-keyed","keyed":true,"benchmark":"43_first-paint","type":"size","values":{"DEFAULT":{"min":150.5,"max":150.5,"median":150.5,"mean":150.5,"stddev":null,"values":[150.5]}}}
