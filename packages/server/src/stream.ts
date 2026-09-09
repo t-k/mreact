@@ -148,11 +148,9 @@ export function renderToReadableStream(
             // render settles, so without this handler a rejection that lands
             // in between is an unhandled rejection - which terminates the
             // Node process under the default `--unhandled-rejections=throw`.
-            guarded.catch((error: unknown) => {
-              if (!abortController.signal.aborted) {
-                terminateWithError(error);
-              }
-            });
+            // terminateWithError is a no-op once the stream is terminated
+            // (which is the only way the signal becomes aborted).
+            guarded.catch(terminateWithError);
             deferredTasks.push(guarded);
           },
           signal: abortController.signal,

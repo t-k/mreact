@@ -37,6 +37,7 @@ describe("deferred task rejection during async render", () => {
     const collector = collectUnhandledRejections();
     try {
       let signalAbortedAtFailure: boolean | undefined;
+      let renderFinished = false;
       const stream = renderToReadableStream(async (sink) => {
         sink.append("shell");
         sink.defer(
@@ -48,9 +49,13 @@ describe("deferred task rejection during async render", () => {
           }),
         );
         await new Promise((resolve) => setTimeout(resolve, 30));
+        renderFinished = true;
       });
 
       await expect(readAll(stream)).rejects.toThrow("deferred failure");
+      // The failure must reach the reader as soon as the deferred task
+      // fails, not only after the async render settles.
+      expect(renderFinished).toBe(false);
       // Let any stray rejection surface before asserting.
       await new Promise((resolve) => setTimeout(resolve, 10));
       expect(signalAbortedAtFailure).toBe(false);

@@ -130,6 +130,26 @@ describe("replaceEqualDeep own-property safety", () => {
     expect(sharedNull.value).toBe(1);
   });
 
+  test("defines copied keys as enumerable, writable, configurable own properties", () => {
+    const shared = replaceEqualDeepForTesting({ a: 1 }, { a: 2 }) as Record<string, unknown>;
+    expect(Object.getOwnPropertyDescriptor(shared, "a")).toEqual({
+      value: 2,
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+  });
+
+  test("does not reuse previous when keys are removed or replaced by undefined", () => {
+    const previous = { a: 1, b: 2 };
+    expect(replaceEqualDeepForTesting(previous, { a: 1 })).toEqual({ a: 1 });
+    expect(replaceEqualDeepForTesting(previous, { a: 1 })).not.toBe(previous);
+    const renamed = replaceEqualDeepForTesting(previous, { a: 1, c: undefined });
+    expect(renamed).not.toBe(previous);
+    expect(renamed).toEqual({ a: 1, c: undefined });
+    expect(Object.hasOwn(renamed as object, "c")).toBe(true);
+  });
+
   test("still reuses unchanged references", () => {
     const previous = { a: { b: 1 }, c: [1, 2] };
     const next = { a: { b: 1 }, c: [1, 2] };
