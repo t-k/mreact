@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.0.214 - 2026-09-09
+
+### Added
+
+- Added compiler expression facts and route capability propagation so generated client bundles can specialize proven text, property, conditional, and component paths while preserving conservative fallbacks.
+
+### Changed
+
+- Reduced generated client code and hydration overhead by sharing route-independent hydration support, avoiding repeated resume-walk copies, specializing stable component and DOM bindings, and invalidating only form fields affected by a change.
+- Improved reactive scheduling and validation performance by merging queued computed work, advancing source snapshots once per changed write, and avoiding unnecessary cache and ownership work.
+
+### Fixed
+
+- Fixed reactive computations and effects across dormant graph attachment, nested reads, batching, deferred dependencies, manual disposal, self-stopping cleanup, scheduler re-entry, and failed flush recovery so subscribers observe current values without glitches or lost notifications.
+- Fixed compiler specialization for shadowed or exported cells, escaped bindings, router links, static JSX property names, stream components, and text-valued component props so optimized output preserves normal rendering semantics.
+- Fixed form array row identity and cached field ownership, query structural sharing for `__proto__` keys, store own-key comparison, and router builds reached through resolved symlink paths.
+- Fixed server rendering to observe deferred task failures and aborted renders without unhandled rejections or repeated thenable normalization.
+
 ## 0.0.213 - 2026-09-07
 
 ### Fixed
