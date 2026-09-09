@@ -158,17 +158,22 @@ async function observeCounterClick(
         dispatchMs: undefined as number | undefined,
         domObservedMs: undefined as number | undefined,
         expectedText: after,
-        actualText: () => parent.children[position]?.textContent?.trim() ?? null,
-        dispose: () => {},
+        actualText() {
+          return parent.children[position]?.textContent?.trim() ?? null;
+        },
+        dispose() {},
       };
-      const capture = (event: Event) => {
-        if (
-          state.dispatchMs === undefined &&
-          event.isTrusted &&
-          event.composedPath().includes(element) &&
-          element.textContent?.trim() === before
-        )
-          state.dispatchMs = performance.now();
+      // Object methods stay self-contained under tsx's keepNames transform.
+      const capture = {
+        handleEvent(event: Event) {
+          if (
+            state.dispatchMs === undefined &&
+            event.isTrusted &&
+            event.composedPath().includes(element) &&
+            element.textContent?.trim() === before
+          )
+            state.dispatchMs = performance.now();
+        },
       };
       const observer = new MutationObserver(() => {
         // A replacement in the same DOM slot is valid; an unrelated matching button is not.
