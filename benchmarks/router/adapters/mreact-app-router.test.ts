@@ -5,6 +5,14 @@ import { describe, expect, it } from "vitest";
 const adapterPath = join(process.cwd(), "benchmarks/router/adapters/mreact-app-router.ts");
 
 describe("mreact app-router benchmark fixtures", () => {
+  it("owns temporary directories before builds and attempts their cleanup independently", async () => {
+    const source = await readFile(adapterPath, "utf8");
+    expect(source).toContain("const mkdtemp = temporaryDirectories.create;");
+    expect(source).toContain('import { mkdir, readFile, rm, writeFile } from "node:fs/promises";');
+    expect(source).toContain(
+      'name: "allocated fixture directories", run: () => temporaryDirectories.closeAll()',
+    );
+  });
   it("keeps react-compat server-side fixtures on the native page path", async () => {
     const source = await readFile(adapterPath, "utf8");
     const primaryFixtureSource = source.slice(

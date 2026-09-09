@@ -163,6 +163,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload benchmark results
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-results-${{ steps.results.outputs.date }}-${{ steps.results.outputs.run }}

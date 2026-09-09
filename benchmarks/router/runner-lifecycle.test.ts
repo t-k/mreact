@@ -102,4 +102,44 @@ describe("router benchmark lifecycle", () => {
     ).rejects.toThrow("disk full");
     expect(events).toEqual(["save", "cleanup"]);
   });
+
+  it("retains a measurement failure and closes every initialized adapter", async () => {
+    const closed: string[] = [];
+    const result = await runRouterBenchmarks(
+      [
+        {
+          name: "mreact-app-router",
+          version: "test",
+          async measureBuildOutputGzipBytes() {
+            throw new Error("measurement failed");
+          },
+          async teardown() {
+            closed.push("first");
+          },
+        },
+        {
+          name: "marko-run",
+          version: "test",
+          async teardown() {
+            closed.push("second");
+          },
+        },
+      ],
+      fastRun,
+    );
+    expect(closed).toEqual(["first", "second"]);
+    expect(result.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          framework: "mreact-app-router",
+          caseName: "app build output gzip bytes",
+          status: "failed",
+        }),
+      ]),
+    );
+    expect(result.cleanup).toEqual([
+      { adapter: "mreact-app-router", status: "completed" },
+      { adapter: "marko-run", status: "completed" },
+    ]);
+  });
 });

@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { gzipSync } from "node:zlib";
 import { measureBuildOutputGzipBytes } from "../build-output-size.js";
+import { registerDetachedProcess } from "../lifecycle-protocol.js";
 import {
   measureBackForwardRestore,
   measureClientNavigation,
@@ -72,6 +73,7 @@ export function createProductionAppAdapter(
     await options.writeFixture(rootDir, nodeCount);
     await options.build(rootDir);
     server = await options.start(rootDir);
+    await registerDetachedProcess({ pid: server.pid }, options.name);
     return server.url;
   }
 
@@ -319,6 +321,12 @@ export async function startCommandServer(
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
+  try {
+    await registerDetachedProcess(child, "command server");
+  } catch (error) {
+    await closeChildProcess(child);
+    throw error;
+  }
   let stderr = "";
   child.stderr?.on("data", (chunk: Buffer) => {
     stderr += chunk.toString("utf8");

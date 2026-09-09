@@ -4,7 +4,7 @@
 // http.Server に乗せる) と round-trip overhead が揃い fair comparison になる。
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { gzipSync } from "node:zlib";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
@@ -20,6 +20,7 @@ import type { AppFrameworkAdapter } from "../types.js";
 import { buildDynamicAttrCells, type DynamicAttrCell } from "../dynamic-attr-cells.js";
 import { measureBuildOutputGzipBytes } from "../build-output-size.js";
 import { createVariantFixtureCache } from "../variant-fixture-cache.js";
+import { createTemporaryDirectoryOwner } from "../temporary-directories.js";
 import {
   measureClientNavigation,
   measureBackForwardRestore,
@@ -64,6 +65,8 @@ let coldStartRootDir: string | undefined;
 let coldStartOutDir: string | undefined;
 let coldStartReactCompat = false;
 const routeScaleResults = new Map<string, Promise<RouteScaleResult>>();
+const temporaryDirectories = createTemporaryDirectoryOwner();
+const mkdtemp = temporaryDirectories.create;
 
 interface ConcurrentLoadResult {
   p99Ms: number;
@@ -422,6 +425,7 @@ function createMreactAppRouterAdapter(options: {
             await runCleanupTasks(cleanupTasks);
           },
         },
+        { name: "allocated fixture directories", run: () => temporaryDirectories.closeAll() },
       ]);
     },
     async renderToString(nodeCount: number): Promise<string> {

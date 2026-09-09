@@ -48,6 +48,8 @@ describe("benchmark cleanup tasks", () => {
     ]);
     expect((error as Error).message).toContain("first: sync failure");
     expect((error as Error).message).toContain("second: async failure");
+    expect((error as Error).message).toBe("first: sync failure; second: async failure");
+    expect((error as AggregateError).errors[0].cause.message).toBe("sync failure");
   });
 
   it("runs successful tasks in order exactly once", async () => {
