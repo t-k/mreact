@@ -1103,7 +1103,9 @@ describe("bindStaticKeyedSingleNodeList", () => {
     expect(source.indexOf("trySwapSingleNodeItems(")).toBeLessThan(
       source.indexOf("const keyedItems = uniqueSingleNodeKeyedItems("),
     );
-    expect(source).toContain("new Array<SingleNodeRecord>(currentItems.length)");
+    const swapSource = source.slice(source.indexOf("function trySwapSingleNodeItems<"), source.indexOf("function updateSameOrderRecords<"));
+    expect(swapSource).not.toContain("new Array");
+    expect(source).not.toContain("new Array<SingleNodeRecord>(currentItems.length)");
     expect(source).not.toContain("bufferedRecords");
   });
 

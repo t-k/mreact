@@ -1119,8 +1119,6 @@ function trySwapSingleNodeItems<T>(
   }
 
   const previousRecords = records[Symbol.iterator]();
-  // oxlint-disable-next-line unicorn/no-new-array -- this hot path fills every slot while avoiding a second swap buffer.
-  const orderedRecords = new Array<SingleNodeRecord>(currentItems.length);
   let firstIndex = -1;
   let secondIndex = -1;
   let firstPreviousKey: unknown;
@@ -1142,7 +1140,6 @@ function trySwapSingleNodeItems<T>(
     const record = previousRecord.value[1];
 
     if (Object.is(previousKey, nextKey)) {
-      orderedRecords[index] = record;
       continue;
     }
 
@@ -1164,8 +1161,6 @@ function trySwapSingleNodeItems<T>(
         return undefined;
       }
 
-      orderedRecords[firstIndex] = secondRecord;
-      orderedRecords[secondIndex] = firstRecord as SingleNodeRecord;
     } else {
       return undefined;
     }
@@ -1173,10 +1168,11 @@ function trySwapSingleNodeItems<T>(
 
   if (firstIndex === -1) {
     const refreshSelectedClasses = shouldRefreshSelectedClassRecords(selectedClassState);
+    const orderedRecords = records.values();
 
     for (let index = 0; index < currentItems.length; index += 1) {
       const item = currentItems[index] as T;
-      const record = orderedRecords[index] as SingleNodeRecord;
+      const record = orderedRecords.next().value as SingleNodeRecord;
 
       if (
         !canKeepSingleNodeRecordWithoutUpdate(record, renderArity) &&
@@ -1199,10 +1195,17 @@ function trySwapSingleNodeItems<T>(
 
   const nextRecords = new Map<unknown, SingleNodeRecord>();
   const refreshSelectedClasses = shouldRefreshSelectedClassRecords(selectedClassState);
+  const orderedRecords = records.values();
+  let secondAnchor = marker;
 
   for (let index = 0; index < currentItems.length; index += 1) {
     const item = currentItems[index] as T;
-    const record = orderedRecords[index] as SingleNodeRecord;
+    const previousRecord = orderedRecords.next().value as SingleNodeRecord;
+    const record =
+      index === firstIndex ? secondRecord : index === secondIndex ? firstRecord : previousRecord;
+    if (index === secondIndex + 1) {
+      secondAnchor = record.node;
+    }
 
     if (
       !canKeepSingleNodeRecordWithoutUpdate(record, renderArity) &&
@@ -1216,8 +1219,6 @@ function trySwapSingleNodeItems<T>(
     }
     nextRecords.set(record.key, record);
   }
-
-  const secondAnchor = orderedRecords[secondIndex + 1]?.node ?? marker;
 
   return moveSwappedSingleNodeRecords(parent, nextRecords, secondRecord, firstRecord, secondAnchor);
 }
