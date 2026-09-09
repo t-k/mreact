@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { chromium, expect } from "@playwright/test";
 import { spawn } from "node:child_process";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
@@ -104,6 +105,7 @@ async function createStandaloneApp(appDir, tarballs) {
       "@reckona/mreact-compiler": tarballSpec(tarballs, "@reckona/mreact-compiler"),
       "@reckona/mreact-forms": tarballSpec(tarballs, "@reckona/mreact-forms"),
       "@reckona/mreact-query": tarballSpec(tarballs, "@reckona/mreact-query"),
+      "@reckona/mreact-reactive-core": tarballSpec(tarballs, "@reckona/mreact-reactive-core"),
       "@reckona/mreact-reactive-dom": tarballSpec(tarballs, "@reckona/mreact-reactive-dom"),
       "@reckona/mreact-router": tarballSpec(tarballs, "@reckona/mreact-router"),
       "@reckona/mreact-server": tarballSpec(tarballs, "@reckona/mreact-server"),
@@ -155,8 +157,11 @@ export default defineConfig({
   );
   await writeFile(
     join(appDir, "app", "page.tsx"),
-    `export default function Page() {
-  return <main>Standalone tarball smoke</main>;
+    `import { cell } from "@reckona/mreact-reactive-core";
+
+export default function Page() {
+  const count = cell(0);
+  return <main><h1>Standalone tarball smoke</h1><button type="button" onClick={() => count.set(value => value + 1)}>count: {count.get()}</button></main>;
 }
 `,
   );
@@ -431,6 +436,7 @@ async function smokeDevServer(appDir) {
   try {
     const url = await server.waitForUrl(/mreact app router ready at (?<url>http:\/\/[^\s]+)/u);
     await expectHtml(url, "Standalone tarball smoke");
+    await expectHydratedCounter(url);
   } finally {
     await server.stop();
   }
@@ -459,6 +465,7 @@ async function smokeBuiltServer(appDir) {
       /mreact app router serving built output at (?<url>http:\/\/[^\s]+)/u,
     );
     await expectHtml(url, "Standalone tarball smoke");
+    await expectHydratedCounter(url);
   } finally {
     await server.stop();
   }
@@ -629,4 +636,44 @@ function run(command, args, options = {}) {
 
 function formatExit(exitCode, signal) {
   return signal === null ? `exit code ${exitCode}` : `signal ${signal}`;
+}
+
+async function expectHydratedCounter(url) {
+  const browser = await chromium.launch();
+  try {
+    const ssrContext = await browser.newContext({ javaScriptEnabled: false });
+    const ssrPage = await ssrContext.newPage();
+    const ssrResponse = await ssrPage.goto(url);
+    expect(ssrResponse?.ok()).toBe(true);
+    await expect(ssrPage.getByRole("button", { name: "count: 0", exact: true })).toBeVisible();
+    await ssrContext.close();
+    const page = await browser.newPage();
+    const errors = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    let releaseScripts;
+    const scriptsReady = new Promise((resolve) => {
+      releaseScripts = resolve;
+    });
+    await page.route("**/*", async (route) => {
+      if (route.request().resourceType() === "script") await scriptsReady;
+      await route.continue();
+    });
+    const response = await page.goto(url, { waitUntil: "commit" });
+    expect(response?.ok()).toBe(true);
+    const counter = page.getByRole("button", { name: "count: 0", exact: true });
+    await expect(counter).toBeVisible();
+    const serverButton = await counter.elementHandle();
+    releaseScripts();
+    await page.waitForLoadState("networkidle");
+    await counter.click();
+    await expect(page.getByRole("button", { name: "count: 1", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "count: 1", exact: true }).click();
+    await expect(page.getByRole("button", { name: "count: 2", exact: true })).toBeVisible();
+    expect(
+      await serverButton.evaluate((button) => button === document.querySelector("button")),
+    ).toBe(true);
+    expect(errors).toEqual([]);
+  } finally {
+    await browser.close();
+  }
 }
