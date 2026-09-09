@@ -264,39 +264,46 @@ export async function measureBackForwardRestore(
   }
 }
 
-export async function measureHydrationIslands(url: string, islandCount: number): Promise<number> {
-  const browser = await chromium.launch({ headless: true });
+export async function measureHydrationIslands(
+  url: string,
+  islandCount: number,
+  options: { timeoutMs?: number } = {},
+): Promise<number> {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  if (!Number.isSafeInteger(islandCount) || islandCount < 1 || islandCount > 1000)
+    throw new Error("Invalid island count");
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 60_000)
+    throw new Error("Invalid island timeout");
+  const browser = await chromium.launch({ headless: true, timeout: 10_000 });
+  const deadline = setTimeout(() => {
+    void browser.close().catch(() => {});
+  }, 60_000);
   try {
     const page = await browser.newPage();
-    const diagnostics = collectDiagnostics(page);
+    page.setDefaultTimeout(timeoutMs);
+    page.setDefaultNavigationTimeout(timeoutMs);
     const start = performance.now();
     await page.goto(url, { waitUntil: "domcontentloaded" });
-    await page.waitForLoadState("networkidle", { timeout: DEFAULT_TIMEOUT_MS }).catch(() => {});
-
-    for (let index = 0; index < islandCount; index += 1) {
-      await page
-        .getByRole("button", { name: `island ${index}: 0` })
-        .waitFor({
-          state: "visible",
-          timeout: DEFAULT_TIMEOUT_MS,
-        })
-        .catch((error: unknown) => {
-          throw appendDiagnostics(error, diagnostics);
-        });
+    const expected = Array.from({ length: islandCount }, (_, i) => `island ${i}: 0`);
+    const verify = async () => {
+      const actual = (await page.locator("button").allTextContents())
+        .map((text) => text.trim())
+        .filter((text) => text.startsWith("island "));
+      if (JSON.stringify(actual) !== JSON.stringify(expected))
+        throw new Error(
+          `Island state mismatch: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`,
+        );
+    };
+    await verify();
+    for (let index = 0; index < islandCount; index++) {
+      await page.getByRole("button", { name: `island ${index}: 0`, exact: true }).click();
+      await page.getByRole("button", { name: `island ${index}: 1`, exact: true }).waitFor();
+      expected[index] = `island ${index}: 1`;
+      await verify();
     }
-
-    await page.getByRole("button", { name: `island ${islandCount - 1}: 0` }).click();
-    await page
-      .getByRole("button", { name: `island ${islandCount - 1}: 1` })
-      .waitFor({
-        state: "visible",
-        timeout: DEFAULT_TIMEOUT_MS,
-      })
-      .catch((error: unknown) => {
-        throw appendDiagnostics(error, diagnostics);
-      });
     return performance.now() - start;
   } finally {
+    clearTimeout(deadline);
     await browser.close();
   }
 }

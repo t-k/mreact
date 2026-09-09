@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { gzipSync } from "node:zlib";
 import { afterEach, describe, expect, it } from "vitest";
-import { measureRouteJavaScriptGzipBytePhases } from "./browser-probes.js";
+import { measureHydrationIslands, measureRouteJavaScriptGzipBytePhases } from "./browser-probes.js";
 
 const servers: Array<{ close: () => Promise<void> }> = [];
 
@@ -10,6 +10,32 @@ afterEach(async () => {
 });
 
 describe("router browser probes", () => {
+  it.each(["last-only", "shared"])("rejects %s island interactions", async (mode) => {
+    const buttons = Array.from({ length: 3 }, (_, i) => `<button>island ${i}: 0</button>`).join("");
+    const script =
+      mode === "last-only"
+        ? "document.querySelectorAll('button')[2].onclick=e=>e.target.textContent='island 2: 1'"
+        : "document.querySelectorAll('button').forEach(b=>b.onclick=()=>document.querySelectorAll('button').forEach((x,i)=>x.textContent='island '+i+': 1'))";
+    const url = await startScriptFixture({
+      "/": `<!doctype html>${buttons}<script>${script}</script>`,
+    });
+    await expect(measureHydrationIslands(url, 3, { timeoutMs: 500 })).rejects.toThrow();
+  });
+
+  it.each([3, 100])(
+    "verifies all %i independent islands with ordinary clicks",
+    async (count) => {
+      const buttons = Array.from(
+        { length: count },
+        (_, i) => `<button>island ${i}: 0</button>`,
+      ).join("");
+      const url = await startScriptFixture({
+        "/": `<!doctype html>${buttons}<script>document.querySelectorAll('button').forEach((b,i)=>b.onclick=()=>b.textContent='island '+i+': 1')</script>`,
+      });
+      expect(await measureHydrationIslands(url, count, { timeoutMs: 1000 })).toBeGreaterThan(0);
+    },
+    15_000,
+  );
   it("separates script bytes needed before interaction from idle-settled bytes", async () => {
     const mainScript = `const button = document.querySelector("button");
 button.disabled = false;
