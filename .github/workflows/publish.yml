@@ -78,6 +78,33 @@ jobs:
       - name: Standalone tarball smoke
         run: pnpm publish:standalone-smoke
 
+  smoke-min-node:
+    name: Standalone tarball smoke (Node 20.19)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          # Minimum engines.node from package.json. Keep in sync.
+          node-version: 20.19.0
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Standalone tarball smoke
+        run: pnpm publish:standalone-smoke
+
   test-shard:
     name: Test shard ${{ matrix.shard }}/3
     runs-on: ubuntu-latest
@@ -163,6 +190,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - verify
+      - smoke-min-node
       - test-shard
       - native-artifacts
     environment: npm-publish
@@ -216,8 +244,14 @@ jobs:
 
           npm_tag="${{ inputs.tag }}"
           if [ -z "$npm_tag" ]; then
-            npm_tag="latest"
+            # Tag pushes have no dist-tag input. Prerelease tags such as
+            # v1.2.3-rc.1 must never land on `latest`, so route them to `next`.
+            case "${GITHUB_REF_NAME}" in
+              v*-*) npm_tag="next" ;;
+              *) npm_tag="latest" ;;
+            esac
           fi
+          echo "Publishing with npm dist-tag: ${npm_tag}"
 
           args=(--tag "$npm_tag")
           if [ "${{ inputs.dry_run }}" = "true" ]; then
