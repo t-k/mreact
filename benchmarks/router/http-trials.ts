@@ -78,13 +78,7 @@ export async function measureHttpTrials(
           : Math.ceil(options.totalRequests / options.concurrency) * options.requestTimeoutMs +
             5_000;
       const result = await receiveLoad(worker, deadline);
-      Object.assign(trial, result);
-      if (result.error !== undefined) throw new Error(result.error);
-      trial.rssAfterBytes = await readProcessRssBytes(target.serverPid);
-      Object.assign(trial, summarizeHttpLoad(result), {
-        rssDeltaBytes: trial.rssAfterBytes - trial.rssBeforeBytes,
-        status: "completed",
-      });
+      await recordHttpTrialResult(trial, result);
     } catch (error) {
       trial.error = error instanceof Error ? error.message : String(error);
     }
@@ -103,6 +97,20 @@ export async function measureHttpTrials(
     if (trial.status === "failed") break;
   }
   return trials;
+}
+
+export async function recordHttpTrialResult(
+  trial: HttpTrial,
+  result: HttpLoadResult,
+): Promise<void> {
+  Object.assign(trial, result);
+  if (result.error !== undefined) throw new Error(result.error);
+  trial.rssAfterBytes = await readProcessRssBytes(trial.serverPid);
+  if (trial.rssBeforeBytes === undefined) throw new Error("Missing initial server RSS snapshot");
+  Object.assign(trial, summarizeHttpLoad(result), {
+    rssDeltaBytes: trial.rssAfterBytes - trial.rssBeforeBytes,
+    status: "completed",
+  });
 }
 
 async function receiveLoad(

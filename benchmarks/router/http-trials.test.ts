@@ -1,16 +1,20 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { describe, expect, it } from "vitest";
-import { measureHttpTrials } from "./http-trials.js";
+import { measureHttpTrials, recordHttpTrialResult } from "./http-trials.js";
+import type { HttpLoadResult, HttpTrial } from "./http-trial-types.js";
 import { collectHttpRows } from "./runner-http.js";
 
 async function withServer(
-  run: (target: {
-    url: string;
-    serverPid: number;
-    requiredText: string;
-    workload: Record<string, string>;
-  }) => Promise<void>,
+  run: (
+    target: {
+      url: string;
+      serverPid: number;
+      requiredText: string;
+      workload: Record<string, string>;
+    },
+    waitForExit: () => Promise<unknown>,
+  ) => Promise<void>,
 ) {
   const child = spawn(
     process.execPath,
@@ -38,12 +42,15 @@ server.listen(0, '127.0.0.1', () => process.send({port: server.address().port}))
   const exited = once(child, "exit");
   try {
     const [{ port }] = (await once(child, "message")) as [{ port: number }];
-    await run({
-      url: `http://127.0.0.1:${port}/`,
-      serverPid: child.pid!,
-      requiredText: "ok:",
-      workload: { route: "/" },
-    });
+    await run(
+      {
+        url: `http://127.0.0.1:${port}/`,
+        serverPid: child.pid!,
+        requiredText: "ok:",
+        workload: { route: "/" },
+      },
+      () => exited,
+    );
   } finally {
     child.kill("SIGTERM");
     await exited;
@@ -65,16 +72,63 @@ describe("isolated HTTP trials", () => {
       expect(trial?.throughputOps).toBeUndefined();
     });
   });
-  it("retains completed HTTP samples if the server exits before the final RSS snapshot", async () => {
+  it("retains HTTP samples regardless of whether final RSS sampling precedes server exit", async () => {
     await withServer(async (target) => {
       const [trial] = await measureHttpTrials(
         { ...target, url: new URL("/exit", target.url).href },
         { profile: "burst", totalRequests: 1, concurrency: 1, windows: 1 },
       );
-      expect(trial?.status).toBe("failed");
       expect(trial?.requestCount).toBe(1);
       expect(trial?.latenciesMs).toHaveLength(1);
-      expect(trial?.rssAfterBytes).toBeUndefined();
+      if (trial?.status === "completed") {
+        expect(trial.rssDeltaBytes).toBe(trial.rssAfterBytes! - trial.rssBeforeBytes!);
+      } else {
+        expect(trial?.status).toBe("failed");
+        expect(trial?.error).toBeTruthy();
+        expect(trial?.rssAfterBytes).toBeUndefined();
+      }
+    });
+  });
+  it("preserves raw results when RSS is sampled after confirmed server exit", async () => {
+    await withServer(async (target, waitForExit) => {
+      const [completed] = await measureHttpTrials(target, {
+        profile: "burst",
+        totalRequests: 1,
+        concurrency: 1,
+        windows: 1,
+      });
+      expect(completed?.status).toBe("completed");
+      const result: HttpLoadResult = {
+        latenciesMs: completed!.latenciesMs!,
+        elapsedMs: completed!.elapsedMs!,
+        requestCount: completed!.requestCount!,
+        connectionsOpened: completed!.connectionsOpened!,
+        reusedRequests: completed!.reusedRequests!,
+      };
+      process.kill(target.serverPid, "SIGTERM");
+      await waitForExit();
+      const trial: HttpTrial = {
+        methodologyVersion: 2,
+        trialId: "exited-server",
+        seriesId: "exited-server",
+        window: 0,
+        status: "failed",
+        options: completed!.options,
+        target,
+        serverPid: target.serverPid,
+        orchestratorPid: process.pid,
+        nodeVersion: process.version,
+        client: completed!.client,
+        warmupRequests: 0,
+        warmupElapsedMs: 0,
+        rssBeforeBytes: completed!.rssBeforeBytes!,
+      };
+      await expect(recordHttpTrialResult(trial, result)).rejects.toThrow();
+      expect(trial).toMatchObject(result);
+      expect(trial.status).toBe("failed");
+      expect(trial.rssAfterBytes).toBeUndefined();
+      expect(trial.rssDeltaBytes).toBeUndefined();
+      expect(trial.throughputOps).toBeUndefined();
     });
   });
   it("samples memory allocated by the server process", async () => {
