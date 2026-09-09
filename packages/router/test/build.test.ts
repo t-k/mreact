@@ -5811,19 +5811,23 @@ export default function MfaChallenge() {
 
     expect(login?.script).toMatch(/^assets\/routes\/login\.[a-f0-9]{8}\.js$/);
     expect(challenge?.script).toMatch(/^assets\/routes\/mfa-challenge\.[a-f0-9]{8}\.js$/);
-    expect(sharedImports).toHaveLength(1);
+    expect(sharedImports?.length).toBeGreaterThan(0);
     expect(login?.modulePreloads).toEqual([...(login?.modulePreloads ?? [])].sort());
     expect(challenge?.modulePreloads).toEqual([...(challenge?.modulePreloads ?? [])].sort());
-    expect(login?.modulePreloads).toContain(sharedImports?.[0]);
-    expect(challenge?.modulePreloads).toContain(sharedImports?.[0]);
+    expect(login?.modulePreloads).toEqual(expect.arrayContaining(sharedImports ?? []));
+    expect(challenge?.modulePreloads).toEqual(expect.arrayContaining(sharedImports ?? []));
     expect(login?.modulePreloads).not.toContain(login?.script);
     expect(challenge?.modulePreloads).not.toContain(challenge?.script);
 
-    const sharedCode = await readFile(join(outDir, "client", sharedImports?.[0] ?? ""), "utf8");
+    const sharedSources = await Promise.all(
+      (sharedImports ?? []).map((file) => readFile(join(outDir, "client", file), "utf8")),
+    );
     const loginCode = await readFile(join(outDir, "client", login?.script ?? ""), "utf8");
     const challengeCode = await readFile(join(outDir, "client", challenge?.script ?? ""), "utf8");
 
-    expect(sharedCode).toContain("__mfa_pending_store_marker__");
+    expect(
+      sharedSources.filter((code) => code.includes("__mfa_pending_store_marker__")),
+    ).toHaveLength(1);
     expect(loginCode).not.toContain("let pending");
     expect(challengeCode).not.toContain("let pending");
 
@@ -6575,7 +6579,7 @@ export default function Page() {
     ).text();
 
     expect(home).toMatchObject({ navigation: true });
-    expect(home?.navigationScript).toMatch(/^assets\/navigation\.[a-f0-9]{8}\.js$/);
+    expect(home?.navigationScript).toMatch(/^assets\/routes\/__mreact_navigation_runtime\.[a-f0-9]{8}\.js$/);
     expect(html).toContain('<script type="application/json" id="mreact-navigation-runtime">');
     expect(html).toContain(`"/_mreact/client/${home?.navigationScript}"`);
     expect(html).not.toContain(

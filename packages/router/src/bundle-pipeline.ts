@@ -58,6 +58,7 @@ export interface RouterBundleEntryOptions {
   code: string;
   filename: string;
   name: string;
+  preserveExports?: boolean | undefined;
 }
 
 export interface RouterBundleOutput {
@@ -646,6 +647,15 @@ function virtualEntriesPlugin(entries: ReadonlyMap<string, RouterBundleEntryOpti
   return {
     name: "mreact-router-virtual-entries",
     enforce: "pre",
+    buildStart() {
+      for (const [id, entry] of entries) {
+        if (entry.preserveExports === true) {
+          // A dynamically loaded runtime needs its exports even in an application build.
+          // Keep other entries eligible for normal application entry tree shaking.
+          this.emitFile({ type: "chunk", id, name: entry.name, preserveSignature: "strict" });
+        }
+      }
+    },
     resolveId(id) {
       return entries.has(id) ? id : undefined;
     },

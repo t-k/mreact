@@ -2866,6 +2866,7 @@ export async function buildClientRouteBatchOutput(options: {
     options.routes.map(async (route) => ({
       filename: route.filename,
       name: routeIdForPath(route.routePath),
+      preserveExports: route.forceInlineNavigationRuntime === true,
       routePath: route.routePath,
       source: await buildClientRouteEntrySource({
         ...route,
@@ -2898,6 +2899,7 @@ export async function buildClientRouteBatchOutput(options: {
       code: entry.source.code,
       filename: entry.filename,
       name: entry.name,
+      preserveExports: entry.preserveExports,
     })),
     minify: options.minify === true,
     platform: "browser",
