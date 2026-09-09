@@ -468,7 +468,7 @@ describe("router benchmark configuration", () => {
   });
 
   it("reports fixed-latency streaming benchmark rows as duration samples", async () => {
-    const rows = await runRouterBenchmarks(
+    const { rows } = await runRouterBenchmarks(
       [
         {
           name: "mreact-app-router",
@@ -508,7 +508,7 @@ describe("router benchmark configuration", () => {
   });
 
   it("reports unsupported timed cases without running them through tinybench", async () => {
-    const rows = await runRouterBenchmarks(
+    const { rows } = await runRouterBenchmarks(
       [
         {
           name: "mreact-app-router",
@@ -534,7 +534,7 @@ describe("router benchmark configuration", () => {
   });
 
   it("reports streaming timing probes as unsupported without a real async stream route", async () => {
-    const rows = await runRouterBenchmarks(
+    const { rows } = await runRouterBenchmarks(
       [
         {
           name: "analog",
@@ -571,7 +571,7 @@ describe("router benchmark configuration", () => {
   });
 
   it("retains raw latency samples for timed benchmark rows", async () => {
-    const rows = await runRouterBenchmarks(
+    const { rows } = await runRouterBenchmarks(
       [
         {
           name: "mreact-app-router",
@@ -604,7 +604,7 @@ describe("router benchmark configuration", () => {
       },
     });
 
-    const rows = await runRouterBenchmarks(
+    const { rows } = await runRouterBenchmarks(
       [createAdapter("mreact-app-router"), createAdapter("next-app-router")],
       { benchTimeMs: 1, warmupTimeMs: 1 },
     );
@@ -632,7 +632,7 @@ describe("router benchmark configuration", () => {
 
   it("warms up and samples value probes before reporting the median", async () => {
     const values = [999, 5, 1, 9, 3, 7];
-    const rows = await runRouterBenchmarks(
+    const { rows } = await runRouterBenchmarks(
       [
         {
           name: "mreact-app-router",
@@ -658,7 +658,7 @@ describe("router benchmark configuration", () => {
 
   it("reports route-scale value probes as honest single-sample rows", async () => {
     const values = [999, 5];
-    const rows = await runRouterBenchmarks(
+    const { rows } = await runRouterBenchmarks(
       [
         {
           name: "mreact-app-router",
@@ -684,7 +684,7 @@ describe("router benchmark configuration", () => {
 
   it("surfaces negative memory samples in value probe notes", async () => {
     const values = [0, -10, 20, -30, 40, -50];
-    const rows = await runRouterBenchmarks(
+    const { rows } = await runRouterBenchmarks(
       [
         {
           name: "mreact-app-router",

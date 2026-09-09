@@ -161,3 +161,14 @@ export type RouterBenchmarkAdapter = AppFrameworkAdapter;
 export type RouterBenchmarkMetric = AppFrameworkMetric;
 export type RouterBenchmarkUnit = AppFrameworkUnit;
 export type RouterBenchmarkRow = AppFrameworkRow;
+
+export interface RouterBenchmarkCleanupResult {
+  adapter: AppFrameworkName;
+  status: "completed" | "failed";
+  error?: string;
+}
+
+export interface RouterBenchmarkRunResult {
+  rows: RouterBenchmarkRow[];
+  cleanup: RouterBenchmarkCleanupResult[];
+}

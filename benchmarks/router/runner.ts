@@ -2,8 +2,10 @@ import { Bench } from "tinybench";
 import type {
   RouterBenchmarkAdapter,
   RouterBenchmarkCaseName,
+  RouterBenchmarkCleanupResult,
   RouterBenchmarkMetric,
   RouterBenchmarkRow,
+  RouterBenchmarkRunResult,
   RouterBenchmarkUnit,
 } from "./types.js";
 
@@ -458,24 +460,32 @@ function isRankableRow(row: RouterBenchmarkRow): boolean {
 
 export async function runRouterBenchmarks(
   adapters: readonly RouterBenchmarkAdapter[],
-  options: { benchTimeMs?: number; warmupTimeMs?: number } = {},
-): Promise<RouterBenchmarkRow[]> {
+  options: {
+    benchTimeMs?: number;
+    warmupTimeMs?: number;
+    onMeasurementsComplete?: (rows: RouterBenchmarkRow[]) => Promise<void>;
+    onCleanupComplete?: (cleanup: RouterBenchmarkCleanupResult[]) => Promise<void>;
+  } = {},
+): Promise<RouterBenchmarkRunResult> {
   const rows: RouterBenchmarkRow[] = [];
+  const cleanup: RouterBenchmarkCleanupResult[] = [];
   const benchTimeMs = options.benchTimeMs ?? 1_500;
   const warmupTimeMs = options.warmupTimeMs ?? 250;
   const activeAdapters: RouterBenchmarkAdapter[] = [];
-
-  for (const adapter of adapters) {
-    try {
-      await adapter.setup?.();
-      await adapter.renderToString?.(nodeCount);
-      activeAdapters.push(adapter);
-    } catch (error) {
-      rows.push(...failedRowsForAdapter(adapter, error));
-    }
-  }
+  const attemptedAdapters: RouterBenchmarkAdapter[] = [];
 
   try {
+    for (const adapter of adapters) {
+      attemptedAdapters.push(adapter);
+      try {
+        await adapter.setup?.();
+        await adapter.renderToString?.(nodeCount);
+        activeAdapters.push(adapter);
+      } catch (error) {
+        rows.push(...failedRowsForAdapter(adapter, error));
+      }
+    }
+
     for (const benchmarkCase of timedRouterBenchmarkCases) {
       for (const adapter of activeAdapters) {
         if (!benchmarkCase.isSupported(adapter)) {
@@ -544,17 +554,24 @@ export async function runRouterBenchmarks(
         }
       }
     }
+    await options.onMeasurementsComplete?.(rows);
   } finally {
-    for (const adapter of activeAdapters) {
+    for (const adapter of attemptedAdapters) {
       try {
         await adapter.teardown?.();
-      } catch {
-        // Teardown failures should not hide benchmark results.
+        cleanup.push({ adapter: adapter.name, status: "completed" });
+      } catch (error) {
+        cleanup.push({
+          adapter: adapter.name,
+          status: "failed",
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
+    await options.onCleanupComplete?.(cleanup);
   }
 
-  return rows;
+  return { rows, cleanup };
 }
 
 async function collectValueRowsRoundRobin(

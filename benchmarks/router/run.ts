@@ -22,15 +22,19 @@ const env = await collectBenchmarkEnvironment([
   "svelte",
   "vue",
 ]);
-const rows = await runRouterBenchmarks(routerBenchmarkAdapters);
+const { rows, cleanup } = await runRouterBenchmarks(routerBenchmarkAdapters);
 const dir = await createDatedResultsDir();
 const markdown = formatRouterBenchmarkMarkdown(env, rows);
 
 await writeJsonFile(join(dir, "router.summary.json"), rows);
+await writeJsonFile(join(dir, "router.lifecycle.json"), cleanup);
 await writeTextFile(join(dir, "router.md"), markdown);
 
 console.log(markdown);
 
-if (rows.some((row) => row.status === "failed")) {
+if (
+  rows.some((row) => row.status === "failed") ||
+  cleanup.some((result) => result.status === "failed")
+) {
   process.exitCode = 1;
 }
