@@ -1,5 +1,4 @@
 import { markoRunAdapter } from "./marko-run.js";
-import { analogAdapter } from "./analog.js";
 import {
   mreactAppRouterAdapter,
   mreactAppRouterLogEnabledAdapter,
@@ -18,7 +17,6 @@ export const routerBenchmarkAdapters: RouterBenchmarkAdapter[] = [
   markoRunAdapter,
   nuxtAdapter,
   svelteKitAdapter,
-  analogAdapter,
   qwikCityAdapter,
   solidStartAdapter,
   tanstackStartAdapter,

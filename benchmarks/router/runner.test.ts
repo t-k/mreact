@@ -5,12 +5,17 @@ import { httpBenchmarkCases } from "./runner-http.js";
 import type { RouterBenchmarkRow } from "./types.js";
 
 describe("router benchmark configuration", () => {
+  it("excludes quarantined Analog and experimental Qwik V2 from the default suite", () => {
+    const names = routerBenchmarkAdapters.map((adapter) => adapter.name);
+    expect(names).not.toContain("analog");
+    expect(names).not.toContain("qwik-router-v2");
+    expect(names).toContain("qwik-city");
+  });
   it("includes every planned router/app framework adapter", () => {
     expect(routerBenchmarkAdapters.map((adapter) => adapter.name)).toEqual([
       "marko-run",
       "nuxt",
       "svelte-kit",
-      "analog",
       "qwik-city",
       "solid-start",
       "tanstack-start",
@@ -74,7 +79,6 @@ describe("router benchmark configuration", () => {
       "marko-run",
       "nuxt",
       "svelte-kit",
-      "analog",
       "qwik-city",
       "solid-start",
       "tanstack-start",
@@ -100,7 +104,6 @@ describe("router benchmark configuration", () => {
       "marko-run",
       "nuxt",
       "svelte-kit",
-      "analog",
       "qwik-city",
       "solid-start",
       "tanstack-start",
@@ -119,7 +122,6 @@ describe("router benchmark configuration", () => {
     expect(adaptersWithNavigationProbes).toEqual([
       "nuxt",
       "svelte-kit",
-      "analog",
       "qwik-city",
       "solid-start",
       "tanstack-start",
@@ -182,7 +184,6 @@ describe("router benchmark configuration", () => {
       "marko-run",
       "nuxt",
       "svelte-kit",
-      "analog",
       "qwik-city",
       "solid-start",
       "tanstack-start",
@@ -213,7 +214,6 @@ describe("router benchmark configuration", () => {
       "marko-run",
       "nuxt",
       "svelte-kit",
-      "analog",
       "qwik-city",
       "solid-start",
       "tanstack-start",
@@ -229,7 +229,6 @@ describe("router benchmark configuration", () => {
     const expectedAdapters = [
       "nuxt",
       "svelte-kit",
-      "analog",
       "qwik-city",
       "solid-start",
       "tanstack-start",
@@ -292,7 +291,7 @@ describe("router benchmark configuration", () => {
   });
 
   it("exposes client bundle probes for production app framework adapters", () => {
-    const productionAppAdapterNames = ["nuxt", "svelte-kit", "analog"];
+    const productionAppAdapterNames = ["nuxt", "svelte-kit"];
     const requiredMethods = [
       "measureServerOnlyClientBundleBytes",
       "measureInteractiveClientBundleBeforeInteractionBytes",
@@ -318,7 +317,6 @@ describe("router benchmark configuration", () => {
       "marko-run",
       "nuxt",
       "svelte-kit",
-      "analog",
       "qwik-city",
       "solid-start",
       "tanstack-start",
@@ -341,17 +339,16 @@ describe("router benchmark configuration", () => {
     }
   });
 
-  it("uses production app fixtures for Nuxt, SvelteKit, and Analog adapters", () => {
+  it("uses production app fixtures for Nuxt and SvelteKit adapters", () => {
     const fixtureKinds = Object.fromEntries(
       routerBenchmarkAdapters
-        .filter((adapter) => ["nuxt", "svelte-kit", "analog"].includes(adapter.name))
+        .filter((adapter) => ["nuxt", "svelte-kit"].includes(adapter.name))
         .map((adapter) => [adapter.name, (adapter as { fixtureKind?: string }).fixtureKind]),
     );
 
     expect(fixtureKinds).toEqual({
       nuxt: "production-app",
       "svelte-kit": "production-app",
-      analog: "production-app",
     });
   });
 

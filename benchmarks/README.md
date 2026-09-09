@@ -11,7 +11,7 @@ This directory contains fair, repeatable benchmark fixtures for mreact and peer 
   cross-checked against real browser DOM behavior.
 - `non-router`: package-level regression microbenchmarks for virtual, forms,
   query, store, auth, and other non-router packages.
-- `router`: production router/app framework comparison across Marko Run, Nuxt, SvelteKit, Analog, Qwik City, SolidStart, TanStack Start, Next.js App Router, and mreact app router.
+- `router`: production router/app framework comparison across Marko Run, Nuxt, SvelteKit, Qwik City, SolidStart, TanStack Start, Next.js App Router, and mreact app router.
 - `lambda-route-latency`: local AWS Lambda adapter route latency reproduction.
   It invokes API Gateway HTTP API v2-style events directly against the mreact
   Lambda handler and records request/render timing phases for cold health
@@ -23,6 +23,8 @@ This directory contains fair, repeatable benchmark fixtures for mreact and peer 
 ## Fairness Policy
 
 The default router suite excludes the experimental `qwik-router-v2` adapter following an interactive validation timeout in [run 34344383424](https://github.com/t-k/mreact/actions/runs/34344383424). Qwik City remains included. The V2 adapter source is retained for investigation; exclusion is not a fix for its timeout or a performance improvement. Historical results that include V2 have a different adapter set.
+
+The default router suite also excludes Analog following an owned-process cleanup failure in [run 34369458539](https://github.com/t-k/mreact/actions/runs/34369458539). Its adapter and opt-in production regression test remain available for investigation, but the standard benchmark workflow no longer runs that preflight. The saved SSR responses contained all 1,000 rows; exclusion does not resolve the cleanup failure and is not a performance improvement. Historical results that include Analog have a different adapter set.
 
 The Analog production fixture serializes Vite's client and SSR environment builds while retaining Nitro's `buildApp()` orchestration. Concurrent builds with shared Angular compiler state intermittently produced server components without AOT output and empty SSR documents. This build-time workaround preserves the framework version, production runtime, hydration, navigation, fixture contents, and measurement intervals; it is not a runtime optimization. The opt-in regression command `MREACT_ANALOG_INTEGRATION=1 NODE_ENV=production pnpm exec vitest run benchmarks/router/adapters/analog.integration.test.ts` checks three independent production builds and three post-readiness SSR responses per build. The existing HTTP readiness probe runs first, so this regression check does not guarantee correctness of the server's very first HTTP response. Failed checks retain HTML and process diagnostics.
 
