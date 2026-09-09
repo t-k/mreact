@@ -503,6 +503,9 @@ export const markoRunAdapter: AppFrameworkAdapter = {
       workload: { route: "/", cache: "existing framework fixture defaults" },
     };
   },
+  async getBrowserTarget() {
+    return { url: await ensureBrowserFixture(), counterPrefix: "count: " };
+  },
   async measureInitialPageLoadBeforeInteractionMs(): Promise<number> {
     const url = await ensureBrowserFixture();
     return measureInitialPageLoadBeforeInteraction(url);

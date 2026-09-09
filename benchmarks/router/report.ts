@@ -45,12 +45,12 @@ export function formatRouterBenchmarkMarkdown(
       lines.push(caveat, "");
     }
 
-    const noiseFloor = benchmarkCase.name.startsWith("app HTTP v2 ")
+    const variantSpread = benchmarkCase.name.startsWith("app HTTP v2 ")
       ? undefined
-      : sameCoreNoiseFloor(rankedRows);
-    if (noiseFloor !== undefined) {
+      : mreactVariantSpread(rankedRows);
+    if (variantSpread !== undefined) {
       lines.push(
-        `Same-core mreact variant noise floor: ${noiseFloor} spread. Treat smaller cross-framework gaps in this case as inconclusive.`,
+        `mreact variant spread: ${variantSpread}. This includes implementation and configuration differences; it is not measurement noise or a statistical significance threshold.`,
         "",
       );
     }
@@ -130,6 +130,7 @@ const mreactVariantOnlyRankingCaseNames = new Set<RouterBenchmarkCaseName>([
   "app concurrent p99 latency 100 connections",
   "app concurrent RSS delta 100 connections",
   "app hydration 100 islands",
+  "app 100 islands verified interaction E2E",
   "app dev cold start",
   "app dev first request latency",
   "app dev HMR update latency",
@@ -156,6 +157,12 @@ function isMreactVariantOnlyRanking(
 }
 
 function rankingCaveat(caseName: RouterBenchmarkCaseName): string | undefined {
+  if (caseName.startsWith("app browser v2 ")) {
+    return "Browser methodology v2 verifies SSR separately with JavaScript disabled and requires two working counter interactions. Related metrics share trials and IDs in browserTrials. E2E includes Playwright automation; event-to-DOM ends at MutationObserver delivery, not paint or INP. Network-idle profiles include the explicit quiet-period wait before interaction. These measurements are not directly comparable to legacy browser probes.";
+  }
+  if (caseName === "app 100 islands verified interaction E2E") {
+    return "Includes navigation and sequential Playwright interactions with every island, checking independent state after each click. This is functional end-to-end duration, not hydration time.";
+  }
   if (caseName.startsWith("app HTTP v2 ")) {
     return "Methodology v2 uses separate orchestrator, load generator and production server processes. All five metrics share the same trials. RSS is a single server PID's before/after delta, not a peak or process-tree total; negative samples remain in JSON but are excluded from RSS rankings. Route/cache conditions still differ across adapters (mreact uses /static-page with its route cache); consult httpTrials before comparing frameworks. These measurements are not directly comparable to legacy concurrent probes. Steady windows share one warmed connection pool; burst trials start fresh pools, not cold servers.";
   }
@@ -166,7 +173,7 @@ function rankingCaveat(caseName: RouterBenchmarkCaseName): string | undefined {
   return undefined;
 }
 
-function sameCoreNoiseFloor(rows: readonly RouterBenchmarkRow[]): string | undefined {
+function mreactVariantSpread(rows: readonly RouterBenchmarkRow[]): string | undefined {
   const variantRows = rows.filter(
     (row) => row.status === "completed" && row.framework.startsWith("mreact-app-router"),
   );

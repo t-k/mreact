@@ -2,9 +2,21 @@ import { describe, expect, it } from "vitest";
 import { routerBenchmarkAdapters } from "./adapters/index.js";
 import { routerBenchmarkCases, rankCompletedRows, runRouterBenchmarks } from "./runner.js";
 import { httpBenchmarkCases } from "./runner-http.js";
+import { browserBenchmarkCases } from "./runner-browser.js";
 import type { RouterBenchmarkRow } from "./types.js";
 
 describe("router benchmark configuration", () => {
+  it("exposes explicit browser targets only for previously supported interaction adapters", () => {
+    expect(
+      routerBenchmarkAdapters
+        .filter((adapter) => adapter.getBrowserTarget)
+        .map((adapter) => adapter.name),
+    ).toEqual(
+      routerBenchmarkAdapters
+        .filter((adapter) => adapter.measureFirstInteractionFromDomContentLoadedMs)
+        .map((adapter) => adapter.name),
+    );
+  });
   it("excludes quarantined Analog and experimental Qwik V2 from the default suite", () => {
     const names = routerBenchmarkAdapters.map((adapter) => adapter.name);
     expect(names).not.toContain("analog");
@@ -40,7 +52,8 @@ describe("router benchmark configuration", () => {
       "app dynamic-attr grid 200 cells",
       "app dynamic route params data",
       ...httpBenchmarkCases.map((item) => item.name),
-      "app hydration 100 islands",
+      ...browserBenchmarkCases.map((item) => item.name),
+      "app 100 islands verified interaction E2E",
       "app dev cold start",
       "app dev first request latency",
       "app dev HMR update latency",
@@ -54,10 +67,6 @@ describe("router benchmark configuration", () => {
       "app client navigation back-forward restore",
       "app Cloudflare Worker request latency",
       "app client navigation route-to-route",
-      "app initial page load JS before interaction",
-      "app first interaction from DOMContentLoaded",
-      "app first interaction after networkidle",
-      "app second interaction latency",
       "app server cold start",
       "app SSR HTML gzip bytes 1000 nodes",
       "app client bundle gzip bytes (server-only page)",
@@ -193,10 +202,7 @@ describe("router benchmark configuration", () => {
       "mreact-app-router+mreact react-compat",
       "mreact-app-router+log enabled",
     ];
-    const requiredMethods = [
-      "getHttpTarget",
-      "measureSsrHtmlGzipBytes",
-    ] as const;
+    const requiredMethods = ["getHttpTarget", "measureSsrHtmlGzipBytes"] as const;
 
     for (const method of requiredMethods) {
       expect(
@@ -584,7 +590,7 @@ describe("router benchmark configuration", () => {
       async renderToString(nodeCount: number) {
         return `<span>${nodeCount - 1}</span>`;
       },
-      async measureFirstInteractionAfterNetworkIdleMs() {
+      async measureClientNavigationMs() {
         calls.push(name);
         return name === "mreact-app-router" ? 10 : 20;
       },
@@ -607,7 +613,7 @@ describe("router benchmark configuration", () => {
       rows.find(
         (row) =>
           row.framework === "mreact-app-router" &&
-          row.caseName === "app first interaction after networkidle",
+          row.caseName === "app client navigation route-to-route",
       ),
     ).toMatchObject({
       status: "completed",
@@ -686,9 +692,7 @@ describe("router benchmark configuration", () => {
       { benchTimeMs: 1, warmupTimeMs: 1 },
     );
 
-    expect(
-      rows.find((row) => row.caseName === "app 1000 route RSS delta"),
-    ).toMatchObject({
+    expect(rows.find((row) => row.caseName === "app 1000 route RSS delta")).toMatchObject({
       note: "1/1 samples negative",
       samplesMs: [-10],
     });

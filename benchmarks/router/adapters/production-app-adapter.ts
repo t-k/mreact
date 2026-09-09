@@ -177,6 +177,9 @@ export function createProductionAppAdapter(
     async measureClientNavigationMs(): Promise<number> {
       return measureClientNavigation(await interactiveRouteUrl());
     },
+    async getBrowserTarget() {
+      return { url: await interactiveRouteUrl(), counterPrefix: "count: " };
+    },
     async measureInitialPageLoadBeforeInteractionMs(): Promise<number> {
       return measureInitialPageLoadBeforeInteraction(await interactiveRouteUrl());
     },

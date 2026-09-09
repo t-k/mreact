@@ -673,6 +673,9 @@ export const qwikRouterV2Adapter: AppFrameworkAdapter = {
     const url = await ensureBrowserFixture();
     return measureBackForwardRestore(url, { expectStateRestore: false });
   },
+  async getBrowserTarget() {
+    return { url: await ensureBrowserFixture(), counterPrefix: "count: " };
+  },
   async measureInitialPageLoadBeforeInteractionMs(): Promise<number> {
     const url = await ensureBrowserFixture();
     return measureInitialPageLoadBeforeInteraction(url);

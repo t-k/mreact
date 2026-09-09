@@ -1,5 +1,6 @@
 import { Bench } from "tinybench";
 import { collectHttpRows, httpBenchmarkCases } from "./runner-http.js";
+import { collectBrowserRows, browserBenchmarkCases } from "./runner-browser.js";
 import type {
   RouterBenchmarkAdapter,
   RouterBenchmarkCaseName,
@@ -103,9 +104,9 @@ const timedRouterBenchmarkCases: TimedRouterBenchmarkCase[] = [
 
 const valueRouterBenchmarkCases: ValueRouterBenchmarkCase[] = [
   {
-    name: "app hydration 100 islands",
+    name: "app 100 islands verified interaction E2E",
     description:
-      "Loads an app route with 100 independently interactive islands and reports time until all islands can update in real Chromium.",
+      "Loads 100 islands and verifies every independent 0-to-1 update with ordinary Playwright clicks. Includes navigation and all 100 operations; not hydration time.",
     metric: "duration",
     unit: "ms",
     invoke: (adapter) => adapter.measureHydration100IslandsMs?.(),
@@ -276,38 +277,6 @@ const durationRouterBenchmarkCases: DurationRouterBenchmarkCase[] = [
     invoke: (adapter) => adapter.measureClientNavigationMs?.(),
   },
   {
-    name: "app initial page load JS before interaction",
-    description:
-      "Measures page load time until the interactive route is visible and idle before any user interaction.",
-    metric: "duration",
-    unit: "ms",
-    invoke: (adapter) => adapter.measureInitialPageLoadBeforeInteractionMs?.(),
-  },
-  {
-    name: "app first interaction from DOMContentLoaded",
-    description:
-      "Measures the first click-to-visible-update latency immediately after DOMContentLoaded without waiting for network idle.",
-    metric: "duration",
-    unit: "ms",
-    invoke: (adapter) => adapter.measureFirstInteractionFromDomContentLoadedMs?.(),
-  },
-  {
-    name: "app first interaction after networkidle",
-    description:
-      "Measures the first click-to-visible-update latency after the interactive route has reached network idle.",
-    metric: "duration",
-    unit: "ms",
-    invoke: (adapter) => adapter.measureFirstInteractionAfterNetworkIdleMs?.(),
-  },
-  {
-    name: "app second interaction latency",
-    description:
-      "Measures the second click-to-visible-update latency after the route has already handled one client interaction.",
-    metric: "duration",
-    unit: "ms",
-    invoke: (adapter) => adapter.measureSecondInteractionLatencyMs?.(),
-  },
-  {
     name: "app server cold start",
     description:
       "Measures production server cold-start latency when the adapter can isolate startup from build work.",
@@ -396,6 +365,7 @@ export const routerBenchmarkCases: RouterBenchmarkCase[] = [
   timedRouterBenchmarkCases[4]!,
   timedRouterBenchmarkCases[2]!,
   ...httpBenchmarkCases,
+  ...browserBenchmarkCases,
   ...valueRouterBenchmarkCases,
   ...durationRouterBenchmarkCases.slice(5),
   ...sizeRouterBenchmarkCases,
@@ -503,6 +473,7 @@ export async function runRouterBenchmarks(
     }
 
     rows.push(...(await collectHttpRows(activeAdapters)));
+    rows.push(...(await collectBrowserRows(activeAdapters)));
 
     for (const benchmarkCase of valueRouterBenchmarkCases) {
       rows.push(...(await collectValueRowsRoundRobin(activeAdapters, benchmarkCase)));

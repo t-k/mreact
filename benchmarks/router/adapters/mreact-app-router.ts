@@ -543,6 +543,12 @@ function createMreactAppRouterAdapter(options: {
       const url = await ensureBrowserFixture(logEnabled, reactCompat);
       return measureBackForwardRestore(url);
     },
+    async getBrowserTarget() {
+      return {
+        url: await ensureBrowserFixture(logEnabled, reactCompat),
+        counterPrefix: reactCompat ? "compat count: " : "count: ",
+      };
+    },
     async measureInitialPageLoadBeforeInteractionMs(): Promise<number> {
       const url = await ensureBrowserFixture(logEnabled, reactCompat);
       return measureInitialPageLoadBeforeInteraction(url);

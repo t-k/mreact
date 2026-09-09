@@ -1,4 +1,5 @@
 import type { HttpTarget, HttpTrial } from "./http-trial-types.js";
+import type { BrowserTarget, BrowserTrial } from "./browser-trials.js";
 
 export type AppFrameworkName =
   | "mreact-app-router"
@@ -16,6 +17,8 @@ export type AppFrameworkName =
   | "qwik-router-v2";
 
 export type AppFrameworkCaseName =
+  | `app browser v2 ${"domcontentloaded" | "networkidle"} ${"initial content observed" | "navigation to first verified update" | "first click E2E" | "first click event-to-DOM" | "second click E2E" | "second click event-to-DOM"}`
+  | "app 100 islands verified interaction E2E"
   | `app HTTP v2 ${"burst" | "steady"} ${"throughput" | "p50 latency" | "p95 latency" | "p99 latency" | "server RSS delta"} (max 100 in-flight)`
   | "app render 1000 nodes"
   | "app streaming 1000 nodes"
@@ -108,6 +111,7 @@ export interface AppFrameworkAdapter {
   measureServerColdStartMs?: () => Promise<number>;
   measureBuildOutputGzipBytes?: () => Promise<number>;
   getHttpTarget?: () => Promise<HttpTarget>;
+  getBrowserTarget?: () => Promise<BrowserTarget>;
   measureHydration100IslandsMs?: () => Promise<number>;
   measureDevColdStartMs?: () => Promise<number>;
   measureDevFirstRequestLatencyMs?: () => Promise<number>;
@@ -154,6 +158,7 @@ export interface AppFrameworkRow {
   samplesMs?: number[];
   samples?: { unit: AppFrameworkUnit; values: number[] };
   httpTrials?: HttpTrial[];
+  browserTrials?: BrowserTrial[];
   gzipBytes?: number;
   note?: string;
 }
