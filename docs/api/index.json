@@ -192125,9 +192125,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/sink.ts",
-									"line": 25,
+									"line": 27,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/sink.ts#L25"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/sink.ts#L27"
 								}
 							],
 							"signatures": [
@@ -192148,9 +192148,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/sink.ts",
-											"line": 25,
+											"line": 27,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/sink.ts#L25"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/sink.ts#L27"
 										}
 									],
 									"parameters": [

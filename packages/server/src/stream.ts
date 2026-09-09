@@ -390,6 +390,8 @@ function shouldWarnAboutQueuedStreamBytes(): boolean {
 
 async function raceAbort<T>(task: PromiseLike<T>, signal: AbortSignal): Promise<T | undefined> {
   if (signal.aborted) {
+    // Stopping the wait must not leave the render's later rejection unobserved.
+    void Promise.resolve(task).then(undefined, () => {});
     return undefined;
   }
 
