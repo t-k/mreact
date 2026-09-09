@@ -135,7 +135,7 @@ jobs:
         if: ${{ inputs.suite == 'all' || inputs.suite == 'router' }}
         env:
           MREACT_ROUTER_HTTP_INTEGRATION: "1"
-        run: NODE_ENV=production pnpm exec vitest run benchmarks/router/adapters/http-production.integration.test.ts benchmarks/router/fixture-server.test.ts
+        run: pnpm build && NODE_ENV=production pnpm exec vitest run benchmarks/router/adapters/http-production.integration.test.ts benchmarks/router/fixture-server.test.ts
 
       - name: Run router benchmarks
         if: ${{ inputs.suite == 'all' || inputs.suite == 'router' }}
