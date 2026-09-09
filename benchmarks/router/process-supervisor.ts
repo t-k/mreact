@@ -316,9 +316,14 @@ function groupExists(pid: number): boolean {
     process.kill(-pid, 0);
     return true;
   } catch (error) {
-    if (isMissingProcess(error)) return false;
-    throw error;
+    return processMayExistAfterProbeError(error);
   }
+}
+
+export function processMayExistAfterProbeError(error: unknown): boolean {
+  // EPERM (and unknown observation errors) cannot prove absence. Retain the
+  // group for bounded cleanup and failed-run reporting instead of abandoning it.
+  return !isMissingProcess(error);
 }
 
 function isMissingProcess(error: unknown): boolean {

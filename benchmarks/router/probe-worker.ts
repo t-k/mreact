@@ -28,7 +28,7 @@ export function startProbeWorker(module: URL, config: unknown) {
   };
   child.on("error", fail);
   const exited = new Promise<void>((resolve) =>
-    child.once("exit", (code, signal) => {
+    child.once("close", (code, signal) => {
       fail(new Error(`probe worker exited (${code ?? signal}): ${stderr}`));
       resolve();
     }),
@@ -65,6 +65,7 @@ export function startProbeWorker(module: URL, config: unknown) {
     async close() {
       if (child.exitCode !== null || child.signalCode !== null) {
         await exited;
+        if (child.exitCode !== 0) throw terminal;
         return;
       }
       if (child.connected)
@@ -82,6 +83,7 @@ export function startProbeWorker(module: URL, config: unknown) {
         clearTimeout(timer);
       }
       if (forced) throw new Error(`probe worker ${child.pid} required forced cleanup`);
+      if (child.exitCode !== 0) throw terminal ?? new Error("probe worker exited abnormally");
     },
   };
 }

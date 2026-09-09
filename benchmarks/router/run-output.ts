@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { writeJsonFile, writeTextFile } from "../shared/results.js";
 import type { BenchmarkEnvironment } from "../shared/types.js";
 import { notifyMeasurementsComplete } from "./lifecycle-protocol.js";
+import { httpOutputArtifacts } from "./http-artifacts.js";
 import { formatRouterBenchmarkMarkdown } from "./report.js";
 import { runRouterBenchmarks } from "./runner.js";
 import type { RouterBenchmarkAdapter, RouterBenchmarkCleanupResult } from "./types.js";
@@ -29,7 +30,9 @@ export async function saveRouterBenchmarkRun(
         // Arm shutdown supervision before filesystem work or adapter teardown can hang.
         await notifyMeasurementsComplete();
         const markdown = formatRouterBenchmarkMarkdown(environment, rows);
-        await writeJsonFile(join(directory, "router.summary.json"), rows);
+        const output = httpOutputArtifacts(rows);
+        await writeJsonFile(join(directory, "router.http-trials.json"), output.trials);
+        await writeJsonFile(join(directory, "router.summary.json"), output.rows);
         await writeTextFile(join(directory, "router.md"), markdown);
         await writeJsonFile(join(directory, "router.lifecycle.json"), {
           status: "cleaning",

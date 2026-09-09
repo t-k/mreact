@@ -4,15 +4,15 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { superviseRouterBenchmark } from "./process-supervisor.js";
+import { processMayExistAfterProbeError, superviseRouterBenchmark } from "./process-supervisor.js";
 
 const fixture = fileURLToPath(new URL("./test-fixtures/lifecycle-worker.ts", import.meta.url));
 const alive = (pid: number) => {
   try {
     process.kill(pid, 0);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    return processMayExistAfterProbeError(error);
   }
 };
 

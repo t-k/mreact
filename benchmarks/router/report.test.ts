@@ -228,14 +228,14 @@ describe("router benchmark report", () => {
     const rows: RouterBenchmarkRow[] = [
       completedRow(
         "mreact-app-router",
-        "app concurrent RSS delta 100 connections",
+        "app HTTP v2 burst server RSS delta (max 100 in-flight)",
         "memory",
         "bytes",
         100,
       ),
       completedRow(
         "mreact-app-router+mreact react-compat",
-        "app concurrent RSS delta 100 connections",
+        "app HTTP v2 burst server RSS delta (max 100 in-flight)",
         "memory",
         "bytes",
         -20,
@@ -245,7 +245,7 @@ describe("router benchmark report", () => {
     const markdown = formatRouterBenchmarkMarkdown(testEnvironment, rows);
 
     expect(markdown).toContain(
-      "RSS delta rows only rank adapters that expose server child process RSS; adapters without measurable server child RSS are reported as unsupported, and rows with negative RSS samples are treated as contaminated and excluded from this ranking.",
+      "RSS is a single server PID's before/after delta",
     );
   });
 
@@ -254,7 +254,7 @@ describe("router benchmark report", () => {
       {
         ...completedRow(
           "marko-run",
-          "app concurrent RSS delta 100 connections",
+          "app HTTP v2 burst server RSS delta (max 100 in-flight)",
           "memory",
           "bytes",
           1024,
@@ -264,7 +264,7 @@ describe("router benchmark report", () => {
       },
       completedRow(
         "mreact-app-router",
-        "app concurrent RSS delta 100 connections",
+        "app HTTP v2 burst server RSS delta (max 100 in-flight)",
         "memory",
         "bytes",
         2048,
@@ -273,13 +273,13 @@ describe("router benchmark report", () => {
 
     const markdown = formatRouterBenchmarkMarkdown(testEnvironment, rows);
     const ranking = markdown.slice(
-      sectionIndex(markdown, "app concurrent RSS delta 100 connections"),
+      sectionIndex(markdown, "app HTTP v2 burst server RSS delta (max 100 in-flight)"),
       markdown.indexOf("## Results"),
     );
 
     expect(ranking).toContain("mreact-app-router");
     expect(ranking).not.toContain("marko-run");
-    expect(markdown).toContain("| router | marko-run | test | app concurrent RSS delta 100 connections | unsupported |");
+    expect(markdown).toContain("| router | marko-run | test | app HTTP v2 burst server RSS delta (max 100 in-flight) | unsupported |");
   });
 });
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { routerBenchmarkAdapters } from "./adapters/index.js";
 import { routerBenchmarkCases, rankCompletedRows, runRouterBenchmarks } from "./runner.js";
+import { httpBenchmarkCases } from "./runner-http.js";
 import type { RouterBenchmarkRow } from "./types.js";
 
 describe("router benchmark configuration", () => {
@@ -33,9 +34,7 @@ describe("router benchmark configuration", () => {
       "app static cached route 1000 nodes",
       "app dynamic-attr grid 200 cells",
       "app dynamic route params data",
-      "app concurrent throughput 100 connections",
-      "app concurrent p99 latency 100 connections",
-      "app concurrent RSS delta 100 connections",
+      ...httpBenchmarkCases.map((item) => item.name),
       "app hydration 100 islands",
       "app dev cold start",
       "app dev first request latency",
@@ -145,9 +144,7 @@ describe("router benchmark configuration", () => {
 
   it("exposes extended router probes for mreact app-router variants", () => {
     const requiredMethods = [
-      "measureConcurrentRequestThroughputOps",
-      "measureConcurrentRequestP99Ms",
-      "measureConcurrentRequestRssDeltaBytes",
+      "getHttpTarget",
       "measureHydration100IslandsMs",
       "measureDevColdStartMs",
       "measureDevFirstRequestLatencyMs",
@@ -196,8 +193,7 @@ describe("router benchmark configuration", () => {
       "mreact-app-router+log enabled",
     ];
     const requiredMethods = [
-      "measureConcurrentRequestThroughputOps",
-      "measureConcurrentRequestP99Ms",
+      "getHttpTarget",
       "measureSsrHtmlGzipBytes",
     ] as const;
 
@@ -211,16 +207,18 @@ describe("router benchmark configuration", () => {
 
     expect(
       routerBenchmarkAdapters
-        .filter((adapter) => adapter.measureConcurrentRequestRssDeltaBytes !== undefined)
+        .filter((adapter) => adapter.getHttpTarget !== undefined)
         .map((adapter) => adapter.name),
     ).toEqual([
       "marko-run",
       "nuxt",
+      "svelte-kit",
       "analog",
       "qwik-city",
       "solid-start",
       "tanstack-start",
       "tanstack-start-solid",
+      "next-app-router",
       "mreact-app-router",
       "mreact-app-router+mreact react-compat",
       "mreact-app-router+log enabled",
@@ -683,7 +681,7 @@ describe("router benchmark configuration", () => {
           async renderToString(nodeCount: number) {
             return `<span>${nodeCount - 1}</span>`;
           },
-          async measureConcurrentRequestRssDeltaBytes() {
+          async measureRouteScale1000RssDeltaBytes() {
             return values.shift() ?? 0;
           },
         },
@@ -692,10 +690,10 @@ describe("router benchmark configuration", () => {
     );
 
     expect(
-      rows.find((row) => row.caseName === "app concurrent RSS delta 100 connections"),
+      rows.find((row) => row.caseName === "app 1000 route RSS delta"),
     ).toMatchObject({
-      note: "3/5 samples negative",
-      samplesMs: [-10, 20, -30, 40, -50],
+      note: "1/1 samples negative",
+      samplesMs: [-10],
     });
   });
 });

@@ -18,11 +18,6 @@ import { dirname, join, resolve as pathResolve } from "node:path";
 import type { AppFrameworkAdapter } from "../types.js";
 import { measureBuildOutputGzipBytes } from "../build-output-size.js";
 import {
-  type ConcurrentRequestProbeResult,
-  measureConcurrentRequests,
-  measureConcurrentRequestsWithServerRss,
-} from "../http-probes.js";
-import {
   measureBackForwardRestore,
   measureClientNavigation,
   measureFirstInteractionAfterNetworkIdle,
@@ -765,27 +760,15 @@ export const tanstackStartAdapter: AppFrameworkAdapter = {
 
     return gzipSync(html).length;
   },
-  async measureConcurrentRequestThroughputOps(): Promise<number> {
-    return (await ensureConcurrentRequestResult()).throughputOps;
-  },
-  async measureConcurrentRequestP99Ms(): Promise<number> {
-    return (await ensureConcurrentRequestResult()).p99Ms;
-  },
-  async measureConcurrentRequestRssDeltaBytes(): Promise<number | undefined> {
+  async getHttpTarget() {
     const url = await ensureFixture(1000);
-    if (serverProcess?.pid === undefined) {
-      return undefined;
-    }
-    return (
-      await measureConcurrentRequestsWithServerRss(url, serverProcess.pid, {
-        path: "/",
-        validate(html) {
-          if (!html.includes(`<span>999</span>`)) {
-            throw new Error("tanstack-start concurrent RSS response did not include the last node");
-          }
-        },
-      })
-    ).rssDeltaBytes;
+    if (serverProcess?.pid === undefined) throw new Error("HTTP server PID unavailable");
+    return {
+      url: new URL("/", url).href,
+      serverPid: serverProcess.pid,
+      requiredText: "<span>999</span>",
+      workload: { route: "/", cache: "existing framework fixture defaults" },
+    };
   },
   async measureClientNavigationMs(): Promise<number> {
     const url = await ensureBrowserFixture();
@@ -816,19 +799,3 @@ export const tanstackStartAdapter: AppFrameworkAdapter = {
     return measureSecondInteractionLatency(url);
   },
 };
-
-function ensureConcurrentRequestResult(): Promise<ConcurrentRequestProbeResult> {
-  return measureConcurrentRequestResult();
-}
-
-async function measureConcurrentRequestResult(): Promise<ConcurrentRequestProbeResult> {
-  const url = await ensureFixture(1000);
-  return measureConcurrentRequests(url, {
-    path: "/",
-    validate(html) {
-      if (!html.includes(`<span>999</span>`)) {
-        throw new Error("tanstack-start concurrent response did not include the last node");
-      }
-    },
-  });
-}

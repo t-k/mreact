@@ -28,11 +28,11 @@ describe("mreact app-router benchmark fixtures", () => {
   it("measures the static cached route with an actual route cache", async () => {
     const source = await readFile(adapterPath, "utf8");
 
-    expect(source).toContain("createMemoryRouteCache");
     expect(source).toContain('import { cacheControl } from "@reckona/mreact-router";');
     expect(source).not.toContain("@reckona/mreact-router/cache");
     expect(source).toContain("cacheControl({ maxAge: 60 })");
-    expect(source).toContain("routeCache: createMemoryRouteCache()");
+    const worker = await readFile(new URL("../fixture-server-worker.ts", import.meta.url), "utf8");
+    expect(worker).toContain("routeCache: createMemoryRouteCache()");
   });
 
   it("measures route-scale RSS in an isolated child process", async () => {
@@ -44,20 +44,12 @@ describe("mreact app-router benchmark fixtures", () => {
     expect(source).not.toContain("Math.max(0, process.memoryUsage().rss - beforeRss),");
   });
 
-  it("measures concurrent-load RSS in an isolated child process", async () => {
+  it("exposes the production cached route PID to the common HTTP trial runner", async () => {
     const source = await readFile(adapterPath, "utf8");
-    const concurrentLoadSource = source.slice(
-      source.indexOf("async function measureConcurrentLoad("),
-      source.indexOf("async function createHydrationFixture("),
-    );
-
-    expect(source).toContain("measureConcurrentLoadRssInChild");
-    expect(source).toContain("waitForConcurrentLoadRss");
-    expect(source).toContain(
-      'spawn(process.execPath, ["--expose-gc", "--input-type=module", "-e", script]',
-    );
-    expect(concurrentLoadSource).not.toContain("process.memoryUsage()");
-    expect(source).toContain("await measureConcurrentLoadRssInChild(logEnabled, reactCompat)");
+    expect(source).toContain("async getHttpTarget()");
+    expect(source).toContain("serverPid: server.pid");
+    expect(source).toContain('url: `${url}/static-page`');
+    expect(source).not.toContain("measureConcurrentLoadRssInChild");
   });
 
   it("does not clamp RSS deltas to zero", async () => {
@@ -72,7 +64,8 @@ describe("mreact app-router benchmark fixtures", () => {
 
     expect(source).not.toContain("concurrentLoadResults");
     expect(source).not.toContain("async function ensureConcurrentLoadResult");
-    expect(source).toContain("await measureConcurrentLoad(logEnabled, reactCompat)");
+    expect(source).toContain("async getHttpTarget()");
+    expect(source).not.toContain("async function measureConcurrentLoad(");
   });
 
   it("keys route-scale fixtures by react-compat variant", async () => {

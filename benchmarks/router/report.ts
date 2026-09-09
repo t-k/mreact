@@ -23,9 +23,7 @@ export function formatRouterBenchmarkMarkdown(
     `- CPU: ${env.cpuModel} (${env.cpuCount})`,
     `- Memory: ${env.totalMemoryBytes} bytes`,
     "- Package versions:",
-    ...Object.entries(env.packageVersions).map(
-      ([name, version]) => `  - ${name}: ${version}`,
-    ),
+    ...Object.entries(env.packageVersions).map(([name, version]) => `  - ${name}: ${version}`),
     "",
     "## Rankings",
     "",
@@ -47,7 +45,9 @@ export function formatRouterBenchmarkMarkdown(
       lines.push(caveat, "");
     }
 
-    const noiseFloor = sameCoreNoiseFloor(rankedRows);
+    const noiseFloor = benchmarkCase.name.startsWith("app HTTP v2 ")
+      ? undefined
+      : sameCoreNoiseFloor(rankedRows);
     if (noiseFloor !== undefined) {
       lines.push(
         `Same-core mreact variant noise floor: ${noiseFloor} spread. Treat smaller cross-framework gaps in this case as inconclusive.`,
@@ -83,8 +83,9 @@ export function formatRouterBenchmarkMarkdown(
 
   for (const row of rows) {
     const bestRow = rankCompletedRows(rows, row.caseName)[0];
+    const samples = row.samples?.values ?? row.samplesMs;
     lines.push(
-      `| router | ${escapeMarkdownCell(row.framework)} | ${escapeMarkdownCell(row.version)} | ${escapeMarkdownCell(row.caseName)} | ${row.status} | ${row.metric} | ${row.unit} | ${row.value} | ${formatDiffVsBest(row, bestRow)} | ${row.gzipBytes ?? 0} | ${row.hz ?? 0} | ${row.meanMs ?? 0} | ${row.p75Ms ?? 0} | ${row.p99Ms ?? 0} | ${row.samplesMs?.length ?? 0} | ${formatSamples(row.samplesMs)} | ${escapeMarkdownCell(row.note ?? "")} |`,
+      `| router | ${escapeMarkdownCell(row.framework)} | ${escapeMarkdownCell(row.version)} | ${escapeMarkdownCell(row.caseName)} | ${row.status} | ${row.metric} | ${row.unit} | ${row.value} | ${formatDiffVsBest(row, bestRow)} | ${row.gzipBytes ?? 0} | ${row.hz ?? 0} | ${row.meanMs ?? 0} | ${row.p75Ms ?? 0} | ${row.p99Ms ?? 0} | ${samples?.length ?? 0} | ${formatSamples(samples)} | ${escapeMarkdownCell(row.note ?? "")} |`,
     );
   }
 
@@ -155,6 +156,9 @@ function isMreactVariantOnlyRanking(
 }
 
 function rankingCaveat(caseName: RouterBenchmarkCaseName): string | undefined {
+  if (caseName.startsWith("app HTTP v2 ")) {
+    return "Methodology v2 uses separate orchestrator, load generator and production server processes. All five metrics share the same trials. RSS is a single server PID's before/after delta, not a peak or process-tree total; negative samples remain in JSON but are excluded from RSS rankings. Route/cache conditions still differ across adapters (mreact uses /static-page with its route cache); consult httpTrials before comparing frameworks. These measurements are not directly comparable to legacy concurrent probes. Steady windows share one warmed connection pool; burst trials start fresh pools, not cold servers.";
+  }
   if (caseName === "app concurrent RSS delta 100 connections") {
     return "RSS delta rows only rank adapters that expose server child process RSS; adapters without measurable server child RSS are reported as unsupported, and rows with negative RSS samples are treated as contaminated and excluded from this ranking.";
   }
@@ -219,5 +223,7 @@ function formatDiffVsBest(
 function formatPercent(value: number): string {
   const rounded = Math.round(value * 100) / 100;
   const sign = rounded > 0 ? "+" : "";
-  return `${sign}${String(rounded).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "")}%`;
+  return `${sign}${String(rounded)
+    .replace(/(\.\d*?)0+$/, "$1")
+    .replace(/\.$/, "")}%`;
 }

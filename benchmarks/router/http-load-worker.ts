@@ -19,9 +19,12 @@ const agent = new Agent({
 let connectionsOpened = 0;
 let reusedRequests = 0;
 let busy = false;
+let closing = false;
 const sockets = new WeakSet<object>();
 
 async function load(warmup: boolean) {
+  const openedBefore = connectionsOpened;
+  const reusedBefore = reusedRequests;
   const latenciesMs: number[] = [];
   const start = performance.now();
   let issued = 0;
@@ -74,7 +77,7 @@ async function load(warmup: boolean) {
             req.end();
           });
         } catch (error) {
-          failure = error;
+          failure ??= error;
           agent.destroy();
         }
       }
@@ -85,19 +88,23 @@ async function load(warmup: boolean) {
     requestCount: latenciesMs.length,
     latenciesMs,
     elapsedMs: performance.now() - start,
-    connectionsOpened,
-    reusedRequests,
+    connectionsOpened: connectionsOpened - openedBefore,
+    reusedRequests: reusedRequests - reusedBefore,
+    connectionsOpenedTotal: connectionsOpened,
+    reusedRequestsTotal: reusedRequests,
   };
 }
 
 process.on("disconnect", () => {
   agent.destroy();
-  process.exitCode = 1;
+  if (!closing) process.exitCode = 1;
+  closing = true;
 });
 process.on("message", async (message: { type: string }) => {
   if (message.type === "close") {
+    closing = true;
     agent.destroy();
-    process.disconnect();
+    process.disconnect?.();
     return;
   }
   if (busy) {
@@ -109,12 +116,13 @@ process.on("message", async (message: { type: string }) => {
     if (message.type !== "warmup" && message.type !== "measure")
       throw new Error("invalid HTTP load command");
     const result = await load(message.type === "warmup");
-    process.send?.({ type: "result", result });
+    if (process.connected) process.send?.({ type: "result", result });
   } catch (error) {
-    process.send?.({
-      type: "error",
-      error: error instanceof Error ? error.message : String(error),
-    });
+    if (process.connected)
+      process.send?.({
+        type: "error",
+        error: error instanceof Error ? error.message : String(error),
+      });
   } finally {
     busy = false;
   }

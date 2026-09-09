@@ -1,6 +1,5 @@
-// next-app-router adapter。Next.js App Router の fixture を `next build` で
-// production build し、`getRequestHandler()` を `http.Server` に乗せて HTTP
-// 越しに fetch する。mreact 側と同じ HTTP round-trip overhead で比較が成立する。
+// Build with next build; the primary production request handler runs in its own
+// process. The browser fixture keeps its existing independent lifecycle.
 //
 // `next build` は重い (10〜30 秒)。adapter init 時に 1 回だけ build し、
 // fixture / server を再利用する。`pnpm bench:router` 1 回あたりの
@@ -15,7 +14,7 @@ import { dirname, join, resolve as pathResolve } from "node:path";
 import { createRequire } from "node:module";
 import type { AppFrameworkAdapter } from "../types.js";
 import { measureBuildOutputGzipBytes } from "../build-output-size.js";
-import { type ConcurrentRequestProbeResult, measureConcurrentRequests } from "../http-probes.js";
+import { startFixtureServer } from "../fixture-server.js";
 import {
   measureBackForwardRestore,
   measureClientNavigation,
@@ -37,6 +36,7 @@ const fixtureParent = pathResolve(repoRoot, "benchmarks/router/.tmp");
 
 interface ServerHandle {
   close(): Promise<void>;
+  pid?: number;
   url: string;
 }
 
@@ -284,33 +284,7 @@ export default function Page() {
   // signature mismatch that triggers _global-error / useContext bugs)
   await runNextBuild(rootDir);
 
-  // Start the production server in-process
-  const nextModule = await import("next");
-  const nextDefault = (nextModule as { default: (options: unknown) => unknown }).default;
-  const app = nextDefault({
-    dev: false,
-    dir: rootDir,
-    quiet: true,
-  }) as {
-    prepare(): Promise<void>;
-    getRequestHandler(): (req: unknown, res: unknown) => Promise<void>;
-  };
-  await app.prepare();
-  const handler = app.getRequestHandler();
-  const httpServer: Server = createServer((req, res) => {
-    void handler(req, res);
-  });
-
-  await new Promise<void>((resolve) => httpServer.listen(0, "127.0.0.1", resolve));
-  const addr = httpServer.address();
-  const port = typeof addr === "object" && addr !== null ? addr.port : 0;
-  server = {
-    url: `http://127.0.0.1:${port}`,
-    close: () =>
-      new Promise<void>((resolve, reject) =>
-        httpServer.close((error) => (error ? reject(error) : resolve())),
-      ),
-  };
+  server = await startFixtureServer({ framework: "next", directory: rootDir });
   currentNodeCount = nodeCount;
   return server.url;
 }
@@ -572,11 +546,15 @@ export const nextAppRouterAdapter: AppFrameworkAdapter = {
 
     return gzipSync(html).length;
   },
-  async measureConcurrentRequestThroughputOps(): Promise<number> {
-    return (await ensureConcurrentRequestResult()).throughputOps;
-  },
-  async measureConcurrentRequestP99Ms(): Promise<number> {
-    return (await ensureConcurrentRequestResult()).p99Ms;
+  async getHttpTarget() {
+    const url = await ensureFixture(1000);
+    if (server?.pid === undefined) throw new Error("HTTP server PID unavailable");
+    return {
+      url: new URL("/", url).href,
+      serverPid: server.pid,
+      requiredText: "<span>999</span>",
+      workload: { route: "/", cache: "existing framework fixture defaults" },
+    };
   },
   async measureClientNavigationMs(): Promise<number> {
     const url = await ensureBrowserFixture();
@@ -607,19 +585,3 @@ export const nextAppRouterAdapter: AppFrameworkAdapter = {
     return measureSecondInteractionLatency(url);
   },
 };
-
-function ensureConcurrentRequestResult(): Promise<ConcurrentRequestProbeResult> {
-  return measureConcurrentRequestResult();
-}
-
-async function measureConcurrentRequestResult(): Promise<ConcurrentRequestProbeResult> {
-  const url = await ensureFixture(1000);
-  return measureConcurrentRequests(url, {
-    path: "/",
-    validate(html) {
-      if (!html.includes(`<span>999</span>`)) {
-        throw new Error("next-app-router concurrent response did not include the last node");
-      }
-    },
-  });
-}

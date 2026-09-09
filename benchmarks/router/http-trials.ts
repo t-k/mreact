@@ -75,8 +75,9 @@ export async function measureHttpTrials(
           : Math.ceil(options.totalRequests / options.concurrency) * options.requestTimeoutMs +
             5_000;
       const result = await receiveLoad(worker, deadline);
+      Object.assign(trial, result);
       trial.rssAfterBytes = await readProcessRssBytes(target.serverPid);
-      Object.assign(trial, result, summarizeHttpLoad(result), {
+      Object.assign(trial, summarizeHttpLoad(result), {
         rssDeltaBytes: trial.rssAfterBytes - trial.rssBeforeBytes,
         status: "completed",
       });

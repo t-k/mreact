@@ -21,6 +21,8 @@ export interface HttpLoadResult {
   requestCount: number;
   connectionsOpened: number;
   reusedRequests: number;
+  connectionsOpenedTotal?: number;
+  reusedRequestsTotal?: number;
 }
 
 export interface HttpTrial extends Partial<HttpLoadResult> {
@@ -29,6 +31,7 @@ export interface HttpTrial extends Partial<HttpLoadResult> {
   seriesId: string;
   window: number;
   executionOrder?: { round: number; position: number };
+  latencySamplesRef?: string;
   status: "completed" | "failed";
   error?: string;
   options: Required<HttpTrialOptions>;

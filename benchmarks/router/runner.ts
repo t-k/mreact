@@ -1,4 +1,5 @@
 import { Bench } from "tinybench";
+import { collectHttpRows, httpBenchmarkCases } from "./runner-http.js";
 import type {
   RouterBenchmarkAdapter,
   RouterBenchmarkCaseName,
@@ -101,30 +102,6 @@ const timedRouterBenchmarkCases: TimedRouterBenchmarkCase[] = [
 ];
 
 const valueRouterBenchmarkCases: ValueRouterBenchmarkCase[] = [
-  {
-    name: "app concurrent throughput 100 connections",
-    description:
-      "Runs a fixed burst against the production fixture with up to 100 concurrent requests and reports sustained request throughput.",
-    metric: "throughput",
-    unit: "ops/sec",
-    invoke: (adapter) => adapter.measureConcurrentRequestThroughputOps?.(),
-  },
-  {
-    name: "app concurrent p99 latency 100 connections",
-    description:
-      "Runs the same concurrent request burst and reports per-request p99 latency, exposing event-loop stalls hidden by sequential tinybench runs.",
-    metric: "duration",
-    unit: "ms",
-    invoke: (adapter) => adapter.measureConcurrentRequestP99Ms?.(),
-  },
-  {
-    name: "app concurrent RSS delta 100 connections",
-    description:
-      "Reports RSS growth across the concurrent request burst so sustained-load memory trends are visible in router benchmark output.",
-    metric: "memory",
-    unit: "bytes",
-    invoke: (adapter) => adapter.measureConcurrentRequestRssDeltaBytes?.(),
-  },
   {
     name: "app hydration 100 islands",
     description:
@@ -418,6 +395,7 @@ export const routerBenchmarkCases: RouterBenchmarkCase[] = [
   timedRouterBenchmarkCases[3]!,
   timedRouterBenchmarkCases[4]!,
   timedRouterBenchmarkCases[2]!,
+  ...httpBenchmarkCases,
   ...valueRouterBenchmarkCases,
   ...durationRouterBenchmarkCases.slice(5),
   ...sizeRouterBenchmarkCases,
@@ -447,7 +425,10 @@ export function rankCompletedRows(
 }
 
 function isRankableRow(row: RouterBenchmarkRow): boolean {
-  if (row.caseName !== "app concurrent RSS delta 100 connections") {
+  if (
+    row.caseName !== "app concurrent RSS delta 100 connections" &&
+    !(row.caseName.startsWith("app HTTP v2 ") && row.metric === "memory")
+  ) {
     return true;
   }
 
@@ -455,7 +436,7 @@ function isRankableRow(row: RouterBenchmarkRow): boolean {
     return false;
   }
 
-  return row.samplesMs?.every((sample) => sample >= 0) ?? true;
+  return (row.samples?.values ?? row.samplesMs)?.every((sample) => sample >= 0) ?? true;
 }
 
 export async function runRouterBenchmarks(
@@ -520,6 +501,8 @@ export async function runRouterBenchmarks(
     for (const benchmarkCase of durationRouterBenchmarkCases) {
       rows.push(...(await collectDurationRowsRoundRobin(activeAdapters, benchmarkCase)));
     }
+
+    rows.push(...(await collectHttpRows(activeAdapters)));
 
     for (const benchmarkCase of valueRouterBenchmarkCases) {
       rows.push(...(await collectValueRowsRoundRobin(activeAdapters, benchmarkCase)));
