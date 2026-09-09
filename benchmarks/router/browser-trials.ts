@@ -37,6 +37,7 @@ export interface BrowserTrial {
   failedInteraction?: FailedBrowserInteraction;
   error?: string;
   diagnostics: string[];
+  executionOrder?: { round: number; position: number };
 }
 
 // These timestamps observe DOM state, not paint, INP or hydration completion.
@@ -151,6 +152,7 @@ async function observeCounterClick(
       const parent = element.parentElement;
       if (!parent) throw new Error("Counter has no parent");
       const position = Array.from(parent.children).indexOf(element);
+      const existingButtons = new Set(document.querySelectorAll("button"));
       const state = {
         startMs: performance.now(),
         dispatchMs: undefined as number | undefined,
@@ -176,6 +178,8 @@ async function observeCounterClick(
           state.domObservedMs === undefined &&
           parent.isConnected &&
           current?.tagName === "BUTTON" &&
+          (current === element ||
+            (!element.isConnected && !existingButtons.has(current as HTMLButtonElement))) &&
           current.textContent?.trim() === after
         )
           state.domObservedMs = performance.now();

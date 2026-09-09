@@ -59,6 +59,24 @@ it("rejects a visible counter with no handler and preserves its display measurem
   expect(trial.failedInteraction?.actualText).toBe("count: 0");
 });
 
+it("accepts a newly created replacement counter with working subsequent interactions", async () => {
+  const target = await fixture(
+    `function bind(b,n){b.onclick=()=>{const next=document.createElement('button');next.textContent='count: '+(n+1);bind(next,n+1);b.replaceWith(next)}}bind(document.querySelector('button'),0)`,
+  );
+  const trial = await measureBrowserTrial(target, "domcontentloaded", { timeoutMs: 1500 });
+  expect(trial.status).toBe("completed");
+  expect(trial.second?.domObservedMs).toBeGreaterThanOrEqual(trial.first!.domObservedMs);
+});
+
+it("rejects insertion of another counter before the unchanged clicked counter", async () => {
+  const target = await fixture(
+    `const a=document.querySelector('button');a.onclick=()=>{const b=document.createElement('button');b.textContent='count: 1';b.onclick=()=>b.textContent='count: 2';a.before(b)}`,
+  );
+  const trial = await measureBrowserTrial(target, "domcontentloaded", { timeoutMs: 500 });
+  expect(trial.status).toBe("failed");
+  expect(trial.stage).toBe("first interaction");
+});
+
 it("does not report after-networkidle measurements when idle was never reached", async () => {
   const target = await fixture(
     "fetch('/pending');let n=0;document.querySelector('button').onclick=e=>e.target.textContent='count: '+(++n)",
@@ -112,4 +130,15 @@ it("rejects ambiguous initial counters", async () => {
   );
   expect(trial.status).toBe("failed");
   expect(trial.error).toContain("strict mode");
+});
+
+it("does not mistake an existing sibling moving into the counter slot for an update", async () => {
+  const target = await fixture(
+    "const [a,b]=document.querySelectorAll('button');a.onclick=()=>a.remove();b.onclick=()=>b.textContent='count: 2'",
+    "count: ",
+    "<button>count: 0</button><button>count: 1</button>",
+  );
+  const trial = await measureBrowserTrial(target, "domcontentloaded", { timeoutMs: 500 });
+  expect(trial.status).toBe("failed");
+  expect(trial.first).toBeUndefined();
 });
