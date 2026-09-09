@@ -27,7 +27,11 @@ export const analogAdapter = createProductionAppAdapter({
     await writeAnalogWaterfallPage(rootDir);
     await writeAnalogDataGridPage(rootDir, cells);
     await writeAnalogServerOnlyPage(rootDir);
-    await writeAnalogInteractivePage(rootDir, "interactive-bundle.page.ts", "InteractiveBundlePage");
+    await writeAnalogInteractivePage(
+      rootDir,
+      "interactive-bundle.page.ts",
+      "InteractiveBundlePage",
+    );
     await writeAnalogInteractivePage(
       rootDir,
       "interactive-minimal-bundle.page.ts",
@@ -69,7 +73,7 @@ async function writeAnalogRootFiles(rootDir: string): Promise<void> {
         private: true,
         type: "module",
         scripts: {
-          build: "vite build",
+          build: "node build.mjs",
         },
         dependencies: {
           "@analogjs/content": "2.6.0",
@@ -94,6 +98,23 @@ async function writeAnalogRootFiles(rootDir: string): Promise<void> {
       null,
       2,
     ),
+  );
+  await writeFile(
+    join(rootDir, "build.mjs"),
+    `import { createBuilder } from "vite";
+
+const builder = await createBuilder();
+const build = builder.build.bind(builder);
+// Analog shares Angular compiler state across client/SSR builds. Serialize the
+// environment builds, retaining Nitro's buildApp orchestration and finalization.
+let pending = Promise.resolve();
+builder.build = (environment) => {
+  const next = pending.then(() => build(environment));
+  pending = next;
+  return next;
+};
+await builder.buildApp();
+`,
   );
   await writeFile(
     join(rootDir, "vite.config.ts"),
