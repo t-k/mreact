@@ -19,6 +19,8 @@ export interface StringSinkOptions {
 /** Callback that writes server-rendered HTML into a sink. */
 export type StreamRender = (sink: HtmlSink) => void | PromiseLike<void>;
 
+const noop = () => {};
+
 const stringSinkDeferredTasks = new WeakMap<HtmlSink, PromiseLike<void>[]>();
 
 /** Creates an HTML sink that stores appended chunks in memory as a string. */
@@ -68,6 +70,10 @@ export function createStringSink(options: StringSinkOptions = {}): StringHtmlSin
       return strategy;
     },
     defer(task) {
+      // Mark the rejection as observed so a task that fails before `drain()`
+      // is awaited does not surface as an unhandled rejection. `drain()`
+      // still rejects with the same error through `Promise.all`.
+      Promise.resolve(task).then(undefined, noop);
       deferredTasks.push(task);
     },
     async drain() {

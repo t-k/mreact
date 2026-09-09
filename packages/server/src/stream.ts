@@ -142,7 +142,18 @@ export function renderToReadableStream(
             return waitForBackpressure();
           },
           defer(task) {
-            deferredTasks.push(ignoreAfterAbort(task, abortController.signal, options));
+            const guarded = ignoreAfterAbort(task, abortController.signal, options);
+            // Observe the failure from the moment the task is registered.
+            // `Promise.all(deferredTasks)` is only attached after the async
+            // render settles, so without this handler a rejection that lands
+            // in between is an unhandled rejection - which terminates the
+            // Node process under the default `--unhandled-rejections=throw`.
+            guarded.catch((error: unknown) => {
+              if (!abortController.signal.aborted) {
+                terminateWithError(error);
+              }
+            });
+            deferredTasks.push(guarded);
           },
           signal: abortController.signal,
         });
@@ -170,6 +181,12 @@ export function renderToReadableStream(
             // That tail is also "shell" - flush it before entering the
             // deferred phase.
             sink.flush();
+          }
+
+          if (abortController.signal.aborted) {
+            // A deferred task already terminated the stream. Do not build a
+            // `Promise.all` here - it would reject with nobody observing it.
+            return;
           }
 
           inDeferredPhase = true;
