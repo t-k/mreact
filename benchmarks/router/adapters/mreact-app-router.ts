@@ -371,33 +371,58 @@ function createMreactAppRouterAdapter(options: {
       return server?.url ?? null;
     },
     async teardown() {
-      await primaryFixtureLifecycle.closeAll();
-      primaryFixtureStates.clear();
-      rootDir = undefined;
-      server = undefined;
-      currentNodeCount = 0;
-      currentLogEnabled = false;
-      currentReactCompat = false;
-
-      await browserFixtureLifecycle.closeAll();
-      browserFixtureStates.clear();
-      browserRootDir = undefined;
-      browserServer = undefined;
-      browserLogEnabled = false;
-      browserReactCompat = false;
-
-      if (coldStartRootDir !== undefined) {
-        await rm(coldStartRootDir, { force: true, recursive: true });
-        coldStartRootDir = undefined;
-        coldStartOutDir = undefined;
-        coldStartReactCompat = false;
-      }
-      for (const result of await Promise.allSettled(routeScaleResults.values())) {
-        if (result.status === "fulfilled") {
-          await rm(result.value.rootDir, { force: true, recursive: true });
-        }
-      }
-      routeScaleResults.clear();
+      await runCleanupTasks([
+        {
+          name: "primary fixtures",
+          async run() {
+            await primaryFixtureLifecycle.closeAll();
+            primaryFixtureStates.clear();
+            rootDir = undefined;
+            server = undefined;
+            currentNodeCount = 0;
+            currentLogEnabled = false;
+            currentReactCompat = false;
+          },
+        },
+        {
+          name: "browser fixtures",
+          async run() {
+            await browserFixtureLifecycle.closeAll();
+            browserFixtureStates.clear();
+            browserRootDir = undefined;
+            browserServer = undefined;
+            browserLogEnabled = false;
+            browserReactCompat = false;
+          },
+        },
+        {
+          name: "cold start fixture",
+          async run() {
+            if (coldStartRootDir !== undefined) {
+              await rm(coldStartRootDir, { force: true, recursive: true });
+              coldStartRootDir = undefined;
+              coldStartOutDir = undefined;
+              coldStartReactCompat = false;
+            }
+          },
+        },
+        {
+          name: "route scale fixtures",
+          async run() {
+            const cleanupTasks = [];
+            for (const result of await Promise.allSettled(routeScaleResults.values())) {
+              if (result.status === "fulfilled") {
+                cleanupTasks.push({
+                  name: "route scale directory",
+                  run: () => rm(result.value.rootDir, { force: true, recursive: true }),
+                });
+              }
+            }
+            routeScaleResults.clear();
+            await runCleanupTasks(cleanupTasks);
+          },
+        },
+      ]);
     },
     async renderToString(nodeCount: number): Promise<string> {
       const url = await ensureFixture(nodeCount, logEnabled, reactCompat);
@@ -1762,3 +1787,4 @@ async function waitForChildExit(child: ChildProcessWithoutNullStreams): Promise<
     });
   });
 }
+import { runCleanupTasks } from "../cleanup.js";
