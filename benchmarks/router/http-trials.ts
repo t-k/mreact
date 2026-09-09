@@ -62,6 +62,9 @@ export async function measureHttpTrials(
           );
           warmupRequests = warmup.requestCount;
           warmupElapsedMs = warmup.elapsedMs;
+          trial.warmupRequests = warmupRequests;
+          trial.warmupElapsedMs = warmupElapsedMs;
+          if (warmup.error !== undefined) throw new Error(`warmup: ${warmup.error}`);
         }
       }
       trial.generatorPid = worker.pid;
@@ -76,6 +79,7 @@ export async function measureHttpTrials(
             5_000;
       const result = await receiveLoad(worker, deadline);
       Object.assign(trial, result);
+      if (result.error !== undefined) throw new Error(result.error);
       trial.rssAfterBytes = await readProcessRssBytes(target.serverPid);
       Object.assign(trial, summarizeHttpLoad(result), {
         rssDeltaBytes: trial.rssAfterBytes - trial.rssBeforeBytes,

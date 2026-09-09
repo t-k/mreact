@@ -16,6 +16,8 @@ export interface HttpTrialOptions {
 }
 
 export interface HttpLoadResult {
+  error?: string;
+  attemptedRequests?: number;
   latenciesMs: number[];
   elapsedMs: number;
   requestCount: number;

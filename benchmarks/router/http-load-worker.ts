@@ -83,8 +83,9 @@ async function load(warmup: boolean) {
       }
     }),
   );
-  if (failure) throw failure;
   return {
+    ...(failure ? { error: failure instanceof Error ? failure.message : String(failure) } : {}),
+    attemptedRequests: issued,
     requestCount: latenciesMs.length,
     latenciesMs,
     elapsedMs: performance.now() - start,

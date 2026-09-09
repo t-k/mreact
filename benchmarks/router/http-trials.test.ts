@@ -26,7 +26,7 @@ const server = createServer((req, res) => {
   if (req.url === '/allocate') retained.push(Buffer.alloc(16 * 1024 * 1024, 1));
   if (req.url === '/exit') { res.end('ok:' + count, () => process.exit(0)); return; }
   if (req.url === '/hang') return;
-  res.statusCode = req.url === '/error' ? 503 : 200;
+  res.statusCode = req.url === '/error' || (req.url === '/partial-error' && count > 1) ? 503 : 200;
   res.end('ok:' + count);
 });
 process.on('disconnect', () => { server.closeAllConnections(); server.close(); });
@@ -51,9 +51,26 @@ server.listen(0, '127.0.0.1', () => process.send({port: server.address().port}))
 }
 
 describe("isolated HTTP trials", () => {
+  it("retains successful partial samples without ranking a failed burst", async () => {
+    await withServer(async (target) => {
+      const [trial] = await measureHttpTrials(
+        { ...target, url: new URL("/partial-error", target.url).href },
+        { profile: "burst", totalRequests: 3, concurrency: 1, windows: 1 },
+      );
+      expect(trial?.status).toBe("failed");
+      expect(trial?.error).toContain("HTTP 503");
+      expect(trial?.requestCount).toBe(1);
+      expect(trial?.attemptedRequests).toBe(2);
+      expect(trial?.latenciesMs).toHaveLength(1);
+      expect(trial?.throughputOps).toBeUndefined();
+    });
+  });
   it("retains completed HTTP samples if the server exits before the final RSS snapshot", async () => {
     await withServer(async (target) => {
-      const [trial] = await measureHttpTrials({ ...target, url: new URL("/exit", target.url).href }, { profile: "burst", totalRequests: 1, concurrency: 1, windows: 1 });
+      const [trial] = await measureHttpTrials(
+        { ...target, url: new URL("/exit", target.url).href },
+        { profile: "burst", totalRequests: 1, concurrency: 1, windows: 1 },
+      );
       expect(trial?.status).toBe("failed");
       expect(trial?.requestCount).toBe(1);
       expect(trial?.latenciesMs).toHaveLength(1);
