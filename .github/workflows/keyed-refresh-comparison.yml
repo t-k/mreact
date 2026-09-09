@@ -1,6 +1,9 @@
 name: Keyed refresh comparison
 
 on:
+  push:
+    branches:
+      - perf/benchmark-184-comparison
   workflow_dispatch:
 
 permissions:
