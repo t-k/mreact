@@ -264,7 +264,7 @@ export interface BuildAppResult {
 
 interface IncrementalBuildCacheManifest {
   fingerprint: string;
-  version: 2;
+  version: typeof incrementalBuildCacheVersion;
 }
 
 interface IncrementalBuildServerManifestOutputs {
@@ -760,13 +760,15 @@ async function buildAppWithResolvedProject(
         ),
   ]);
   const clientRoutes = clientBundle.routes;
-  const navigationRuntimeScript = clientRoutes.some((route) => route.navigation === true)
-    ? shouldTrackBuildPhases === false
-      ? await writeNavigationRuntimeBundle(clientDir, project.clientConsolePureFunctions)
-      : await timeBuildPhase(timingSink, progressSink, "navigationRuntime", () =>
-          writeNavigationRuntimeBundle(clientDir, project.clientConsolePureFunctions),
-        )
-    : undefined;
+  const navigationRuntimeScript =
+    clientBundle.navigationScript ??
+    (clientRoutes.some((route) => route.navigation === true)
+      ? shouldTrackBuildPhases === false
+        ? await writeNavigationRuntimeBundle(clientDir, project.clientConsolePureFunctions)
+        : await timeBuildPhase(timingSink, progressSink, "navigationRuntime", () =>
+            writeNavigationRuntimeBundle(clientDir, project.clientConsolePureFunctions),
+          )
+      : undefined);
   const clientManifestRoutes =
     navigationRuntimeScript === undefined
       ? clientRoutes
@@ -1096,7 +1098,7 @@ function clientArtifactStaticClosure(
     paths.add(path);
   }
   if (route.navigation === true && route.navigationScript !== undefined) {
-    paths.add(route.navigationScript);
+    addClientArtifactStaticClosure(paths, route.navigationScript, chunks);
   }
   for (const path of route.imports ?? []) {
     addClientArtifactStaticClosure(paths, path, chunks);
@@ -1257,7 +1259,7 @@ function byteCostForPaths(
 }
 
 const incrementalBuildCacheFilename = "build-cache.json";
-const incrementalBuildCacheVersion = 2;
+const incrementalBuildCacheVersion = 3;
 
 async function createIncrementalBuildCacheFingerprint(options: {
   buildTargets: readonly AppRouterBuildTarget[];
@@ -6660,6 +6662,7 @@ function viteManifestFromClientRoutes(routes: ClientRouteManifestEntry[]): Recor
 interface ClientRouteBundleManifest {
   assets: string[];
   chunks: ClientArtifactChunkManifest[];
+  navigationScript?: string | undefined;
   routes: ClientRouteManifestEntry[];
   styles: ClientStyleManifestEntry[];
 }
@@ -6843,6 +6846,29 @@ async function writeClientRouteBundles(options: {
   }
 
   let output: Awaited<ReturnType<typeof buildClientRouteBatchOutput>>;
+  const needsNavigation = entries.some((entry) =>
+    "build" in entry
+      ? entry.navigation || entry.build.clientNavigation !== false
+      : entry.manifest.navigation === true,
+  );
+  // Navigation stays a separate entry so importing a route cannot install it. Bundling it
+  // alongside routes lets the bundler share their runtime dependencies and resume walk.
+  let navigationRoutePath = "/__mreact_navigation_runtime";
+  const routeIds = new Set(pageRoutes.map((route) => routeIdForPath(route.path)));
+  while (routeIds.has(routeIdForPath(navigationRoutePath))) {
+    navigationRoutePath += "_";
+  }
+  const navigationEntries: BuildClientRouteOutputOptions[] = needsNavigation
+    ? [
+        {
+          code: "export default undefined;",
+          filename: join(options.projectRoot, `${routeIdForPath(navigationRoutePath)}.tsx`),
+          routePath: navigationRoutePath,
+          clientNavigation: true,
+          forceInlineNavigationRuntime: true,
+        },
+      ]
+    : [];
 
   try {
     output = await buildClientRouteBatchOutput({
@@ -6851,7 +6877,7 @@ async function writeClientRouteBundles(options: {
       dropConsoleFunctions: options.clientConsolePureFunctions,
       minify: true,
       projectRoot: options.projectRoot,
-      routes: clientEntries.map((entry) => entry.build),
+      routes: [...clientEntries.map((entry) => entry.build), ...navigationEntries],
       sourceMap: options.sourceMaps !== "none",
       vitePlugins: options.vitePlugins,
     });
@@ -6967,6 +6993,9 @@ async function writeClientRouteBundles(options: {
 
   return {
     assets: Array.from(generatedAssets).sort(),
+    ...(needsNavigation
+      ? { navigationScript: routeOutputs.get(navigationRoutePath)?.chunk.fileName }
+      : {}),
     chunks: output.chunks.map((chunk) => ({
       ...(chunk.dynamicImports.length === 0 ? {} : { dynamicImports: chunk.dynamicImports }),
       file: chunk.fileName,

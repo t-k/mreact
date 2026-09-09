@@ -27,6 +27,53 @@ For keyed table operations such as create rows, replace rows, partial update, se
 
 The keyed table results include two React-compatibility Mreact fixtures. `mreact-react-compat` is the compiler-lowered path: the source stays React-compatible JSX, and the Mreact compiler lowers proven-safe state text, prop, and event bindings into reactive DOM operations. `mreact-react-compat-vdom` is the virtual-DOM compatibility path: the same app shape runs through the React-compatible runtime without those DOM-binding lowerings. Compare the two to separate compatibility runtime cost from the compiler's normal DOM-binding optimizations.
 
+## Measuring route delivery
+
+A route's `imports` in `.mreact/client/manifest.json` lists its direct static imports. A shared chunk can import more chunks, so summing only `route.script`, `route.navigationScript`, and `route.imports` can undercount the JavaScript a browser needs. Follow `manifest.chunks[].imports` transitively and count each file once. Include navigation's dependencies when budgeting navigation startup, including on a server-rendered route without a client entry. Keep unfetched dynamic imports separate; measure their static dependencies when an interaction actually loads them.
+
+This Node script measures a JavaScript budget for the home route including navigation startup. Run it from the application directory after a production build. It uses Brotli quality 11 for each asset, so the result is a compression estimate rather than observed CDN transfer bytes.
+
+```js
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { brotliCompressSync, constants } from "node:zlib";
+
+const clientDir = ".mreact/client";
+const manifest = JSON.parse(await readFile(join(clientDir, "manifest.json"), "utf8"));
+if (!Array.isArray(manifest.chunks)) {
+  throw new Error("This manifest lacks a chunk graph; inspect emitted static imports or browser requests instead.");
+}
+const route = manifest.routes.find((entry) => entry.path === "/");
+if (!route) throw new Error("Home route is missing.");
+const chunks = new Map(manifest.chunks.map((chunk) => [chunk.file, chunk]));
+const files = new Set();
+function visit(file) {
+  if (!file || files.has(file)) return;
+  files.add(file);
+  for (const dependency of chunks.get(file)?.imports ?? []) visit(dependency);
+}
+visit(route.script);
+for (const file of route.imports ?? []) visit(file);
+if (route.navigation) visit(route.navigationScript);
+let rawBytes = 0;
+let brotliBytes = 0;
+for (const file of files) {
+  if (!file.endsWith(".js")) continue;
+  const content = await readFile(join(clientDir, file));
+  rawBytes += content.byteLength;
+  brotliBytes += brotliCompressSync(content, {
+    params: { [constants.BROTLI_PARAM_QUALITY]: 11 },
+  }).byteLength;
+}
+console.log({ rawBytes, brotliBytes });
+```
+
+Keep the application source, lockfile, route set, build target, source-map mode, public environment values, and compression settings fixed when comparing framework versions. Preserve each build's assets and manifest separately. For older manifests without `chunks`, reconstruct the graph from emitted static imports or record browser requests; treating a missing graph as an empty graph gives an incomplete total. A production Sentry or analytics configuration can change the result, so run a release budget with the actual production configuration as well.
+
+Chunk names describe bundler naming choices, not exclusive ownership. A chunk named after a small component can also contain shared runtime code. In particular, `mreact-router-compat` in a generated virtual-module name is the router's bundler adapter namespace; it does not establish that React compatibility is loaded. Native boundary helpers can contain compatibility checks without importing the React-compatible mounting runtime. Check the reachable implementation and imports before attributing a size increase to compatibility.
+
+Sharing hydration helpers reduces duplication across route entries, but it can change chunk placement and per-file compression. A smaller multi-route session does not guarantee a smaller cold load for every route. Upgrades spanning several releases also include rendering and reactivity fixes, so compare adjacent versions when attributing a regression to a particular optimization. Keep route budgets as explicit application checks instead of relying on a release-wide size claim.
+
 ## Latest results
 
 BENCHMARK_RESULTS_PLACEHOLDER

@@ -421,7 +421,7 @@ function collectAssetRoles(options: {
     add(css, "css");
   }
   if (options.includeNavigationRuntime && options.route.navigation === true) {
-    add(options.route.navigationScript, "navigation-runtime");
+    visitStatic(options.route.navigationScript, "navigation-runtime");
   }
   for (const dynamic of options.dynamicImports ?? []) {
     visitStatic(dynamic, "dynamic-import");

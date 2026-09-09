@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Bundle production navigation as an independent entry alongside client routes so their hydration helpers and runtime dependencies can be shared. Navigation still starts through its existing loader; server-only builds keep the standalone navigation runtime. Delivery and boundary cost reports include navigation's transitive static imports.
+
 ## 0.0.214 - 2026-09-09
 
 ### Added
@@ -9,6 +15,7 @@
 ### Changed
 
 - Reduced generated client code and hydration overhead by sharing route-independent hydration support, avoiding repeated resume-walk copies, specializing stable component and DOM bindings, and invalidating only form fields affected by a change.
+- These optimizations do not guarantee a smaller initial compressed asset set for every route, especially when upgrading across multiple releases with rendering correctness fixes. Shared chunk placement and per-file compression also affect cold-load totals. Compare the complete static import graph, including navigation, rather than chunk names or only a route entry's direct imports; see the [bundle measurement guide](https://t-k.github.io/mreact/benchmarks/#measuring-route-delivery).
 - Improved reactive scheduling and validation performance by merging queued computed work, advancing source snapshots once per changed write, and avoiding unnecessary cache and ownership work.
 
 ### Fixed

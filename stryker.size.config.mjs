@@ -23,8 +23,8 @@ export default createStrykerConfig({
     "size/client-delivery-report.ts",
     "packages/router/src/reactive-devtools-stub.ts",
     "packages/router/src/route-client-capabilities.ts",
-    "packages/router/src/client.ts:5732-5764",
-    "packages/router/src/client.ts:5780-5786",
+    "packages/router/src/client.ts:5734-5766",
+    "packages/router/src/client.ts:5782-5788",
   ],
   testFiles: [
     "size/delivery.test.ts",
