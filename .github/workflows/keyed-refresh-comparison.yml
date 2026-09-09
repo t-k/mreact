@@ -1,0 +1,59 @@
+name: Keyed refresh comparison
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      NODE_OPTIONS: --max-old-space-size=6144
+      MREACT_JS_FRAMEWORKS: keyed/mreact
+      MREACT_JS_FRAMEWORK_BENCHMARKS: 03_update10th1k_x16 05_swap1k
+      MREACT_JS_FRAMEWORK_ORDER_OFFSET: 0
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Enable Corepack
+        run: corepack enable
+      - name: Prepare immutable revisions
+        shell: bash
+        run: |
+          for entry in baseline:4bbca7bbb text:f7d24a460 array:9708a6eee class:e22077d6d; do
+            comparison_name="${entry%%:*}"
+            comparison_sha="${entry#*:}"
+            comparison_checkout="$GITHUB_WORKSPACE/.worktrees/keyed-$comparison_name"
+            git worktree add --detach "$comparison_checkout" "$comparison_sha"
+            pnpm --dir "$comparison_checkout" install --frozen-lockfile
+            pnpm --dir "$comparison_checkout" build
+          done
+          echo "MREACT_JS_FRAMEWORK_CHROME_BINARY=$(command -v google-chrome)" >> "$GITHUB_ENV"
+          echo "MREACT_JS_FRAMEWORK_BENCHMARK_DIR=$RUNNER_TEMP/mreact-keyed-comparison" >> "$GITHUB_ENV"
+      - name: Compare forward and reverse order on one runner
+        shell: bash
+        run: |
+          comparison_index=0
+          for comparison_name in baseline text array class class array text baseline; do
+            comparison_index=$((comparison_index + 1))
+            comparison_checkout="$GITHUB_WORKSPACE/.worktrees/keyed-$comparison_name"
+            comparison_output="$GITHUB_WORKSPACE/benchmarks/results/keyed-comparison/$comparison_index-$comparison_name"
+            mkdir -p "$comparison_output"
+            git -C "$comparison_checkout" rev-parse HEAD > "$comparison_output/revision.txt"
+            NODE_ENV=production MREACT_BENCHMARK_RESULTS_DIR="$comparison_output" pnpm --dir "$comparison_checkout" bench:js-framework
+            git -C "$MREACT_JS_FRAMEWORK_BENCHMARK_DIR" rev-parse HEAD > "$comparison_output/upstream-revision.txt"
+          done
+      - name: Upload all samples and traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: keyed-refresh-comparison
+          path: benchmarks/results/keyed-comparison
