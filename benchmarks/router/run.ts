@@ -16,7 +16,7 @@ try {
 }
 if (result.status === "failed") {
   console.error(
-    `Router benchmark lifecycle failed. See ${directory}/router.lifecycle.json and router.process.json`,
+    `Router benchmark run failed. Measurement/cleanup details: ${directory}/router.lifecycle.json. Process shutdown details: ${directory}/router.process.json`,
   );
   process.exitCode = 1;
 }

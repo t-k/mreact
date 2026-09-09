@@ -21,6 +21,40 @@ const environment: BenchmarkEnvironment = {
 };
 
 describe("router benchmark output", () => {
+  it("retains measurement and cleanup failure counts when output also fails", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "mreact-run-mixed-failure-"));
+    try {
+      await mkdir(join(directory, "router.md"));
+      const result = await saveRouterBenchmarkRun(
+        [
+          {
+            name: "mreact-app-router",
+            version: "test",
+            async measureBuildOutputGzipBytes() {
+              throw new Error("measure failed");
+            },
+            async teardown() {
+              throw new Error("close failed");
+            },
+          },
+        ],
+        directory,
+        environment,
+        { benchTimeMs: 1, warmupTimeMs: 1 },
+      );
+      expect(result).toEqual({
+        status: "failed",
+        measurementFailures: 1,
+        cleanupFailures: 1,
+        error: expect.stringContaining("EISDIR"),
+      });
+      expect(
+        JSON.parse(await readFile(join(directory, "router.lifecycle.json"), "utf8")),
+      ).toMatchObject(result);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
   it("records successful measurements and cleanup as completed", async () => {
     const directory = await mkdtemp(join(tmpdir(), "mreact-run-success-"));
     try {
@@ -36,9 +70,11 @@ describe("router benchmark output", () => {
         environment,
         { benchTimeMs: 1, warmupTimeMs: 1 },
       );
-      expect(result).toEqual({ status: "completed" });
+      expect(result).toEqual({ status: "completed", measurementFailures: 0, cleanupFailures: 0 });
       expect(JSON.parse(await readFile(join(directory, "router.lifecycle.json"), "utf8"))).toEqual({
         status: "completed",
+        measurementFailures: 0,
+        cleanupFailures: 0,
         cleanup: [{ adapter: "mreact-app-router", status: "completed" }],
       });
     } finally {
@@ -65,10 +101,17 @@ describe("router benchmark output", () => {
         environment,
         { benchTimeMs: 1, warmupTimeMs: 1 },
       );
-      expect(result).toEqual({ status: "failed" });
+      expect(result).toEqual({
+        status: "failed",
+        measurementFailures: 0,
+        cleanupFailures: 0,
+        error: expect.stringContaining("EISDIR"),
+      });
       expect(closed).toBe(true);
       expect(JSON.parse(await readFile(join(directory, "router.lifecycle.json"), "utf8"))).toEqual({
         status: "failed",
+        measurementFailures: 0,
+        cleanupFailures: 0,
         cleanup: [{ adapter: "mreact-app-router", status: "completed" }],
         error: expect.stringContaining("EISDIR"),
       });
@@ -108,10 +151,17 @@ describe("router benchmark output", () => {
       const rows = JSON.parse(await readFile(join(directory, "router.summary.json"), "utf8"));
       expect(rows.some((row: { status: string }) => row.status === "failed")).toBe(true);
       expect(rows.some((row: { value: number }) => row.value === 123)).toBe(true);
+      expect(result).toMatchObject({
+        measurementFailures: rows.filter((row: { status: string }) => row.status === "failed")
+          .length,
+        cleanupFailures: 0,
+      });
       expect(
         JSON.parse(await readFile(join(directory, "router.lifecycle.json"), "utf8")),
       ).toMatchObject({
         status: "failed",
+        measurementFailures: result.measurementFailures,
+        cleanupFailures: 0,
         cleanup: [
           { adapter: "mreact-app-router", status: "completed" },
           { adapter: "marko-run", status: "completed" },
@@ -156,11 +206,14 @@ describe("router benchmark output", () => {
       expect(savedBeforeCleanup).toBe(true);
       expect(beforeCleanup).toEqual({ status: "cleaning", cleanup: [] });
       expect(result.status).toBe("failed");
+      expect(result).toMatchObject({ measurementFailures: 0, cleanupFailures: 1 });
       const lifecycle = JSON.parse(
         await readFile(join(directory, "router.lifecycle.json"), "utf8"),
       );
       expect(lifecycle).toMatchObject({
         status: "failed",
+        measurementFailures: 0,
+        cleanupFailures: 1,
         cleanup: [
           { adapter: "mreact-app-router", status: "failed", error: "fixture close failed" },
           { adapter: "marko-run", status: "completed" },

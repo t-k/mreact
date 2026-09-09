@@ -22,6 +22,8 @@ This directory contains fair, repeatable benchmark fixtures for mreact and peer 
 
 ## Fairness Policy
 
+The default router suite excludes the experimental `qwik-router-v2` adapter following an interactive validation timeout in [run 34344383424](https://github.com/t-k/mreact/actions/runs/34344383424). Qwik City remains included. The V2 adapter source is retained for investigation; exclusion is not a fix for its timeout or a performance improvement. Historical results that include V2 have a different adapter set.
+
 - Use each framework's recommended production mode.
 - Use the same fixture data and DOM shape for comparable rows.
 - Validate DOM or HTML output before recording a completed result.
@@ -61,6 +63,8 @@ Throughput cases use Tinybench with a 250 ms warmup window and a 1,500 ms measur
 The Lambda route latency runner is not a full AWS runtime emulator: it skips AWS zip extraction, runtime init scheduling, API Gateway infrastructure, and networked AWS service latency. It is intended for fast iteration on mreact's handler, route matching, middleware, loader, render, and response conversion phases. Use `MREACT_LAMBDA_BENCH_LOADER_MS`, `MREACT_LAMBDA_BENCH_MIDDLEWARE_MS`, and `MREACT_LAMBDA_BENCH_REPEATS` to tune the synthetic fixture.
 
 ## Reading Results
+
+Router runs save measurement rows to `router.summary.json` and `router.md` before teardown. `router.lifecycle.json` records separate `measurementFailures` and `cleanupFailures` counts once cleanup finishes, with an `error` for execution or output failures. `router.process.json` records worker exit and process supervision, including forced termination and remaining tracked groups. A measurement failure produces a nonzero exit even when cleanup and process shutdown succeed. Failed runs retain Actions artifacts.
 
 The markdown reports use the median as the ranking value, while the JSON summary files keep the raw measured samples and percentile summaries (`p75`, `p95`, and `p99` where applicable). Use the raw samples when comparing close results, especially for cases that can flip between adjacent runs such as logging-enabled and non-logging router variants.
 

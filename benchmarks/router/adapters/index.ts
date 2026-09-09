@@ -8,7 +8,6 @@ import {
 import { nextAppRouterAdapter } from "./next-app-router.js";
 import { nuxtAdapter } from "./nuxt.js";
 import { qwikCityAdapter } from "./qwik-city.js";
-import { qwikRouterV2Adapter } from "./qwik-router-v2.js";
 import { solidStartAdapter } from "./solid-start.js";
 import { svelteKitAdapter } from "./svelte-kit.js";
 import { tanstackStartAdapter } from "./tanstack-start.js";
@@ -21,7 +20,6 @@ export const routerBenchmarkAdapters: RouterBenchmarkAdapter[] = [
   svelteKitAdapter,
   analogAdapter,
   qwikCityAdapter,
-  qwikRouterV2Adapter,
   solidStartAdapter,
   tanstackStartAdapter,
   tanstackStartSolidAdapter,

@@ -24,4 +24,7 @@ const environment = await collectBenchmarkEnvironment([
   "vue",
 ]);
 const result = await saveRouterBenchmarkRun(routerBenchmarkAdapters, directory, environment);
-if (result.status === "failed") process.exitCode = 1;
+if (result.status === "failed") {
+  console.error(`Router benchmark failure details: ${JSON.stringify(result)}`);
+  process.exitCode = 1;
+}

@@ -6,19 +6,26 @@ import { formatRouterBenchmarkMarkdown } from "./report.js";
 import { runRouterBenchmarks } from "./runner.js";
 import type { RouterBenchmarkAdapter, RouterBenchmarkCleanupResult } from "./types.js";
 
+export interface RouterRunOutcome {
+  status: "completed" | "failed";
+  measurementFailures: number;
+  cleanupFailures: number;
+  error?: string;
+}
+
 export async function saveRouterBenchmarkRun(
   adapters: readonly RouterBenchmarkAdapter[],
   directory: string,
   environment: BenchmarkEnvironment,
   options: { benchTimeMs?: number; warmupTimeMs?: number } = {},
-): Promise<{ status: "completed" | "failed" }> {
+): Promise<RouterRunOutcome> {
   let cleanup: RouterBenchmarkCleanupResult[] = [];
-  let failedMeasurements = false;
+  let measurementFailures = 0;
   try {
     await runRouterBenchmarks(adapters, {
       ...options,
       async onMeasurementsComplete(rows) {
-        failedMeasurements = rows.some((row) => row.status === "failed");
+        measurementFailures = rows.filter((row) => row.status === "failed").length;
         // Arm shutdown supervision before filesystem work or adapter teardown can hang.
         await notifyMeasurementsComplete();
         const markdown = formatRouterBenchmarkMarkdown(environment, rows);
@@ -33,18 +40,22 @@ export async function saveRouterBenchmarkRun(
         cleanup = results;
       },
     });
-    const status =
-      failedMeasurements || cleanup.some((result) => result.status === "failed")
-        ? "failed"
-        : "completed";
-    await writeJsonFile(join(directory, "router.lifecycle.json"), { status, cleanup });
-    return { status };
+    const cleanupFailures = cleanup.filter((result) => result.status === "failed").length;
+    const result: RouterRunOutcome = {
+      status: measurementFailures > 0 || cleanupFailures > 0 ? "failed" : "completed",
+      measurementFailures,
+      cleanupFailures,
+    };
+    await writeJsonFile(join(directory, "router.lifecycle.json"), { ...result, cleanup });
+    return result;
   } catch (error) {
-    await writeJsonFile(join(directory, "router.lifecycle.json"), {
+    const result: RouterRunOutcome = {
       status: "failed",
-      cleanup,
+      measurementFailures,
+      cleanupFailures: cleanup.filter((entry) => entry.status === "failed").length,
       error: error instanceof Error ? error.message : String(error),
-    });
-    return { status: "failed" };
+    };
+    await writeJsonFile(join(directory, "router.lifecycle.json"), { ...result, cleanup });
+    return result;
   }
 }
