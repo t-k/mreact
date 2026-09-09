@@ -6,6 +6,7 @@ export default createStrykerConfig({
     "packages/reactive-dom/src/bind-static-keyed-single-node-list.ts:1172-1175",
     "packages/reactive-dom/src/bind-static-keyed-single-node-list.ts:1198-1208",
     "packages/reactive-dom/src/bind-static-keyed-single-node-list.ts:1391-1394",
+    "packages/reactive-dom/src/bind-static-keyed-single-node-list.ts:1971-1974",
   ],
   testFiles: [
     "packages/reactive-dom/test/compiler-keyed-property-refresh.test.ts",

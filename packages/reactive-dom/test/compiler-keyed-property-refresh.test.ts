@@ -6,6 +6,73 @@ import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { bindCompilerKeyedPropertyText, bindCompilerKeyedSingleNodeList } from "../src/internal.js";
 
 describe("compiler keyed property refresh", () => {
+  test("refreshes selected classes only when DOM differs and repairs external changes", async () => {
+    const items = cell([
+      { id: 1, label: "A" },
+      { id: 2, label: "B" },
+    ]);
+    const selected = cell<unknown>(-1);
+    const parent = document.createElement("div");
+    const marker = document.createComment("rows");
+    parent.append(marker);
+    const dispose = bindCompilerKeyedSingleNodeList(
+      parent,
+      marker,
+      () => items.get(),
+      (context) => {
+        const row = document.createElement("span");
+        row.className = "";
+        const text = document.createTextNode("");
+        bindCompilerKeyedPropertyText(context, text, "label");
+        row.append(text);
+        return row;
+      },
+      {
+        key: (item) => item.id,
+        compilerOwnsTextCleanup: true,
+        compilerSelectedClass: { source: selected, className: "danger", initialClassValue: "" },
+      },
+    );
+    const mutations: MutationRecord[] = [];
+    const observer = new MutationObserver((records) => mutations.push(...records));
+    observer.observe(parent, { subtree: true, attributes: true, attributeFilter: ["class"] });
+    const take = () => {
+      mutations.push(...observer.takeRecords());
+      return mutations.splice(0);
+    };
+    try {
+      items.set([
+        { id: 1, label: "A!" },
+        { id: 2, label: "B!" },
+      ]);
+      await flushEffects();
+      expect(take()).toHaveLength(0);
+      selected.set(1);
+      await flushEffects();
+      expect(take().map((record) => record.target)).toEqual([parent.children[0]]);
+      expect(parent.children[0]!.getAttribute("class")).toBe("danger");
+      selected.set(2);
+      await flushEffects();
+      expect(take().map((record) => record.target)).toEqual([
+        parent.children[0],
+        parent.children[1],
+      ]);
+      expect(parent.children[0]!.getAttribute("class")).toBe("");
+      expect(parent.children[1]!.getAttribute("class")).toBe("danger");
+      parent.children[0]!.setAttribute("class", "external");
+      parent.children[1]!.removeAttribute("class");
+      take();
+      items.set([...items.get()]);
+      await flushEffects();
+      expect(take()).toHaveLength(2);
+      expect(parent.children[0]!.getAttribute("class")).toBe("");
+      expect(parent.children[1]!.getAttribute("class")).toBe("danger");
+    } finally {
+      observer.disconnect();
+      dispose();
+    }
+  });
+
   test("preserves row identity across same-order, adjacent, tail and fallback updates", async () => {
     const items = cell([1, 2, 3, 4].map((id) => ({ id, label: String(id) })));
     const parent = document.createElement("div");
