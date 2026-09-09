@@ -1074,12 +1074,24 @@ function replaceEqualDeep(previous: unknown, next: unknown): unknown {
     const result: Record<string, unknown> = {};
 
     for (const key of nextKeys) {
-      if (!Object.hasOwn(previousRecord, key)) {
+      const previousHasKey = Object.hasOwn(previousRecord, key);
+      if (!previousHasKey) {
         equalEntries = false;
       }
-      const replaced = replaceEqualDeep(previousRecord[key], nextRecord[key]);
-      result[key] = replaced;
-      if (!Object.is(replaced, previousRecord[key])) {
+      // Read inherited keys (e.g. "__proto__") as absent so structural
+      // sharing never compares against Object.prototype.
+      const previousValue = previousHasKey ? previousRecord[key] : undefined;
+      const replaced = replaceEqualDeep(previousValue, nextRecord[key]);
+      // Define as an own data property: a plain assignment of a key such as
+      // "__proto__" (valid JSON) would change the prototype of `result`
+      // instead of copying the value.
+      Object.defineProperty(result, key, {
+        value: replaced,
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
+      if (!Object.is(replaced, previousValue)) {
         equalEntries = false;
       }
     }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, test } from "vitest";
 import {
   createQueryLifecycle,
   replaceEqualDeepForTesting,
@@ -97,5 +97,42 @@ describe("query entry lifecycle", () => {
     } finally {
       Array.prototype.map = originalMap;
     }
+  });
+});
+
+describe("replaceEqualDeep own-property safety", () => {
+  test("keeps JSON __proto__ keys as own data properties", () => {
+    const next = JSON.parse('{"name":"sample","__proto__":{"isAdmin":true}}') as Record<string, unknown>;
+    const shared = replaceEqualDeepForTesting({ name: "old" }, next) as Record<string, unknown>;
+
+    expect(shared).not.toBe(next);
+    expect(Object.hasOwn(shared, "__proto__")).toBe(true);
+    expect(Object.getPrototypeOf(shared)).toBe(Object.prototype);
+    expect((shared as { isAdmin?: unknown }).isAdmin).toBeUndefined();
+    expect(JSON.stringify(shared)).toBe(JSON.stringify(next));
+  });
+
+  test("handles nested __proto__, constructor keys and null-prototype input", () => {
+    const previous = { nested: { constructor: "old", keep: 1 } };
+    const next = JSON.parse('{"nested":{"constructor":"new","keep":1,"__proto__":{"polluted":true}}}') as {
+      nested: Record<string, unknown>;
+    };
+    const shared = replaceEqualDeepForTesting(previous, next) as typeof next;
+
+    expect(shared.nested.constructor).toBe("new");
+    expect(Object.hasOwn(shared.nested, "__proto__")).toBe(true);
+    expect((shared.nested as { polluted?: unknown }).polluted).toBeUndefined();
+    expect(({} as { polluted?: unknown }).polluted).toBeUndefined();
+
+    const nullProto = Object.create(null) as Record<string, unknown>;
+    nullProto.value = 1;
+    const sharedNull = replaceEqualDeepForTesting({ value: 2 }, nullProto) as Record<string, unknown>;
+    expect(sharedNull.value).toBe(1);
+  });
+
+  test("still reuses unchanged references", () => {
+    const previous = { a: { b: 1 }, c: [1, 2] };
+    const next = { a: { b: 1 }, c: [1, 2] };
+    expect(replaceEqualDeepForTesting(previous, next)).toBe(previous);
   });
 });
