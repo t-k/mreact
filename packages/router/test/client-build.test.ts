@@ -8598,8 +8598,9 @@ export default function Page(props) {
       });
 
       // Route modules imported by earlier tests keep their own popstate listeners on this shared
-      // document, so only the fetched URL is exact here; the browser E2E covers a single fetch.
-      expect([...new Set(fetched)]).toEqual(["/"]);
+      // document, so only the fetched URL is exact here. The browser E2E covers a single fetch
+      // and the traversal races, where one runtime owns the document.
+      expect([...new Set(fetched)]).toEqual([new URL("/", location.href).href]);
       expect(reloads).toBe(0);
       expect(scrollCalls.at(-1)).toEqual([0, 25]);
     } finally {
