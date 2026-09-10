@@ -374,14 +374,17 @@ export default function Page() {
         "",
       ].join("\n"),
     )).toBe(true);
-    expect(navigating.code.startsWith(
+    // A navigating entry leads with the history cache and route data imports, so the runtime
+    // block is checked as one contiguous group instead of the file prefix.
+    expect(navigating.code).toContain(
       [
         'import { __mreactRunLifecycleTasks } from "mreact-route-hydration-runtime/lifecycle";',
         'import { __mreactCreateRouteResumeRuntime } from "mreact-route-hydration-runtime/resume";',
         'import { __mreactApplyOutOfOrderFragments } from "mreact-route-hydration-runtime/fragments";',
         "",
       ].join("\n"),
-    )).toBe(true);
+    );
+    expect(navigating.code.split("mreact-route-hydration-runtime/").length - 1).toBe(3);
     expect(entryParseErrors(plain.code)).toHaveLength(0);
     expect(entryParseErrors(navigating.code)).toHaveLength(0);
     expect(plain.code).toContain(

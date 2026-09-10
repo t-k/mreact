@@ -2862,6 +2862,11 @@ export async function buildNavigationRuntimeBundle(
 
 export interface BuildNavigationEntrySourceOptions {
   /**
+   * Route path the entry is registered under. The batch build suffixes it when a user route
+   * would collide, and the hydration event and failure report carry the resulting id.
+   */
+  routePath?: string | undefined;
+  /**
    * Import the route-independent hydration helpers from the shared virtual modules instead of
    * inlining them. The batch build opts in so the navigation entry shares the resume walk with
    * the route chunks; the standalone bundle keeps the inline shape.
@@ -2878,7 +2883,7 @@ export function buildNavigationEntrySource(
   options: BuildNavigationEntrySourceOptions = {},
 ): { code: string } {
   const shareHydrationRuntime = options.shareHydrationRuntime === true;
-  const routeId = routeIdForPath("/__mreact_navigation_runtime");
+  const routeId = routeIdForPath(options.routePath ?? "/__mreact_navigation_runtime");
   const historyCacheImport = `import { rememberNavigationHistorySnapshot as __mreactRememberHistorySnapshot } from ${JSON.stringify(workspacePackageFile({ currentFileUrl: import.meta.url, monorepoDir: "router", packageName: "@reckona/mreact-router", entry: "navigation-history-cache" }))};\n`;
   const routeDataImport = `import { takeNavigationRouteDataScripts as __mreactTakeRouteDataScripts } from ${JSON.stringify(workspacePackageFile({ currentFileUrl: import.meta.url, monorepoDir: "router", packageName: "@reckona/mreact-router", entry: "navigation-route-data" }))};\n`;
   const hydrationRuntimeImportBlock = shareHydrationRuntime
@@ -3030,7 +3035,10 @@ export async function buildClientRouteBatchOutput(options: {
             name: routeIdForPath(navigationRuntime.routePath),
             preserveExports: true,
             routePath: navigationRuntime.routePath,
-            source: buildNavigationEntrySource({ shareHydrationRuntime: entryCount > 1 }),
+            source: buildNavigationEntrySource({
+              routePath: navigationRuntime.routePath,
+              shareHydrationRuntime: entryCount > 1,
+            }),
           },
         ];
   const routeEntries = await Promise.all(

@@ -239,6 +239,19 @@ export default function Page() {
     expect(routeCode).not.toMatch(/export\s*\{[^}]*\b__mreactHydrateRoute\b/);
   });
 
+  test("the navigation entry reports the collision-suffixed id it is registered under", async () => {
+    const { manifest, clientDir } = await buildFixture({
+      "page.tsx": `export const clientNavigation = true;\n${interactivePage}`,
+      "__mreact_navigation_runtime/page.tsx": staticPage,
+    });
+    const home = manifest.routes.find((route) => route.path === "/");
+    const navigationCode = await readFile(join(clientDir, home?.navigationScript ?? ""), "utf8");
+
+    expect(home?.navigationScript).toContain("__mreact_navigation_runtime_");
+    expect(navigationCode).toContain("`__mreact_navigation_runtime_`");
+    expect(navigationCode).not.toContain("`__mreact_navigation_runtime`");
+  });
+
   test("the shared navigation entry is a dedicated runtime without route hydration", async () => {
     const { manifest, clientDir } = await buildFixture({
       "page.tsx": `export const clientNavigation = true;\n${interactivePage}`,
