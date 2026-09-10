@@ -110,12 +110,13 @@ const routeHydrationRuntimeParts: Record<RouteHydrationRuntimeModule, string> = 
   }
 
   let hydrated = false;
-  const skipped = new Set();
+  const placeholders = marker.querySelectorAll("template[data-mreact-client-boundary]");
+  let placeholderIndex = 0;
 
   while (true) {
-    const placeholder = Array.from(marker.querySelectorAll("template[data-mreact-client-boundary]")).find(node => !skipped.has(node)) ?? null;
+    const placeholder = placeholders[placeholderIndex++];
 
-    if (placeholder === null) {
+    if (!placeholder) {
       return hydrated;
     }
 
@@ -136,24 +137,20 @@ const routeHydrationRuntimeParts: Record<RouteHydrationRuntimeModule, string> = 
         const end = propsElement?.previousSibling;
         const parent = placeholder.parentElement;
         const encodedId = encodeURIComponent(resumeId);
-        if (parent === null || start?.nodeType !== Node.COMMENT_NODE || end?.nodeType !== Node.COMMENT_NODE ||
+        if (parent === null || start?.nodeType !== 8 || end?.nodeType !== 8 ||
             start.nodeValue !== "mreact-h:start:" + encodedId || end.nodeValue !== "mreact-h:end:" + encodedId ||
-            propsElement.parentElement !== parent || start === end) {
-          throw new Error("Invalid compat boundary range markers.");
+            propsElement.parentElement !== parent) {
+          throw Error();
         }
         const props = JSON.parse(propsElement.textContent || "{}");
         const root = __mreactCompatHydrateRoot(parent, __mreactCompatCreateElement(component, props), {
           resumeId,
           identifierPrefix: resumeId,
-          onRecoverableError(error) { console.error("Compat boundary hydration mismatch", error); },
+          onRecoverableError: console.error,
         });
-        let unmounted = false;
         start.__mreactCompatRoot = {
           unmount() {
-            if (unmounted) return;
-            unmounted = true;
             try { root.unmount(); } finally {
-              start.__mreactCompatRoot = undefined;
               start.remove();
               end.remove();
             }
@@ -163,8 +160,7 @@ const routeHydrationRuntimeParts: Record<RouteHydrationRuntimeModule, string> = 
         propsElement.remove();
         hydrated = true;
       } catch (error) {
-        skipped.add(placeholder);
-        console.error("Compat boundary hydration failed", error);
+        console.error(error);
       }
       continue;
     }
@@ -413,16 +409,15 @@ function __mreactExtractClientBoundaryChildren(nodes, name) {
 }
 `,
   resume: `function __mreactUnmountCompatBoundaries(root) {
-  const containers = Array.from(root.querySelectorAll?.("[data-mreact-compat-boundary]") ?? []);
-  containers.unshift(root);
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_COMMENT);
+  const containers = [root, ...(root.querySelectorAll?.("[data-mreact-compat-boundary]") ?? [])];
+  const walker = document.createTreeWalker(root, 128);
   while (walker.nextNode()) {
-    if (walker.currentNode.__mreactCompatRoot !== undefined) containers.push(walker.currentNode);
+    if (walker.currentNode.__mreactCompatRoot) containers.push(walker.currentNode);
   }
   __mreactRunLifecycleTasks(containers, (container) => {
     const compatRoot = container.__mreactCompatRoot;
     container.__mreactCompatRoot = undefined;
-    compatRoot?.unmount?.();
+    compatRoot?.unmount();
   });
 }
 

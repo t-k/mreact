@@ -107,7 +107,7 @@ export function getHydrationScope(
   if (starts.length !== 1 || ends.length !== 1 ||
       start === undefined || end === undefined || start.parentNode === null ||
       start.parentNode !== end.parentNode) {
-    throw new Error(`Invalid hydration range markers for ${resumeId}.`);
+    throw new Error("Invalid range markers.");
   }
 
   // Validate nesting only inside the requested range; other streamed ranges may be incomplete.
@@ -118,13 +118,13 @@ export function getHydrationScope(
       const value = (next as Comment).data;
       if (value.startsWith("mreact-h:start:")) stack.push(value.slice(15));
       if (value.startsWith("mreact-h:end:") && stack.pop() !== value.slice(13)) {
-        throw new Error(`Invalid hydration range markers for ${resumeId}.`);
+        throw new Error("Invalid range markers.");
       }
     }
     next = next.nextSibling;
   }
   if (next !== end || stack.length !== 1 || stack[0] !== encodedId) {
-    throw new Error(`Invalid hydration range markers for ${resumeId}.`);
+    throw new Error("Invalid range markers.");
   }
 
   return {

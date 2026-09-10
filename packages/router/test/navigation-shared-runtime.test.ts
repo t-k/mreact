@@ -205,7 +205,7 @@ export default function Page() {
       expect(navigationCode).toMatch(/export\s*\{[^}]*\b__mreactNavigate\b/);
       expect(navigationCode).toContain("popstate");
       const routeCode = await readFile(join(clientDir, home?.script ?? ""), "utf8");
-      expect(routeCode).not.toMatch(/export\s*\{[^}]*\b__mreactHydrateRoute\b/);
+      expect(routeCode).toMatch(/export\s*\{[^}]*\b__mreactHydrateRoute\b/);
       const report = await measureBrowserDelivery({
         clientDir,
         initialPath: "/",
@@ -227,4 +227,15 @@ export default function Page() {
       expect(routeOnly.initial.paths).not.toContain(home?.navigationScript);
     },
   );
+
+  test("a no-navigation route omits the revisit hydration export", async () => {
+    const { manifest, clientDir } = await buildFixture({
+      "page.tsx": `export const clientNavigation = false;\n${interactivePage}`,
+    });
+    const home = manifest.routes.find((route) => route.path === "/");
+    const routeCode = await readFile(join(clientDir, home?.script ?? ""), "utf8");
+
+    expect(home?.navigationScript).toBeUndefined();
+    expect(routeCode).not.toMatch(/export\s*\{[^}]*\b__mreactHydrateRoute\b/);
+  });
 });

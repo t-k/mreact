@@ -393,7 +393,7 @@ export function hydrateRoot(
 
   const root: Root = {
     render(nextElement) {
-      if (unmounted) throw new Error("Cannot render an unmounted hydration root.");
+      if (unmounted) throw new Error("Root is unmounted.");
       runtime.currentElement = nextElement;
       enqueueRootRender(fiberRoot, nextElement, SyncLane, () => {
         if (canRenderHostFiber(nextElement)) {
@@ -414,8 +414,7 @@ export function hydrateRoot(
       unmounted = true;
       withBatchedDelegatedRootReleases(() => {
         runtime.currentElement = undefined;
-        let failed = false;
-        let firstError: unknown;
+        const errors: unknown[] = [];
         for (const cleanup of [
           () => runtime.dispose(),
           () => detachFiberRefs(fiberRoot.current),
@@ -423,12 +422,7 @@ export function hydrateRoot(
           () => disposeHostFiberResources(fiberRoot.current),
           () => unmountDevToolsRoot(container, fiberRoot),
         ]) {
-          try {
-            cleanup();
-          } catch (error) {
-            if (!failed) firstError = error;
-            failed = true;
-          }
+          try { cleanup(); } catch (error) { errors.push(error); }
         }
         runtime.instances.clear();
         if (selectiveScope === undefined) {
@@ -446,7 +440,7 @@ export function hydrateRoot(
             selectiveScope.after!.remove();
           }
         }
-        if (failed) throw firstError;
+        if (errors.length > 0) throw errors[0];
       });
     },
   };
@@ -486,7 +480,7 @@ export function hydrateRoot(
 }
 
 function throwUnsupportedRootNode(): never {
-  throw new Error("Unsupported react-compat root node. Pass a valid React-compatible element, portal, fragment, primitive, array, or nullish value.");
+  throw new Error("Unsupported react-compat root node.");
 }
 
 function laneForRenderPriority(priority: RenderPriority): Lane {

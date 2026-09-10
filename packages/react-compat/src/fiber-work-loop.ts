@@ -138,7 +138,7 @@ function renderRootConcurrentInEnvironment(
   const finishedWork = root.finishedWork;
 
   if (finishedWork === undefined) {
-    throw new Error("Fiber concurrent render completed without finished work.");
+    throw new Error("Concurrent render produced no work.");
   }
 
   finishedWork.lanes = lanes;

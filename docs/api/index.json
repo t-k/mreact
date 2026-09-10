@@ -49219,9 +49219,9 @@
 							"sources": [
 								{
 									"fileName": "root.ts",
-									"line": 505,
+									"line": 499,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/root.ts#L505"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/root.ts#L499"
 								}
 							],
 							"signatures": [
@@ -49242,9 +49242,9 @@
 									"sources": [
 										{
 											"fileName": "root.ts",
-											"line": 505,
+											"line": 499,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/root.ts#L505"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/root.ts#L499"
 										}
 									],
 									"parameters": [
@@ -51209,9 +51209,9 @@
 							"sources": [
 								{
 									"fileName": "root.ts",
-									"line": 585,
+									"line": 579,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/root.ts#L585"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/root.ts#L579"
 								}
 							],
 							"signatures": [
@@ -51232,9 +51232,9 @@
 									"sources": [
 										{
 											"fileName": "root.ts",
-											"line": 585,
+											"line": 579,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/root.ts#L585"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/root.ts#L579"
 										}
 									],
 									"parameters": [

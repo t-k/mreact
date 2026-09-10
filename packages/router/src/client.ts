@@ -2896,7 +2896,9 @@ export async function buildClientRouteBatchOutput(options: {
       filename: route.filename,
       name: routeIdForPath(route.routePath),
       // Navigation invokes the hydration export again when a cached route module is revisited.
-      preserveExports: true,
+      // Routes that cannot navigate only need their entry's initial side effect.
+      preserveExports:
+        route.clientNavigation ?? detectClientNavigationHint(route.code),
       routePath: route.routePath,
       source: await buildClientRouteEntrySource({
         ...route,

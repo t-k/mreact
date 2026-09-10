@@ -1086,7 +1086,7 @@ export function useState<T>(
   }
 
   if (slot.kind !== "state") {
-    throw new Error("Hook order changed between renders.");
+    throw new Error("Hook order.");
   }
 
   if (slot.dispatch === undefined) {
@@ -1499,7 +1499,7 @@ export function useRef<T>(initial: T): { current: T } {
   }
 
   if (slot.kind !== "ref") {
-    throw new Error("Hook order changed between renders.");
+    throw new Error("Hook order.");
   }
 
   recordDevToolsHook("useRef", {
@@ -1585,7 +1585,7 @@ export function useMemo<T>(factory: () => T, deps?: readonly unknown[]): T {
   let slot = instance.hooks[index];
 
   if (slot !== undefined && slot.kind !== "memo") {
-    throw new Error("Hook order changed between renders.");
+    throw new Error("Hook order.");
   }
 
   let value: unknown;
@@ -1628,7 +1628,7 @@ export function useMemo<T>(factory: () => T, deps?: readonly unknown[]): T {
 
   const memoSlot = slot;
   if (memoSlot === undefined) {
-    throw new Error("Hook order changed between renders.");
+    throw new Error("Hook order.");
   }
 
   recordDevToolsHook(
@@ -1739,7 +1739,7 @@ export function useDebugValue(_value: unknown, _format?: (value: unknown) => unk
   let slot = instance.hooks[index];
 
   if (slot !== undefined && slot.kind !== "debug") {
-    throw new Error("Hook order changed between renders.");
+    throw new Error("Hook order.");
   }
 
   if (slot === undefined) {
@@ -1834,7 +1834,7 @@ export function useSyncExternalStore<T>(
   }
 
   if (slot.kind !== "store") {
-    throw new Error("Hook order changed between renders.");
+    throw new Error("Hook order.");
   }
   slot.getSnapshot = getSnapshot as () => unknown;
 
@@ -1917,7 +1917,7 @@ export function useActionState<TState, TPayload>(
   let slot = instance.hooks[index];
 
   if (slot !== undefined && slot.kind !== "action-state") {
-    throw new Error("Hook order changed between renders.");
+    throw new Error("Hook order.");
   }
 
   if (slot === undefined) {
@@ -1972,7 +1972,7 @@ export function useOptimistic<TState, TPayload>(
       : (update as (state: unknown, payload: unknown) => unknown);
 
   if (slot !== undefined && slot.kind !== "optimistic") {
-    throw new Error("Hook order changed between renders.");
+    throw new Error("Hook order.");
   }
 
   if (slot === undefined) {
@@ -2510,7 +2510,7 @@ function useEffectImpl(
   let slot = instance.hooks[index];
 
   if (slot !== undefined && slot.kind !== "effect") {
-    throw new Error("Hook order changed between renders.");
+    throw new Error("Hook order.");
   }
 
   const shouldRun =
