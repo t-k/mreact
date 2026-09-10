@@ -329,7 +329,9 @@ export function renderContextProviderToString<T>(provider: ReactCompatProvider<T
 // @public
 export function renderToString<TProps>(component: ((props: TProps) => ReactCompatNode) | (new (props: TProps) => {
     render(): ReactCompatNode;
-}), props?: TProps, options?: RootRuntimeOptions): string;
+}), props?: TProps, options?: RootRuntimeOptions & {
+    stringResult?: "html" | "text";
+}): string;
 
 // @public (undocumented)
 export interface RootRuntimeOptions {
