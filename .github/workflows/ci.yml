@@ -81,12 +81,6 @@ jobs:
           - name: Primitive browser fixture build smoke
             run: NODE_ENV=production pnpm bench:primitive-browser:build
 
-          - name: E2E smoke
-            run: pnpm exec playwright test packages/router/e2e/navigation.spec.ts --grep "client navigation preserves layouts"
-
-          - name: E2E client delivery accounting
-            run: pnpm exec playwright test packages/router/e2e/client-delivery-accounting.spec.ts
-
           - name: API reports
             run: node scripts/generate-api-reports.mjs --check
 
@@ -98,6 +92,15 @@ jobs:
 
           - name: Test router build
             run: pnpm exec vitest run packages/router/test/build.test.ts --passWithNoTests --maxWorkers=1 --maxConcurrency=1
+
+      # The checks above regenerate shared package dist directories. Wait for them before E2E
+      # imports those packages so it never observes a partially replaced build output.
+      - parallel:
+          - name: E2E smoke
+            run: pnpm exec playwright test packages/router/e2e/navigation.spec.ts --grep "client navigation preserves layouts"
+
+          - name: E2E client delivery accounting
+            run: pnpm exec playwright test packages/router/e2e/client-delivery-accounting.spec.ts
 
   # Runs apart from verify so a lint, docs, or scenario failure there cannot skip the size
   # measurement: the budget verdict and the uploaded reports stay available for every push.
