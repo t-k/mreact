@@ -14,11 +14,17 @@ import { renderBuiltAppRequest } from "../src/serve.js";
 
 test.each(
   ["node", "cloudflare", "aws-lambda"].flatMap((target) =>
-    [false, true].map((stream) => ({ target, stream })),
+    [false, true].flatMap((stream) =>
+      ["@reckona/mreact-compat", "@reckona/mreact-compat/hooks"].map((hooksEntry) => ({
+        target,
+        stream,
+        hooksEntry,
+      })),
+    ),
   ),
 )(
-  "production compat boundaries include meaningful server HTML ($target, stream=$stream)",
-  async ({ target, stream }) => {
+  "production compat boundaries include meaningful server HTML ($target, stream=$stream, $hooksEntry)",
+  async ({ target, stream, hooksEntry }) => {
     const root = await mkdtemp(join(tmpdir(), "mreact-compat-ssr-"));
     try {
       const appDir = join(root, "app");
@@ -26,7 +32,7 @@ test.each(
       await mkdir(appDir);
       await writeFile(
         join(appDir, "Counter.compat.tsx"),
-        `import { useState } from "@reckona/mreact-compat";
+        `import { useState } from "${hooksEntry}";
 export function Counter() {
   const [count, setCount] = useState(0);
   return <button type="button" onClick={() => setCount(value => value + 1)}>compat count: {count}</button>;
@@ -191,7 +197,7 @@ test.each([false, true])(
       const payload = '<img src=x onerror="globalThis.__compatXss = true">&text';
       await writeFile(
         join(root, "Text.compat.tsx"),
-        "export function Text(props) { return props.value; }",
+        'import { useState } from "@reckona/mreact-compat/hooks"; export function Text(props) { const [value] = useState(props.value); return value; }',
       );
       await writeFile(
         join(root, "page.tsx"),

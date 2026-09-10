@@ -7,7 +7,7 @@ type AstNode = Record<string, unknown>;
 const object = (value: unknown): AstNode =>
   value !== null && typeof value === "object" ? (value as AstNode) : {};
 const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
-const safeHooks = new Set([
+const safeHookSubpathImports = new Set([
   "useState",
   "useReducer",
   "useRef",
@@ -17,10 +17,8 @@ const safeHooks = new Set([
   "useEffect",
   "useLayoutEffect",
   "useInsertionEffect",
-  "useContext",
-  "createContext",
-  "Fragment",
 ]);
+const safeHooks = new Set([...safeHookSubpathImports, "useContext", "createContext", "Fragment"]);
 const unsafeNames = new Set([
   "window",
   "document",
@@ -85,14 +83,20 @@ export async function analyzeCompatSsrEligibility(
           const source = object(node.source).value;
           if (typeof source !== "string") return false;
           if (node.type === "ImportDeclaration" && list(node.specifiers).length === 0) return false;
-          if (source === "@reckona/mreact-compat" || source === "react") {
+          if (
+            source === "@reckona/mreact-compat" ||
+            source === "react" ||
+            source === "@reckona/mreact-compat/hooks"
+          ) {
+            const allowedImports =
+              source === "@reckona/mreact-compat/hooks" ? safeHookSubpathImports : safeHooks;
             if (
               node.type !== "ImportDeclaration" ||
               !list(node.specifiers).every(
                 (spec) =>
                   object(spec).importKind === "type" ||
                   (object(spec).type === "ImportSpecifier" &&
-                    safeHooks.has(String(object(object(spec).imported).name))),
+                    allowedImports.has(String(object(object(spec).imported).name))),
               )
             )
               return false;

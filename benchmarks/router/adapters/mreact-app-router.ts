@@ -643,7 +643,7 @@ function createMreactAppRouterAdapter(options: {
   };
 }
 
-async function createHydrationFixture(
+export async function createHydrationFixture(
   logEnabled: boolean,
   reactCompat: boolean,
   islandCount: number,
