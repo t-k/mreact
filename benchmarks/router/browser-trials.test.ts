@@ -48,6 +48,21 @@ it.each(["text", "replace", "delayed"])(
   },
 );
 
+it.each(["document", "window"])(
+  "observes synchronous %s capture handlers before they update DOM",
+  async (owner) => {
+    const target = await fixture(`let n=0;${owner}.addEventListener('click',e=>{
+    e.stopImmediatePropagation();
+    const start=performance.now();while(performance.now()-start<50){}
+    e.target.textContent='count: '+(++n);
+  },true)`);
+    const trial = await measureBrowserTrial(target, "domcontentloaded", { timeoutMs: 1500 });
+    expect(trial.status).toBe("completed");
+    expect(trial.first?.eventToDomMs).toBeGreaterThanOrEqual(50);
+    expect(trial.second?.eventToDomMs).toBeGreaterThanOrEqual(50);
+  },
+);
+
 it("rejects a visible counter with no handler and preserves its display measurement", async () => {
   const trial = await measureBrowserTrial(await fixture(), "domcontentloaded", { timeoutMs: 500 });
   expect(trial.status).toBe("failed");

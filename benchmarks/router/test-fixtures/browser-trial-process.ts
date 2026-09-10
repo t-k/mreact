@@ -5,7 +5,7 @@ import { measureBrowserTrial } from "../browser-trials.js";
 const server = createServer((_request, response) => {
   response.setHeader("content-type", "text/html");
   response.end(
-    "<!doctype html><button>count: 0</button><script>let n=0;document.querySelector('button').onclick=e=>e.target.textContent='count: '+(++n)</script>",
+    "<!doctype html><button>count: 0</button><script>let n=0;window.addEventListener('click',e=>{e.stopImmediatePropagation();e.target.textContent='count: '+(++n)},true)</script>",
   );
 });
 await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

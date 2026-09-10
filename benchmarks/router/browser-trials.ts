@@ -88,6 +88,19 @@ export async function measureBrowserTrial(
     const context = await browser.newContext();
     try {
       const page = await context.newPage();
+      const captureKey = `__mreactCapture_${randomUUID().replaceAll("-", "")}`;
+      await page.addInitScript((key) => {
+        const bridge = {
+          active: undefined as EventListenerObject | undefined,
+          handleEvent(event: Event) {
+            this.active?.handleEvent(event);
+          },
+        };
+        (window as unknown as Record<string, unknown>)[key] = bridge;
+        // Observe before application capture handlers, including synchronous DOM updates.
+        // The page context owns this listener; each interaction releases its active observer.
+        window.addEventListener("click", bridge, true);
+      }, captureKey);
       page.setDefaultTimeout(timeoutMs);
       page.setDefaultNavigationTimeout(timeoutMs);
       page.on("pageerror", (error) => {
@@ -113,10 +126,24 @@ export async function measureBrowserTrial(
       const failed = (data: FailedBrowserInteraction) => {
         trial.failedInteraction = data;
       };
-      trial.first = await observeCounterClick(page, target.counterPrefix, 0, timeoutMs, failed);
+      trial.first = await observeCounterClick(
+        page,
+        captureKey,
+        target.counterPrefix,
+        0,
+        timeoutMs,
+        failed,
+      );
       trial.navigationToVerifiedMs = trial.first.domObservedMs;
       trial.stage = "second interaction";
-      trial.second = await observeCounterClick(page, target.counterPrefix, 1, timeoutMs, failed);
+      trial.second = await observeCounterClick(
+        page,
+        captureKey,
+        target.counterPrefix,
+        1,
+        timeoutMs,
+        failed,
+      );
       if (trial.diagnostics.length) throw new Error("Page errors during browser trial");
       trial.stage = "completed";
       trial.status = "completed";
@@ -140,6 +167,7 @@ export async function measureBrowserTrial(
 
 async function observeCounterClick(
   page: Page,
+  captureKey: string,
   prefix: string,
   from: number,
   timeoutMs: number,
@@ -148,7 +176,11 @@ async function observeCounterClick(
   const key = `__mreactProbe_${randomUUID().replaceAll("-", "")}`;
   const button = page.getByRole("button", { name: `${prefix}${from}`, exact: true });
   await button.evaluate(
-    (element, { key, before, after }) => {
+    (element, { key, captureKey, before, after }) => {
+      const bridge = (window as unknown as Record<string, { active?: EventListenerObject }>)[
+        captureKey
+      ];
+      if (!bridge) throw new Error("Counter capture was not initialized");
       const parent = element.parentElement;
       if (!parent) throw new Error("Counter has no parent");
       const position = Array.from(parent.children).indexOf(element);
@@ -190,14 +222,14 @@ async function observeCounterClick(
           state.domObservedMs = performance.now();
       });
       observer.observe(parent, { subtree: true, childList: true, characterData: true });
-      document.addEventListener("click", capture, true);
+      bridge.active = capture;
       state.dispose = () => {
         observer.disconnect();
-        document.removeEventListener("click", capture, true);
+        if (bridge.active === capture) bridge.active = undefined;
       };
       (window as unknown as Record<string, unknown>)[key] = state;
     },
-    { key, before: `${prefix}${from}`, after: `${prefix}${from + 1}` },
+    { key, captureKey, before: `${prefix}${from}`, after: `${prefix}${from + 1}` },
   );
   try {
     await button.click({ timeout: timeoutMs });
