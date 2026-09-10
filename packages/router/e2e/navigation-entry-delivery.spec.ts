@@ -143,12 +143,21 @@ export default function Page() { return <main style="min-height:1800px;padding-t
       }
       await page.evaluate(() => window.scrollTo(0, 400));
       await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(400);
+      // A restored entry must be interactive again, not only visible.
+      const clickCounter = async () => {
+        const counterButton = page.getByRole("button", { name: /^count: / });
+        const count = Number((await counterButton.textContent())?.split(":")[1]);
+        await counterButton.click();
+        await expect(counterButton).toHaveText(`count: ${count + 1}`);
+      };
       await page.goBack();
       await expect(page.getByRole("heading", { name: "Third", exact: true })).toBeVisible();
+      await clickCounter();
       await checkpoint("back");
       await page.goForward();
       await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
       await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(400);
+      await clickCounter();
       await checkpoint("forward");
       await page.getByRole("link", { name: "Fallback", exact: true }).click();
       await expect(page.getByRole("heading", { name: "Fallback", exact: true })).toBeVisible();

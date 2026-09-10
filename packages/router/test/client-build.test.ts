@@ -8519,7 +8519,7 @@ export default function Page(props) {
     expect((replacedStates[0] as { html?: string }).html).toContain("mreact-props-index");
   });
 
-  test("saves the current route HTML before pushing a navigation entry", async () => {
+  test("saves the applied navigation response before pushing the next entry", async () => {
     const { routeModule } = await importRouteRuntime("pushstate-current-html");
     document.body.innerHTML = [
       '<div data-mreact-route-id="index"><main><h1>Home</h1><button type="button">count: 1</button></main></div>',
@@ -8531,22 +8531,80 @@ export default function Page(props) {
       replacedStates.push(state);
       return originalReplaceState(state, title, url);
     };
+    const aboutHtml = [
+      "<!DOCTYPE html>",
+      "<head><title>About title</title></head>",
+      '<div data-mreact-route-id="about"><main>About<!-- -->0</main></div>',
+      '<script type="application/json" id="mreact-props-about">{"count":0}</script>',
+    ].join("");
 
+    routeModule.__mreactNavigateToHtml(aboutHtml, "/about");
     routeModule.__mreactNavigateToHtml(
       [
-        "<!DOCTYPE html>",
-        '<div data-mreact-route-id="about"><main>About</main></div>',
-        '<script type="application/json" id="mreact-props-about">{}</script>',
+        '<div data-mreact-route-id="contact"><main>Contact</main></div>',
+        '<script type="application/json" id="mreact-props-contact">{}</script>',
       ].join(""),
-      "/about",
+      "/contact",
     );
 
-    expect(replacedStates[0]).toMatchObject({
-      __mreact: true,
-      url: expect.stringContaining("/"),
+    // The initial document has consumed its hydration markup and keeps no HTML, so traversal
+    // back to it refetches instead of restoring a DOM that cannot hydrate again.
+    expect(replacedStates[0]).toMatchObject({ __mreact: true, url: expect.stringContaining("/") });
+    expect((replacedStates[0] as { html?: string }).html).toBeUndefined();
+    // A navigated entry keeps the response that produced it, hydration markup and head included.
+    expect(replacedStates[1]).toMatchObject({ __mreact: true, url: expect.stringContaining("/about") });
+    expect((replacedStates[1] as { html?: string }).html).toBe(aboutHtml);
+  });
+
+  test("refetches an entry without hydratable HTML on popstate instead of reloading", async () => {
+    const { routeModule } = await importRouteRuntime("popstate-refetch");
+    const fetched: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      fetched.push(String(input));
+      return new Response(
+        [
+          '<div data-mreact-route-id="index"><main>Home again</main></div>',
+          '<script type="application/json" id="mreact-props-index">{}</script>',
+        ].join(""),
+        { headers: { "content-type": "text/html" }, status: 200 },
+      );
+    }) as typeof fetch;
+    const scrollCalls: Array<[number, number]> = [];
+    globalThis.scrollTo = ((x?: number | ScrollToOptions, y?: number) => {
+      if (typeof x === "number" && y !== undefined) scrollCalls.push([x, y]);
+    }) as typeof globalThis.scrollTo;
+    let reloads = 0;
+    const originalLocation = globalThis.location;
+    Object.defineProperty(globalThis, "location", {
+      configurable: true,
+      value: { ...originalLocation, href: originalLocation.href, origin: originalLocation.origin, reload: () => { reloads += 1; } },
     });
-    expect((replacedStates[0] as { html?: string }).html).toContain("count: 1");
-    expect((replacedStates[0] as { html?: string }).html).toContain("mreact-props-index");
+    try {
+      routeModule.__mreactNavigateToHtml(
+        [
+          '<div data-mreact-route-id="about"><main>About</main></div>',
+          '<script type="application/json" id="mreact-props-about">{}</script>',
+        ].join(""),
+        "/about",
+      );
+
+      dispatchEvent(
+        new PopStateEvent("popstate", {
+          state: { __mreact: true, scrollX: 0, scrollY: 25, url: "/" },
+        }),
+      );
+      await vi.waitFor(() => {
+        expect(document.querySelector("[data-mreact-route-id='index']")?.textContent).toBe("Home again");
+      });
+
+      // Route modules imported by earlier tests keep their own popstate listeners on this shared
+      // document, so only the fetched URL is exact here; the browser E2E covers a single fetch.
+      expect([...new Set(fetched)]).toEqual(["/"]);
+      expect(reloads).toBe(0);
+      expect(scrollCalls.at(-1)).toEqual([0, 25]);
+    } finally {
+      Object.defineProperty(globalThis, "location", { configurable: true, value: originalLocation });
+    }
   });
 
   test("does not intercept reload links", async () => {

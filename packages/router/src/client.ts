@@ -3134,6 +3134,7 @@ const navigationStateDeclarationSource = `const __mreactNavigationState = __mrea
   reloadNextNavigationFetch: false,
   routePrefetchManifest: undefined,
   routePrefetchManifestText: undefined,
+  routeHtml: undefined,
   viewportAnchors: new WeakMap(),
   viewportObserver: undefined,
   viewportMutationObserver: undefined,
@@ -4653,6 +4654,56 @@ export function __mreactRestoreHistoryState(state) {
   return true;
 }
 
+function __mreactRestoreHistoryEntry(state) {
+  // A newer traversal supersedes any refetch still in flight.
+  const traversal = {};
+  __mreactNavigationState.pendingTraversal = traversal;
+
+  if (__mreactRestoreHistoryState(state)) {
+    return true;
+  }
+
+  if (state === null || state === undefined || state.__mreact !== true || typeof state.url !== "string") {
+    return false;
+  }
+
+  // An entry without hydratable HTML, such as the initial document, is refetched so the
+  // document and its shared layout survive traversal instead of reloading.
+  return __mreactFetchNavigationHtmlOnce(state.url)
+    .then((result) => {
+      if (__mreactNavigationState.pendingTraversal !== traversal) {
+        return true;
+      }
+      if (typeof result.html !== "string" || !__mreactApplyNavigationHtml(result.html, state.url)) {
+        return false;
+      }
+      __mreactScrollTo(Number(state.scrollX ?? 0), Number(state.scrollY ?? 0));
+      return true;
+    })
+    .catch(() => false);
+}
+
+function __mreactFinishHistoryTraversal(state, restored) {
+  if (!restored) {
+    location.reload();
+    return;
+  }
+
+  __mreactNavigationState.historyEntryId = state.__mreactEntryId ?? __mreactNewHistoryEntryId();
+  __mreactSaveCurrentHistoryState();
+}
+
+function __mreactTraverseHistory(state) {
+  const restored = __mreactRestoreHistoryEntry(state);
+
+  if (restored === true || restored === false) {
+    __mreactFinishHistoryTraversal(state, restored);
+    return;
+  }
+
+  void restored.then((result) => __mreactFinishHistoryTraversal(state, result));
+}
+
 function __mreactApplyNavigationHtml(html, url) {
   const template = document.createElement("template");
   template.innerHTML = html.replace(/^\\s*<!doctype html>/i, "");
@@ -4678,6 +4729,8 @@ ${routeCleanupNavigationDispose}
     __mreactResumeNode(currentMarker, nextMarker);
   }
   __mreactSyncRouteDataScripts(routeDataScripts);
+  // The live DOM consumes its hydration markup, so history snapshots keep this response instead.
+  __mreactNavigationState.routeHtml = html;
 
   if (script !== null && script !== undefined) {
     void import(/* @vite-ignore */ script)
@@ -4899,19 +4952,10 @@ function __mreactCurrentHistoryState(url, entryId = __mreactNavigationState.hist
 }
 
 function __mreactCurrentDocumentRouteHtml() {
-  if (typeof document === "undefined") {
-    return undefined;
-  }
-
-  const marker = document.querySelector("[" + __mreactRouteMarkerAttribute + "]");
-  if (marker === null) {
-    return undefined;
-  }
-
-  const routeDataScripts = Array.from(document.querySelectorAll(__mreactRouteDataScriptSelector()))
-    .map((script) => script.outerHTML)
-    .join("");
-  return marker.outerHTML + routeDataScripts;
+  // Only the navigation response that produced this entry can hydrate again: the live DOM has
+  // consumed its hydration markup. The initial document has no response and is refetched.
+  const html = __mreactNavigationState.routeHtml;
+  return typeof html === "string" ? html : undefined;
 }
 
 function __mreactPushHistoryState(url) {
@@ -5209,22 +5253,14 @@ function __mreactInstallNavigation() {
   const pending = __mreactGlobal.__mreactPendingHistoryTraversal;
   delete __mreactGlobal.__mreactPendingHistoryTraversal;
   if (pending !== undefined) {
-    if (!__mreactRestoreHistoryState(pending.state)) {
-      location.reload();
-      return;
-    }
-    __mreactNavigationState.historyEntryId = pending.state.__mreactEntryId ?? __mreactNewHistoryEntryId();
+    __mreactTraverseHistory(pending.state);
+  } else {
+    __mreactSaveCurrentHistoryState();
   }
-  __mreactSaveCurrentHistoryState();
   addEventListener("popstate", (event) => {
     const state = __mreactNavigationState.historySnapshots?.get(event.state?.__mreactEntryId) ?? event.state;
     __mreactRememberDepartingHistoryEntry();
-    if (!__mreactRestoreHistoryState(state)) {
-      location.reload();
-      return;
-    }
-    __mreactNavigationState.historyEntryId = state.__mreactEntryId ?? __mreactNewHistoryEntryId();
-    __mreactSaveCurrentHistoryState();
+    __mreactTraverseHistory(state);
   });
   document.addEventListener("pointerover", (event) => {
     const anchor = __mreactAnchorFromEvent(event);
