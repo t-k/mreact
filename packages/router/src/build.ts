@@ -6873,17 +6873,12 @@ async function writeClientRouteBundles(options: {
   while (routeIds.has(routeIdForPath(navigationRoutePath))) {
     navigationRoutePath += "_";
   }
-  const navigationEntries: BuildClientRouteOutputOptions[] = needsNavigation
-    ? [
-        {
-          code: "export default undefined;",
-          filename: join(options.projectRoot, `${routeIdForPath(navigationRoutePath)}.tsx`),
-          routePath: navigationRoutePath,
-          clientNavigation: true,
-          forceInlineNavigationRuntime: true,
-        },
-      ]
-    : [];
+  const navigationRuntime = needsNavigation
+    ? {
+        filename: join(options.projectRoot, `${routeIdForPath(navigationRoutePath)}.tsx`),
+        routePath: navigationRoutePath,
+      }
+    : undefined;
 
   try {
     output = await buildClientRouteBatchOutput({
@@ -6892,7 +6887,8 @@ async function writeClientRouteBundles(options: {
       dropConsoleFunctions: options.clientConsolePureFunctions,
       minify: true,
       projectRoot: options.projectRoot,
-      routes: [...clientEntries.map((entry) => entry.build), ...navigationEntries],
+      ...(navigationRuntime === undefined ? {} : { navigationRuntime }),
+      routes: clientEntries.map((entry) => entry.build),
       sourceMap: options.sourceMaps !== "none",
       vitePlugins: options.vitePlugins,
     });

@@ -11,6 +11,7 @@ import {
   buildClientRouteBundle,
   buildClientRouteEntrySource,
   buildClientRouteOutput,
+  buildNavigationRuntimeBundle,
   collectClientRouteReferences,
 } from "../src/client.js";
 import { renderAppRequest } from "../src/render.js";
@@ -84,6 +85,29 @@ describe("mreact app client build and hydration markers", () => {
       configurable: true,
       value: undefined,
     });
+  });
+
+  test("the standalone navigation bundle omits route hydration", async () => {
+    const output = await buildNavigationRuntimeBundle({ minify: false });
+
+    for (const name of [
+      "__mreactNavigate",
+      "__mreactNavigateToHtml",
+      "__mreactPrefetch",
+      "__mreactGetNavigationState",
+      "__mreactInvalidateNavigationCache",
+      "__mreactRestoreHistoryState",
+    ]) {
+      expect(output.code).toMatch(new RegExp(`export\\s*\\{[^}]*\\b${name}\\b`));
+    }
+    expect(output.code).toContain("__mreactInstallNavigation");
+    // Navigation still replays the next route module's hydrate export by name, so only the
+    // entry's own hydrate definition and export must be gone.
+    expect(output.code).not.toMatch(/export\s*\{[^}]*\b__mreactHydrateRoute\b/);
+    expect(output.code).not.toMatch(/function __mreactHydrateRoute\b/);
+    expect(output.code).not.toContain("__mreactEvaluateHydrationNode");
+    expect(output.code).not.toContain("withPropBindingMetadata");
+    expect(output.code).not.toContain("__mreactClientReferenceManifests");
   });
 
   test("omits the navigation runtime when clientNavigation=false (issue 058)", async () => {

@@ -2831,18 +2831,141 @@ export async function buildNavigationRuntimeBundle(
     sourceMap?: boolean;
   } = {},
 ): Promise<{ code: string; map?: string }> {
-  return buildClientRouteOutput({
-    code: "export default undefined;",
-    filename: "__mreact_navigation_runtime.tsx",
-    routePath: "/__mreact_navigation_runtime",
-    clientNavigation: true,
-    forceInlineNavigationRuntime: true,
-    ...(options.dropConsoleFunctions === undefined
-      ? {}
-      : { dropConsoleFunctions: options.dropConsoleFunctions }),
-    ...(options.minify === undefined ? {} : { minify: options.minify }),
-    ...(options.sourceMap === undefined ? {} : { sourceMap: options.sourceMap }),
+  const filename = "__mreact_navigation_runtime.tsx";
+  const entry = buildNavigationEntrySource();
+  const sourceRegionModulePaths = new Set([filename]);
+  const runtimePlugin = workspaceRuntimePlugin({
+    debugLabels: false,
+    routeFiles: [filename],
+    sourceRegionModulePaths,
   });
+  const bundled = await bundleRouterModule({
+    code: entry.code,
+    define: {
+      __MREACT_CLIENT_DEVTOOLS__: "false",
+    },
+    filename,
+    dropConsoleFunctions: options.dropConsoleFunctions ?? resolveClientConsolePureFunctions(undefined),
+    minify: options.minify === true,
+    platform: "browser",
+    preserveExports: true,
+    sourceRegionModulePaths,
+    plugins: [runtimePlugin],
+    sourceMap: options.sourceMap,
+  });
+
+  return {
+    code: bundled.code,
+    ...(bundled.map === undefined ? {} : { map: bundled.map }),
+  };
+}
+
+export interface BuildNavigationEntrySourceOptions {
+  /**
+   * Import the route-independent hydration helpers from the shared virtual modules instead of
+   * inlining them. The batch build opts in so the navigation entry shares the resume walk with
+   * the route chunks; the standalone bundle keeps the inline shape.
+   */
+  shareHydrationRuntime?: boolean | undefined;
+}
+
+/**
+ * Generates the dedicated client navigation entry.
+ *
+ * Navigation used to be emitted as a pseudo route that carried the full route hydration entry: props parsing, client reference registry, reactive DOM metadata imports, and an initial hydrate call that never found a marker. The dedicated entry keeps only what the navigation runtime references: the resume walk with cleanup-only binding synchronisers, the hydration mark/report helpers navigation replays for the next route module, and the shared navigation state.
+ */
+export function buildNavigationEntrySource(
+  options: BuildNavigationEntrySourceOptions = {},
+): { code: string } {
+  const shareHydrationRuntime = options.shareHydrationRuntime === true;
+  const routeId = routeIdForPath("/__mreact_navigation_runtime");
+  const historyCacheImport = `import { rememberNavigationHistorySnapshot as __mreactRememberHistorySnapshot } from ${JSON.stringify(workspacePackageFile({ currentFileUrl: import.meta.url, monorepoDir: "router", packageName: "@reckona/mreact-router", entry: "navigation-history-cache" }))};\n`;
+  const routeDataImport = `import { takeNavigationRouteDataScripts as __mreactTakeRouteDataScripts } from ${JSON.stringify(workspacePackageFile({ currentFileUrl: import.meta.url, monorepoDir: "router", packageName: "@reckona/mreact-router", entry: "navigation-route-data" }))};\n`;
+  const hydrationRuntimeImportBlock = shareHydrationRuntime
+    ? `import { __mreactRunLifecycleTasks } from ${JSON.stringify(routeHydrationRuntimeSpecifier("lifecycle"))};
+import { __mreactCreateRouteResumeRuntime } from ${JSON.stringify(routeHydrationRuntimeSpecifier("resume"))};
+import { __mreactApplyOutOfOrderFragments } from ${JSON.stringify(routeHydrationRuntimeSpecifier("fragments"))};
+`
+    : "";
+  const inlineHydrationRuntime = shareHydrationRuntime
+    ? ""
+    : `${routeHydrationRuntimeInlineSource("fragments")}${routeHydrationRuntimeInlineSource("resume")}`;
+  const inlineLifecycleRuntime = shareHydrationRuntime
+    ? ""
+    : `\n${routeHydrationRuntimeInlineSource("lifecycle")}`;
+  // Navigation only resumes the shared shell of the departing route, so the binding synchronisers
+  // dispose captured events and leave DOM refs to the route module that owns them.
+  const resumeRuntimeBindings = shareHydrationRuntime
+    ? `const {
+  resumeNode: __mreactResumeNode,
+  unmountCompatBoundaries: __mreactUnmountCompatBoundaries,
+} = __mreactCreateRouteResumeRuntime(__mreactSyncEventBindings, __mreactSyncDomRefBindings);
+`
+    : "";
+  const entry = `${historyCacheImport}${routeDataImport}${hydrationRuntimeImportBlock}
+const __mreactRouteId = ${JSON.stringify(routeId)};
+const __mreactRouteMarkerAttribute = ${JSON.stringify(routeHydrationContract.routeMarkerAttribute)};
+const __mreactRouteHydratedAttribute = ${JSON.stringify(routeHydrationContract.hydratedAttribute)};
+const __mreactGlobal = globalThis;
+${resumeRuntimeBindings}${navigationStateDeclarationSource}
+${inlineLifecycleRuntime}
+function __mreactMarkRouteHydrated() {
+  if (typeof document !== "undefined") {
+    document.documentElement.setAttribute(__mreactRouteHydratedAttribute, "true");
+  }
+
+  if (typeof window !== "undefined" && typeof CustomEvent === "function") {
+    window.dispatchEvent(new CustomEvent("mreact:hydrated", {
+      detail: { routeId: __mreactRouteId },
+    }));
+  }
+}
+
+function __mreactMarkRouteHydrating() {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  document.documentElement.removeAttribute(__mreactRouteHydratedAttribute);
+}
+
+const __mreactRouteHydrationReported = Symbol.for("mreact.routeHydrationReported");
+
+function __mreactReportRouteHydrationError(error) {
+  if (error !== null && typeof error === "object") {
+    if (error[__mreactRouteHydrationReported] === true) {
+      return;
+    }
+    error[__mreactRouteHydrationReported] = true;
+  }
+
+  if (typeof console !== "undefined" && typeof console.error === "function") {
+    console.error(
+      \`mreact: route hydration failed for route "\${__mreactRouteId}". Server HTML remains visible, but client interactivity for this route was not attached.\`,
+      error,
+    );
+  }
+}
+
+function __mreactRunRouteHydration(factory) {
+  try {
+    return factory();
+  } catch (error) {
+    __mreactReportRouteHydrationError(error);
+    throw error;
+  }
+}
+
+__mreactInstallNavigation();
+
+${inlineNavigationRuntimeSource()}
+${routeCleanupOnlyEventBindingSyncSource}
+function __mreactSyncDomRefBindings() {}
+${inlineHydrationRuntime}`;
+
+  return {
+    code: stripTypeScriptWithOxc(entry),
+  };
 }
 
 export async function buildClientRouteOutput(
@@ -2886,12 +3009,31 @@ export async function buildClientRouteBatchOutput(options: {
   cacheDir?: string | undefined;
   dropConsoleFunctions?: readonly string[] | undefined;
   minify?: boolean;
+  /**
+   * Emit the dedicated navigation runtime entry alongside the routes. It stays a separate entry
+   * so importing a route cannot install navigation, while sharing the hydration runtime chunks.
+   */
+  navigationRuntime?: { filename: string; routePath: string } | undefined;
   projectRoot?: string | undefined;
   routes: readonly BuildClientRouteOutputOptions[];
   sourceMap?: boolean;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<BuildClientRouteBatchOutput> {
-  const entries = await Promise.all(
+  const navigationRuntime = options.navigationRuntime;
+  const entryCount = options.routes.length + (navigationRuntime === undefined ? 0 : 1);
+  const navigationEntries =
+    navigationRuntime === undefined
+      ? []
+      : [
+          {
+            filename: navigationRuntime.filename,
+            name: routeIdForPath(navigationRuntime.routePath),
+            preserveExports: true,
+            routePath: navigationRuntime.routePath,
+            source: buildNavigationEntrySource({ shareHydrationRuntime: entryCount > 1 }),
+          },
+        ];
+  const routeEntries = await Promise.all(
     options.routes.map(async (route) => ({
       filename: route.filename,
       name: routeIdForPath(route.routePath),
@@ -2906,12 +3048,13 @@ export async function buildClientRouteBatchOutput(options: {
         // Only a build with more than one entry can hoist the hydration helpers into a shared
         // chunk. A single entry would inline the same modules and pay the factory indirection
         // for nothing, so it keeps the inline shape.
-        shareHydrationRuntime: options.routes.length > 1,
+        shareHydrationRuntime: entryCount > 1,
         sourceMap: options.sourceMap ?? route.sourceMap,
         vitePlugins: options.vitePlugins ?? route.vitePlugins,
       }),
     })),
   );
+  const entries = [...routeEntries, ...navigationEntries];
   const debugLabels = options.routes.some((route) => route.debugLabels === true);
   const sourceRegionModulePaths = debugLabels
     ? undefined
@@ -2964,6 +3107,58 @@ export async function buildClientRouteBatchOutput(options: {
     }),
   };
 }
+
+const navigationStateDeclarationSource = `const __mreactNavigationState = __mreactGlobal.__mreactNavigationState ??= {
+  cache: new Map(),
+  cacheTokens: new Map(),
+  current: {
+    from: null,
+    pending: false,
+    to: null,
+    type: null,
+  },
+  fetchRevalidationInstalled: false,
+  installed: false,
+  navigationFetchInits: new WeakSet(),
+  pendingHtmlFetches: new Map(),
+  prefetchedUrls: new Set(),
+  prefetchedScripts: new Set(),
+  reloadNextNavigationFetch: false,
+  routePrefetchManifest: undefined,
+  routePrefetchManifestText: undefined,
+  viewportAnchors: new WeakMap(),
+  viewportObserver: undefined,
+  viewportMutationObserver: undefined,
+};
+__mreactNavigationState.cacheTokens ??= new Map();
+__mreactNavigationState.navigationFetchInits ??= new WeakSet();`;
+
+// Navigation entries and boundary-only routes never bind captured events themselves, so the
+// synchroniser only disposes listeners left by the previous route.
+const routeCleanupOnlyEventBindingSyncSource = `function __mreactSyncEventBindings(current) {
+  const previousDisposers = current.__mreactEventDisposers;
+
+  if (Array.isArray(previousDisposers)) {
+    __mreactRunLifecycleTasks(previousDisposers, (dispose) => dispose());
+  }
+
+  current.__mreactEventDisposers = [];
+  current.__mreactHasEvents = false;
+}
+`;
+
+const routeCleanupNavigationDispose = `  if (currentRouteId !== nextRouteId) {
+    const __mreactRegisteredRouteDisposers = __mreactGlobal.__mreactRouteDisposers;
+    const __mreactRegisteredRouteDispose = __mreactRegisteredRouteDisposers?.get(currentRouteId);
+    if (__mreactRegisteredRouteDispose !== undefined) {
+      __mreactRegisteredRouteDisposers.delete(currentRouteId);
+      __mreactRunLifecycleTasks(
+        [__mreactRegisteredRouteDispose],
+        (__mreactDispose) => __mreactDispose(),
+      );
+    }
+  }
+`;
 
 export async function buildClientRouteEntrySource(
   options: BuildClientRouteOutputOptions,
@@ -3082,32 +3277,7 @@ export async function buildClientRouteEntrySource(
   const routeReactiveDomMetadataImport = !routeUsesOnlyClientReferenceBoundaries
     ? `${routeCapturedEventImport}import { ${routeUsesDomRefs ? "getDomRefBindings as __mreactGetDomRefBindings, " : ""}withEventBindingMetadata as __mreactWithEventBindingMetadata, withPropBindingMetadata as __mreactWithPropBindingMetadata } from "@reckona/mreact-reactive-dom";\n`
     : "";
-  const navigationStateDeclaration = inlineClientNavigation
-    ? `const __mreactNavigationState = __mreactGlobal.__mreactNavigationState ??= {
-  cache: new Map(),
-  cacheTokens: new Map(),
-  current: {
-    from: null,
-    pending: false,
-    to: null,
-    type: null,
-  },
-  fetchRevalidationInstalled: false,
-  installed: false,
-  navigationFetchInits: new WeakSet(),
-  pendingHtmlFetches: new Map(),
-  prefetchedUrls: new Set(),
-  prefetchedScripts: new Set(),
-  reloadNextNavigationFetch: false,
-  routePrefetchManifest: undefined,
-  routePrefetchManifestText: undefined,
-  viewportAnchors: new WeakMap(),
-  viewportObserver: undefined,
-  viewportMutationObserver: undefined,
-};
-__mreactNavigationState.cacheTokens ??= new Map();
-__mreactNavigationState.navigationFetchInits ??= new WeakSet();`
-    : "";
+  const navigationStateDeclaration = inlineClientNavigation ? navigationStateDeclarationSource : "";
   const deferredNavigationRuntime = deferredClientNavigation
     ? `
 let __mreactDeferredNavigationRuntime = undefined;
@@ -3424,18 +3594,6 @@ function __mreactDisposeRoute(routeId) {
 }
 `
     : "";
-  const routeCleanupNavigationDispose = `  if (currentRouteId !== nextRouteId) {
-    const __mreactRegisteredRouteDisposers = __mreactGlobal.__mreactRouteDisposers;
-    const __mreactRegisteredRouteDispose = __mreactRegisteredRouteDisposers?.get(currentRouteId);
-    if (__mreactRegisteredRouteDispose !== undefined) {
-      __mreactRegisteredRouteDisposers.delete(currentRouteId);
-      __mreactRunLifecycleTasks(
-        [__mreactRegisteredRouteDispose],
-        (__mreactDispose) => __mreactDispose(),
-      );
-    }
-  }
-`;
   const routeNodeResolver = routeUsesCells
     ? `
 function __mreactResolveRouteNode(value) {
@@ -3499,17 +3657,7 @@ function __mreactResolveRouteNode(value) {
   current.__mreactHasEvents = true;
 }
 `
-    : `function __mreactSyncEventBindings(current) {
-  const previousDisposers = current.__mreactEventDisposers;
-
-  if (Array.isArray(previousDisposers)) {
-    __mreactRunLifecycleTasks(previousDisposers, (dispose) => dispose());
-  }
-
-  current.__mreactEventDisposers = [];
-  current.__mreactHasEvents = false;
-}
-`;
+    : routeCleanupOnlyEventBindingSyncSource;
   const routeDomRefBindingSyncFunction = routeUsesDomRefs
     ? `function __mreactSyncDomRefBindings(current, next) {
   __mreactRunLifecycleTasks(
@@ -3716,9 +3864,23 @@ ${deferredNavigationRuntime}
 __mreactRunRouteHydration(() => __mreactHydrateRoute());
 ${clientNavigation ? "__mreactInstallNavigation();" : ""}
 
-${
-  inlineClientNavigation
-    ? `export function __mreactNavigateToHtml(html, url, options = {}) {
+${inlineClientNavigation ? inlineNavigationRuntimeSource() : ""}
+
+${routeEventBindingSyncFunction}
+${routeDomRefBindingSyncFunction}
+${routeInlineHydrationRuntime}`;
+  return {
+    code: stripTypeScriptWithOxc(entry),
+  };
+}
+
+/**
+ * Emits the client navigation runtime shared by inline route entries and the dedicated navigation entry.
+ *
+ * The template only depends on the route hydration contract and a small set of helpers the host entry must define: the resume walk bindings, the out-of-order fragment helper, the hydration mark/report helpers, the route data script helper, and the history snapshot cache.
+ */
+function inlineNavigationRuntimeSource(): string {
+  return `export function __mreactNavigateToHtml(html, url, options = {}) {
   __mreactSaveCurrentHistoryState();
   const applied = __mreactApplyNavigationHtml(html, url);
 
@@ -5445,16 +5607,7 @@ function __mreactForgetViewportPrefetchAnchor(anchor) {
   __mreactNavigationState.viewportObserver?.unobserve(anchor);
   __mreactNavigationState.viewportAnchors.delete(anchor);
 }
-`
-    : ""
-}
-
-${routeEventBindingSyncFunction}
-${routeDomRefBindingSyncFunction}
-${routeInlineHydrationRuntime}`;
-  return {
-    code: stripTypeScriptWithOxc(entry),
-  };
+`;
 }
 
 function workspaceRuntimePlugin(options: {

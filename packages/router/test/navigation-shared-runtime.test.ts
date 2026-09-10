@@ -238,4 +238,30 @@ export default function Page() {
     expect(home?.navigationScript).toBeUndefined();
     expect(routeCode).not.toMatch(/export\s*\{[^}]*\b__mreactHydrateRoute\b/);
   });
+
+  test("the shared navigation entry is a dedicated runtime without route hydration", async () => {
+    const { manifest, clientDir } = await buildFixture({
+      "page.tsx": `export const clientNavigation = true;\n${interactivePage}`,
+      "about/page.tsx": staticPage,
+    });
+    const home = manifest.routes.find((route) => route.path === "/");
+    const navigationCode = await readFile(join(clientDir, home?.navigationScript ?? ""), "utf8");
+
+    for (const name of [
+      "__mreactNavigate",
+      "__mreactNavigateToHtml",
+      "__mreactPrefetch",
+      "__mreactGetNavigationState",
+      "__mreactInvalidateNavigationCache",
+      "__mreactRestoreHistoryState",
+    ]) {
+      expect(navigationCode).toMatch(new RegExp(`export\\s*\\{[^}]*\\b${name}\\b`));
+    }
+    // Navigation still replays the next route module's hydrate export by name, so only the
+    // entry's own hydrate definition and export must be gone.
+    expect(navigationCode).not.toMatch(/export\s*\{[^}]*\b__mreactHydrateRoute\b/);
+    expect(navigationCode).not.toMatch(/function __mreactHydrateRoute\b/);
+    expect(navigationCode).not.toContain("__mreactEvaluateHydrationNode");
+    expect(navigationCode).not.toContain("__mreactClientReferenceManifests");
+  });
 });

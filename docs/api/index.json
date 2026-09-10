@@ -156971,9 +156971,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/build.ts",
-									"line": 7357,
+									"line": 7353,
 									"character": 22,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/build.ts#L7357"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/build.ts#L7353"
 								}
 							],
 							"signatures": [
@@ -157010,9 +157010,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/build.ts",
-											"line": 7357,
+											"line": 7353,
 											"character": 22,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/build.ts#L7357"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/build.ts#L7353"
 										}
 									],
 									"parameters": [
@@ -157060,9 +157060,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/build.ts",
-									"line": 7482,
+									"line": 7478,
 									"character": 22,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/build.ts#L7482"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/build.ts#L7478"
 								}
 							],
 							"signatures": [
@@ -157107,9 +157107,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/build.ts",
-											"line": 7482,
+											"line": 7478,
 											"character": 22,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/build.ts#L7482"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/build.ts#L7478"
 										}
 									],
 									"parameters": [
