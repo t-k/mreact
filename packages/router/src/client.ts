@@ -3594,7 +3594,10 @@ ${routeCellHydrationIndent}}
   const historyCacheImport = inlineClientNavigation
     ? `import { rememberNavigationHistorySnapshot as __mreactRememberHistorySnapshot } from ${JSON.stringify(workspacePackageFile({ currentFileUrl: import.meta.url, monorepoDir: "router", packageName: "@reckona/mreact-router", entry: "navigation-history-cache" }))};\n`
     : "";
-  const entry = `${historyCacheImport}${routeHydrationRuntimeImportBlock}${routeCellEffectImport}${routeCleanupScopeImport}${routeReactiveDomMetadataImport}${emitCompatClientReferenceImportBlock(compatClientReferenceNames)}${clientReferenceImportBlock}${routeHydrationCode}
+  const routeDataImport = inlineClientNavigation
+    ? `import { takeNavigationRouteDataScripts as __mreactTakeRouteDataScripts } from ${JSON.stringify(workspacePackageFile({ currentFileUrl: import.meta.url, monorepoDir: "router", packageName: "@reckona/mreact-router", entry: "navigation-route-data" }))};\n`
+    : "";
+  const entry = `${historyCacheImport}${routeDataImport}${routeHydrationRuntimeImportBlock}${routeCellEffectImport}${routeCleanupScopeImport}${routeReactiveDomMetadataImport}${emitCompatClientReferenceImportBlock(compatClientReferenceNames)}${clientReferenceImportBlock}${routeHydrationCode}
 
 const __mreactRouteId = ${JSON.stringify(routeId)};
   const __mreactRouteStateSignature = ${JSON.stringify(routeStateSignature)};
@@ -4493,6 +4496,9 @@ function __mreactApplyNavigationHtml(html, url) {
 
   const currentRouteId = currentMarker.getAttribute("${routeHydrationContract.routeMarkerAttribute}");
   const nextRouteId = nextMarker.getAttribute("${routeHydrationContract.routeMarkerAttribute}");
+  // Shell reconciliation can move these nodes out of the incoming fragment.
+  const script = template.content.querySelector('script[type="module"][src]')?.getAttribute("src");
+  const routeDataScripts = __mreactTakeRouteDataScripts(template.content, __mreactRouteDataScriptIds(currentRouteId, nextRouteId));
 
 ${routeCleanupNavigationDispose}
   __mreactMarkRouteHydrating();
@@ -4501,9 +4507,8 @@ ${routeCleanupNavigationDispose}
     __mreactUnmountCompatBoundaries(currentMarker);
     __mreactResumeNode(currentMarker, nextMarker);
   }
-  __mreactSyncRouteDataScripts(template.content, currentRouteId, nextRouteId);
+  __mreactSyncRouteDataScripts(routeDataScripts);
 
-  const script = template.content.querySelector('script[type="module"][src]')?.getAttribute("src");
   if (script !== null && script !== undefined) {
     void import(/* @vite-ignore */ script)
       .then((module) => __mreactRunRouteHydration(() => module.${routeHydrationContract.routeHydrateExport}?.()))
@@ -4682,18 +4687,9 @@ function __mreactManagedHeadMetadataSelector() {
   ].join(",");
 }
 
-function __mreactSyncRouteDataScripts(root, currentRouteId, nextRouteId) {
-  const managedIds = __mreactRouteDataScriptIds(currentRouteId, nextRouteId);
-
-  if (managedIds.size === 0) {
-    return;
-  }
-
-  for (const id of managedIds) {
+function __mreactSyncRouteDataScripts(scripts) {
+  for (const [id, next] of scripts) {
     document.getElementById(id)?.remove();
-    const next = typeof root.getElementById === "function"
-      ? root.getElementById(id)
-      : root.querySelector(\`#\${id}\`);
 
     if (next !== null && next !== undefined) {
       document.body.appendChild(next);

@@ -8700,6 +8700,29 @@ export default function Page(props) {
     expect(document.getElementById("mreact-route-announcement")?.textContent).toBe("Loaded About");
   });
 
+  test("retains route data scripts when navigation moves a new shell into the document", async () => {
+    const { routeModule } = await importRouteRuntime("shell-route-data");
+    document.body.innerHTML =
+      '<section data-mreact-layout-boundary="root"><div data-mreact-route-id="index"><main>Home</main></div><script type="module"></script></section>';
+    for (const id of ["other", "third"]) {
+      expect(
+        routeModule.__mreactNavigateToHtml(
+          [
+            '<section data-mreact-layout-boundary="root">',
+            `<div data-mreact-route-id="${id}"><main>${id}</main></div>`,
+            `<script type="application/json" id="mreact-props-${id}">{"page":"${id}"}</script>`,
+            `<script type="application/json" id="mreact-client-references-${id}">[]</script>`,
+            "</section>",
+          ].join(""),
+          `/${id}`,
+        ),
+      ).toBe(true);
+      expect(document.getElementById(`mreact-props-${id}`)?.textContent).toBe(`{"page":"${id}"}`);
+      expect(document.getElementById(`mreact-client-references-${id}`)?.textContent).toBe("[]");
+    }
+    expect(document.getElementById("mreact-props-other")).toBeNull();
+  });
+
   test("preserves layout boundaries and remounts template boundaries on navigation", async () => {
     const { routeModule } = await importRouteRuntime("shell-boundaries");
     document.body.innerHTML = [
