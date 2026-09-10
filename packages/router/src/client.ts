@@ -4211,6 +4211,7 @@ export async function __mreactNavigate(url, options = {}) {
   // A navigation outranks a history refetch from the moment it starts, so a refetch that
   // resolves during a view transition cannot flash the other page first.
   __mreactNavigationState.pendingTraversal = undefined;
+  __mreactNavigationState.pendingTraversalState = undefined;
   __mreactSetNavigationState(__mreactPendingNavigationState(href, options.type ?? "push"));
 
   try {

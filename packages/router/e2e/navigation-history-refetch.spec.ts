@@ -111,6 +111,52 @@ test("a link navigation during a history refetch wins over the refetched entry",
   }
 });
 
+test("an overtaken refetch does not clear the pending state of the navigation in flight", async ({
+  page,
+}) => {
+  const fixture = await startFixture();
+  const holds = new Map<string, () => void>();
+  const held = (key: string) =>
+    new Promise<void>((resolve) => {
+      holds.set(key, resolve);
+    });
+  const pendingAttribute = () =>
+    page.evaluate(() => document.documentElement.hasAttribute("data-mreact-navigation-pending"));
+  try {
+    await page.route("**/*", async (route) => {
+      const request = route.request();
+      const pathname = new URL(request.url()).pathname;
+      if (request.headers()["x-mreact-navigation"] === "1" && (pathname === "/" || pathname === "/third")) {
+        await held(pathname);
+      }
+      await route.continue();
+    });
+    await page.goto(fixture.url);
+    await markDocument(page);
+    await page.getByRole("link", { name: "Other", exact: true }).click();
+    await expectInteractive(page, "Other");
+    await page.goBack();
+    await expect.poll(() => holds.has("/")).toBe(true);
+    await expect(pendingAttribute()).resolves.toBe(true);
+
+    await page.getByRole("link", { name: "Third", exact: true }).click();
+    await expect.poll(() => holds.has("/third")).toBe(true);
+    holds.get("/")?.();
+    await page.waitForTimeout(300);
+
+    // The refetch was overtaken, but the link navigation is still in flight and still pending.
+    await expect(pendingAttribute()).resolves.toBe(true);
+    await expect(page.getByRole("heading", { name: "Other", exact: true })).toBeVisible();
+
+    holds.get("/third")?.();
+    await expectInteractive(page, "Third");
+    await expect(pendingAttribute()).resolves.toBe(false);
+    await expect(sameDocument(page)).resolves.toBe(true);
+  } finally {
+    await fixture.close();
+  }
+});
+
 test("a second traversal during a history refetch keeps its own entry", async ({ page }) => {
   const fixture = await startFixture();
   let releaseRefetch: (() => void) | undefined;
