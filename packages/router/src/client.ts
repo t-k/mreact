@@ -3135,6 +3135,7 @@ const navigationStateDeclarationSource = `const __mreactNavigationState = __mrea
   routePrefetchManifest: undefined,
   routePrefetchManifestText: undefined,
   pendingTraversal: undefined,
+  pendingTraversalState: undefined,
   routeHtml: undefined,
   viewportAnchors: new WeakMap(),
   viewportObserver: undefined,
@@ -4207,6 +4208,9 @@ export async function __mreactNavigate(url, options = {}) {
     return false;
   }
 
+  // A navigation outranks a history refetch from the moment it starts, so a refetch that
+  // resolves during a view transition cannot flash the other page first.
+  __mreactNavigationState.pendingTraversal = undefined;
   __mreactSetNavigationState(__mreactPendingNavigationState(href, options.type ?? "push"));
 
   try {
@@ -4689,14 +4693,24 @@ function __mreactRestoreHistoryEntry(state) {
   // An entry without hydratable HTML, such as the initial document, is refetched so the
   // document and its shared layout survive traversal instead of reloading.
   __mreactSetNavigationState(__mreactPendingNavigationState(href, "pop"));
+  __mreactNavigationState.pendingTraversalState = traversal;
   const superseded = () => __mreactNavigationState.pendingTraversal !== traversal;
+  // A navigation that overtook this refetch owns the state only while it is pending itself;
+  // a synchronous restore does not touch it, so this traversal still has to settle its own.
+  const settleState = () => {
+    if (__mreactNavigationState.pendingTraversalState === traversal) {
+      __mreactNavigationState.pendingTraversalState = undefined;
+      __mreactSetNavigationState(__mreactIdleNavigationState());
+    }
+  };
   return __mreactResolveNavigationHtml(href)
     .then(
       (html) => {
         if (superseded()) {
+          settleState();
           return "superseded";
         }
-        __mreactSetNavigationState(__mreactIdleNavigationState());
+        settleState();
         if (html === undefined || !__mreactApplyNavigationHtml(html, href)) {
           return false;
         }
@@ -4704,13 +4718,14 @@ function __mreactRestoreHistoryEntry(state) {
         return true;
       },
       () => {
-        if (superseded()) {
-          return "superseded";
-        }
-        __mreactSetNavigationState(__mreactIdleNavigationState());
-        return false;
+        settleState();
+        return superseded() ? "superseded" : false;
       },
-    );
+    )
+    .catch(() => {
+      settleState();
+      return superseded() ? "superseded" : false;
+    });
 }
 
 function __mreactFinishHistoryTraversal(state, restored) {

@@ -146,6 +146,10 @@ test("a second traversal during a history refetch keeps its own entry", async ({
     await expect(page).toHaveURL(/\/other$/);
     await expect(page.evaluate(() => history.state?.__mreactEntryId)).resolves.toBe(entryId);
     await expect(sameDocument(page)).resolves.toBe(true);
+    // The synchronous restore does not own navigation state, so the overtaken refetch settles it.
+    await expect(
+      page.evaluate(() => document.documentElement.hasAttribute("data-mreact-navigation-pending")),
+    ).resolves.toBe(false);
     await page.goBack();
     await expectInteractive(page, "Home");
   } finally {
