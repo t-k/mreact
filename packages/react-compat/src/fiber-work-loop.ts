@@ -23,7 +23,7 @@ import {
 } from "./fiber-reconciler.js";
 import { withContextEnvironment } from "./context.js";
 
-const fiberRootsByContainer = new WeakMap<Element, FiberRoot>();
+const fiberRootsByContainer = new WeakMap<Node, FiberRoot>();
 
 export interface ConcurrentRenderOptions {
   shouldYield?: () => boolean;
@@ -33,20 +33,20 @@ export type ConcurrentRenderResult =
   | { status: "completed"; finishedWork: Fiber }
   | { status: "yielded" };
 
-export function createContainerFiberRoot(container: Element): FiberRoot {
-  const existing = fiberRootsByContainer.get(container);
+export function createContainerFiberRoot(container: Element, ownershipKey: Node = container): FiberRoot {
+  const existing = fiberRootsByContainer.get(ownershipKey);
 
   if (existing !== undefined) {
     return existing;
   }
 
   const root = createFiberRoot(container);
-  fiberRootsByContainer.set(container, root);
+  fiberRootsByContainer.set(ownershipKey, root);
   return root;
 }
 
 export function getFiberRootForContainer(
-  container: Element,
+  container: Node,
 ): FiberRoot | undefined {
   return fiberRootsByContainer.get(container);
 }

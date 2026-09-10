@@ -707,7 +707,7 @@ describe("react-compat deep hydration", () => {
       "<span>outside</span><!--mreact-h:start:app--><button>client</button><!--mreact-h:end:app-->",
     );
 
-    const fiberRoot = getFiberRootForContainer(container);
+    const fiberRoot = getFiberRootForContainer(container.childNodes[1]!);
     expect(fiberRoot?.hydrationState?.resumeId).toBe("app");
     expect(fiberRoot?.current.child?.tag).toBe("host-component");
   });

@@ -128,7 +128,7 @@ interface DevToolsCommitProfilingData {
   }>;
 }
 
-const roots = new WeakMap<Element, DevToolsRoot>();
+const roots = new WeakMap<object, DevToolsRoot>();
 const hostInstanceFibers = new WeakMap<object, DevToolsFiber>();
 const rootHostInstances = new WeakMap<DevToolsRoot, object[]>();
 let rendererRoots = new Set<DevToolsRoot>();
@@ -156,7 +156,8 @@ export function commitDevToolsRoot(
     return;
   }
 
-  const previousRoot = roots.get(container);
+  const ownershipKey = isFiberRoot(source) ? source : container;
+  const previousRoot = roots.get(ownershipKey);
   const commitStart = getCurrentTime();
 
   if (previousRoot !== undefined) {
@@ -176,21 +177,21 @@ export function commitDevToolsRoot(
     rootHostInstances.set(root, rootHostInstances.get(nextRoot) ?? []);
   }
 
-  roots.set(container, root);
+  roots.set(ownershipKey, root);
   rendererRoots.add(root);
   recordDevToolsCommit(root, commitStart);
   hook.onCommitFiberRoot?.(id, root, undefined, didError);
   hook.onPostCommitFiberRoot?.(id, root);
 }
 
-export function unmountDevToolsRoot(container: Element): void {
+export function unmountDevToolsRoot(container: Element, ownershipKey: object = container): void {
   if (typeof __MREACT_CLIENT_DEVTOOLS__ !== "undefined" && __MREACT_CLIENT_DEVTOOLS__ === false) {
     return;
   }
 
   const hook = getDevToolsHook();
   const id = injectDevToolsRenderer(hook);
-  const root = roots.get(container);
+  const root = roots.get(ownershipKey);
 
   if (hook === undefined || id === undefined || root === undefined) {
     return;
@@ -202,7 +203,7 @@ export function unmountDevToolsRoot(container: Element): void {
   hook.onPostCommitFiberRoot?.(id, root);
   rendererRoots.delete(root);
   clearHostInstanceFibers(root);
-  roots.delete(container);
+  roots.delete(ownershipKey);
 }
 
 function injectDevToolsRenderer(hook: DevToolsHook | undefined): number | undefined {

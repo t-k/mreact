@@ -94,17 +94,37 @@ export function getHydrationScope(
   }
 
   const encodedId = encodeURIComponent(resumeId);
-  const start = findComment(container, `mreact-h:start:${encodedId}`);
-  const end =
-    start === null ? null : findFollowingComment(start, `mreact-h:end:${encodedId}`);
+  const walker = container.ownerDocument.createTreeWalker(container, 128);
+  const starts: Comment[] = [];
+  const ends: Comment[] = [];
+  while (walker.nextNode()) {
+    const comment = walker.currentNode as Comment;
+    if (comment.data === `mreact-h:start:${encodedId}`) starts.push(comment);
+    if (comment.data === `mreact-h:end:${encodedId}`) ends.push(comment);
+  }
+  const start = starts[0];
+  const end = ends[0];
+  if (starts.length !== 1 || ends.length !== 1 ||
+      start === undefined || end === undefined || start.parentNode === null ||
+      start.parentNode !== end.parentNode) {
+    throw new Error(`Invalid hydration range markers for ${resumeId}.`);
+  }
 
-  if (start === null || end === null || start.parentNode === null) {
-    return {
-      parent: container,
-      previousNodes: Array.from(container.childNodes),
-      before: null,
-      after: null,
-    };
+  // Validate nesting only inside the requested range; other streamed ranges may be incomplete.
+  const stack: string[] = [];
+  let next: ChildNode | null = start;
+  while (next !== null && next !== end) {
+    if (next.nodeType === 8) {
+      const value = (next as Comment).data;
+      if (value.startsWith("mreact-h:start:")) stack.push(value.slice(15));
+      if (value.startsWith("mreact-h:end:") && stack.pop() !== value.slice(13)) {
+        throw new Error(`Invalid hydration range markers for ${resumeId}.`);
+      }
+    }
+    next = next.nextSibling;
+  }
+  if (next !== end || stack.length !== 1 || stack[0] !== encodedId) {
+    throw new Error(`Invalid hydration range markers for ${resumeId}.`);
   }
 
   return {
@@ -368,32 +388,4 @@ function readResumeMarkerId(
   return value.startsWith(prefix)
     ? decodeURIComponent(value.slice(prefix.length))
     : undefined;
-}
-
-function findComment(root: ParentNode, value: string): Comment | null {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_COMMENT);
-
-  while (walker.nextNode()) {
-    const node = walker.currentNode;
-
-    if (node instanceof Comment && node.data === value) {
-      return node;
-    }
-  }
-
-  return null;
-}
-
-function findFollowingComment(start: Comment, value: string): Comment | null {
-  let cursor: Node | null = start.nextSibling;
-
-  while (cursor !== null) {
-    if (cursor instanceof Comment && cursor.data === value) {
-      return cursor;
-    }
-
-    cursor = cursor.nextSibling;
-  }
-
-  return null;
 }

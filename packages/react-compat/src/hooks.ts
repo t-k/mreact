@@ -619,8 +619,9 @@ export function createRootRuntime(
       }
     },
     dispose() {
+      let firstError: unknown;
       for (const instance of this.instances.values()) {
-        cleanupInstance(instance);
+        try { cleanupInstance(instance); } catch (error) { firstError ??= error; }
       }
 
       this.pendingLayoutEffects = [];
@@ -631,6 +632,7 @@ export function createRootRuntime(
       this.mountedProfilerPaths.clear();
       this.profilerBaseDurations.clear();
       clearRuntimePortalNodes(this);
+      if (firstError !== undefined) throw firstError;
     },
   };
 }
@@ -3257,6 +3259,10 @@ function forEachInstanceKeyPrefix(key: string, callback: (prefix: string) => voi
 
 function cleanupInstance(instance: ComponentInstance): void {
   instance.disposed = true;
+  let firstError: unknown;
+  const cleanup = (run: () => void) => {
+    try { run(); } catch (error) { firstError ??= error; }
+  };
   if (instance.transitionListeners !== undefined) {
     for (const [context, listener] of instance.transitionListeners) {
       context.settlementListeners.delete(listener);
@@ -3264,16 +3270,17 @@ function cleanupInstance(instance: ComponentInstance): void {
     instance.transitionListeners.clear();
     delete instance.transitionListeners;
   }
-  disposeRootCleanups(instance.committedReactiveCleanups);
+  cleanup(() => disposeRootCleanups(instance.committedReactiveCleanups));
   delete instance.committedReactiveCleanups;
-  disposeRootCleanups(instance.pendingReactiveCleanups);
+  cleanup(() => disposeRootCleanups(instance.pendingReactiveCleanups));
   delete instance.pendingReactiveCleanups;
   for (const slot of instance.hooks) {
     if (slot?.kind === "effect") {
       slot.disposed = true;
       slot.mounted = false;
-      slot.cleanup?.();
+      const dispose = slot.cleanup;
       delete slot.cleanup;
+      if (dispose !== undefined) cleanup(dispose);
     } else if (slot?.kind === "state" && slot.textBinding !== undefined) {
       clearReactiveTextBindingSubscribers(slot.textBinding);
     } else if (slot?.kind === "action-state") {
@@ -3290,6 +3297,7 @@ function cleanupInstance(instance: ComponentInstance): void {
       slot.updates = [];
     }
   }
+  if (firstError !== undefined) throw firstError;
 }
 
 function commitReactiveCleanups(runtime: RootRuntime): void {

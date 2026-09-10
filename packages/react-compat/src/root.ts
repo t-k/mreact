@@ -162,7 +162,7 @@ export function createRoot(
         disposeFiberEventListeners(fiberRoot.current);
         disposeHostFiberResources(fiberRoot.current);
         runtime.instances.clear();
-        unmountDevToolsRoot(container);
+        unmountDevToolsRoot(container, fiberRoot);
         clearElementChildren(container);
       });
     },
@@ -338,7 +338,6 @@ export function hydrateRoot(
   element: ReactCompatNode,
   options: HydrateRootOptions = {},
 ): Root {
-  const fiberRoot = createContainerFiberRoot(container);
   const renderOptions: RenderOptions & {
     resumeId?: string;
     consumeResumeMarkers?: boolean;
@@ -354,6 +353,8 @@ export function hydrateRoot(
   };
   const hydrationScope = getHydrationScope(container, renderOptions.resumeId);
   const selectiveScope = renderOptions.resumeId === undefined ? undefined : hydrationScope;
+  const fiberRoot = createContainerFiberRoot(container, selectiveScope?.before ?? container);
+  let unmounted = false;
   const runtime = createRootRuntime((priority = "sync") => {
     if (runtime.currentElement !== undefined) {
       enqueueRootRender(fiberRoot, runtime.currentElement, laneForRenderPriority(priority), () => {
@@ -390,6 +391,7 @@ export function hydrateRoot(
 
   const root: Root = {
     render(nextElement) {
+      if (unmounted) throw new Error("Cannot render an unmounted hydration root.");
       runtime.currentElement = nextElement;
       enqueueRootRender(fiberRoot, nextElement, SyncLane, () => {
         if (canRenderHostFiber(nextElement)) {
@@ -406,14 +408,21 @@ export function hydrateRoot(
       });
     },
     unmount() {
+      if (unmounted) return;
+      unmounted = true;
       withBatchedDelegatedRootReleases(() => {
         runtime.currentElement = undefined;
-        runtime.dispose();
-        detachFiberRefs(fiberRoot.current);
-        disposeFiberEventListeners(fiberRoot.current);
-        disposeHostFiberResources(fiberRoot.current);
+        let firstError: unknown;
+        for (const cleanup of [
+          () => runtime.dispose(),
+          () => detachFiberRefs(fiberRoot.current),
+          () => disposeFiberEventListeners(fiberRoot.current),
+          () => disposeHostFiberResources(fiberRoot.current),
+          () => unmountDevToolsRoot(container, fiberRoot),
+        ]) {
+          try { cleanup(); } catch (error) { firstError ??= error; }
+        }
         runtime.instances.clear();
-        unmountDevToolsRoot(container);
         if (selectiveScope === undefined) {
           clearElementChildren(container);
         } else {
@@ -425,25 +434,33 @@ export function hydrateRoot(
           );
           selectiveScope.previousNodes = [];
         }
+        if (firstError !== undefined) throw firstError;
       });
     },
   };
 
-  runtime.currentElement = element;
-  enqueueRootRender(fiberRoot, element, SyncLane, () => {
-    if (canRenderHostFiber(element)) {
-      return renderHydratingHostFiberIntoContainer(
-        container,
-        fiberRoot,
-        runtime,
-        element,
-        hydrationScope,
-        renderOptions,
-    );
+  const originalNodes = hydrationScope.previousNodes.slice();
+  try {
+    runtime.currentElement = element;
+    enqueueRootRender(fiberRoot, element, SyncLane, () => {
+      if (canRenderHostFiber(element)) {
+        return renderHydratingHostFiberIntoContainer(
+          container,
+          fiberRoot,
+          runtime,
+          element,
+          hydrationScope,
+          renderOptions,
+      );
+    }
+  
+    throwUnsupportedRootNode();
+    });
+  } catch (error) {
+    try { root.unmount(); } catch { /* Preserve the original hydration failure. */ }
+    syncScopedChildNodes(hydrationScope.parent, hydrationScope.before, hydrationScope.after, originalNodes);
+    throw error;
   }
-
-  throwUnsupportedRootNode();
-  });
   replayQueuedHydrationEvents(container);
   return root;
 }
