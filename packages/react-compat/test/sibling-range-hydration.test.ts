@@ -263,3 +263,214 @@ test("repeated unmount leaves a later owner's nodes inside retained anchors", ()
   root.unmount();
   expect(foreign.parentNode).toBe(container);
 });
+
+test.each([
+  [false, false],
+  [false, true],
+  [true, false],
+  [true, true],
+])(
+  "consumed adjacent roots preserve ownership (hydrateReverse=%s, unmountReverse=%s)",
+  (hydrateReverse, unmountReverse) => {
+    const container = document.createElement("main");
+    container.innerHTML =
+      "<p>before</p><!--mreact-h:start:a--><button>0</button><!--mreact-h:end:a--><!--mreact-h:start:b--><button>0</button><!--mreact-h:end:b--><p>after</p>";
+    const native = Array.from(container.querySelectorAll("p"));
+    const buttons = Array.from(container.querySelectorAll("button"));
+    const roots = new Map<string, ReturnType<typeof hydrateRoot>>();
+    for (const id of hydrateReverse ? ["b", "a"] : ["a", "b"])
+      roots.set(
+        id,
+        hydrateRoot(container, createElement(Counter), {
+          resumeId: id,
+          consumeResumeMarkers: true,
+        }),
+      );
+    expect(container.innerHTML).toBe(
+      "<p>before</p><button>0</button><button>0</button><p>after</p>",
+    );
+    roots.get(unmountReverse ? "b" : "a")!.unmount();
+    const remaining = buttons[unmountReverse ? 0 : 1]!;
+    expect(remaining.parentNode).toBe(container);
+    remaining.click();
+    expect(remaining.textContent).toBe("1");
+    roots.get(unmountReverse ? "a" : "b")!.unmount();
+    expect(Array.from(container.childNodes)).toEqual(native);
+  },
+);
+
+test.each([true, false])(
+  "empty consumed roots preserve structural updates beside siblings (siblingConsumes=%s)",
+  (siblingConsumes) => {
+    const container = document.createElement("main");
+    container.innerHTML =
+      "<p>before</p><!--mreact-h:start:a--><!--mreact-h:end:a--><!--mreact-h:start:b--><button>0</button><!--mreact-h:end:b--><p>after</p>";
+    const native = Array.from(container.querySelectorAll("p"));
+    const first = hydrateRoot(container, null, { resumeId: "a", consumeResumeMarkers: true });
+    const second = hydrateRoot(container, createElement(Counter), {
+      resumeId: "b",
+      consumeResumeMarkers: siblingConsumes,
+    });
+    const button = container.querySelector("button");
+    first.render([createElement("span", null, "one"), createElement("span", null, "two")]);
+    expect(Array.from(container.children).map((node) => node.textContent)).toEqual([
+      "before",
+      "one",
+      "two",
+      "0",
+      "after",
+    ]);
+    expect(container.querySelector("button")).toBe(button);
+    first.render(null);
+    second.unmount();
+    first.render(createElement("strong", null, "again"));
+    expect(Array.from(container.children).map((node) => node.textContent)).toEqual([
+      "before",
+      "again",
+      "after",
+    ]);
+    first.unmount();
+    expect(Array.from(container.querySelectorAll("p"))).toEqual(native);
+    expect(
+      Array.from(container.childNodes).filter((node) => node.nodeType !== Node.COMMENT_NODE),
+    ).toEqual(native);
+  },
+);
+
+test("failed consumed hydration restores original markers for retry", () => {
+  const container = document.createElement("main");
+  container.innerHTML =
+    "<p>before</p><!--mreact-h:start:a--><span>original</span><!--mreact-h:end:a--><!--mreact-h:start:b--><button>0</button><!--mreact-h:end:b--><p>after</p>";
+  const second = hydrateRoot(container, createElement(Counter), {
+    resumeId: "b",
+    consumeResumeMarkers: true,
+  });
+  const original = Array.from(container.childNodes);
+  function Failing() {
+    useLayoutEffect(() => {
+      throw new Error("setup failure");
+    }, []);
+    return createElement("span", null, "original");
+  }
+  expect(() =>
+    hydrateRoot(container, createElement(Failing), { resumeId: "a", consumeResumeMarkers: true }),
+  ).toThrow("setup failure");
+  expect(Array.from(container.childNodes)).toEqual(original);
+  const retry = hydrateRoot(container, createElement("span", null, "original"), {
+    resumeId: "a",
+    consumeResumeMarkers: true,
+  });
+  retry.unmount();
+  container.querySelector("button")!.click();
+  expect(container.querySelector("button")!.textContent).toBe("1");
+  second.unmount();
+  expect(container.childNodes).toHaveLength(2);
+});
+
+test.each([new Error("first ref"), null, undefined])(
+  "throwing ref cleanup releases all refs and preserves the first error: %s",
+  (failure) => {
+    const container = document.createElement("main");
+    container.innerHTML =
+      "<p>before</p><!--mreact-h:start:a--><span>A</span><span>B</span><span>C</span><!--mreact-h:end:a--><p>after</p>";
+    const calls: string[] = [];
+    const objectRef = { current: null as Element | null };
+    const root = hydrateRoot(
+      container,
+      [
+        createElement(
+          "span",
+          {
+            ref: () => () => {
+              calls.push("A");
+              throw failure;
+            },
+          },
+          "A",
+        ),
+        createElement(
+          "span",
+          {
+            ref: () => () => {
+              calls.push("B");
+              throw new Error("second ref");
+            },
+          },
+          "B",
+        ),
+        createElement("span", { ref: objectRef }, "C"),
+      ],
+      { resumeId: "a", consumeResumeMarkers: true },
+    );
+    let caught = false;
+    try {
+      root.unmount();
+    } catch (error) {
+      caught = true;
+      expect(error).toBe(failure);
+    }
+    expect(caught).toBe(true);
+    expect(calls).toEqual(["A", "B"]);
+    expect(objectRef.current).toBeNull();
+    expect(container.innerHTML).toBe("<p>before</p><p>after</p>");
+    expect(container.childNodes).toHaveLength(2);
+    root.unmount();
+    expect(calls).toEqual(["A", "B"]);
+  },
+);
+
+test("consume option without a resume range preserves whole-root behavior and original setup errors", () => {
+  const container = document.createElement("main");
+  container.innerHTML = "<button>0</button>";
+  const original = container.firstChild;
+  const root = hydrateRoot(container, createElement(Counter), { consumeResumeMarkers: true });
+  expect(container.firstChild).toBe(original);
+  root.unmount();
+  expect(container.childNodes).toHaveLength(0);
+  const failure = new Error("whole-root setup");
+  function Failing() {
+    useLayoutEffect(() => {
+      throw failure;
+    }, []);
+    return createElement("span", null, "original");
+  }
+  container.innerHTML = "<span>original</span>";
+  expect(() =>
+    hydrateRoot(container, createElement(Failing), { consumeResumeMarkers: true }),
+  ).toThrow(failure);
+  expect(container.innerHTML).toBe("<span>original</span>");
+});
+
+test("an effect cleanup error stays first while later ref errors and refs are processed", () => {
+  const container = document.createElement("main");
+  container.innerHTML = "<!--mreact-h:start:a--><span>A</span><!--mreact-h:end:a-->";
+  const calls: string[] = [];
+  function FailingCleanups() {
+    useLayoutEffect(
+      () => () => {
+        calls.push("effect");
+        throw new Error("effect failure");
+      },
+      [],
+    );
+    return createElement(
+      "span",
+      {
+        ref: () => () => {
+          calls.push("ref");
+          throw new Error("ref failure");
+        },
+      },
+      "A",
+    );
+  }
+  const root = hydrateRoot(container, createElement(FailingCleanups), {
+    resumeId: "a",
+    consumeResumeMarkers: true,
+  });
+  expect(() => root.unmount()).toThrow("effect failure");
+  expect(calls).toEqual(["effect", "ref"]);
+  expect(container.childNodes).toHaveLength(0);
+  root.unmount();
+  expect(calls).toEqual(["effect", "ref"]);
+});

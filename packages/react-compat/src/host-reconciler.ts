@@ -363,10 +363,11 @@ export function consumeHydrationScopeResumeMarkers(scope: HydrationScope): void 
     isResumeScopeStartMarker(scope.before) &&
     isResumeScopeEndMarker(scope.after)
   ) {
-    const before = scope.before.previousSibling;
-    const after = scope.after.nextSibling;
-    scope.before.remove();
-    scope.after.remove();
+    // Each range keeps its own invisible anchors; adjacent roots may consume their markers too.
+    const before = scope.before.ownerDocument.createTextNode("");
+    const after = scope.after.ownerDocument.createTextNode("");
+    scope.before.replaceWith(before);
+    scope.after.replaceWith(after);
     scope.before = before;
     scope.after = after;
   }

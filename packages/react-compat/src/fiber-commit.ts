@@ -55,9 +55,17 @@ export function commitFiberRoot(
 }
 
 export function detachFiberRefs(fiber: Fiber): void {
+  let failed = false;
+  let firstError: unknown;
   for (const record of collectRefRecords(fiber)) {
-    detachRef(record.ref, record.node);
+    try {
+      detachRef(record.ref, record.node);
+    } catch (error) {
+      if (!failed) firstError = error;
+      failed = true;
+    }
   }
+  if (failed) throw firstError;
 }
 
 export function disposeFiberEventListeners(fiber: Fiber): void {

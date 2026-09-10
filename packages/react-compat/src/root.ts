@@ -353,6 +353,8 @@ export function hydrateRoot(
   };
   const hydrationScope = getHydrationScope(container, renderOptions.resumeId);
   const selectiveScope = renderOptions.resumeId === undefined ? undefined : hydrationScope;
+  const resumeStart = hydrationScope.before;
+  const resumeEnd = hydrationScope.after;
   const fiberRoot = createContainerFiberRoot(container, selectiveScope?.before ?? container);
   let unmounted = false;
   const runtime = createRootRuntime((priority = "sync") => {
@@ -412,6 +414,7 @@ export function hydrateRoot(
       unmounted = true;
       withBatchedDelegatedRootReleases(() => {
         runtime.currentElement = undefined;
+        let failed = false;
         let firstError: unknown;
         for (const cleanup of [
           () => runtime.dispose(),
@@ -420,7 +423,12 @@ export function hydrateRoot(
           () => disposeHostFiberResources(fiberRoot.current),
           () => unmountDevToolsRoot(container, fiberRoot),
         ]) {
-          try { cleanup(); } catch (error) { firstError ??= error; }
+          try {
+            cleanup();
+          } catch (error) {
+            if (!failed) firstError = error;
+            failed = true;
+          }
         }
         runtime.instances.clear();
         if (selectiveScope === undefined) {
@@ -433,8 +441,12 @@ export function hydrateRoot(
             [],
           );
           selectiveScope.previousNodes = [];
+          if (selectiveScope.before !== resumeStart) {
+            selectiveScope.before!.remove();
+            selectiveScope.after!.remove();
+          }
         }
-        if (firstError !== undefined) throw firstError;
+        if (failed) throw firstError;
       });
     },
   };
@@ -457,6 +469,14 @@ export function hydrateRoot(
     throwUnsupportedRootNode();
     });
   } catch (error) {
+    // Only consumption changes these anchors, and it requires a validated non-null marker pair.
+    // Restore the original markers before disposal so rollback retains valid range anchors.
+    if (hydrationScope.before !== resumeStart) {
+      hydrationScope.before!.replaceWith(resumeStart!);
+      hydrationScope.after!.replaceWith(resumeEnd!);
+      hydrationScope.before = resumeStart;
+      hydrationScope.after = resumeEnd;
+    }
     try { root.unmount(); } catch { /* Preserve the original hydration failure. */ }
     syncScopedChildNodes(hydrationScope.parent, hydrationScope.before, hydrationScope.after, originalNodes);
     throw error;

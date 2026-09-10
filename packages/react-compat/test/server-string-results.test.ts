@@ -1,5 +1,6 @@
+// @vitest-environment happy-dom
 import { expect, test } from "vitest";
-import { createElement, renderToString, useId } from "../src/index.js";
+import { createElement, hydrateRoot, renderToString, useId } from "../src/index.js";
 
 const payload = '<img src=x onerror="alert(1)">&text';
 
@@ -21,4 +22,21 @@ test("text mode preserves component hook paths and nested element rendering", ()
   expect(renderToString(Parent, {}, { identifierPrefix: "boundary", stringResult: "text" })).toBe(
     renderToString(Parent, {}, { identifierPrefix: "boundary" }),
   );
+  const container = document.createElement("main");
+  container.innerHTML = renderToString(
+    Parent,
+    {},
+    { identifierPrefix: "boundary", stringResult: "text" },
+  );
+  const nodes = Array.from(container.querySelectorAll("[id]"));
+  const ids = nodes.map((node) => node.id);
+  const errors: Error[] = [];
+  const root = hydrateRoot(container, createElement(Parent), {
+    identifierPrefix: "boundary",
+    onRecoverableError: (error) => errors.push(error),
+  });
+  expect(Array.from(container.querySelectorAll("[id]"))).toEqual(nodes);
+  expect(nodes.map((node) => node.id)).toEqual(ids);
+  expect(errors).toEqual([]);
+  root.unmount();
 });
