@@ -431,6 +431,8 @@ export function transform(input: TransformInput): TransformOutput;
 // @public
 export interface TransformInput {
     // (undocumented)
+    clientBoundaryCompatImports?: readonly string[] | undefined;
+    // (undocumented)
     clientBoundaryFallbackImports?: readonly string[];
     // (undocumented)
     clientBoundaryImports?: readonly string[];

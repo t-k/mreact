@@ -673,6 +673,8 @@ export interface BuiltRouteSourceAnalysisSummary {
     // (undocumented)
     cachePolicy?: RouteCachePolicy | undefined;
     // (undocumented)
+    clientBoundaryCompatImports?: readonly string[] | undefined;
+    // (undocumented)
     clientBoundaryFallbackImports: readonly string[];
     // (undocumented)
     clientBoundaryImports: readonly string[];
@@ -780,7 +782,7 @@ export interface ClientRouteInferenceCache {
 // @public (undocumented)
 export interface ClientRouteInferenceDiagnostic {
     // (undocumented)
-    code: "MR_CLIENT_BOUNDARY_INFERENCE_SERVER_ONLY_REFERENCE" | "MR_CLIENT_BOUNDARY_INFERENCE_FUNCTION_CALL_INTERACTIVE" | "MR_CLIENT_BOUNDARY_INFERENCE_UNRESOLVED_REFERENCE" | "MR_CLIENT_BOUNDARY_INFERENCE_UNSUPPORTED_REFERENCE" | "MR_NAVIGATION_RUNTIME_LINK_DISABLED";
+    code: "MR_CLIENT_BOUNDARY_INFERENCE_SERVER_ONLY_REFERENCE" | "MR_CLIENT_BOUNDARY_INFERENCE_FUNCTION_CALL_INTERACTIVE" | "MR_CLIENT_BOUNDARY_INFERENCE_UNRESOLVED_REFERENCE" | "MR_CLIENT_BOUNDARY_INFERENCE_UNSUPPORTED_REFERENCE" | "MR_NAVIGATION_RUNTIME_LINK_DISABLED" | "MR_COMPAT_SSR_CLIENT_ONLY";
     // (undocumented)
     filename: string;
     // (undocumented)

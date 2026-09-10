@@ -19,6 +19,8 @@ export interface AnalyzeModuleOptions {
     // (undocumented)
     bodyStatementJsx?: BodyStatementJsxMode;
     // (undocumented)
+    clientBoundaryCompatImports?: readonly string[] | undefined;
+    // (undocumented)
     clientBoundaryFallbackImports?: readonly string[];
     // (undocumented)
     clientBoundaryImports?: readonly string[];
@@ -92,6 +94,8 @@ export type BodyStatementJsxMode = "dom-node" | "compat-object" | "server-string
 
 // @public
 export interface ClientReferenceIr {
+    // (undocumented)
+    compatSsr?: boolean;
     // (undocumented)
     exportName: string;
     // (undocumented)

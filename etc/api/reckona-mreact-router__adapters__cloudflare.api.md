@@ -233,6 +233,8 @@ export interface BuiltRouteSourceAnalysisSummary {
     // (undocumented)
     cachePolicy?: RouteCachePolicy | undefined;
     // (undocumented)
+    clientBoundaryCompatImports?: readonly string[] | undefined;
+    // (undocumented)
     clientBoundaryFallbackImports: readonly string[];
     // (undocumented)
     clientBoundaryImports: readonly string[];
