@@ -1931,7 +1931,7 @@ function collectHtmlParts(
         const hasComponentFallback = shouldRenderClientBoundaryFallback(node);
         const boundaryProps = emitPropsObject(node.props, [], escapeHelperName);
         const fallbackHtml = node.clientReference?.compatSsr === true
-          ? `(_childrenHtml, _identifierPrefix, _props) => ${currentCompatRenderToStringHelperName}(${node.name}, _props, { identifierPrefix: _identifierPrefix })`
+          ? `(_childrenHtml, _identifierPrefix, _props) => ${currentCompatRenderToStringHelperName}(${node.name}, _props, { identifierPrefix: _identifierPrefix, stringResult: "text" })`
           : hasComponentFallback
           ? `(_childrenHtml) => async (${currentClientBoundaryFallbackSinkName}) => { await ${node.name}(${currentClientBoundaryFallbackSinkName}, ${emitPropsObject(node.props, node.children, escapeHelperName, node.name, "_childrenHtml")}); }`
           : emitHtmlExpressionFromChildren(node.children, escapeHelperName);

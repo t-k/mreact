@@ -38,13 +38,13 @@ import { isEventLikePropName, isVoidHtmlElement } from "@reckona/mreact-shared";
 const serverSelectionContextKey = Symbol.for("mreact.server.selected-value");
 const serverSelectionMultipleContextKey = Symbol.for("mreact.server.select-multiple");
 
-/** Renders a React-compatible component to an HTML string. */
+/** Renders a component to HTML. Use stringResult: "text" for ReactNode components; the default preserves compiled HTML strings. */
 export function renderToString<TProps>(
   component:
     | ((props: TProps) => ReactCompatNode)
     | (new (props: TProps) => { render(): ReactCompatNode }),
   props?: TProps,
-  options: RootRuntimeOptions = {},
+  options: RootRuntimeOptions & { stringResult?: "html" | "text" } = {},
 ): string {
   const runtime = createRootRuntime(() => undefined, {
     ...options,
@@ -65,7 +65,7 @@ export function renderToString<TProps>(
 
           return (component as (props: TProps) => ReactCompatNode)(props as TProps);
         });
-        return typeof rendered === "string"
+        return typeof rendered === "string" && options.stringResult !== "text"
           ? rendered
           : renderNodeToString(rendered, runtime, "0.0");
       } catch (error) {

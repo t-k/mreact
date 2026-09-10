@@ -5,6 +5,7 @@ import { expect, test } from "@playwright/test";
 import { buildApp } from "../dist/build.js";
 import { startServer } from "../dist/serve.js";
 
+const payload = '<img src=x onerror="globalThis.__compatXss = true">&text';
 let root: string;
 let url: string;
 let close: (() => Promise<void>) | undefined;
@@ -31,10 +32,15 @@ export function Counter({ label }) {
 }`,
     );
     await writeFile(
+      join(appDir, "Text.compat.tsx"),
+      "export function Text(props) { return props.value; }",
+    );
+    await writeFile(
       join(appDir, "page.tsx"),
       `import { Counter } from "./Counter.compat";
+import { Text } from "./Text.compat";
 import { Link } from "@reckona/mreact-router";
-export default function Page() { return <main><Counter label="first" /><p id="native">Native sibling</p><Counter label="second" /><Link href="/other">Other</Link></main>; }`,
+export default function Page() { return <main><Counter label="first" /><p id="native">Native sibling</p><Counter label="second" /><aside id="text"><Text value={${JSON.stringify(payload)}} /></aside><Link href="/other">Other</Link></main>; }`,
     );
     await writeFile(
       join(appDir, "other/page.tsx"),
@@ -84,11 +90,17 @@ export default function Page() { return <main><h1>Other page</h1><Link href="/">
     page.on("console", (message) => {
       if (message.type() === "error") errors.push(message.text());
     });
+    await page.addInitScript(() => {
+      (window as any).__compatXss = false;
+    });
     await page.goto(url, { waitUntil: "commit" });
     await expect(page.locator("[data-counter=first]")).toBeVisible();
     await page.evaluate(() => {
       const state = {
         nodes: Array.from(document.querySelectorAll("button,input,#native")),
+        textNode: Array.from(document.querySelector("#text")!.childNodes).find(
+          (node) => node.nodeType === Node.TEXT_NODE,
+        ),
         removed: [] as Node[],
       };
       (window as any).__compatTest = state;
@@ -98,11 +110,20 @@ export default function Page() { return <main><h1>Other page</h1><Link href="/">
             if (state.nodes.includes(node as Element)) state.removed.push(node);
       }).observe(document.body, { subtree: true, childList: true });
     });
+    expect(await page.evaluate(() => (window as any).__compatTest.textNode?.textContent)).toBe(
+      payload,
+    );
+    await expect(page.locator("#text img")).toHaveCount(0);
     const input = page.locator("[data-input=first]");
     await input.fill("user edit");
     await input.focus();
     release();
     await page.waitForFunction(() => document.documentElement.dataset.mreactHydrated === "true");
+    await expect(page.locator("#text")).toHaveText(payload);
+    expect(await page.evaluate(() => (window as any).__compatTest.textNode?.isConnected)).toBe(
+      true,
+    );
+    expect(await page.evaluate(() => (window as any).__compatXss)).toBe(false);
     await expect(input).toHaveValue("user edit");
     await expect(input).toBeFocused();
     await expect(page.locator("[data-controlled=first]")).toHaveValue("controlled");

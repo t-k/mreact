@@ -821,7 +821,7 @@ function collectHtmlStatements(
           false,
         );
         const fallbackHtml = node.clientReference?.compatSsr === true
-          ? `(_childrenHtml, _identifierPrefix, _props) => ${reactNodeRenderHelperName}(${node.name}, _props, { identifierPrefix: _identifierPrefix })`
+          ? `(_childrenHtml, _identifierPrefix, _props) => ${reactNodeRenderHelperName}(${node.name}, _props, { identifierPrefix: _identifierPrefix, stringResult: "text" })`
           : hasComponentFallback
           ? `(_childrenHtml) => ${emitComponentCallExpression(
               node.name,

@@ -9,6 +9,7 @@ import {
 } from "../src/adapters/cloudflare.js";
 import { expect, test } from "vitest";
 import { buildApp } from "../src/build.js";
+import { renderAppRequest } from "../src/render.js";
 import { renderBuiltAppRequest } from "../src/serve.js";
 
 test.each(
@@ -31,9 +32,15 @@ export function Counter() {
   return <button type="button" onClick={() => setCount(value => value + 1)}>compat count: {count}</button>;
 }`,
       );
+      const payload = '<img src=x onerror="globalThis.__compatXss = true">&text';
+      await writeFile(
+        join(appDir, "Text.compat.tsx"),
+        "export function Text(props) { return props.value; }",
+      );
       const code = `export const stream = ${stream};
 import { Counter } from "./Counter.compat";
-export default function Page() { return <main><Counter /><p>Native sibling</p><Counter /></main>; }`;
+import { Text } from "./Text.compat";
+export default function Page() { return <main><Counter /><p>Native sibling</p><Counter /><aside><Text value={${JSON.stringify(payload)}} /></aside></main>; }`;
       const filename = join(appDir, "page.tsx");
       await writeFile(filename, code);
       await buildApp({
@@ -84,6 +91,8 @@ export default function Page() { return <main><Counter /><p>Native sibling</p><C
         html.match(/<button type="button">compat count: (?:<!-- -->)?0<\/button>/g),
       ).toHaveLength(2);
       expect(html).toContain("<p>Native sibling</p>");
+      expect(html).toContain("&lt;img");
+      expect(html).not.toContain("<img");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -167,6 +176,35 @@ test.each([false, true])(
       expect(html).toContain('data-mreact-client-boundary-nonserializable="true"');
       expect(html).toContain('data-mreact-client-boundary="ContextPanel"');
       expect(html).not.toContain("<p>default</p>");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+  60_000,
+);
+
+test.each([false, true])(
+  "development compat string results escape HTML (stream=%s)",
+  async (stream) => {
+    const root = await mkdtemp(join(tmpdir(), "mreact-compat-text-"));
+    try {
+      const payload = '<img src=x onerror="globalThis.__compatXss = true">&text';
+      await writeFile(
+        join(root, "Text.compat.tsx"),
+        "export function Text(props) { return props.value; }",
+      );
+      await writeFile(
+        join(root, "page.tsx"),
+        `export const stream = ${stream}; import { Text } from "./Text.compat"; export default function Page() { return <main><Text value={${JSON.stringify(payload)}} /></main>; }`,
+      );
+      const response = await renderAppRequest({
+        appDir: root,
+        request: new Request("http://local.test/"),
+      });
+      const html = await response.text();
+      expect(response.status, html).toBe(200);
+      expect(html).toContain("&lt;img");
+      expect(html).not.toContain("<img");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
