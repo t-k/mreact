@@ -3255,7 +3255,19 @@ function __mreactInstallNavigation() {
     }
   }
 
-  addEventListener("popstate", load);
+  addEventListener("popstate", (event) => {
+    if (__mreactGlobal.__mreactNavigationState?.installed) {
+      return;
+    }
+    // Keep the latest destination while the runtime import is pending.
+    const pending = { state: event.state };
+    __mreactGlobal.__mreactPendingHistoryTraversal = pending;
+    void __mreactLoadNavigationRuntime().then((runtime) => {
+      if (runtime === undefined && __mreactGlobal.__mreactPendingHistoryTraversal === pending) {
+        location.reload();
+      }
+    });
+  });
   document.addEventListener("pointerover", loadFromAnchorEvent, true);
   document.addEventListener("pointerdown", loadFromAnchorEvent, true);
   document.addEventListener("click", __mreactDeferredHandleClick, true);
@@ -3579,7 +3591,10 @@ ${routeCellHydrationIndent}__mreactResumeRoute(__mreactMarker, __mreactNode);
 ${routeCellHydrationIndent}  return;
 ${routeCellHydrationIndent}}
 `;
-  const entry = `${routeHydrationRuntimeImportBlock}${routeCellEffectImport}${routeCleanupScopeImport}${routeReactiveDomMetadataImport}${emitCompatClientReferenceImportBlock(compatClientReferenceNames)}${clientReferenceImportBlock}${routeHydrationCode}
+  const historyCacheImport = inlineClientNavigation
+    ? `import { rememberNavigationHistorySnapshot as __mreactRememberHistorySnapshot } from ${JSON.stringify(workspacePackageFile({ currentFileUrl: import.meta.url, monorepoDir: "router", packageName: "@reckona/mreact-router", entry: "navigation-history-cache" }))};\n`
+    : "";
+  const entry = `${historyCacheImport}${routeHydrationRuntimeImportBlock}${routeCellEffectImport}${routeCleanupScopeImport}${routeReactiveDomMetadataImport}${emitCompatClientReferenceImportBlock(compatClientReferenceNames)}${clientReferenceImportBlock}${routeHydrationCode}
 
 const __mreactRouteId = ${JSON.stringify(routeId)};
   const __mreactRouteStateSignature = ${JSON.stringify(routeStateSignature)};
@@ -4706,9 +4721,10 @@ function __mreactRouteDataScriptSelector() {
   return ${JSON.stringify(routeDataScriptSelector())};
 }
 
-function __mreactCurrentHistoryState(url) {
+function __mreactCurrentHistoryState(url, entryId = __mreactNavigationState.historyEntryId) {
   return {
     __mreact: true,
+    __mreactEntryId: entryId,
     html: __mreactCurrentDocumentRouteHtml(),
     scrollX: Number(globalThis.scrollX ?? 0),
     scrollY: Number(globalThis.scrollY ?? 0),
@@ -4738,7 +4754,10 @@ function __mreactPushHistoryState(url) {
   }
 
   try {
-    history.pushState(__mreactCurrentHistoryState(url), "", url);
+    const entryId = __mreactNewHistoryEntryId();
+    history.pushState(__mreactCurrentHistoryState(url, entryId), "", url);
+    __mreactNavigationState.historyEntryId = entryId;
+    __mreactNavigationState.historyEntryUrl = location.href;
   } catch {
     // Ignore invalid URLs in non-browser test environments.
   }
@@ -4750,10 +4769,30 @@ function __mreactSaveCurrentHistoryState() {
   }
 
   try {
+    __mreactNavigationState.historyEntryId ??= history.state?.__mreactEntryId ?? __mreactNewHistoryEntryId();
     history.replaceState(__mreactCurrentHistoryState(location.href), "", location.href);
+    __mreactNavigationState.historyEntryUrl = location.href;
+    __mreactNavigationState.historySnapshots?.delete(__mreactNavigationState.historyEntryId);
   } catch {
     // Ignore invalid URLs in non-browser test environments.
   }
+}
+
+function __mreactNewHistoryEntryId() {
+  // Entry identity is independent of URL, including repeated visits to the same route.
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+function __mreactRememberDepartingHistoryEntry() {
+  const entryId = __mreactNavigationState.historyEntryId;
+  const url = __mreactNavigationState.historyEntryUrl;
+  if (entryId === undefined || url === undefined) {
+    return;
+  }
+  // popstate runs after the browser has switched entries. Keep the outgoing snapshot in
+  // memory instead of replacing the destination's state with the outgoing document.
+  const snapshots = __mreactNavigationState.historySnapshots ??= new Map();
+  __mreactRememberHistorySnapshot(snapshots, entryId, __mreactCurrentHistoryState(url, entryId));
 }
 
 function __mreactEnableManualScrollRestoration() {
@@ -5001,12 +5040,25 @@ function __mreactInstallNavigation() {
   __mreactNavigationState.installed = true;
   __mreactInstallNavigationFetchRevalidation();
   __mreactEnableManualScrollRestoration();
+  const pending = __mreactGlobal.__mreactPendingHistoryTraversal;
+  delete __mreactGlobal.__mreactPendingHistoryTraversal;
+  if (pending !== undefined) {
+    if (!__mreactRestoreHistoryState(pending.state)) {
+      location.reload();
+      return;
+    }
+    __mreactNavigationState.historyEntryId = pending.state.__mreactEntryId ?? __mreactNewHistoryEntryId();
+  }
   __mreactSaveCurrentHistoryState();
   addEventListener("popstate", (event) => {
-    __mreactSaveCurrentHistoryState();
-    if (!__mreactRestoreHistoryState(event.state)) {
+    const state = __mreactNavigationState.historySnapshots?.get(event.state?.__mreactEntryId) ?? event.state;
+    __mreactRememberDepartingHistoryEntry();
+    if (!__mreactRestoreHistoryState(state)) {
       location.reload();
+      return;
     }
+    __mreactNavigationState.historyEntryId = state.__mreactEntryId ?? __mreactNewHistoryEntryId();
+    __mreactSaveCurrentHistoryState();
   });
   document.addEventListener("pointerover", (event) => {
     const anchor = __mreactAnchorFromEvent(event);

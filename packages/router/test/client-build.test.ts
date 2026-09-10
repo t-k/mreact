@@ -8444,7 +8444,7 @@ export default function Page(props) {
     expect(fetchCalls).toBe(0);
   });
 
-  test("saves the current history entry before restoring a popstate entry", async () => {
+  test("does not overwrite the destination entry with the departing route on popstate", async () => {
     const { routeModule } = await importRouteRuntime("popstate-save-current");
     routeModule.__mreactNavigateToHtml(
       [
@@ -8463,6 +8463,7 @@ export default function Page(props) {
       value: 200,
     });
     const originalReplaceState = history.replaceState.bind(history);
+    originalReplaceState({ __mreact: true }, "", "/");
     const replacedStates: unknown[] = [];
     history.replaceState = (state, title, url) => {
       replacedStates.push(state);
@@ -8488,10 +8489,10 @@ export default function Page(props) {
       __mreact: true,
       scrollX: 7,
       scrollY: 200,
-      url: expect.stringContaining("/about"),
+      url: expect.not.stringContaining("/about"),
     });
-    expect((replacedStates[0] as { html?: string }).html).toContain("About");
-    expect((replacedStates[0] as { html?: string }).html).toContain("mreact-props-about");
+    expect((replacedStates[0] as { html?: string }).html).toContain("Home");
+    expect((replacedStates[0] as { html?: string }).html).toContain("mreact-props-index");
   });
 
   test("saves the current route HTML before pushing a navigation entry", async () => {
