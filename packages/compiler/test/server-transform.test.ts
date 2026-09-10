@@ -2135,7 +2135,7 @@ export function App(props) { return <Detail action={__mreactServerRenderValue\u0
     expect(html).not.toContain("onerror");
   });
 
-  test("bigint and cyclic client boundary props fail closed", () => {
+  test.each([false, true])("bigint and cyclic client boundary props fail closed (compat=%s)", (compat) => {
     const output = transform({
       code: `import { Detail } from "./Detail";
 
@@ -2146,6 +2146,8 @@ export function App(props) {
       target: "server",
       dev: true,
       clientBoundaryImports: ["./Detail"],
+      clientBoundaryFallbackImports: compat ? ["./Detail"] : [],
+      clientBoundaryCompatImports: compat ? ["./Detail"] : [],
     });
     const cyclic: Record<string, unknown> = {};
     cyclic.self = cyclic;

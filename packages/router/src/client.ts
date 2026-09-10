@@ -1,3 +1,4 @@
+import { analyzeCompatSsrEligibility, isCompatSsrFilename } from "./compat-ssr.js";
 import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { builtinModules } from "node:module";
@@ -142,6 +143,7 @@ export interface ClientRouteInferenceResult {
   client: boolean;
   clientBoundaryImports: string[];
   clientBoundaryFallbackImports: string[];
+  clientBoundaryCompatImports?: string[] | undefined;
   components?: ClientRouteComponent[] | undefined;
   diagnostics: ClientRouteInferenceDiagnostic[];
 }
@@ -225,7 +227,8 @@ export interface ClientRouteInferenceDiagnostic {
     | "MR_CLIENT_BOUNDARY_INFERENCE_FUNCTION_CALL_INTERACTIVE"
     | "MR_CLIENT_BOUNDARY_INFERENCE_UNRESOLVED_REFERENCE"
     | "MR_CLIENT_BOUNDARY_INFERENCE_UNSUPPORTED_REFERENCE"
-    | "MR_NAVIGATION_RUNTIME_LINK_DISABLED";
+    | "MR_NAVIGATION_RUNTIME_LINK_DISABLED"
+    | "MR_COMPAT_SSR_CLIENT_ONLY";
   filename: string;
   level: "warn";
   localNames: string[];
@@ -371,6 +374,7 @@ export async function inferClientRouteModule(options: {
           mergedRouteInference.client || shellInferences.some((inference) => inference.client),
         clientBoundaryImports: mergedRouteInference.clientBoundaryImports,
         clientBoundaryFallbackImports: mergedRouteInference.clientBoundaryFallbackImports,
+        clientBoundaryCompatImports: mergedRouteInference.clientBoundaryCompatImports,
         ...(componentCollector === undefined
           ? {}
           : {
@@ -438,6 +442,7 @@ function clientRouteInferenceFromBoundaryGraph(
     client: clientRoute || clientBoundaryImports.length > 0,
     clientBoundaryImports,
     clientBoundaryFallbackImports: [],
+    clientBoundaryCompatImports: [],
     diagnostics: [],
   };
 }
@@ -451,6 +456,7 @@ function mergeClientRouteInference(
     clientBoundaryImports: Array.from(
       new Set([...left.clientBoundaryImports, ...right.clientBoundaryImports]),
     ),
+    clientBoundaryCompatImports: [...(left.clientBoundaryCompatImports ?? []), ...(right.clientBoundaryCompatImports ?? [])],
     clientBoundaryFallbackImports: Array.from(
       new Set([...left.clientBoundaryFallbackImports, ...right.clientBoundaryFallbackImports]),
     ),
@@ -586,6 +592,7 @@ export async function collectClientRouteReferences(options: {
       code: source.code,
       clientBoundaryImports: source.inference.clientBoundaryImports,
       clientBoundaryFallbackImports: source.inference.clientBoundaryFallbackImports,
+      clientBoundaryCompatImports: source.inference.clientBoundaryCompatImports,
       dev: false,
       filename: source.filename,
       moduleContext: source.moduleContext,
@@ -632,6 +639,7 @@ export async function collectClientRouteReferences(options: {
       sources.some((source) => source.filename !== options.filename && source.inference.client),
     clientBoundaryImports: routeInference.clientBoundaryImports,
     clientBoundaryFallbackImports: routeInference.clientBoundaryFallbackImports,
+    clientBoundaryCompatImports: routeInference.clientBoundaryCompatImports,
     clientReferenceImports,
     clientReferenceManifest,
     diagnostics: sources
@@ -1225,6 +1233,7 @@ async function inferClientRouteModuleSource(options: {
   try {
     const clientBoundaryImports: string[] = [];
     const clientBoundaryFallbackImports: string[] = [];
+    const clientBoundaryCompatImports: string[] = [];
     const clientBoundaryExportNames = new Set<string>();
     const nestedClientExportNames = new Set<string>();
     const clientReferenceSourceFiles: string[] = [];
@@ -1442,6 +1451,24 @@ async function inferClientRouteModuleSource(options: {
         }
 
         clientBoundaryImports.push(reference.source);
+        if (isCompatSsrFilename(resolved)) {
+          const eligibility = options.sourceTransform === undefined
+            ? await analyzeCompatSsrEligibility(resolved)
+            : { eligible: false, reason: "Custom source transforms require a client-only compat boundary." };
+          if (eligibility.eligible) {
+            clientBoundaryCompatImports.push(reference.source);
+            clientBoundaryFallbackImports.push(reference.source);
+          } else if (!/^\s*["']use client["']/.test(source)) {
+            diagnostics.push({
+              code: "MR_COMPAT_SSR_CLIENT_ONLY",
+              filename: options.filename,
+              level: "warn",
+              localNames: reference.localNames,
+              source: reference.source,
+              message: `${resolved}: ${eligibility.reason}`,
+            });
+          }
+        }
         if (
           !imported.clientBoundaryModule &&
           isClientBoundaryFallbackEligibleSource(source, resolved)
@@ -1583,6 +1610,7 @@ async function inferClientRouteModuleSource(options: {
         nestedClient,
       clientBoundaryImports,
       clientBoundaryFallbackImports,
+      clientBoundaryCompatImports,
       clientBoundaryExportNames: Array.from(clientBoundaryExportNames),
       clientBoundaryModule: clientProxy || implicitModuleClient,
       nestedClientExportNames: Array.from(nestedClientExportNames),
@@ -1617,6 +1645,7 @@ function emptyClientRouteModuleInferenceResult(
     client: false,
     clientBoundaryImports: [],
     clientBoundaryFallbackImports: [],
+    clientBoundaryCompatImports: [],
     clientBoundaryExportNames: [],
     clientBoundaryModule: false,
     nestedClientExportNames: [],
@@ -2866,7 +2895,8 @@ export async function buildClientRouteBatchOutput(options: {
     options.routes.map(async (route) => ({
       filename: route.filename,
       name: routeIdForPath(route.routePath),
-      preserveExports: route.forceInlineNavigationRuntime === true,
+      // Navigation invokes the hydration export again when a cached route module is revisited.
+      preserveExports: true,
       routePath: route.routePath,
       source: await buildClientRouteEntrySource({
         ...route,
@@ -3529,7 +3559,7 @@ ${inlineClientNavigation ? "  resumeNode: __mreactResumeNode,\n" : ""}  resumeRo
       ? `const {
   hasNonSerializableClientBoundaries: __mreactHasNonSerializableClientBoundaries,
   hydrateClientBoundaries: __mreactHydrateClientBoundaries,
-} = __mreactCreateClientBoundaryRuntime(${compatClientReferenceNames.size === 0 ? "undefined, undefined" : "__mreactCompatCreateRoot, __mreactCompatCreateElement"});
+} = __mreactCreateClientBoundaryRuntime(${compatClientReferenceNames.size === 0 ? "undefined, undefined" : "__mreactCompatCreateRoot, __mreactCompatCreateElement, __mreactCompatHydrateRoot"});
 `
       : "";
   const routeInlineHydrationRuntime = shareHydrationRuntime
@@ -5884,7 +5914,7 @@ function compatClientReferenceComponentNames(
 function emitCompatClientReferenceImportBlock(compatNames: ReadonlySet<string>): string {
   return compatNames.size === 0
     ? ""
-    : 'import { createElement as __mreactCompatCreateElement, createRoot as __mreactCompatCreateRoot } from "@reckona/mreact-compat";\n';
+    : 'import { createElement as __mreactCompatCreateElement, createRoot as __mreactCompatCreateRoot, hydrateRoot as __mreactCompatHydrateRoot } from "@reckona/mreact-compat";\n';
 }
 
 function clientReferenceLocalName(index: number): string {

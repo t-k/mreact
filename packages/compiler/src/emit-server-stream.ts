@@ -1,3 +1,4 @@
+import { emitCompatSsrBoundaryHelper } from "./emit-compat-ssr-boundary.js";
 import type {
   AsyncBoundaryIr,
   AttributeIr,
@@ -122,6 +123,7 @@ export function emitServerStream(
     ? allocateHelperFamilyName(ir, "_renderClientBoundary", [
         "$hasNonSerializableProps",
         "$markChildren",
+        "$compat",
         "$renderHtml",
       ])
     : undefined;
@@ -571,7 +573,9 @@ function emitClientBoundaryHelper(name: string, isServerRenderValueHelperName?: 
     `  while (_tasks.length > 0) await Promise.all(_tasks.splice(0));`,
     `  return _out;`,
     `}`,
-    `function ${name}(name, props, fallbackHtml = "", componentFallback = false, originalChildrenHtml = "", hasOriginalChildren = false) {`,
+    emitCompatSsrBoundaryHelper(name),
+    `function ${name}(name, props, fallbackHtml = "", componentFallback = false, originalChildrenHtml = "", hasOriginalChildren = false, compatSsr = false) {`,
+    `  if (compatSsr) return Promise.resolve(${renderHelperName}(originalChildrenHtml)).then((children) => ${name}$compat(name, props, fallbackHtml, children, hasOriginalChildren));`,
     `  const _name = String(name);`,
     `  const _escapedName = _name.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");`,
     `  const _props = props ?? {};`,
@@ -1926,14 +1930,16 @@ function collectHtmlParts(
       if (helperName !== undefined) {
         const hasComponentFallback = shouldRenderClientBoundaryFallback(node);
         const boundaryProps = emitPropsObject(node.props, [], escapeHelperName);
-        const fallbackHtml = hasComponentFallback
+        const fallbackHtml = node.clientReference?.compatSsr === true
+          ? `(_childrenHtml, _identifierPrefix, _props) => ${currentCompatRenderToStringHelperName}(${node.name}, _props, { identifierPrefix: _identifierPrefix })`
+          : hasComponentFallback
           ? `(_childrenHtml) => async (${currentClientBoundaryFallbackSinkName}) => { await ${node.name}(${currentClientBoundaryFallbackSinkName}, ${emitPropsObject(node.props, node.children, escapeHelperName, node.name, "_childrenHtml")}); }`
           : emitHtmlExpressionFromChildren(node.children, escapeHelperName);
         const originalChildrenHtml = hasComponentFallback
           ? (emitStreamRendererFromChildren(node.children, escapeHelperName, true) ??
             emitHtmlExpressionFromChildren(node.children, escapeHelperName))
           : undefined;
-        const helperCall = `${helperName}(${stringLiteral(node.name)}, ${boundaryProps}, ${fallbackHtml}${originalChildrenHtml === undefined ? "" : `, true, ${originalChildrenHtml}, ${node.children.length > 0}`})`;
+        const helperCall = `${helperName}(${stringLiteral(node.name)}, ${boundaryProps}, ${fallbackHtml}${originalChildrenHtml === undefined ? "" : `, true, ${originalChildrenHtml}, ${node.children.length > 0}${node.clientReference?.compatSsr === true ? ", true" : ""}`})`;
 
         return hasComponentFallback
           ? [
@@ -3912,7 +3918,7 @@ function containsReactNodeRender(node: JsxNodeIr): boolean {
   }
 
   if (node.kind === "component") {
-    if (node.runtime === "compat") {
+    if (node.runtime === "compat" || node.clientReference?.compatSsr === true) {
       return true;
     }
 

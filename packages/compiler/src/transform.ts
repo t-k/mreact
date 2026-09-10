@@ -70,6 +70,7 @@ function transformWithAnalyzer(
       input.target === "server" && serverOutput === "stream" ? "lower" : "diagnostic",
     clientBoundaryImports: input.clientBoundaryImports ?? [],
     clientBoundaryFallbackImports: input.clientBoundaryFallbackImports ?? [],
+    clientBoundaryCompatImports: input.clientBoundaryCompatImports ?? [],
     compatReactNodeReturn: mode === "compat",
     ...(mode === "compat" && input.target === "server"
       ? { compatReactNodeReturnRenderMode: "react-node" as const }

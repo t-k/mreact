@@ -50,6 +50,28 @@ export function CompatCounter() {
 
 Optimization or compatibility fallback can change how much code runs and ships, but it should not change the observable counter behavior. Keep low-level DOM work under an explicit `createRoot()` or `createCleanupScope()` owner so listeners, effects, subscriptions, and pending work are disposed with the integration.
 
+## App Router compat SSR
+
+The App Router server-renders eligible `.compat.tsx` boundaries and hydrates their existing DOM. A counter is visible before JavaScript loads; hydration preserves its button, focus, and edits to uncontrolled inputs. Each boundary owns a comment-delimited range, so sibling counters keep independent state without extra wrapper elements. Route navigation disposes their effects, refs, and event resources.
+
+Eligibility is conservative and checked across runtime imports and re-exports without evaluating application modules. The initial supported subset includes synchronous components, deterministic initial state, dynamic attributes and styles, form controls, and `useId()`. Named hooks from `@reckona/mreact-compat` or `react`, relative pure helpers, and nested `.compat` components can participate. Nested compat components render within their owning boundary; they do not create another independent root. Identifiers use a per-boundary prefix shared by SSR and hydration. This applies to development rendering, production string and streaming rendering, and the Lambda and Cloudflare render adapters.
+
+```tsx
+// Counter.compat.tsx
+import { useState } from "@reckona/mreact-compat";
+
+export function Counter() {
+  const [count, setCount] = useState(0);
+  return <button onClick={() => setCount(value => value + 1)}>Count: {count}</button>;
+}
+```
+
+A boundary stays client-only when its dependency graph cannot be proven eligible. This includes browser globals, unknown packages, side-effect imports, module-level calls or mutable objects, nondeterministic operations, dynamic imports, dependency cycles, and ordinary non-compat JSX helpers. A custom source transform also retains the client-only path. The `MR_COMPAT_SSR_CLIENT_ONLY` diagnostic explains this choice. An explicit `"use client"` directive opts out of compat SSR; `.client` boundaries also retain their existing behavior. The initial hook import allowlist does not include the broader `@reckona/mreact` entry point.
+
+Boundary props use the same JSON-normalized values on the server and client. Nonserializable props, including cyclic values and `BigInt`, keep the existing client-only fallback. Server-rendered JSX children retain the existing slot path and do not enable compat SSR. A Provider outside a boundary does not transfer context across independent roots; pass serializable values explicitly. Module-level `createContext()` is currently outside the eligibility subset, so ordinary context-based compat trees remain client-only. These restrictions bound the supported SSR subset; they do not make arbitrary browser-dependent components safe to execute on the server.
+
+Malformed props or missing range markers leave that boundary untouched while other valid boundaries continue hydrating. Recoverable mismatches are limited to the affected range. Deployment checks cover the generated Cloudflare route registry and Lambda render adapter; hosted infrastructure and a separately installed Lambda deployment package require their usual deployment smoke tests.
+
 ## Vite configuration
 
 You usually do not need a separate Vite alias just to use Mreact's app router. The `mreactRouter()` plugin wires the framework runtime, and most route code should import from `@reckona/mreact`.

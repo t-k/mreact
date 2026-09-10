@@ -21,6 +21,7 @@ export function collectOxcClientBoundaryImportComponents(
   program: unknown,
   inferredBoundaryImports: ReadonlySet<string>,
   fallbackBoundaryImports: ReadonlySet<string> = new Set(),
+  compatBoundaryImports: ReadonlySet<string> = new Set(),
 ): Map<string, ClientReferenceIr> {
   const names = new Map<string, ClientReferenceIr>();
 
@@ -46,12 +47,12 @@ export function collectOxcClientBoundaryImportComponents(
       }
 
       if (specifierObject.type === "ImportDefaultSpecifier") {
-        names.set(localName, clientReference(moduleId, "default", fallbackBoundaryImports));
+        names.set(localName, clientReference(moduleId, "default", fallbackBoundaryImports, compatBoundaryImports));
         continue;
       }
 
       if (specifierObject.type === "ImportNamespaceSpecifier") {
-        names.set(localName, clientReference(moduleId, "*", fallbackBoundaryImports));
+        names.set(localName, clientReference(moduleId, "*", fallbackBoundaryImports, compatBoundaryImports));
         continue;
       }
 
@@ -59,7 +60,7 @@ export function collectOxcClientBoundaryImportComponents(
         const imported = readObject(specifierObject.imported);
         names.set(
           localName,
-          clientReference(moduleId, String(imported.name ?? localName), fallbackBoundaryImports),
+          clientReference(moduleId, String(imported.name ?? localName), fallbackBoundaryImports, compatBoundaryImports),
         );
       }
     }
@@ -73,11 +74,13 @@ function clientReference(
   moduleId: string,
   exportName: string,
   fallbackBoundaryImports: ReadonlySet<string>,
+  compatBoundaryImports: ReadonlySet<string>,
 ): ClientReferenceIr {
   return {
     moduleId,
     exportName,
     ...(fallbackBoundaryImports.has(moduleId) ? { ssrFallback: true } : {}),
+    ...(compatBoundaryImports.has(moduleId) ? { ssrFallback: true, compatSsr: true } : {}),
   };
 }
 

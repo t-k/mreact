@@ -403,6 +403,7 @@ function analyzeOxcToIr(
     program,
     new Set(options?.clientBoundaryImports ?? []),
     new Set(options?.clientBoundaryFallbackImports ?? []),
+    new Set(options?.clientBoundaryCompatImports ?? []),
   );
   const compatRuntimeImports = collectOxcCompatRuntimeImportComponents(program);
   const compatReactNodeReferences =

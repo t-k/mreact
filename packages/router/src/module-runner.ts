@@ -1,3 +1,4 @@
+import { isCompatSsrFilename } from "./compat-ssr.js";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -532,7 +533,7 @@ async function transformServerSourceFile(
     console.warn(formatClientRouteInferenceDiagnostic(diagnostic));
   }
 
-  const cacheKey = `${options.serverOutput}\0${options.dev ? "dev" : "prod"}\0${options.filename}\0${transformedSourceHash}\0${clientInference.clientBoundaryImports.join("\0")}\0${clientInference.clientBoundaryFallbackImports.join("\0")}\0${viteDefineCacheKey(options.define)}\0${vitePluginsCacheKey(options.vitePlugins)}`;
+  const cacheKey = `${options.serverOutput}\0${options.dev ? "dev" : "prod"}\0${options.filename}\0${transformedSourceHash}\0${clientInference.clientBoundaryImports.join("\0")}\0${clientInference.clientBoundaryFallbackImports.join("\0")}\0${(clientInference.clientBoundaryCompatImports ?? []).join("\0")}\0${viteDefineCacheKey(options.define)}\0${vitePluginsCacheKey(options.vitePlugins)}`;
   const cached = readRouterRuntimeCacheEntry(
     serverSourceTransformCache,
     cacheKey,
@@ -547,12 +548,15 @@ async function transformServerSourceFile(
     code: source,
     clientBoundaryImports: clientInference.clientBoundaryImports,
     clientBoundaryFallbackImports: clientInference.clientBoundaryFallbackImports,
+    clientBoundaryCompatImports: clientInference.clientBoundaryCompatImports,
     dev: options.dev,
     filename: options.filename,
     moduleContext,
     serverEscape: nativeEscapeTransform,
     serverOutput: options.serverOutput,
-    target: "server",
+    ...(isCompatSsrFilename(options.filename)
+      ? { target: "client" as const, mode: "compat" as const }
+      : { target: "server" as const }),
   });
   const fatalDiagnostics = output.diagnostics.filter(
     (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",

@@ -90,9 +90,9 @@ const routeResumeRuntimeFactoryEpilogue = `
 const clientBoundaryRuntimeFactoryPrologue = `/**
  * Builds the client boundary hydration helpers around one route's compat entry points.
  *
- * The compat createRoot/createElement pair is injected so a route without a compat client reference never imports the compat runtime.
+ * The compat root and element functions are injected so a route without a compat client reference never imports the compat runtime.
  */
-export function __mreactCreateClientBoundaryRuntime(__mreactCompatCreateRoot, __mreactCompatCreateElement) {
+export function __mreactCreateClientBoundaryRuntime(__mreactCompatCreateRoot, __mreactCompatCreateElement, __mreactCompatHydrateRoot) {
 `;
 
 const clientBoundaryRuntimeFactoryEpilogue = `
@@ -110,9 +110,10 @@ const routeHydrationRuntimeParts: Record<RouteHydrationRuntimeModule, string> = 
   }
 
   let hydrated = false;
+  const skipped = new Set();
 
   while (true) {
-    const placeholder = marker.querySelector("template[data-mreact-client-boundary]");
+    const placeholder = Array.from(marker.querySelectorAll("template[data-mreact-client-boundary]")).find(node => !skipped.has(node)) ?? null;
 
     if (placeholder === null) {
       return hydrated;
@@ -128,6 +129,45 @@ const routeHydrationRuntimeParts: Record<RouteHydrationRuntimeModule, string> = 
     }
 
     const propsElement = __mreactClientBoundaryPropsElement(placeholder, name);
+    const resumeId = placeholder.getAttribute("data-mreact-compat-resume");
+    if (compat && resumeId !== null) {
+      try {
+        const start = placeholder.nextSibling;
+        const end = propsElement?.previousSibling;
+        const parent = placeholder.parentElement;
+        const encodedId = encodeURIComponent(resumeId);
+        if (parent === null || start?.nodeType !== Node.COMMENT_NODE || end?.nodeType !== Node.COMMENT_NODE ||
+            start.nodeValue !== "mreact-h:start:" + encodedId || end.nodeValue !== "mreact-h:end:" + encodedId ||
+            propsElement.parentElement !== parent || start === end) {
+          throw new Error("Invalid compat boundary range markers.");
+        }
+        const props = JSON.parse(propsElement.textContent || "{}");
+        const root = __mreactCompatHydrateRoot(parent, __mreactCompatCreateElement(component, props), {
+          resumeId,
+          identifierPrefix: resumeId,
+          onRecoverableError(error) { console.error("Compat boundary hydration mismatch", error); },
+        });
+        let unmounted = false;
+        start.__mreactCompatRoot = {
+          unmount() {
+            if (unmounted) return;
+            unmounted = true;
+            try { root.unmount(); } finally {
+              start.__mreactCompatRoot = undefined;
+              start.remove();
+              end.remove();
+            }
+          },
+        };
+        placeholder.remove();
+        propsElement.remove();
+        hydrated = true;
+      } catch (error) {
+        skipped.add(placeholder);
+        console.error("Compat boundary hydration failed", error);
+      }
+      continue;
+    }
     let props = propsElement?.textContent ? JSON.parse(propsElement.textContent) : {};
     const fallbackChildren = __mreactClientBoundaryFallbackChildren(placeholder, propsElement);
 
@@ -373,29 +413,17 @@ function __mreactExtractClientBoundaryChildren(nodes, name) {
 }
 `,
   resume: `function __mreactUnmountCompatBoundaries(root) {
-  const containers = [];
-
-  if (
-    root.nodeType === Node.ELEMENT_NODE &&
-    root.hasAttribute("data-mreact-compat-boundary")
-  ) {
-    containers.push(root);
+  const containers = Array.from(root.querySelectorAll?.("[data-mreact-compat-boundary]") ?? []);
+  containers.unshift(root);
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_COMMENT);
+  while (walker.nextNode()) {
+    if (walker.currentNode.__mreactCompatRoot !== undefined) containers.push(walker.currentNode);
   }
-
-  if (typeof root.querySelectorAll === "function") {
-    containers.push(...root.querySelectorAll("[data-mreact-compat-boundary]"));
-  }
-
-  for (const container of containers) {
+  __mreactRunLifecycleTasks(containers, (container) => {
     const compatRoot = container.__mreactCompatRoot;
-
-    if (compatRoot === undefined || typeof compatRoot.unmount !== "function") {
-      continue;
-    }
-
-    compatRoot.unmount();
     container.__mreactCompatRoot = undefined;
-  }
+    compatRoot?.unmount?.();
+  });
 }
 
 function __mreactResumeRoute(marker, nextNode) {

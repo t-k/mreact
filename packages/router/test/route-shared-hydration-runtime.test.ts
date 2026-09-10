@@ -327,7 +327,7 @@ export default function Page() {
 
     expect(source.startsWith("/**")).toBe(true);
     expect(source).toContain(
-      "export function __mreactCreateClientBoundaryRuntime(__mreactCompatCreateRoot, __mreactCompatCreateElement) {",
+      "export function __mreactCreateClientBoundaryRuntime(__mreactCompatCreateRoot, __mreactCompatCreateElement, __mreactCompatHydrateRoot) {",
     );
     expect(source).toContain("  function __mreactHydrateClientBoundaries(marker, references, components) {");
     expect(source).toContain("    hydrateClientBoundaries: __mreactHydrateClientBoundaries,");
@@ -463,7 +463,7 @@ export default function Page() {
     });
 
     expect(entry.code).toContain(
-      "__mreactCreateClientBoundaryRuntime(__mreactCompatCreateRoot, __mreactCompatCreateElement);",
+      "__mreactCreateClientBoundaryRuntime(__mreactCompatCreateRoot, __mreactCompatCreateElement, __mreactCompatHydrateRoot);",
     );
     expect(entry.code).not.toContain("__mreactCreateClientBoundaryRuntime(undefined, undefined)");
   });

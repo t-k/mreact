@@ -1,3 +1,4 @@
+import { isCompatSsrFilename } from "./compat-ssr.js";
 import { createHash } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { Dirent } from "node:fs";
@@ -397,6 +398,7 @@ export interface BuiltRouteSourceAnalysisSummary {
   cachePolicy?: RouteCachePolicy | undefined;
   clientBoundaryImports: readonly string[];
   clientBoundaryFallbackImports: readonly string[];
+  clientBoundaryCompatImports?: readonly string[] | undefined;
   clientRoute: boolean;
   hasLoader: boolean;
   routeCode: string;
@@ -422,6 +424,7 @@ interface BuildSourceAnalysis {
 interface BuildRouteSourceAnalysis extends BuildSourceAnalysis {
   clientBoundaryImports: readonly string[];
   clientBoundaryFallbackImports: readonly string[];
+  clientBoundaryCompatImports?: readonly string[] | undefined;
   clientRoute: boolean;
   components: readonly ClientRouteComponent[];
   diagnostics: readonly ClientRouteInferenceDiagnostic[];
@@ -1761,6 +1764,7 @@ async function analyzeBuildRouteSources(options: {
           ...analyzeBuildSource(source, route.file),
           clientBoundaryImports: clientInference.clientBoundaryImports,
           clientBoundaryFallbackImports: clientInference.clientBoundaryFallbackImports,
+          clientBoundaryCompatImports: clientInference.clientBoundaryCompatImports,
           clientRoute: clientInference.client,
           components: clientInference.components ?? [],
           diagnostics: clientInference.diagnostics,
@@ -3447,6 +3451,7 @@ async function buildServerModuleArtifacts(options: {
           : undefined;
       const clientBoundaryImports =
         routeAnalysis?.clientBoundaryImports ?? clientInference?.clientBoundaryImports ?? [];
+      const clientBoundaryCompatImports = routeAnalysis?.clientBoundaryCompatImports ?? clientInference?.clientBoundaryCompatImports ?? [];
       const clientBoundaryFallbackImports =
         routeAnalysis?.clientBoundaryFallbackImports ??
         clientInference?.clientBoundaryFallbackImports ??
@@ -3470,6 +3475,7 @@ async function buildServerModuleArtifacts(options: {
             code,
             clientBoundaryImports,
             clientBoundaryFallbackImports,
+            clientBoundaryCompatImports,
             filename: join(options.projectRoot, file),
             moduleContextCache: options.clientRouteInferenceCache,
             serverOutput,
@@ -3593,6 +3599,7 @@ async function transformServerRouteSource(options: {
   cache: ServerTransformCache;
   clientBoundaryImports: readonly string[];
   clientBoundaryFallbackImports?: readonly string[];
+  clientBoundaryCompatImports?: readonly string[] | undefined;
   code: string;
   filename: string;
   moduleContextCache: ClientRouteInferenceCache;
@@ -3601,6 +3608,7 @@ async function transformServerRouteSource(options: {
   const cacheKey = stableCacheKey({
     clientBoundaryImports: options.clientBoundaryImports,
     clientBoundaryFallbackImports: options.clientBoundaryFallbackImports ?? [],
+    clientBoundaryCompatImports: options.clientBoundaryCompatImports ?? [],
     codeHash: hashText(options.code),
     filename: resolve(options.filename),
     serverOutput: options.serverOutput,
@@ -3623,12 +3631,15 @@ async function transformServerRouteSource(options: {
       code: options.code,
       clientBoundaryImports: options.clientBoundaryImports,
       clientBoundaryFallbackImports: options.clientBoundaryFallbackImports ?? [],
+      clientBoundaryCompatImports: options.clientBoundaryCompatImports ?? [],
       dev: false,
       filename: options.filename,
       moduleContext,
       serverEscape: nativeEscapeTransform,
       serverOutput: options.serverOutput,
-      target: "server",
+      ...(isCompatSsrFilename(options.filename)
+      ? { target: "client" as const, mode: "compat" as const }
+      : { target: "server" as const }),
     });
   });
   options.cache.set(cacheKey, transformed);
@@ -3645,6 +3656,7 @@ function builtRouteSourceAnalysisSummary(options: {
       : { cachePolicy: options.analysis.cachePolicy }),
     clientBoundaryImports: options.analysis.clientBoundaryImports,
     clientBoundaryFallbackImports: options.analysis.clientBoundaryFallbackImports,
+    clientBoundaryCompatImports: options.analysis.clientBoundaryCompatImports,
     clientRoute: options.analysis.clientRoute,
     hasLoader: options.analysis.hasLoader,
     routeCode: options.analysis.routeCode,
@@ -6435,12 +6447,15 @@ async function transformCloudflareServerSource(options: {
     code: options.source,
     clientBoundaryImports: clientInference.clientBoundaryImports,
     clientBoundaryFallbackImports: clientInference.clientBoundaryFallbackImports,
+    clientBoundaryCompatImports: clientInference.clientBoundaryCompatImports,
     dev: false,
     filename: options.filename,
     moduleContext,
     serverEscape: nativeEscapeTransform,
     serverOutput: options.serverOutput,
-    target: "server",
+    ...(isCompatSsrFilename(options.filename)
+      ? { target: "client" as const, mode: "compat" as const }
+      : { target: "server" as const }),
   });
   const fatalDiagnostics = output.diagnostics.filter(
     (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
@@ -7755,6 +7770,7 @@ async function validateProductionRoutes(options: {
       code: analysis.routeCode,
       clientBoundaryImports: analysis.clientBoundaryImports,
       clientBoundaryFallbackImports: analysis.clientBoundaryFallbackImports,
+      clientBoundaryCompatImports: analysis.clientBoundaryCompatImports,
       filename: route.file,
       moduleContextCache: options.clientRouteInferenceCache,
       serverOutput: analysis.streamRoute ? "stream" : "string",

@@ -74,6 +74,7 @@ export interface ClientReferenceIr {
   moduleId: string;
   exportName: string;
   ssrFallback?: boolean;
+  compatSsr?: boolean;
 }
 
 /** Represents any prop shape supported by a component reference. */

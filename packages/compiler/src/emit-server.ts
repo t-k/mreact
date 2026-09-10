@@ -1,3 +1,4 @@
+import { emitCompatSsrBoundaryHelper } from "./emit-compat-ssr-boundary.js";
 import type { AttributeIr, ComponentPropIr, ComponentIr, JsxNodeIr, ModuleIr } from "./ir.js";
 import type { RuntimeImport, ServerEscapeOptions } from "./types.js";
 import { emitEscapeHtmlHelper } from "./emit-escape-helper.js";
@@ -129,6 +130,7 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
     ? allocateHelperFamilyName(ir, "_renderClientBoundary", [
         "$hasNonSerializableProps",
         "$markChildren",
+        "$compat",
       ])
     : undefined;
   const compatChildHelperName = usesCompatChildRender(ir)
@@ -818,7 +820,9 @@ function collectHtmlStatements(
           undefined,
           false,
         );
-        const fallbackHtml = hasComponentFallback
+        const fallbackHtml = node.clientReference?.compatSsr === true
+          ? `(_childrenHtml, _identifierPrefix, _props) => ${reactNodeRenderHelperName}(${node.name}, _props, { identifierPrefix: _identifierPrefix })`
+          : hasComponentFallback
           ? `(_childrenHtml) => ${emitComponentCallExpression(
               node.name,
               emitPropsObject(
@@ -862,7 +866,7 @@ function collectHtmlStatements(
         return [
           emitHtmlAppend(
             outVar,
-            `${helperName}(${stringLiteral(node.name)}, ${boundaryProps}, ${fallbackHtml}${originalChildrenHtml === undefined ? "" : `, true, ${originalChildrenHtml}, ${node.children.length > 0}`})`,
+            `${helperName}(${stringLiteral(node.name)}, ${boundaryProps}, ${fallbackHtml}${originalChildrenHtml === undefined ? "" : `, true, ${originalChildrenHtml}, ${node.children.length > 0}${node.clientReference?.compatSsr === true ? ", true" : ""}`})`,
           ),
         ];
       }
@@ -3367,7 +3371,9 @@ function emitClientBoundaryHelper(name: string, isServerRenderValueHelperName?: 
     `  if (["iframe", "noembed", "noframes", "noscript", "plaintext", "script", "style", "template", "textarea", "title", "xmp"].includes(_opening[1].toLowerCase())) return undefined;`,
     `  return fallbackHtml.slice(0, _start) + startMarker + childrenHtml + endMarker + fallbackHtml.slice(_end);`,
     `}`,
-    `function ${name}(name, props, fallbackHtml = "", componentFallback = false, originalChildrenHtml = "", hasOriginalChildren = false) {`,
+    emitCompatSsrBoundaryHelper(name),
+    `function ${name}(name, props, fallbackHtml = "", componentFallback = false, originalChildrenHtml = "", hasOriginalChildren = false, compatSsr = false) {`,
+    `  if (compatSsr) return ${name}$compat(name, props, fallbackHtml, originalChildrenHtml, hasOriginalChildren);`,
     `  const _name = String(name);`,
     `  const _escapedName = _name.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");`,
     `  const _props = props ?? {};`,
@@ -3569,7 +3575,7 @@ function containsReactNodeRender(node: JsxNodeIr): boolean {
   }
 
   if (node.kind === "component") {
-    if (node.runtime === "compat" && !isClientBoundaryPlaceholder(node)) {
+    if (node.clientReference?.compatSsr === true || (node.runtime === "compat" && !isClientBoundaryPlaceholder(node))) {
       return true;
     }
 

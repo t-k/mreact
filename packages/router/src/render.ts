@@ -1,3 +1,4 @@
+import { isCompatSsrFilename } from "./compat-ssr.js";
 import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { readFileSync } from "node:fs";
@@ -413,6 +414,7 @@ async function preloadBuiltPageRouteModules(options: {
       code: routeCode,
       clientBoundaryImports: options.analysis.clientInference.clientBoundaryImports,
       clientBoundaryFallbackImports: options.analysis.clientInference.clientBoundaryFallbackImports,
+      clientBoundaryCompatImports: options.analysis.clientInference.clientBoundaryCompatImports,
       filename: options.file,
       serverModules: options.serverModules,
       serverOutput: "string",
@@ -433,6 +435,7 @@ async function preloadBuiltPageRouteModules(options: {
       code: routeCode,
       clientBoundaryImports: options.analysis.clientInference.clientBoundaryImports,
       clientBoundaryFallbackImports: options.analysis.clientInference.clientBoundaryFallbackImports,
+      clientBoundaryCompatImports: options.analysis.clientInference.clientBoundaryCompatImports,
       filename: options.file,
       serverModules: options.serverModules,
       serverOutput: "stream",
@@ -1239,6 +1242,7 @@ async function renderAppRequestInternal(
               code: routeCode,
               clientBoundaryImports: clientInference.clientBoundaryImports,
               clientBoundaryFallbackImports: clientInference.clientBoundaryFallbackImports,
+              clientBoundaryCompatImports: clientInference.clientBoundaryCompatImports,
               filename: matched.route.file,
               serverModules: options.serverModules,
               serverOutput: "string",
@@ -1409,6 +1413,7 @@ async function renderAppRequestInternal(
             code: routeCode,
             clientBoundaryImports: clientInference.clientBoundaryImports,
             clientBoundaryFallbackImports: clientInference.clientBoundaryFallbackImports,
+            clientBoundaryCompatImports: clientInference.clientBoundaryCompatImports,
             filename: matched.route.file,
             serverModules: options.serverModules,
             serverOutput: "stream",
@@ -1553,6 +1558,7 @@ async function renderAppRequestInternal(
           code: routeCode,
           clientBoundaryImports: clientInference.clientBoundaryImports,
           clientBoundaryFallbackImports: clientInference.clientBoundaryFallbackImports,
+          clientBoundaryCompatImports: clientInference.clientBoundaryCompatImports,
           filename: matched.route.file,
           serverModules: options.serverModules,
           serverOutput: "string",
@@ -3028,6 +3034,7 @@ function transformServerModule(options: {
   code: string;
   clientBoundaryImports?: readonly string[];
   clientBoundaryFallbackImports?: readonly string[];
+  clientBoundaryCompatImports?: readonly string[] | undefined;
   filename: string;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverOutput: ServerOutputMode;
@@ -3057,14 +3064,16 @@ function transformServerModule(options: {
         filename: options.filename,
         imports: [],
         serverOutput: options.serverOutput,
-        target: "server",
+        ...(isCompatSsrFilename(options.filename)
+      ? { target: "client" as const, mode: "compat" as const }
+      : { target: "server" as const }),
       },
     };
   }
 
   const awaitHydrationKey = options.serverAwaitHydration === true ? "1" : "0";
   const boundaryKey = options.clientBoundaryImports?.join("\0") ?? "";
-  const fallbackKey = options.clientBoundaryFallbackImports?.join("\0") ?? "";
+  const fallbackKey = (options.clientBoundaryFallbackImports?.join("\0") ?? "") + "\0compat:" + (options.clientBoundaryCompatImports?.join("\0") ?? "");
   const key = `${options.filename}\0${options.serverOutput}\0${sourceHash}\0${awaitHydrationKey}\0${boundaryKey}\0${fallbackKey}`;
   const cached = readRouterRuntimeCacheEntry(
     serverTransformCache,
@@ -3098,6 +3107,7 @@ function transformServerModule(options: {
     ...(options.clientBoundaryImports === undefined
       ? {}
       : { clientBoundaryImports: options.clientBoundaryImports }),
+    clientBoundaryCompatImports: options.clientBoundaryCompatImports ?? [],
     ...(options.clientBoundaryFallbackImports === undefined
       ? {}
       : { clientBoundaryFallbackImports: options.clientBoundaryFallbackImports }),
@@ -3105,7 +3115,9 @@ function transformServerModule(options: {
     filename: options.filename,
     serverEscape: nativeEscapeTransform,
     serverOutput: options.serverOutput,
-    target: "server",
+    ...(isCompatSsrFilename(options.filename)
+      ? { target: "client" as const, mode: "compat" as const }
+      : { target: "server" as const }),
     ...(options.serverAwaitHydration === true ? { serverAwaitHydration: true } : {}),
   });
 
@@ -3242,6 +3254,7 @@ function routeSourceAnalysisFromArtifact(
       client: artifact.clientRoute,
       clientBoundaryImports: [...artifact.clientBoundaryImports],
       clientBoundaryFallbackImports: [...(artifact.clientBoundaryFallbackImports ?? [])],
+      clientBoundaryCompatImports: [...(artifact.clientBoundaryCompatImports ?? [])],
       diagnostics: [],
     },
     hasLoader: artifact.hasLoader,
@@ -4387,6 +4400,7 @@ async function loadShellStaticRenderEntry(options: {
           client: false,
           clientBoundaryImports: [],
           clientBoundaryFallbackImports: [],
+          clientBoundaryCompatImports: [],
           diagnostics: [],
         }
       : await inferClientRouteModule({
@@ -4402,6 +4416,7 @@ async function loadShellStaticRenderEntry(options: {
     code,
     clientBoundaryImports: clientInference.clientBoundaryImports,
     clientBoundaryFallbackImports: clientInference.clientBoundaryFallbackImports,
+    clientBoundaryCompatImports: clientInference.clientBoundaryCompatImports,
     filename: options.shell.file,
     serverModules: options.serverModules,
     serverOutput,

@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { getHydrationScope } from "../src/hydration.js";
 import { expect, test } from "vitest";
 import { createElement, hydrateRoot, useState, useLayoutEffect } from "../src/index.js";
 
@@ -222,4 +223,43 @@ test("DevTools keeps sibling range roots and host lookups independent", () => {
     if (previous === undefined) delete globals.__REACT_DEVTOOLS_GLOBAL_HOOK__;
     else globals.__REACT_DEVTOOLS_GLOBAL_HOOK__ = previous;
   }
+});
+
+test.each([
+  "<!--mreact-h:start:a--><b>owned</b><!--mreact-h:end:a--><!--mreact-h:start:a-->",
+  "<!--mreact-h:start:a--><b>owned</b><!--mreact-h:end:a--><!--mreact-h:end:a-->",
+  "<!--mreact-h:end:a--><b>native</b><!--mreact-h:start:a-->",
+  "<div><!--mreact-h:start:a--></div><div><!--mreact-h:end:a--></div>",
+  "<!--mreact-h:start:a--><!--mreact-h:start:b--><!--mreact-h:end:c--><!--mreact-h:end:a-->",
+])("scope validation rejects malformed ownership before hydration: %s", (html) => {
+  const container = document.createElement("main");
+  container.innerHTML = html;
+  expect(() => getHydrationScope(container, "a")).toThrow(/range markers/);
+  expect(container.innerHTML).toBe(html);
+});
+
+test("valid nested ranges include neutral comments and exact outer anchors", () => {
+  const container = document.createElement("main");
+  container.innerHTML =
+    "<p>native</p><!--mreact-h:start:a--><!--neutral--><!--mreact-h:start:b--><b>nested</b><!--mreact-h:end:b--><!--mreact-h:end:a--><p>after</p>";
+  const scope = getHydrationScope(container, "a");
+  expect(scope.parent).toBe(container);
+  expect(scope.before).toBe(container.childNodes[1]);
+  expect(scope.after).toBe(container.childNodes[6]);
+  expect(scope.previousNodes).toEqual(Array.from(container.childNodes).slice(2, 6));
+  const whole = getHydrationScope(container, undefined);
+  expect(whole.previousNodes).toEqual(Array.from(container.childNodes));
+  expect(whole.before).toBeNull();
+  expect(whole.after).toBeNull();
+});
+
+test("repeated unmount leaves a later owner's nodes inside retained anchors", () => {
+  const container = document.createElement("main");
+  container.innerHTML = "<!--mreact-h:start:a--><button>0</button><!--mreact-h:end:a-->";
+  const root = hydrateRoot(container, createElement(Counter), { resumeId: "a" });
+  root.unmount();
+  const foreign = document.createElement("p");
+  container.insertBefore(foreign, container.lastChild);
+  root.unmount();
+  expect(foreign.parentNode).toBe(container);
 });
