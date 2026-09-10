@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.0.216 - 2026-09-10
+
+### Added
+
+- Added server rendering and existing-DOM hydration for conservatively eligible App Router `.compat` boundaries across development, production string and streaming rendering, AWS Lambda, and Cloudflare. Eligibility checks the runtime dependency graph without evaluating application modules and retains the client-only path for browser-dependent, side-effectful, mutable, nondeterministic, cyclic, or otherwise unproven modules.
+- Added the `stringResult` option to the React-compatible `renderToString()` API so ReactNode components can explicitly treat top-level string results as escaped text while preserving the legacy compiled-HTML default.
+
+### Changed
+
+- Reduced query client overhead when reactive devtools instrumentation is disabled.
+
+### Fixed
+
+- Fixed compat SSR boundaries so string return values are HTML-escaped, preventing markup and event-handler injection from serialized props while retaining node identity through hydration.
+- Fixed independent hydration-range ownership for sibling compat roots, including consumed resume markers, empty and multi-node updates, failed hydration rollback, navigation cleanup, and repeated unmount.
+- Fixed ref teardown so later callback and object refs are released even when an earlier cleanup throws, while preserving and rethrowing the first error after cleanup completes.
+
 ## 0.0.215 - 2026-09-09
 
 ### Fixed
