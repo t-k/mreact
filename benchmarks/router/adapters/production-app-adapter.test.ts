@@ -10,8 +10,8 @@ describe("production app adapter server RSS probes", () => {
 
     expect(source).toContain("pid?: number");
     expect(source).toContain("pid: child.pid");
-    expect(source).toContain("measureConcurrentRequestsWithServerRss");
-    expect(source).toContain("measureServerChildRss");
+    expect(source).toContain("async getHttpTarget()");
+    expect(source).toContain("serverPid: server.pid");
     expect(source).toContain("server?.pid");
   });
 });

@@ -14,11 +14,6 @@ import { dirname, join, resolve as pathResolve } from "node:path";
 import type { AppFrameworkAdapter } from "../types.js";
 import { measureBuildOutputGzipBytes } from "../build-output-size.js";
 import {
-  type ConcurrentRequestProbeResult,
-  measureConcurrentRequests,
-  measureConcurrentRequestsWithServerRss,
-} from "../http-probes.js";
-import {
   measureBackForwardRestore,
   measureClientNavigation,
   measureFirstInteractionAfterNetworkIdle,
@@ -661,25 +656,15 @@ export const qwikCityAdapter: AppFrameworkAdapter = {
     assertLastSpan(html, 1000, "SSR HTML gzip probe");
     return gzipSync(html).length;
   },
-  async measureConcurrentRequestThroughputOps(): Promise<number> {
-    return (await ensureConcurrentRequestResult()).throughputOps;
-  },
-  async measureConcurrentRequestP99Ms(): Promise<number> {
-    return (await ensureConcurrentRequestResult()).p99Ms;
-  },
-  async measureConcurrentRequestRssDeltaBytes(): Promise<number | undefined> {
+  async getHttpTarget() {
     const url = await ensureFixture(1000);
-    if (serverProcess?.pid === undefined) {
-      return undefined;
-    }
-    return (
-      await measureConcurrentRequestsWithServerRss(url, serverProcess.pid, {
-        path: "/",
-        validate(html) {
-          assertLastSpan(html, 1000, "concurrent RSS response");
-        },
-      })
-    ).rssDeltaBytes;
+    if (serverProcess?.pid === undefined) throw new Error("HTTP server PID unavailable");
+    return {
+      url: new URL("/", url).href,
+      serverPid: serverProcess.pid,
+      requiredText: ">999</span>",
+      workload: { route: "/", cache: "existing framework fixture defaults" },
+    };
   },
   async measureClientNavigationMs(): Promise<number> {
     const url = await ensureBrowserFixture();
@@ -692,6 +677,9 @@ export const qwikCityAdapter: AppFrameworkAdapter = {
   async measureBackForwardRestoreMs(): Promise<number> {
     const url = await ensureBrowserFixture();
     return measureBackForwardRestore(url, { expectStateRestore: false });
+  },
+  async getBrowserTarget() {
+    return { url: await ensureBrowserFixture(), counterPrefix: "count: " };
   },
   async measureInitialPageLoadBeforeInteractionMs(): Promise<number> {
     const url = await ensureBrowserFixture();
@@ -710,17 +698,3 @@ export const qwikCityAdapter: AppFrameworkAdapter = {
     return measureSecondInteractionLatency(url);
   },
 };
-
-function ensureConcurrentRequestResult(): Promise<ConcurrentRequestProbeResult> {
-  return measureConcurrentRequestResult();
-}
-
-async function measureConcurrentRequestResult(): Promise<ConcurrentRequestProbeResult> {
-  const url = await ensureFixture(1000);
-  return measureConcurrentRequests(url, {
-    path: "/",
-    validate(html) {
-      assertLastSpan(html, 1000, "concurrent response");
-    },
-  });
-}

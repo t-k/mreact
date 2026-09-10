@@ -124,6 +124,12 @@ jobs:
           MREACT_NON_ROUTER_BENCH_OUT: ${{ steps.results.outputs.dir }}/non-router.md
         run: NODE_ENV=production pnpm bench:non-router
 
+      - name: Verify HTTP production server isolation
+        if: ${{ inputs.suite == 'all' || inputs.suite == 'router' }}
+        env:
+          MREACT_ROUTER_HTTP_INTEGRATION: "1"
+        run: pnpm build && NODE_ENV=production pnpm exec vitest run benchmarks/router/adapters/http-production.integration.test.ts benchmarks/router/fixture-server.test.ts
+
       - name: Run router benchmarks
         if: ${{ inputs.suite == 'all' || inputs.suite == 'router' }}
         env:
@@ -163,6 +169,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload benchmark results
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-results-${{ steps.results.outputs.date }}-${{ steps.results.outputs.run }}

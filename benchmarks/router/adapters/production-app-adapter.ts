@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { gzipSync } from "node:zlib";
 import { measureBuildOutputGzipBytes } from "../build-output-size.js";
+import { registerDetachedProcess } from "../lifecycle-protocol.js";
 import {
   measureBackForwardRestore,
   measureClientNavigation,
@@ -16,11 +17,6 @@ import {
   measureRouteJavaScriptGzipBytes,
   measureSecondInteractionLatency,
 } from "../browser-probes.js";
-import {
-  measureConcurrentRequests,
-  measureConcurrentRequestsWithServerRss,
-  type ConcurrentRequestProbeResult,
-} from "../http-probes.js";
 import type { AppFrameworkAdapter, AppFrameworkName } from "../types.js";
 
 interface ServerHandle {
@@ -34,7 +30,6 @@ export interface ProductionAppAdapterOptions {
   buildOutputPaths?: (rootDir: string) => readonly string[];
   fixturePrefix: string;
   includeAsyncDataRoutes?: boolean;
-  measureServerChildRss?: boolean;
   name: AppFrameworkName;
   packageName: string;
   start: (rootDir: string) => Promise<ServerHandle>;
@@ -72,6 +67,7 @@ export function createProductionAppAdapter(
     await options.writeFixture(rootDir, nodeCount);
     await options.build(rootDir);
     server = await options.start(rootDir);
+    await registerDetachedProcess({ pid: server.pid }, options.name);
     return server.url;
   }
 
@@ -97,15 +93,6 @@ export function createProductionAppAdapter(
     if (!html.includes(`Item #${cellCount - 1}`) || !html.includes("&lt;data")) {
       throw new Error(`${options.name} ${method} did not include the last escaped text`);
     }
-  }
-
-  async function ensureConcurrentRequestResult(): Promise<ConcurrentRequestProbeResult> {
-    return measureConcurrentRequests(await ensureFixture(1000), {
-      path: "/",
-      validate(html) {
-        validateNodeHtml("concurrent response", html, 1000);
-      },
-    });
   }
 
   async function interactiveRouteUrl(): Promise<string> {
@@ -190,6 +177,9 @@ export function createProductionAppAdapter(
     async measureClientNavigationMs(): Promise<number> {
       return measureClientNavigation(await interactiveRouteUrl());
     },
+    async getBrowserTarget() {
+      return { url: await interactiveRouteUrl(), counterPrefix: "count: " };
+    },
     async measureInitialPageLoadBeforeInteractionMs(): Promise<number> {
       return measureInitialPageLoadBeforeInteraction(await interactiveRouteUrl());
     },
@@ -207,11 +197,15 @@ export function createProductionAppAdapter(
         expectStateRestore: false,
       });
     },
-    async measureConcurrentRequestThroughputOps(): Promise<number> {
-      return (await ensureConcurrentRequestResult()).throughputOps;
-    },
-    async measureConcurrentRequestP99Ms(): Promise<number> {
-      return (await ensureConcurrentRequestResult()).p99Ms;
+    async getHttpTarget() {
+      const url = await ensureFixture(1000);
+      if (server?.pid === undefined) throw new Error("HTTP server PID unavailable");
+      return {
+        url: new URL("/", url).href,
+        serverPid: server.pid,
+        requiredText: "<span>999</span>",
+        workload: { route: "/", cache: "existing framework fixture defaults" },
+      };
     },
     async measureBuildOutputGzipBytes(): Promise<number> {
       await ensureFixture(1000);
@@ -221,23 +215,6 @@ export function createProductionAppAdapter(
       return measureBuildOutputGzipBytes(options.buildOutputPaths?.(rootDir) ?? [rootDir]);
     },
   };
-
-  if (options.measureServerChildRss !== false) {
-    adapter.measureConcurrentRequestRssDeltaBytes = async (): Promise<number | undefined> => {
-      const url = await ensureFixture(1000);
-      if (server?.pid === undefined) {
-        return undefined;
-      }
-      return (
-        await measureConcurrentRequestsWithServerRss(url, server.pid, {
-          path: "/",
-          validate(html) {
-            validateNodeHtml("concurrent RSS response", html, 1000);
-          },
-        })
-      ).rssDeltaBytes;
-    };
-  }
 
   if (options.includeAsyncDataRoutes !== false) {
     adapter.renderToRealStream = async (nodeCount: number): Promise<string> => {
@@ -319,6 +296,12 @@ export async function startCommandServer(
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
+  try {
+    await registerDetachedProcess(child, "command server");
+  } catch (error) {
+    await closeChildProcess(child);
+    throw error;
+  }
   let stderr = "";
   child.stderr?.on("data", (chunk: Buffer) => {
     stderr += chunk.toString("utf8");

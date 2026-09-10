@@ -2,6 +2,38 @@ import { describe, expect, test } from "vitest";
 import { createVariantFixtureCache } from "./variant-fixture-cache.js";
 
 describe("variant fixture cache", () => {
+  test("waits for remaining fixture closures when an earlier closure rejects", async () => {
+    const cache = createVariantFixtureCache<string, { close(): Promise<void> }>();
+    const release = Promise.withResolvers<void>();
+    let closing = false;
+    let closed = false;
+    let settled = false;
+    await cache.getOrCreate("broken", async () => ({
+      close: async () => {
+        throw new Error("broken fixture");
+      },
+    }));
+    await cache.getOrCreate("slow", async () => ({
+      close: async () => {
+        closing = true;
+        await release.promise;
+        closed = true;
+      },
+    }));
+    const result = cache.closeAll().catch((error: unknown) => {
+      settled = true;
+      return error;
+    });
+    try {
+      await expect.poll(() => closing).toBe(true);
+      expect(settled).toBe(false);
+    } finally {
+      release.resolve();
+    }
+    expect(await result).toBeInstanceOf(AggregateError);
+    expect(closed).toBe(true);
+  });
+
   test("keeps independent fixtures alive per variant key", async () => {
     const events: string[] = [];
     const cache = createVariantFixtureCache<string, { id: string; close(): Promise<void> }>();

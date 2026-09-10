@@ -8,8 +8,20 @@ describe("router benchmark report", () => {
     const rows: RouterBenchmarkRow[] = [
       completedRow("mreact-app-router", "app render 1000 nodes", "throughput", "ops/sec", 20),
       completedRow("next-app-router", "app render 1000 nodes", "throughput", "ops/sec", 10),
-      completedRow("marko-run", "app client bundle gzip bytes (server-only page)", "size", "gzip bytes", 40),
-      completedRow("qwik-city", "app client bundle gzip bytes (server-only page)", "size", "gzip bytes", 100),
+      completedRow(
+        "marko-run",
+        "app client bundle gzip bytes (server-only page)",
+        "size",
+        "gzip bytes",
+        40,
+      ),
+      completedRow(
+        "qwik-city",
+        "app client bundle gzip bytes (server-only page)",
+        "size",
+        "gzip bytes",
+        100,
+      ),
     ];
 
     const markdown = formatRouterBenchmarkMarkdown(testEnvironment, rows);
@@ -17,9 +29,7 @@ describe("router benchmark report", () => {
     expect(markdown).toContain(
       "Renders a production app route that emits 1,000 simple text spans.",
     );
-    expect(markdown).toContain(
-      "| rank | framework | case | value | diff vs 1st | unit |",
-    );
+    expect(markdown).toContain("| rank | framework | case | value | diff vs 1st | unit |");
     expect(markdown).toContain(
       "| 1 | **mreact-app-router** | app render 1000 nodes | 20 | best | ops/sec |",
     );
@@ -65,13 +75,7 @@ describe("router benchmark report", () => {
         "ms",
         240,
       ),
-      completedRow(
-        "mreact-app-router+log enabled",
-        "app server cold start",
-        "duration",
-        "ms",
-        210,
-      ),
+      completedRow("mreact-app-router+log enabled", "app server cold start", "duration", "ms", 210),
     ];
 
     const markdown = formatRouterBenchmarkMarkdown(testEnvironment, rows);
@@ -81,7 +85,7 @@ describe("router benchmark report", () => {
     );
   });
 
-  it("prints same-core mreact variant noise floor for comparable variants", () => {
+  it("labels implementation variant spread without claiming measurement noise", () => {
     const rows: RouterBenchmarkRow[] = [
       completedRow("mreact-app-router", "app render 1000 nodes", "throughput", "ops/sec", 100),
       completedRow(
@@ -104,7 +108,7 @@ describe("router benchmark report", () => {
     const markdown = formatRouterBenchmarkMarkdown(testEnvironment, rows);
 
     expect(markdown).toContain(
-      "Same-core mreact variant noise floor: +8% spread. Treat smaller cross-framework gaps in this case as inconclusive.",
+      "mreact variant spread: +8%. This includes implementation and configuration differences; it is not measurement noise or a statistical significance threshold.",
     );
   });
 
@@ -127,10 +131,16 @@ describe("router benchmark report", () => {
 
   it("moves mreact-only rankings after cross-framework rankings", () => {
     const rows: RouterBenchmarkRow[] = [
-      completedRow("mreact-app-router", "app hydration 100 islands", "duration", "ms", 80),
+      completedRow(
+        "mreact-app-router",
+        "app 100 islands verified interaction E2E",
+        "duration",
+        "ms",
+        80,
+      ),
       completedRow(
         "mreact-app-router+mreact react-compat",
-        "app hydration 100 islands",
+        "app 100 islands verified interaction E2E",
         "duration",
         "ms",
         100,
@@ -150,13 +160,7 @@ describe("router benchmark report", () => {
         "ms",
         12,
       ),
-      completedRow(
-        "next-app-router",
-        "app client navigation route-to-route",
-        "duration",
-        "ms",
-        20,
-      ),
+      completedRow("next-app-router", "app client navigation route-to-route", "duration", "ms", 20),
       completedRow(
         "mreact-app-router",
         "app client bundle gzip bytes (server-only page)",
@@ -176,11 +180,11 @@ describe("router benchmark report", () => {
     const markdown = formatRouterBenchmarkMarkdown(testEnvironment, rows);
 
     expect(sectionIndex(markdown, "app client navigation route-to-route")).toBeLessThan(
-      sectionIndex(markdown, "app hydration 100 islands"),
+      sectionIndex(markdown, "app 100 islands verified interaction E2E"),
     );
-    expect(
-      sectionIndex(markdown, "app client bundle gzip bytes (server-only page)"),
-    ).toBeLessThan(sectionIndex(markdown, "app nested layouts depth 5"));
+    expect(sectionIndex(markdown, "app client bundle gzip bytes (server-only page)")).toBeLessThan(
+      sectionIndex(markdown, "app nested layouts depth 5"),
+    );
   });
 
   it("shows client bundle gzip byte rankings first", () => {
@@ -211,12 +215,10 @@ describe("router benchmark report", () => {
 
     const markdown = formatRouterBenchmarkMarkdown(testEnvironment, rows);
 
-    expect(
-      sectionIndex(markdown, "app client bundle gzip bytes (server-only page)"),
-    ).toBeLessThan(sectionIndex(markdown, "app client bundle gzip bytes (interactive page)"));
-    expect(
+    expect(sectionIndex(markdown, "app client bundle gzip bytes (server-only page)")).toBeLessThan(
       sectionIndex(markdown, "app client bundle gzip bytes (interactive page)"),
-    ).toBeLessThan(
+    );
+    expect(sectionIndex(markdown, "app client bundle gzip bytes (interactive page)")).toBeLessThan(
       sectionIndex(markdown, "app client bundle gzip bytes (interactive page, minimal opt-out)"),
     );
     expect(
@@ -228,14 +230,14 @@ describe("router benchmark report", () => {
     const rows: RouterBenchmarkRow[] = [
       completedRow(
         "mreact-app-router",
-        "app concurrent RSS delta 100 connections",
+        "app HTTP v2 burst server RSS delta (max 100 in-flight)",
         "memory",
         "bytes",
         100,
       ),
       completedRow(
         "mreact-app-router+mreact react-compat",
-        "app concurrent RSS delta 100 connections",
+        "app HTTP v2 burst server RSS delta (max 100 in-flight)",
         "memory",
         "bytes",
         -20,
@@ -244,9 +246,7 @@ describe("router benchmark report", () => {
 
     const markdown = formatRouterBenchmarkMarkdown(testEnvironment, rows);
 
-    expect(markdown).toContain(
-      "RSS delta rows only rank adapters that expose server child process RSS; adapters without measurable server child RSS are reported as unsupported, and rows with negative RSS samples are treated as contaminated and excluded from this ranking.",
-    );
+    expect(markdown).toContain("RSS is a single server PID's before/after delta");
   });
 
   it("excludes unsupported concurrent RSS delta rows from ranking", () => {
@@ -254,7 +254,7 @@ describe("router benchmark report", () => {
       {
         ...completedRow(
           "marko-run",
-          "app concurrent RSS delta 100 connections",
+          "app HTTP v2 burst server RSS delta (max 100 in-flight)",
           "memory",
           "bytes",
           1024,
@@ -264,7 +264,7 @@ describe("router benchmark report", () => {
       },
       completedRow(
         "mreact-app-router",
-        "app concurrent RSS delta 100 connections",
+        "app HTTP v2 burst server RSS delta (max 100 in-flight)",
         "memory",
         "bytes",
         2048,
@@ -273,13 +273,15 @@ describe("router benchmark report", () => {
 
     const markdown = formatRouterBenchmarkMarkdown(testEnvironment, rows);
     const ranking = markdown.slice(
-      sectionIndex(markdown, "app concurrent RSS delta 100 connections"),
+      sectionIndex(markdown, "app HTTP v2 burst server RSS delta (max 100 in-flight)"),
       markdown.indexOf("## Results"),
     );
 
     expect(ranking).toContain("mreact-app-router");
     expect(ranking).not.toContain("marko-run");
-    expect(markdown).toContain("| router | marko-run | test | app concurrent RSS delta 100 connections | unsupported |");
+    expect(markdown).toContain(
+      "| router | marko-run | test | app HTTP v2 burst server RSS delta (max 100 in-flight) | unsupported |",
+    );
   });
 });
 

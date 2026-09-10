@@ -1,16 +1,13 @@
-// mreact-app-router adapter。同一 shape (1000 spans) の fixture app を
-// `buildApp()` → `startServer()` で立て、HTTP fetch で SSR / streaming を測る。
-// HTTP 越し計測にすることで、後述の Next.js adapter (`getRequestHandler` を
-// http.Server に乗せる) と round-trip overhead が揃い fair comparison になる。
+// Build the production fixture in the orchestrator and serve primary routes in
+// a dedicated process. HTTP workload/cache differences remain explicit metadata.
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { gzipSync } from "node:zlib";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 import {
   buildApp,
-  createMemoryRouteCache,
   packageCloudflarePagesArtifact,
   startDevServer,
   startServer,
@@ -20,6 +17,8 @@ import type { AppFrameworkAdapter } from "../types.js";
 import { buildDynamicAttrCells, type DynamicAttrCell } from "../dynamic-attr-cells.js";
 import { measureBuildOutputGzipBytes } from "../build-output-size.js";
 import { createVariantFixtureCache } from "../variant-fixture-cache.js";
+import { createTemporaryDirectoryOwner } from "../temporary-directories.js";
+import { startFixtureServer } from "../fixture-server.js";
 import {
   measureClientNavigation,
   measureBackForwardRestore,
@@ -37,6 +36,7 @@ void {} as DynamicAttrCell;
 
 interface ServerHandle {
   close(): Promise<void>;
+  pid?: number;
   url: string;
 }
 
@@ -64,12 +64,8 @@ let coldStartRootDir: string | undefined;
 let coldStartOutDir: string | undefined;
 let coldStartReactCompat = false;
 const routeScaleResults = new Map<string, Promise<RouteScaleResult>>();
-
-interface ConcurrentLoadResult {
-  p99Ms: number;
-  rssDeltaBytes: number;
-  throughputOps: number;
-}
+const temporaryDirectories = createTemporaryDirectoryOwner();
+const mkdtemp = temporaryDirectories.create;
 
 interface RouteScaleResult {
   buildTimeMs: number;
@@ -233,11 +229,10 @@ export default function Page() {
   //   MREACT_APP_ROUTER_SINK_STRATEGY=buffer pnpm bench:router
   const envStrategy = process.env["MREACT_APP_ROUTER_SINK_STRATEGY"];
   const sinkStrategy = envStrategy === "buffer" ? ("buffer" as const) : ("string" as const);
-  server = await startServer({
-    logger: logEnabled ? createBenchmarkLogger() : undefined,
-    outDir,
-    port: 0,
-    routeCache: createMemoryRouteCache(),
+  server = await startFixtureServer({
+    framework: "mreact",
+    directory: outDir,
+    logEnabled,
     sinkStrategy,
   });
   currentNodeCount = nodeCount;
@@ -371,33 +366,59 @@ function createMreactAppRouterAdapter(options: {
       return server?.url ?? null;
     },
     async teardown() {
-      await primaryFixtureLifecycle.closeAll();
-      primaryFixtureStates.clear();
-      rootDir = undefined;
-      server = undefined;
-      currentNodeCount = 0;
-      currentLogEnabled = false;
-      currentReactCompat = false;
-
-      await browserFixtureLifecycle.closeAll();
-      browserFixtureStates.clear();
-      browserRootDir = undefined;
-      browserServer = undefined;
-      browserLogEnabled = false;
-      browserReactCompat = false;
-
-      if (coldStartRootDir !== undefined) {
-        await rm(coldStartRootDir, { force: true, recursive: true });
-        coldStartRootDir = undefined;
-        coldStartOutDir = undefined;
-        coldStartReactCompat = false;
-      }
-      for (const result of await Promise.allSettled(routeScaleResults.values())) {
-        if (result.status === "fulfilled") {
-          await rm(result.value.rootDir, { force: true, recursive: true });
-        }
-      }
-      routeScaleResults.clear();
+      await runCleanupTasks([
+        {
+          name: "primary fixtures",
+          async run() {
+            await primaryFixtureLifecycle.closeAll();
+            primaryFixtureStates.clear();
+            rootDir = undefined;
+            server = undefined;
+            currentNodeCount = 0;
+            currentLogEnabled = false;
+            currentReactCompat = false;
+          },
+        },
+        {
+          name: "browser fixtures",
+          async run() {
+            await browserFixtureLifecycle.closeAll();
+            browserFixtureStates.clear();
+            browserRootDir = undefined;
+            browserServer = undefined;
+            browserLogEnabled = false;
+            browserReactCompat = false;
+          },
+        },
+        {
+          name: "cold start fixture",
+          async run() {
+            if (coldStartRootDir !== undefined) {
+              await rm(coldStartRootDir, { force: true, recursive: true });
+              coldStartRootDir = undefined;
+              coldStartOutDir = undefined;
+              coldStartReactCompat = false;
+            }
+          },
+        },
+        {
+          name: "route scale fixtures",
+          async run() {
+            const cleanupTasks = [];
+            for (const result of await Promise.allSettled(routeScaleResults.values())) {
+              if (result.status === "fulfilled") {
+                cleanupTasks.push({
+                  name: "route scale directory",
+                  run: () => rm(result.value.rootDir, { force: true, recursive: true }),
+                });
+              }
+            }
+            routeScaleResults.clear();
+            await runCleanupTasks(cleanupTasks);
+          },
+        },
+        { name: "allocated fixture directories", run: () => temporaryDirectories.closeAll() },
+      ]);
     },
     async renderToString(nodeCount: number): Promise<string> {
       const url = await ensureFixture(nodeCount, logEnabled, reactCompat);
@@ -522,6 +543,12 @@ function createMreactAppRouterAdapter(options: {
       const url = await ensureBrowserFixture(logEnabled, reactCompat);
       return measureBackForwardRestore(url);
     },
+    async getBrowserTarget() {
+      return {
+        url: await ensureBrowserFixture(logEnabled, reactCompat),
+        counterPrefix: reactCompat ? "compat count: " : "count: ",
+      };
+    },
     async measureInitialPageLoadBeforeInteractionMs(): Promise<number> {
       const url = await ensureBrowserFixture(logEnabled, reactCompat);
       return measureInitialPageLoadBeforeInteraction(url);
@@ -538,14 +565,22 @@ function createMreactAppRouterAdapter(options: {
       const url = await ensureBrowserFixture(logEnabled, reactCompat);
       return measureSecondInteractionLatency(url);
     },
-    async measureConcurrentRequestThroughputOps(): Promise<number> {
-      return (await measureConcurrentLoad(logEnabled, reactCompat)).throughputOps;
-    },
-    async measureConcurrentRequestP99Ms(): Promise<number> {
-      return (await measureConcurrentLoad(logEnabled, reactCompat)).p99Ms;
-    },
-    async measureConcurrentRequestRssDeltaBytes(): Promise<number> {
-      return await measureConcurrentLoadRssInChild(logEnabled, reactCompat);
+    async getHttpTarget() {
+      const url = await ensureFixture(NODE_COUNT_DEFAULT, logEnabled, reactCompat);
+      if (server?.pid === undefined) throw new Error("mreact HTTP server PID unavailable");
+      return {
+        url: `${url}/static-page`,
+        serverPid: server.pid,
+        requiredText: "<span>999</span>",
+        workload: {
+          route: "/static-page",
+          cache: "memory route cache; maxAge=60",
+          sinkStrategy:
+            process.env["MREACT_APP_ROUTER_SINK_STRATEGY"] === "buffer" ? "buffer" : "string",
+          logger: String(logEnabled),
+          ssr: "native",
+        },
+      };
     },
     async measureHydration100IslandsMs(): Promise<number> {
       const url = await createHydrationFixture(logEnabled, reactCompat, 100);
@@ -608,48 +643,6 @@ function createMreactAppRouterAdapter(options: {
   };
 }
 
-async function measureConcurrentLoad(
-  logEnabled: boolean,
-  reactCompat: boolean,
-): Promise<ConcurrentLoadResult> {
-  const url = await ensureFixture(NODE_COUNT_DEFAULT, logEnabled, reactCompat);
-  const totalRequests = 200;
-  const concurrency = 100;
-  const latencies: number[] = [];
-  const startedAt = performance.now();
-  let nextIndex = 0;
-
-  await Promise.all(
-    Array.from({ length: concurrency }, async () => {
-      for (;;) {
-        const index = nextIndex;
-        nextIndex += 1;
-
-        if (index >= totalRequests) {
-          return;
-        }
-
-        const requestStartedAt = performance.now();
-        const response = await fetch(`${url}/static-page`);
-        const html = await response.text();
-        latencies.push(performance.now() - requestStartedAt);
-
-        if (!html.includes(`<span>${NODE_COUNT_DEFAULT - 1}</span>`)) {
-          throw new Error("concurrent load response did not include the last node");
-        }
-      }
-    }),
-  );
-
-  const elapsedMs = performance.now() - startedAt;
-
-  return {
-    p99Ms: percentile(latencies, 0.99),
-    rssDeltaBytes: Number.NaN,
-    throughputOps: totalRequests / (elapsedMs / 1000),
-  };
-}
-
 async function createHydrationFixture(
   logEnabled: boolean,
   reactCompat: boolean,
@@ -704,160 +697,6 @@ export default function Page() {
   });
 
   return trackOneShotServer(fixtureDir, server);
-}
-
-async function measureConcurrentLoadRssInChild(
-  logEnabled: boolean,
-  reactCompat: boolean,
-): Promise<number> {
-  const samples = await Promise.all(
-    Array.from({ length: 3 }, () => measureConcurrentLoadRssSampleInChild(logEnabled, reactCompat)),
-  );
-  return percentile(samples, 0.5);
-}
-
-async function measureConcurrentLoadRssSampleInChild(
-  logEnabled: boolean,
-  _reactCompat: boolean,
-): Promise<number> {
-  const items = Array.from({ length: NODE_COUNT_DEFAULT }, (_, index) => index);
-  const arrayLiteral = `[${items.join(",")}]`;
-  const staticPageSource = `import { cacheControl } from "@reckona/mreact-router";
-const items = ${arrayLiteral};
-export default function Page() {
-  cacheControl({ maxAge: 60 });
-  return <main>{items.map((index) => <span key={index}>{index}</span>)}</main>;
-}`;
-  const script = `
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { buildApp, createMemoryRouteCache, startServer } from ${JSON.stringify(join(process.cwd(), "packages/router/dist/index.js"))};
-
-async function forceGcFence() {
-  for (let index = 0; index < 3; index += 1) {
-    globalThis.gc?.();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-}
-
-const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-bench-concurrent-rss-"));
-const appDir = join(rootDir, "app");
-const outDir = join(rootDir, ".mreact");
-
-try {
-  await mkdir(join(appDir, "static-page"), { recursive: true });
-  await writeFile(join(appDir, "layout.tsx"), "export default function Layout() {\\n  return <html lang=\\"en\\"><body><Slot /></body></html>;\\n}\\n");
-  await writeFile(join(appDir, "page.tsx"), ${JSON.stringify(spanPageSource(arrayLiteral))});
-  await writeFile(join(appDir, "static-page", "page.tsx"), ${JSON.stringify(staticPageSource)});
-  await buildApp({ appDir, outDir });
-  const logger = process.env.MREACT_BENCH_LOG_ENABLED === "1" ? { info() {}, error() {} } : undefined;
-  const server = await startServer({
-    logger,
-    outDir,
-    port: 0,
-    routeCache: createMemoryRouteCache(),
-  });
-  try {
-    await forceGcFence();
-    const beforeRss = process.memoryUsage().rss;
-    const totalRequests = 200;
-    const concurrency = 100;
-    let nextIndex = 0;
-    await Promise.all(
-      Array.from({ length: concurrency }, async () => {
-        for (;;) {
-          const index = nextIndex;
-          nextIndex += 1;
-          if (index >= totalRequests) {
-            return;
-          }
-          const response = await fetch(\`\${server.url}/static-page\`);
-          const html = await response.text();
-          if (!html.includes("<span>999</span>")) {
-            throw new Error("concurrent load RSS response did not include the last node");
-          }
-        }
-      }),
-    );
-    await forceGcFence();
-    console.log(JSON.stringify({ rssDeltaBytes: process.memoryUsage().rss - beforeRss }));
-  } finally {
-    await server.close();
-  }
-} finally {
-  await rm(rootDir, { force: true, recursive: true });
-}
-`;
-
-  const child = spawn(process.execPath, ["--expose-gc", "--input-type=module", "-e", script], {
-    env: {
-      ...process.env,
-      ...(logEnabled ? { MREACT_BENCH_LOG_ENABLED: "1" } : {}),
-    },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-
-  return waitForConcurrentLoadRss(child);
-}
-
-async function waitForConcurrentLoadRss(child: ChildProcessWithoutNullStreams): Promise<number> {
-  return new Promise((resolve, reject) => {
-    let stdout = "";
-    let stderr = "";
-    const timeout = setTimeout(() => {
-      cleanup();
-      child.kill("SIGTERM");
-      reject(new Error(`mreact concurrent-load RSS child timed out\n${stderr}`));
-    }, 60_000);
-
-    const cleanup = (): void => {
-      clearTimeout(timeout);
-      child.stdout.off("data", onStdout);
-      child.stderr.off("data", onStderr);
-      child.off("exit", onExit);
-      child.off("error", onError);
-    };
-    const onStdout = (chunk: Buffer): void => {
-      stdout += chunk.toString("utf8");
-      for (const line of stdout.split(/\r?\n/)) {
-        if (!line.trim().startsWith("{")) {
-          continue;
-        }
-
-        try {
-          const parsed = JSON.parse(line) as { rssDeltaBytes?: unknown };
-          if (typeof parsed.rssDeltaBytes === "number") {
-            cleanup();
-            resolve(parsed.rssDeltaBytes);
-          }
-        } catch {
-          // Keep waiting for a complete JSON line.
-        }
-      }
-    };
-    const onStderr = (chunk: Buffer): void => {
-      stderr += chunk.toString("utf8");
-    };
-    const onExit = (code: number | null): void => {
-      cleanup();
-      reject(
-        new Error(`mreact concurrent-load RSS child exited before reporting: ${code}\n${stderr}`),
-      );
-    };
-    const onError = (error: Error): void => {
-      cleanup();
-      reject(error);
-    };
-
-    child.stdout.on("data", onStdout);
-    child.stderr.on("data", onStderr);
-    child.on("exit", onExit);
-    child.on("error", onError);
-  }).finally(async () => {
-    child.kill("SIGTERM");
-    await waitForChildExit(child);
-  });
 }
 
 async function measureDevServerColdStart(reactCompat: boolean): Promise<number> {
@@ -1352,17 +1191,6 @@ function extractInputValue(html: string, name: string): string {
   return match[1];
 }
 
-function percentile(values: readonly number[], p: number): number {
-  if (values.length === 0) {
-    return 0;
-  }
-
-  const sorted = [...values].sort((left, right) => left - right);
-  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * p) - 1));
-
-  return sorted[index]!;
-}
-
 async function trackOneShotServer(rootDir: string, server: ServerHandle): Promise<string> {
   const url = server.url;
   const dispose = async (): Promise<void> => {
@@ -1762,3 +1590,4 @@ async function waitForChildExit(child: ChildProcessWithoutNullStreams): Promise<
     });
   });
 }
+import { runCleanupTasks } from "../cleanup.js";

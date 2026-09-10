@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { createRequire } from "node:module";
 import { buildDynamicAttrCells } from "../dynamic-attr-cells.js";
 import {
   createProductionAppAdapter,
@@ -7,11 +8,13 @@ import {
   startCommandServer,
 } from "./production-app-adapter.js";
 
+const requireFromHere = createRequire(import.meta.url);
+const viteBin = join(dirname(requireFromHere.resolve("vite/package.json")), "bin/vite.js");
+
 export const svelteKitAdapter = createProductionAppAdapter({
   name: "svelte-kit",
   packageName: "@sveltejs/kit",
   fixturePrefix: "svelte-kit-fixture-",
-  measureServerChildRss: false,
   async writeFixture(rootDir, nodeCount) {
     const items = Array.from({ length: nodeCount }, (_, index) => index);
     const arrayLiteral = JSON.stringify(items);
@@ -73,8 +76,8 @@ export default { plugins: [sveltekit()] };
   buildOutputPaths: (rootDir) => [join(rootDir, ".svelte-kit", "bench")],
   start: (rootDir) =>
     startCommandServer(
-      "pnpm",
-      (port) => ["exec", "vite", "preview", "--host", "127.0.0.1", "--port", String(port)],
+      process.execPath,
+      (port) => [viteBin, "preview", "--host", "127.0.0.1", "--port", String(port)],
       { cwd: rootDir },
     ),
 });

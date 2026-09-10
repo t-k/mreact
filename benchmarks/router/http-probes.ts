@@ -74,14 +74,15 @@ export async function measureConcurrentRequestsWithServerRss(
   };
 }
 
-async function readProcessRssBytes(pid: number): Promise<number> {
+export async function readProcessRssBytes(pid: number): Promise<number> {
+  if (!Number.isSafeInteger(pid) || pid <= 1) throw new Error("invalid RSS process PID");
   if (process.platform === "darwin") {
     const { stdout } = await execFileAsync("ps", ["-o", "rss=", "-p", String(pid)], {
       encoding: "utf8",
     });
     const rssKiB = Number(stdout.trim());
 
-    if (!Number.isSafeInteger(rssKiB) || rssKiB < 0) {
+    if (stdout.trim() === "" || !Number.isSafeInteger(rssKiB) || rssKiB < 0) {
       throw new Error(`process ${pid} RSS is not available`);
     }
 

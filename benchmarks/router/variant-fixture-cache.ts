@@ -43,7 +43,10 @@ export function createVariantFixtureCache<TKey, TFixture extends ClosableFixture
       pendingFixtures.clear();
       fixtures.clear();
 
-      await Promise.all(values.map((fixture) => fixture.close()));
+      await runCleanupTasks(
+        values.map((fixture, index) => ({ name: `fixture ${index}`, run: () => fixture.close() })),
+      );
     },
   };
 }
+import { runCleanupTasks } from "./cleanup.js";

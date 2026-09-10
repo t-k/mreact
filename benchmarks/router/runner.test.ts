@@ -1,17 +1,34 @@
 import { describe, expect, it } from "vitest";
 import { routerBenchmarkAdapters } from "./adapters/index.js";
 import { routerBenchmarkCases, rankCompletedRows, runRouterBenchmarks } from "./runner.js";
+import { httpBenchmarkCases } from "./runner-http.js";
+import { browserBenchmarkCases } from "./runner-browser.js";
 import type { RouterBenchmarkRow } from "./types.js";
 
 describe("router benchmark configuration", () => {
+  it("exposes explicit browser targets only for previously supported interaction adapters", () => {
+    expect(
+      routerBenchmarkAdapters
+        .filter((adapter) => adapter.getBrowserTarget)
+        .map((adapter) => adapter.name),
+    ).toEqual(
+      routerBenchmarkAdapters
+        .filter((adapter) => adapter.measureFirstInteractionFromDomContentLoadedMs)
+        .map((adapter) => adapter.name),
+    );
+  });
+  it("excludes quarantined Analog and experimental Qwik V2 from the default suite", () => {
+    const names = routerBenchmarkAdapters.map((adapter) => adapter.name);
+    expect(names).not.toContain("analog");
+    expect(names).not.toContain("qwik-router-v2");
+    expect(names).toContain("qwik-city");
+  });
   it("includes every planned router/app framework adapter", () => {
     expect(routerBenchmarkAdapters.map((adapter) => adapter.name)).toEqual([
       "marko-run",
       "nuxt",
       "svelte-kit",
-      "analog",
       "qwik-city",
-      "qwik-router-v2",
       "solid-start",
       "tanstack-start",
       "tanstack-start-solid",
@@ -34,10 +51,9 @@ describe("router benchmark configuration", () => {
       "app static cached route 1000 nodes",
       "app dynamic-attr grid 200 cells",
       "app dynamic route params data",
-      "app concurrent throughput 100 connections",
-      "app concurrent p99 latency 100 connections",
-      "app concurrent RSS delta 100 connections",
-      "app hydration 100 islands",
+      ...httpBenchmarkCases.map((item) => item.name),
+      ...browserBenchmarkCases.map((item) => item.name),
+      "app 100 islands verified interaction E2E",
       "app dev cold start",
       "app dev first request latency",
       "app dev HMR update latency",
@@ -51,10 +67,6 @@ describe("router benchmark configuration", () => {
       "app client navigation back-forward restore",
       "app Cloudflare Worker request latency",
       "app client navigation route-to-route",
-      "app initial page load JS before interaction",
-      "app first interaction from DOMContentLoaded",
-      "app first interaction after networkidle",
-      "app second interaction latency",
       "app server cold start",
       "app SSR HTML gzip bytes 1000 nodes",
       "app client bundle gzip bytes (server-only page)",
@@ -76,9 +88,7 @@ describe("router benchmark configuration", () => {
       "marko-run",
       "nuxt",
       "svelte-kit",
-      "analog",
       "qwik-city",
-      "qwik-router-v2",
       "solid-start",
       "tanstack-start",
       "next-app-router",
@@ -103,9 +113,7 @@ describe("router benchmark configuration", () => {
       "marko-run",
       "nuxt",
       "svelte-kit",
-      "analog",
       "qwik-city",
-      "qwik-router-v2",
       "solid-start",
       "tanstack-start",
       "next-app-router",
@@ -123,9 +131,7 @@ describe("router benchmark configuration", () => {
     expect(adaptersWithNavigationProbes).toEqual([
       "nuxt",
       "svelte-kit",
-      "analog",
       "qwik-city",
-      "qwik-router-v2",
       "solid-start",
       "tanstack-start",
       "next-app-router",
@@ -149,9 +155,7 @@ describe("router benchmark configuration", () => {
 
   it("exposes extended router probes for mreact app-router variants", () => {
     const requiredMethods = [
-      "measureConcurrentRequestThroughputOps",
-      "measureConcurrentRequestP99Ms",
-      "measureConcurrentRequestRssDeltaBytes",
+      "getHttpTarget",
       "measureHydration100IslandsMs",
       "measureDevColdStartMs",
       "measureDevFirstRequestLatencyMs",
@@ -189,9 +193,7 @@ describe("router benchmark configuration", () => {
       "marko-run",
       "nuxt",
       "svelte-kit",
-      "analog",
       "qwik-city",
-      "qwik-router-v2",
       "solid-start",
       "tanstack-start",
       "tanstack-start-solid",
@@ -200,11 +202,7 @@ describe("router benchmark configuration", () => {
       "mreact-app-router+mreact react-compat",
       "mreact-app-router+log enabled",
     ];
-    const requiredMethods = [
-      "measureConcurrentRequestThroughputOps",
-      "measureConcurrentRequestP99Ms",
-      "measureSsrHtmlGzipBytes",
-    ] as const;
+    const requiredMethods = ["getHttpTarget", "measureSsrHtmlGzipBytes"] as const;
 
     for (const method of requiredMethods) {
       expect(
@@ -216,17 +214,17 @@ describe("router benchmark configuration", () => {
 
     expect(
       routerBenchmarkAdapters
-        .filter((adapter) => adapter.measureConcurrentRequestRssDeltaBytes !== undefined)
+        .filter((adapter) => adapter.getHttpTarget !== undefined)
         .map((adapter) => adapter.name),
     ).toEqual([
       "marko-run",
       "nuxt",
-      "analog",
+      "svelte-kit",
       "qwik-city",
-      "qwik-router-v2",
       "solid-start",
       "tanstack-start",
       "tanstack-start-solid",
+      "next-app-router",
       "mreact-app-router",
       "mreact-app-router+mreact react-compat",
       "mreact-app-router+log enabled",
@@ -237,9 +235,7 @@ describe("router benchmark configuration", () => {
     const expectedAdapters = [
       "nuxt",
       "svelte-kit",
-      "analog",
       "qwik-city",
-      "qwik-router-v2",
       "solid-start",
       "tanstack-start",
       "next-app-router",
@@ -275,7 +271,6 @@ describe("router benchmark configuration", () => {
   it("exposes loader client navigation probes for adapters with loader/data routes", () => {
     const expectedAdapters = [
       "qwik-city",
-      "qwik-router-v2",
       "solid-start",
       "tanstack-start",
       "next-app-router",
@@ -302,7 +297,7 @@ describe("router benchmark configuration", () => {
   });
 
   it("exposes client bundle probes for production app framework adapters", () => {
-    const productionAppAdapterNames = ["nuxt", "svelte-kit", "analog"];
+    const productionAppAdapterNames = ["nuxt", "svelte-kit"];
     const requiredMethods = [
       "measureServerOnlyClientBundleBytes",
       "measureInteractiveClientBundleBeforeInteractionBytes",
@@ -328,9 +323,7 @@ describe("router benchmark configuration", () => {
       "marko-run",
       "nuxt",
       "svelte-kit",
-      "analog",
       "qwik-city",
-      "qwik-router-v2",
       "solid-start",
       "tanstack-start",
       "tanstack-start-solid",
@@ -352,17 +345,16 @@ describe("router benchmark configuration", () => {
     }
   });
 
-  it("uses production app fixtures for Nuxt, SvelteKit, and Analog adapters", () => {
+  it("uses production app fixtures for Nuxt and SvelteKit adapters", () => {
     const fixtureKinds = Object.fromEntries(
       routerBenchmarkAdapters
-        .filter((adapter) => ["nuxt", "svelte-kit", "analog"].includes(adapter.name))
+        .filter((adapter) => ["nuxt", "svelte-kit"].includes(adapter.name))
         .map((adapter) => [adapter.name, (adapter as { fixtureKind?: string }).fixtureKind]),
     );
 
     expect(fixtureKinds).toEqual({
       nuxt: "production-app",
       "svelte-kit": "production-app",
-      analog: "production-app",
     });
   });
 
@@ -468,7 +460,7 @@ describe("router benchmark configuration", () => {
   });
 
   it("reports fixed-latency streaming benchmark rows as duration samples", async () => {
-    const rows = await runRouterBenchmarks(
+    const { rows } = await runRouterBenchmarks(
       [
         {
           name: "mreact-app-router",
@@ -508,7 +500,7 @@ describe("router benchmark configuration", () => {
   });
 
   it("reports unsupported timed cases without running them through tinybench", async () => {
-    const rows = await runRouterBenchmarks(
+    const { rows } = await runRouterBenchmarks(
       [
         {
           name: "mreact-app-router",
@@ -534,7 +526,7 @@ describe("router benchmark configuration", () => {
   });
 
   it("reports streaming timing probes as unsupported without a real async stream route", async () => {
-    const rows = await runRouterBenchmarks(
+    const { rows } = await runRouterBenchmarks(
       [
         {
           name: "analog",
@@ -571,7 +563,7 @@ describe("router benchmark configuration", () => {
   });
 
   it("retains raw latency samples for timed benchmark rows", async () => {
-    const rows = await runRouterBenchmarks(
+    const { rows } = await runRouterBenchmarks(
       [
         {
           name: "mreact-app-router",
@@ -598,13 +590,13 @@ describe("router benchmark configuration", () => {
       async renderToString(nodeCount: number) {
         return `<span>${nodeCount - 1}</span>`;
       },
-      async measureFirstInteractionAfterNetworkIdleMs() {
+      async measureClientNavigationMs() {
         calls.push(name);
         return name === "mreact-app-router" ? 10 : 20;
       },
     });
 
-    const rows = await runRouterBenchmarks(
+    const { rows } = await runRouterBenchmarks(
       [createAdapter("mreact-app-router"), createAdapter("next-app-router")],
       { benchTimeMs: 1, warmupTimeMs: 1 },
     );
@@ -621,7 +613,7 @@ describe("router benchmark configuration", () => {
       rows.find(
         (row) =>
           row.framework === "mreact-app-router" &&
-          row.caseName === "app first interaction after networkidle",
+          row.caseName === "app client navigation route-to-route",
       ),
     ).toMatchObject({
       status: "completed",
@@ -632,7 +624,7 @@ describe("router benchmark configuration", () => {
 
   it("warms up and samples value probes before reporting the median", async () => {
     const values = [999, 5, 1, 9, 3, 7];
-    const rows = await runRouterBenchmarks(
+    const { rows } = await runRouterBenchmarks(
       [
         {
           name: "mreact-app-router",
@@ -658,7 +650,7 @@ describe("router benchmark configuration", () => {
 
   it("reports route-scale value probes as honest single-sample rows", async () => {
     const values = [999, 5];
-    const rows = await runRouterBenchmarks(
+    const { rows } = await runRouterBenchmarks(
       [
         {
           name: "mreact-app-router",
@@ -684,7 +676,7 @@ describe("router benchmark configuration", () => {
 
   it("surfaces negative memory samples in value probe notes", async () => {
     const values = [0, -10, 20, -30, 40, -50];
-    const rows = await runRouterBenchmarks(
+    const { rows } = await runRouterBenchmarks(
       [
         {
           name: "mreact-app-router",
@@ -692,7 +684,7 @@ describe("router benchmark configuration", () => {
           async renderToString(nodeCount: number) {
             return `<span>${nodeCount - 1}</span>`;
           },
-          async measureConcurrentRequestRssDeltaBytes() {
+          async measureRouteScale1000RssDeltaBytes() {
             return values.shift() ?? 0;
           },
         },
@@ -700,11 +692,9 @@ describe("router benchmark configuration", () => {
       { benchTimeMs: 1, warmupTimeMs: 1 },
     );
 
-    expect(
-      rows.find((row) => row.caseName === "app concurrent RSS delta 100 connections"),
-    ).toMatchObject({
-      note: "3/5 samples negative",
-      samplesMs: [-10, 20, -30, 40, -50],
+    expect(rows.find((row) => row.caseName === "app 1000 route RSS delta")).toMatchObject({
+      note: "1/1 samples negative",
+      samplesMs: [-10],
     });
   });
 });

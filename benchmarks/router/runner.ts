@@ -1,9 +1,13 @@
 import { Bench } from "tinybench";
+import { collectHttpRows, httpBenchmarkCases } from "./runner-http.js";
+import { collectBrowserRows, browserBenchmarkCases } from "./runner-browser.js";
 import type {
   RouterBenchmarkAdapter,
   RouterBenchmarkCaseName,
+  RouterBenchmarkCleanupResult,
   RouterBenchmarkMetric,
   RouterBenchmarkRow,
+  RouterBenchmarkRunResult,
   RouterBenchmarkUnit,
 } from "./types.js";
 
@@ -100,33 +104,9 @@ const timedRouterBenchmarkCases: TimedRouterBenchmarkCase[] = [
 
 const valueRouterBenchmarkCases: ValueRouterBenchmarkCase[] = [
   {
-    name: "app concurrent throughput 100 connections",
+    name: "app 100 islands verified interaction E2E",
     description:
-      "Runs a fixed burst against the production fixture with up to 100 concurrent requests and reports sustained request throughput.",
-    metric: "throughput",
-    unit: "ops/sec",
-    invoke: (adapter) => adapter.measureConcurrentRequestThroughputOps?.(),
-  },
-  {
-    name: "app concurrent p99 latency 100 connections",
-    description:
-      "Runs the same concurrent request burst and reports per-request p99 latency, exposing event-loop stalls hidden by sequential tinybench runs.",
-    metric: "duration",
-    unit: "ms",
-    invoke: (adapter) => adapter.measureConcurrentRequestP99Ms?.(),
-  },
-  {
-    name: "app concurrent RSS delta 100 connections",
-    description:
-      "Reports RSS growth across the concurrent request burst so sustained-load memory trends are visible in router benchmark output.",
-    metric: "memory",
-    unit: "bytes",
-    invoke: (adapter) => adapter.measureConcurrentRequestRssDeltaBytes?.(),
-  },
-  {
-    name: "app hydration 100 islands",
-    description:
-      "Loads an app route with 100 independently interactive islands and reports time until all islands can update in real Chromium.",
+      "Loads 100 islands and verifies every independent 0-to-1 update with ordinary Playwright clicks. Includes navigation and all 100 operations; not hydration time.",
     metric: "duration",
     unit: "ms",
     invoke: (adapter) => adapter.measureHydration100IslandsMs?.(),
@@ -297,38 +277,6 @@ const durationRouterBenchmarkCases: DurationRouterBenchmarkCase[] = [
     invoke: (adapter) => adapter.measureClientNavigationMs?.(),
   },
   {
-    name: "app initial page load JS before interaction",
-    description:
-      "Measures page load time until the interactive route is visible and idle before any user interaction.",
-    metric: "duration",
-    unit: "ms",
-    invoke: (adapter) => adapter.measureInitialPageLoadBeforeInteractionMs?.(),
-  },
-  {
-    name: "app first interaction from DOMContentLoaded",
-    description:
-      "Measures the first click-to-visible-update latency immediately after DOMContentLoaded without waiting for network idle.",
-    metric: "duration",
-    unit: "ms",
-    invoke: (adapter) => adapter.measureFirstInteractionFromDomContentLoadedMs?.(),
-  },
-  {
-    name: "app first interaction after networkidle",
-    description:
-      "Measures the first click-to-visible-update latency after the interactive route has reached network idle.",
-    metric: "duration",
-    unit: "ms",
-    invoke: (adapter) => adapter.measureFirstInteractionAfterNetworkIdleMs?.(),
-  },
-  {
-    name: "app second interaction latency",
-    description:
-      "Measures the second click-to-visible-update latency after the route has already handled one client interaction.",
-    metric: "duration",
-    unit: "ms",
-    invoke: (adapter) => adapter.measureSecondInteractionLatencyMs?.(),
-  },
-  {
     name: "app server cold start",
     description:
       "Measures production server cold-start latency when the adapter can isolate startup from build work.",
@@ -416,6 +364,8 @@ export const routerBenchmarkCases: RouterBenchmarkCase[] = [
   timedRouterBenchmarkCases[3]!,
   timedRouterBenchmarkCases[4]!,
   timedRouterBenchmarkCases[2]!,
+  ...httpBenchmarkCases,
+  ...browserBenchmarkCases,
   ...valueRouterBenchmarkCases,
   ...durationRouterBenchmarkCases.slice(5),
   ...sizeRouterBenchmarkCases,
@@ -445,7 +395,10 @@ export function rankCompletedRows(
 }
 
 function isRankableRow(row: RouterBenchmarkRow): boolean {
-  if (row.caseName !== "app concurrent RSS delta 100 connections") {
+  if (
+    row.caseName !== "app concurrent RSS delta 100 connections" &&
+    !(row.caseName.startsWith("app HTTP v2 ") && row.metric === "memory")
+  ) {
     return true;
   }
 
@@ -453,29 +406,37 @@ function isRankableRow(row: RouterBenchmarkRow): boolean {
     return false;
   }
 
-  return row.samplesMs?.every((sample) => sample >= 0) ?? true;
+  return (row.samples?.values ?? row.samplesMs)?.every((sample) => sample >= 0) ?? true;
 }
 
 export async function runRouterBenchmarks(
   adapters: readonly RouterBenchmarkAdapter[],
-  options: { benchTimeMs?: number; warmupTimeMs?: number } = {},
-): Promise<RouterBenchmarkRow[]> {
+  options: {
+    benchTimeMs?: number;
+    warmupTimeMs?: number;
+    onMeasurementsComplete?: (rows: RouterBenchmarkRow[]) => Promise<void>;
+    onCleanupComplete?: (cleanup: RouterBenchmarkCleanupResult[]) => Promise<void>;
+  } = {},
+): Promise<RouterBenchmarkRunResult> {
   const rows: RouterBenchmarkRow[] = [];
+  const cleanup: RouterBenchmarkCleanupResult[] = [];
   const benchTimeMs = options.benchTimeMs ?? 1_500;
   const warmupTimeMs = options.warmupTimeMs ?? 250;
   const activeAdapters: RouterBenchmarkAdapter[] = [];
-
-  for (const adapter of adapters) {
-    try {
-      await adapter.setup?.();
-      await adapter.renderToString?.(nodeCount);
-      activeAdapters.push(adapter);
-    } catch (error) {
-      rows.push(...failedRowsForAdapter(adapter, error));
-    }
-  }
+  const attemptedAdapters: RouterBenchmarkAdapter[] = [];
 
   try {
+    for (const adapter of adapters) {
+      attemptedAdapters.push(adapter);
+      try {
+        await adapter.setup?.();
+        await adapter.renderToString?.(nodeCount);
+        activeAdapters.push(adapter);
+      } catch (error) {
+        rows.push(...failedRowsForAdapter(adapter, error));
+      }
+    }
+
     for (const benchmarkCase of timedRouterBenchmarkCases) {
       for (const adapter of activeAdapters) {
         if (!benchmarkCase.isSupported(adapter)) {
@@ -511,6 +472,9 @@ export async function runRouterBenchmarks(
       rows.push(...(await collectDurationRowsRoundRobin(activeAdapters, benchmarkCase)));
     }
 
+    rows.push(...(await collectHttpRows(activeAdapters)));
+    rows.push(...(await collectBrowserRows(activeAdapters)));
+
     for (const benchmarkCase of valueRouterBenchmarkCases) {
       rows.push(...(await collectValueRowsRoundRobin(activeAdapters, benchmarkCase)));
     }
@@ -544,17 +508,24 @@ export async function runRouterBenchmarks(
         }
       }
     }
+    await options.onMeasurementsComplete?.(rows);
   } finally {
-    for (const adapter of activeAdapters) {
+    for (const adapter of attemptedAdapters) {
       try {
         await adapter.teardown?.();
-      } catch {
-        // Teardown failures should not hide benchmark results.
+        cleanup.push({ adapter: adapter.name, status: "completed" });
+      } catch (error) {
+        cleanup.push({
+          adapter: adapter.name,
+          status: "failed",
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
+    await options.onCleanupComplete?.(cleanup);
   }
 
-  return rows;
+  return { rows, cleanup };
 }
 
 async function collectValueRowsRoundRobin(
