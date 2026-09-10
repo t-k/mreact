@@ -79,13 +79,15 @@ jobs:
             run: pnpm typecheck:forms:strict
 
           - name: Primitive browser fixture build smoke
-            run: NODE_ENV=production pnpm bench:primitive-browser:build
+            run: NODE_ENV=production pnpm exec tsx benchmarks/primitive-browser/build.ts
 
           - name: API reports
             run: node scripts/generate-api-reports.mjs --check
 
           - name: API reference
-            run: pnpm docs:api:check
+            run: |
+              pnpm exec typedoc --options typedoc.json
+              git diff --exit-code -- docs/api
 
           - name: Lifecycle smoke scenario
             run: pnpm scenario:lifecycle

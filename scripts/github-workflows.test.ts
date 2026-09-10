@@ -10,7 +10,7 @@ describe("GitHub workflows", () => {
     const workflow = await readWorkflow("ci.yml");
 
     expect(workflow).toContain(
-      "          - name: Primitive browser fixture build smoke\n            run: NODE_ENV=production pnpm bench:primitive-browser:build",
+      "          - name: Primitive browser fixture build smoke\n            run: NODE_ENV=production pnpm exec tsx benchmarks/primitive-browser/build.ts",
     );
   });
 
@@ -45,8 +45,10 @@ describe("GitHub workflows", () => {
       "          - name: API reports\n            run: node scripts/generate-api-reports.mjs --check",
     );
     expect(workflow).toContain(
-      "          - name: API reference\n            run: pnpm docs:api:check",
+      "          - name: API reference\n            run: |\n              pnpm exec typedoc --options typedoc.json\n              git diff --exit-code -- docs/api",
     );
+    expect(workflow).not.toContain("pnpm bench:primitive-browser:build");
+    expect(workflow).not.toContain("pnpm docs:api:check");
     expect(workflow).toContain("          - name: Test router build");
   });
 
@@ -69,8 +71,9 @@ describe("GitHub workflows", () => {
       "          - name: API reports\n            run: node scripts/generate-api-reports.mjs --check",
     );
     expect(workflow).toContain(
-      "          - name: API reference\n            run: pnpm docs:api:check",
+      "          - name: API reference\n            run: |\n              pnpm exec typedoc --options typedoc.json\n              git diff --exit-code -- docs/api",
     );
+    expect(workflow).not.toContain("pnpm docs:api:check");
     expect(workflow).toContain("- parallel:\n          - name: Download Linux native artifact");
     expect(workflow).toContain("          - name: Download macOS native artifact");
     expect(workflow).toContain("          - name: Download Windows native artifact");
