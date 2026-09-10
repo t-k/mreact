@@ -1,5 +1,6 @@
 import {
   emitQueryDevtoolsEvent,
+  queryDevtoolsEnabled,
   registerQueryDevtoolsResource,
   type QueryDevtoolsResourceHandle,
 } from "./devtools.js";
@@ -31,7 +32,7 @@ interface InternalQueryEntry<TData = unknown> extends QueryEntry<TData> {
   queryKeySegments: readonly string[];
   invalidationRevision: number;
   resource?: QueryDevtoolsResourceHandle | undefined;
-  resourceOwnerId: string;
+  resourceOwnerId?: string | undefined;
   version: number;
 }
 
@@ -51,7 +52,7 @@ interface QuerySubscription<TData = unknown> {
   queryKey: QueryKey;
   queryKeySegments: readonly string[];
   listener: (entry: QueryEntry<TData>) => void;
-  resource: QueryDevtoolsResourceHandle;
+  resource?: QueryDevtoolsResourceHandle | undefined;
 }
 
 interface GcTimeAggregate {
@@ -93,7 +94,7 @@ export function createQueryLifecycle(
       queryHash,
       queryKey: stableQueryKey,
       queryKeySegments: hashQueryKeySegments(stableQueryKey),
-      resourceOwnerId: `query:${nextQueryResourceOwnerId++}`,
+      ...(queryDevtoolsEnabled ? { resourceOwnerId: `query:${nextQueryResourceOwnerId++}` } : {}),
       stale: true,
       status: "pending",
       updatedAt: 0,
@@ -132,14 +133,15 @@ export function createQueryLifecycle(
   }
 
   function notifyPublicEntry(queryKeySegments: readonly string[], publicEntry: QueryEntry): void {
-    emitQueryDevtoolsEvent({
-      isFetching: publicEntry.isFetching,
-      queryHash: publicEntry.queryHash,
-      queryKey: publicEntry.queryKey,
-      stale: publicEntry.stale,
-      status: publicEntry.status,
-      type: "query:update",
-    });
+    if (queryDevtoolsEnabled)
+      emitQueryDevtoolsEvent({
+        isFetching: publicEntry.isFetching,
+        queryHash: publicEntry.queryHash,
+        queryKey: publicEntry.queryKey,
+        stale: publicEntry.stale,
+        status: publicEntry.status,
+        type: "query:update",
+      });
 
     const exact = exactSubscriptions.get(publicEntry.queryHash);
     if (exact !== undefined) {
@@ -313,7 +315,7 @@ export function createQueryLifecycle(
   }
 
   function syncEntryDevtoolsResource(entry: InternalQueryEntry | undefined): void {
-    if (entry === undefined) {
+    if (!queryDevtoolsEnabled || entry === undefined) {
       return;
     }
 
@@ -432,8 +434,10 @@ export function createQueryLifecycle(
       entry.abortController.abort(createQueryAbortReason(entry.queryKey));
     }
 
-    entry.resource?.dispose();
-    entry.resource = undefined;
+    if (queryDevtoolsEnabled) {
+      entry.resource?.dispose();
+      entry.resource = undefined;
+    }
     inactiveGcTimes.delete(entry.queryHash);
     releasedSubscriptionPolicies.delete(entry.queryHash);
     pendingInvalidationNotifications.delete(entry);
@@ -619,10 +623,14 @@ export function createQueryLifecycle(
         queryKey: stableQueryKey,
         queryHash,
         queryKeySegments: hashQueryKeySegments(stableQueryKey),
-        resource: registerQueryDevtoolsResource("subscription", {
-          ownerId: `subscription:${nextQueryResourceOwnerId++}`,
-          ownership: "owned",
-        }),
+        ...(queryDevtoolsEnabled
+          ? {
+              resource: registerQueryDevtoolsResource("subscription", {
+                ownerId: `subscription:${nextQueryResourceOwnerId++}`,
+                ownership: "owned",
+              }),
+            }
+          : {}),
       };
       retainSubscription(queryHash, subscription.policyId, subscription.gcTime);
       if (subscription.exact) {
@@ -652,7 +660,7 @@ export function createQueryLifecycle(
           prefixSubscriptions.delete(subscription as QuerySubscription);
         }
         releaseSubscription(queryHash, subscription.policyId);
-        subscription.resource.dispose();
+        if (queryDevtoolsEnabled) subscription.resource?.dispose();
       };
     },
     entries(): QueryEntry[] {

@@ -1,3 +1,9 @@
+declare const __MREACT_CLIENT_DEVTOOLS__: boolean | undefined;
+
+// Router production bundles already disable client inspection; standalone clients remain opt-in.
+export const queryDevtoolsEnabled =
+  typeof __MREACT_CLIENT_DEVTOOLS__ === "undefined" || __MREACT_CLIENT_DEVTOOLS__ !== false;
+
 interface InstalledDevtools {
   emit?:
     | ((event: { package: string; timestamp: number } & Record<string, unknown>) => void)
@@ -46,5 +52,7 @@ export function registerQueryDevtoolsResource(
 }
 
 function getInstalledDevtools(): InstalledDevtools | undefined {
-  return (globalThis as { __mreactDevtools?: InstalledDevtools | undefined }).__mreactDevtools;
+  return queryDevtoolsEnabled
+    ? (globalThis as { __mreactDevtools?: InstalledDevtools | undefined }).__mreactDevtools
+    : undefined;
 }

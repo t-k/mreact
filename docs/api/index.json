@@ -113989,9 +113989,9 @@
 					"sources": [
 						{
 							"fileName": "query-lifecycle.ts",
-							"line": 800,
+							"line": 808,
 							"character": 16,
-							"url": "https://github.com/t-k/mreact/blob/main/packages/query/src/query-lifecycle.ts#L800"
+							"url": "https://github.com/t-k/mreact/blob/main/packages/query/src/query-lifecycle.ts#L808"
 						}
 					],
 					"signatures": [
@@ -114012,9 +114012,9 @@
 							"sources": [
 								{
 									"fileName": "query-lifecycle.ts",
-									"line": 800,
+									"line": 808,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/query/src/query-lifecycle.ts#L800"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/query/src/query-lifecycle.ts#L808"
 								}
 							],
 							"parameters": [

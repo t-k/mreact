@@ -46,6 +46,32 @@ export default function Page() {
 }`;
 
 describe("production navigation runtime sharing", () => {
+  test("production query routes omit disabled query inspection from their initial graph", async () => {
+    const { manifest, clientDir } = await buildFixture({
+      "page.tsx": `import { createQueryClient } from ${JSON.stringify(new URL("../../query/dist/index.js", import.meta.url).pathname)};
+const client = createQueryClient();
+export const clientNavigation = true;
+export default function Page() {
+  return <button onClick={() => client.setQueryData(["count"], 1)}>Set query</button>;
+}`,
+      "about/page.tsx": staticPage,
+    });
+    const report = await measureBrowserDelivery({
+      clientDir,
+      manifest,
+      initialPath: "/",
+      initialIncludesNavigationRuntime: true,
+    });
+    expect(report.initial.unavailablePaths).toEqual([]);
+    const source = (
+      await Promise.all(report.initial.paths.map((file) => readFile(join(clientDir, file), "utf8")))
+    ).join("\n");
+    for (const marker of ["__mreactDevtools", "query:update", "inactive-query", "subscription:"]) {
+      expect(source).not.toContain(marker);
+    }
+    expect(source).toContain("Set query");
+  });
+
   test("an unchanged app rebuilds navigation artifacts cached by 0.0.214", async () => {
     const { appDir, outDir, clientDir, manifest } = await buildFixture({
       "page.tsx": `export const clientNavigation = true;\n${interactivePage}`,
