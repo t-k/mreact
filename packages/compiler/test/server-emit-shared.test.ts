@@ -94,6 +94,208 @@ export function App() {
 }
 
 describe("server emit shared behavior", () => {
+  test("direct children readers omit empty values and escape nested arrays", async () => {
+    const source = "export function App(props) { return <main>{props.children}</main>; }";
+    for (const children of [null, undefined, false, true]) {
+      await expectServerPairHtml(source, "<main></main>", { children });
+    }
+    await expectServerPairHtml(source, "<main>&lt;unsafe&gt;ok</main>", {
+      children: ["<unsafe>", [null, false, "ok"]],
+    });
+  });
+
+  test.each(["string", "stream"] as const)(
+    "%s ordinary component children preserve markup, empty fallback, and escaped values",
+    async (serverOutput) => {
+      const compile = serverOutput === "string" ? compileServerModule : compileServerStreamModule;
+      const shell = transform({
+        code: "export function Shell(props) { return <main>{props.children || <b>fallback</b>}</main>; }",
+        filename: "Shell.tsx",
+        target: "server",
+        serverOutput,
+        dev: false,
+      });
+      for (const [children, value, expected] of [
+        ["hello &amp; goodbye", null, "<main>hello &amp; goodbye</main>"],
+        ["<p>{props.value}</p>", "<unsafe>", "<main><p>&lt;unsafe&gt;</p></main>"],
+        ['{""}', "", "<main><b>fallback</b></main>"],
+        ["{null}", null, "<main><b>fallback</b></main>"],
+        ["{props.children}", ["<unsafe>", null, false, "ok"], "<main>&lt;unsafe&gt;ok</main>"],
+      ] as const) {
+        const app = transform({
+          code: `import { Shell } from "./Shell"; export function App(props) { return <Shell>${children}</Shell>; }`,
+          filename: "App.tsx",
+          target: "server",
+          serverOutput,
+          dev: false,
+        });
+        expect(app.diagnostics).toEqual([]);
+        const { App } = compile(app.code, compile(shell.code));
+        const render = App as (...args: unknown[]) => unknown;
+        const sink = createStringSink();
+        const result =
+          serverOutput === "string"
+            ? await render({ value, children: value })
+            : await render(sink, { value, children: value });
+        await sink.drain();
+        expect(serverOutput === "string" ? result : sink.toString()).toBe(expected);
+      }
+    },
+  );
+
+  test.each(["string", "stream"] as const)(
+    "%s client layout fallback encodes supplied children before trusting its HTML",
+    async (serverOutput) => {
+      let calls = 0;
+      const payload = "<script>alert(1)</script>";
+      const forged = () => {
+        calls++;
+        return payload;
+      };
+      forged.toString = () => payload;
+      Object.defineProperty(forged, Symbol.for("mreact.server.selection-render-value"), {
+        value: true,
+      });
+      for (const children of [
+        "{props.children}",
+        "<section>{props.children}</section>",
+        "<>{props.children}</>",
+        "{props.nested ? <section>{props.children}</section> : props.children}",
+        "{[props.children].map((value) => <p>{value}</p>)}",
+        "{content}",
+        "<Forward>{props.children}</Forward>",
+        ...(serverOutput === "stream"
+          ? ["<Await value={Promise.resolve(props.children)}>{value => <p>{value}</p>}</Await>"]
+          : []),
+      ]) {
+        const shell = transform({
+          code: "export function Shell(props) { return <main>{props.children || <b>fallback</b>}</main>; }",
+          filename: "Shell.tsx",
+          target: "server",
+          serverOutput,
+          dev: false,
+        });
+        const app = transform({
+          code: `import { Shell } from "./Shell";
+function Forward(props) { return <section>{props.children}</section>; }
+export function App(props) { const read = () => props.children; const content = read(); return <Shell>${children}</Shell>; }`,
+          filename: "App.tsx",
+          target: "server",
+          serverOutput,
+          dev: false,
+          clientBoundaryImports: ["./Shell"],
+          clientBoundaryFallbackImports: ["./Shell"],
+        });
+        expect(shell.diagnostics).toEqual([]);
+        expect(app.diagnostics).toEqual([]);
+        const compile = serverOutput === "string" ? compileServerModule : compileServerStreamModule;
+        const { App } = compile(app.code, compile(shell.code));
+        for (const [value, nested] of [payload, forged, ""].flatMap((value) =>
+          [false, true].map((nested) => [value, nested] as const),
+        )) {
+          const sink = createStringSink();
+          const render = App as (...args: unknown[]) => unknown;
+          const result =
+            serverOutput === "string"
+              ? await render({ children: value, nested })
+              : await render(sink, { children: value, nested });
+          await sink.drain();
+          const html = serverOutput === "string" ? String(result) : sink.toString();
+          expect(html).not.toContain("<script>alert(1)</script>");
+          expect(html).not.toContain("&amp;lt;script");
+          if (value !== "") expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+          else if (children === "{props.children}") expect(html).toContain("<b>fallback</b>");
+        }
+      }
+      expect(calls).toBe(0);
+    },
+  );
+
+  test.each(["string", "stream"] as const)(
+    "%s client layout fallback preserves compiled children across modules",
+    async (serverOutput) => {
+      const modules: Record<string, unknown> = {};
+      for (const [name, code] of [
+        [
+          "AppShell",
+          'export function AppShell(props) { return <main id="main-content">{props.children}</main>; }',
+        ],
+        [
+          "App",
+          `import { AppShell } from "./AppShell";
+export function App(props) {
+  const pageBody = <div><h1>{props.title}</h1><template data-mreact-client-boundary="Widget"></template></div>;
+  return <AppShell>{pageBody}</AppShell>;
+}`,
+        ],
+      ]) {
+        const output = transform({
+          code: code!,
+          filename: `${name}.tsx`,
+          target: "server",
+          serverOutput,
+          dev: false,
+          clientBoundaryImports: ["./AppShell"],
+          clientBoundaryFallbackImports: ["./AppShell"],
+        });
+        expect(output.diagnostics).toEqual([]);
+        Object.assign(
+          modules,
+          serverOutput === "string"
+            ? compileServerModule(output.code, modules)
+            : compileServerStreamModule(output.code, modules),
+        );
+      }
+      const App = modules.App as (...args: unknown[]) => unknown;
+      const sink = createStringSink();
+      const props = { title: "<untrusted>" };
+      const result = serverOutput === "string" ? await App(props) : await App(sink, props);
+      await sink.drain();
+      const html = serverOutput === "string" ? String(result) : sink.toString();
+      expect(html).toContain(
+        '<main id="main-content"><!--mreact-client-boundary-children-start--><div><h1>&lt;untrusted&gt;</h1><template data-mreact-client-boundary="Widget"></template></div><!--mreact-client-boundary-children-end--></main>',
+      );
+      expect(html).not.toContain("&lt;div");
+      expect(html).not.toContain("&lt;template");
+      expect(html).not.toContain("&amp;lt;untrusted");
+    },
+  );
+
+  test("unknown component children cannot execute forged render functions", async () => {
+    let calls = 0;
+    const payload = "<img src=x onerror=alert(1)>";
+    const forged = () => {
+      calls++;
+      return payload;
+    };
+    forged.toString = () => payload;
+    Object.defineProperty(forged, Symbol.for("mreact.server.selection-render-value"), {
+      value: true,
+    });
+    await expectServerPairHtml(
+      `function AppShell(props) { return <main>{props.children}</main>; }
+export function App(props) { const value = props.value; return <AppShell>{value}</AppShell>; }`,
+      "<main>&lt;img src=x onerror=alert(1)&gt;</main>",
+      { value: forged },
+    );
+    expect(calls).toBe(0);
+  });
+
+  test.each(["const", "let"])(
+    "layout children preserve locally bound JSX with %s",
+    async (kind) => {
+      await expectServerPairHtml(
+        `function AppShell(props) { return <main id="main-content">{props.children}</main>; }
+export function App(props) {
+  ${kind} pageBody = <div><h1>{props.title}</h1><template data-mreact-client-boundary="button"></template></div>;
+  return <AppShell>{pageBody}</AppShell>;
+}`,
+        '<main id="main-content"><div><h1>&lt;untrusted&gt;</h1><template data-mreact-client-boundary="button"></template></div></main>',
+        { title: "<untrusted>" },
+      );
+    },
+  );
+
   test.each(["props.children", "[props.children]", "[[props.children]]"])(
     "select preserves forwarded children shape %s",
     async (expression) => {

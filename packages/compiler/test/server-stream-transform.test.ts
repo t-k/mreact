@@ -1396,7 +1396,7 @@ export function App() {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain(
-      'await _renderClientBoundary("AppShell", { currentPath: ("/settings/email") }, (_childrenHtml) => async (_clientBoundaryFallbackSink) => { await AppShell(_clientBoundaryFallbackSink, { currentPath: ("/settings/email"), children: _childrenHtml }); }',
+      'await _renderClientBoundary("AppShell", { currentPath: ("/settings/email") }, (_childrenHtml) => async (_clientBoundaryFallbackSink) => { await AppShell(_clientBoundaryFallbackSink, { currentPath: ("/settings/email"), children: _childrenHtml === "" ? "" : _registerServerRenderValue(_childrenHtml) }); }',
     );
     expect(output.code).toContain("<!--mreact-client-boundary-children-start-->");
     expect(output.code).toContain("<!--mreact-client-boundary-children-end-->");

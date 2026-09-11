@@ -74,7 +74,6 @@ let currentOptionSelectedLocalNames: OptionSelectedLocalNames = {
 };
 const serverSelectionContextKey = "mreact.server.selected-value";
 const serverSelectionMultipleContextKey = "mreact.server.select-multiple";
-const serverSelectionRenderValueKey = "mreact.server.selection-render-value";
 /**
  * Selection expression of the nearest enclosing `<select>`, or `undefined` outside
  * one. Emit-time only (this walker is a synchronous tree walk, and nothing here
@@ -2822,8 +2821,10 @@ function emitPropsObject(
         const childRenderValue = `${containsAsyncServerOperationInChildren(children, asyncComponentNames) ? "async " : ""}(${currentSelectionParameterName}, ${currentSelectionMultipleParameterName}) => (${childrenExpression})`;
         entries.push(`children: ${currentMarkServerRenderThunkHelperName}(${childRenderValue})`);
       } else {
+        // This expression is compiler-rendered HTML, not an arbitrary prop.
+        // Keep empty children falsy while preserving the provenance of markup.
         entries.push(
-          `children: ${isRouterLinkComponentName(componentName) ? `${componentName}.trustedHtml(${childrenExpression})` : childrenExpression}`,
+          `children: ${isRouterLinkComponentName(componentName) ? `${componentName}.trustedHtml(${childrenExpression})` : childrenExpressionOverride !== undefined ? `${childrenExpression} === "" ? "" : ${currentMarkServerRenderValueHelperName}(${childrenExpression})` : `((_childrenHtml) => _childrenHtml === "" ? "" : ${currentMarkServerRenderValueHelperName}(_childrenHtml))(${childrenExpression})`}`,
         );
       }
     }
@@ -2957,10 +2958,6 @@ function emitServerChildHelper(
     `function ${name}(value) {`,
     `  if (value == null || typeof value === "boolean") return "";`,
     ...(renderRegisteredValue === undefined ? [] : [`  ${renderRegisteredValue}`]),
-    `  if (typeof value === "function") {`,
-    `    if (value[Symbol.for(${JSON.stringify(serverSelectionRenderValueKey)})] === true) return value(arguments[1], arguments[2]);`,
-    `    return value();`,
-    `  }`,
     `  ${renderArray}`,
     `  return ${escapeHelperName}(value);`,
     `}`,

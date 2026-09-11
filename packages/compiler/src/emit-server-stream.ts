@@ -1513,19 +1513,7 @@ function collectHtmlParts(
   }
 
   if (node.kind === "expr") {
-    if (node.renderMode === "html" && isChildrenExpressionCode(node.code)) {
-      return [
-        {
-          kind: "stream-node",
-          code: node.code,
-          escapeHelperName,
-          selectedValueCode: state.selectedValueCode ?? currentSelectionParameterName,
-          selectedMultipleCode: state.selectedMultipleCode ?? currentSelectionMultipleParameterName,
-        },
-      ];
-    }
-
-    if (node.renderMode === "html") {
+    if (node.renderMode === "html" && !isChildrenExpressionCode(node.code)) {
       return [{ kind: "raw-dynamic", code: rawHtmlExpression(node.code) }];
     }
 
@@ -1533,7 +1521,7 @@ function collectHtmlParts(
       return [{ kind: "react-node", code: node.code }];
     }
 
-    if (node.renderMode === "server-render-value") {
+    if (node.renderMode === "server-render-value" || (node.renderMode === "html" && isChildrenExpressionCode(node.code))) {
       return [
         {
           kind: "stream-node",
@@ -4165,7 +4153,7 @@ function emitPropsObject(
       entries.push(
         selectionAwareChildren
           ? `children: ${currentMarkServerRenderThunkHelperName}(${childrenExpression})`
-          : `children: ${isRouterLinkComponentName(componentName) ? `${componentName}.trustedHtml(${childrenExpression})` : childrenExpression}`,
+          : `children: ${isRouterLinkComponentName(componentName) ? `${componentName}.trustedHtml(${childrenExpression})` : childrenExpressionOverride !== undefined ? `${childrenExpression} === "" ? "" : ${currentMarkServerRenderValueHelperName}(${childrenExpression})` : `((_childrenHtml) => _childrenHtml === "" ? "" : ${currentMarkServerRenderValueHelperName}(_childrenHtml))(${childrenExpression})`}`,
       );
     }
   }
