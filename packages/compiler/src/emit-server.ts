@@ -2773,12 +2773,17 @@ function emitPropsObject(
   });
 
   if (children.length > 0) {
+    // A single value must retain its identity and truthiness until the receiver renders it.
+    // HTML and renderer closures still require their compiler-owned composition paths.
     const directChildrenExpression =
       childrenExpressionOverride === undefined &&
       !isRouterLinkComponentName(componentName) &&
       children.length === 1 &&
       children[0]?.kind === "expr" &&
-      isChildrenExpressionCode(children[0].code)
+      (isChildrenExpressionCode(children[0].code) ||
+        children[0].renderMode === undefined ||
+        children[0].renderMode === "dynamic" ||
+        children[0].renderMode === "server-render-value")
         ? children[0].code
         : undefined;
     if (directChildrenExpression !== undefined) {

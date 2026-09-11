@@ -1094,15 +1094,15 @@ export function App() {
     );
   });
 
-  test("string and stream emitters only collapse direct children expressions", () => {
+  test("string and stream emitters forward single values but preserve composite and Link rendering", () => {
     const ordinary = compileServerPair(`function Shell(props) {
   return <div>{props.children}</div>;
 }
 export function App(props) {
   return <Shell>{props.label}</Shell>;
 }`);
-    expect(ordinary.string).not.toContain("children: props.label");
-    expect(ordinary.stream).not.toContain("children: props.label");
+    expect(ordinary.string).toContain("children: props.label");
+    expect(ordinary.stream).toContain("children: props.label");
 
     const multiple = compileServerPair(`function Shell(props) {
   return <div>{props.children}{"!"}</div>;
