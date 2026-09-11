@@ -41,7 +41,8 @@ async function expectServerClientParity(
 
 describe("compiler constant component call inlining", () => {
   test("folds a constant-prop call into the caller template", () => {
-    const code = compileClient(`function Badge(props) { return <span class="badge">{props.label}</span>; }
+    const code =
+      compileClient(`function Badge(props) { return <span class="badge">{props.label}</span>; }
 export function App() { return <main><Badge label="alpha" /></main>; }`);
 
     // The constant branch and the props object both disappear: the callee's
@@ -63,12 +64,13 @@ export function App() {
     // The constant call site folds while the dynamic one keeps the shared
     // component and its live text binding.
     expect(code).toContain('<span class=\\"badge\\">alpha</span>');
-    expect(code).toContain("Badge({ get label()");
+    expect(code).toContain("untrack(() => Badge(_componentProps)))({ get label()");
     expect(code).toContain("bindText(");
   });
 
   test("folds a constant-prop call into the caller's server output", () => {
-    const code = compileServer(`function Badge(props) { return <span class="badge">{props.label}</span>; }
+    const code =
+      compileServer(`function Badge(props) { return <span class="badge">{props.label}</span>; }
 export function App() { return <main><Badge label="alpha" /></main>; }`);
 
     // Both emitters have to fold, or the server would render one structure while
@@ -79,7 +81,8 @@ export function App() { return <main><Badge label="alpha" /></main>; }`);
   });
 
   test("escapes a folded constant into the caller template", () => {
-    const code = compileClient(`function Badge(props) { return <span class="badge">{props.label}</span>; }
+    const code =
+      compileClient(`function Badge(props) { return <span class="badge">{props.label}</span>; }
 export function App() { return <main><Badge label="<script>&" /></main>; }`);
 
     expect(code).toContain("&lt;script&gt;&amp;");
@@ -335,7 +338,7 @@ export function App() { return <main><Wrapper /></main>; }`,
     for (const [scenario, source] of unprovable) {
       // The call itself has to survive, so the assertion looks for the props
       // object rather than for the callee's declaration.
-      expect(compileClient(source), scenario).toContain("Badge({");
+      expect(compileClient(source), scenario).toMatch(/untrack\(\(\) => Badge\(_componentProps/);
     }
   });
 
@@ -349,7 +352,8 @@ export function App() { return <main><Badge label="a" /></main>; }`);
   });
 
   test("lowers the prop child of a callee every call site folded away", () => {
-    const code = compileClient(`function Badge(props) { return <span class="badge">{props.label}</span>; }
+    const code =
+      compileClient(`function Badge(props) { return <span class="badge">{props.label}</span>; }
 export function App() { return <main><Badge label="a" /><Badge label="b" /></main>; }`);
 
     // Nothing can reach the callee any more, so its body keeps the cheapest
@@ -364,14 +368,14 @@ export function App() { return <main><Badge label="a" /><Badge label="b" /></mai
 function Shell(props) { return <section>{props.children}</section>; }
 export function App() { return <main><Shell><Badge label="a" /></Shell></main>; }`);
 
-    expect(code).toContain("Shell({");
-    expect(code).toContain("Badge({");
+    expect(code).toMatch(/untrack\(\(\) => Shell\(_componentProps/);
+    expect(code).toMatch(/untrack\(\(\) => Badge\(_componentProps/);
   });
 
   test("leaves a module without an inlinable callee untouched", () => {
     const code = compileClient(`export function Badge(props) { return <span>{props.label}</span>; }
 export function App() { return <main><Badge label="a" /></main>; }`);
 
-    expect(code).toContain('Badge({ label: ("a") })');
+    expect(code).toContain('untrack(() => Badge(_componentProps)))({ label: ("a") })');
   });
 });

@@ -310,6 +310,8 @@ export function App(props: { open: boolean }) {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).not.toContain("document.createDocumentFragment()");
-    expect(output.code).toMatch(/children: \[[\s\S]*\(props\.open\) \? Panel\(/);
+    expect(output.code).toMatch(
+      /children: \[[\s\S]*\(props\.open\) \? \(\(_componentProps[\s\S]*untrack\(\(\) => Panel\(/,
+    );
   });
 });

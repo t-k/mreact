@@ -21,7 +21,9 @@ export function App(props) {
   return <main><Badge label={props.title} /></main>;
 }`);
 
-    expect(code).toContain('_children[0].replaceWith(Badge({ label: (props.title) }))');
+    expect(code).toContain(
+      "_children[0].replaceWith(((_componentProps) => untrack(() => Badge(_componentProps)))({ label: (props.title) }))",
+    );
     expect(code).not.toContain('typeof _component === "boolean"');
   });
 
@@ -34,8 +36,8 @@ export function App() {
 }`);
 
     expect(code.match(/function Badge\(/g)).toHaveLength(1);
-    expect(code.match(/_children\[\d\]\.replaceWith\(Badge\(/g)).toHaveLength(3);
-    expect(code).not.toContain("_component");
+    expect(code.match(/_children\[\d\]\.replaceWith\(\(\(_componentProps/g)).toHaveLength(3);
+    expect(code).not.toContain("const _component =");
   });
 
   test("keeps the guard for callees whose return value the emitter cannot prove", () => {
@@ -74,7 +76,9 @@ export function App() {
   return <main><Panel /><footer>end</footer></main>;
 }`);
 
-    expect(code).toContain("replaceWith(Panel({  }))");
+    expect(code).toContain(
+      "replaceWith(((_componentProps) => untrack(() => Panel(_componentProps)))({  }))",
+    );
     const host = document.createElement("div");
     const dispose = createRoot(host, compileClientComponent(code));
 

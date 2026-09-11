@@ -8,13 +8,14 @@
       {
         "source": "@reckona/mreact-reactive-dom",
         "specifiers": ["createTemplate", "insertRenderValue"]
-      }
+      },
+      { "source": "@reckona/mreact-reactive-core", "specifiers": ["untrack"] }
     ],
     "client": {
       "tagName": "SECTION",
       "textContent": "Hello Ada",
       "attributes": {}
     },
-    "codeContains": ["Child({ name: (\"Ada\") })"]
+    "codeContains": ["untrack(() => Child(_componentProps)))({ name: (\"Ada\") })"]
   }
 }

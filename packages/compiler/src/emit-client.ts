@@ -39,10 +39,7 @@ export function emitClient(
   return withClientSpecializations(options.specializations, () => emitClientModule(ir, options));
 }
 
-function emitClientModule(
-  ir: ModuleIr,
-  options: { dev?: boolean; filename?: string },
-): EmitResult {
+function emitClientModule(ir: ModuleIr, options: { dev?: boolean; filename?: string }): EmitResult {
   const imports = collectImports(ir);
   const helperNames = allocateRuntimeHelperNames(
     ir,
@@ -263,7 +260,16 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
     specifiers.add("bindDomRef");
   }
 
-  if (JSON.stringify(ir).includes(OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER)) {
+  if (
+    JSON.stringify(ir).includes(OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER) ||
+    ir.components.some((component) => {
+      let found = false;
+      visit(component.root, (node) => {
+        if (node.kind === "component") found = true;
+      });
+      return found;
+    })
+  ) {
     reactiveCoreSpecifiers.add("untrack");
   }
 
@@ -1979,7 +1985,10 @@ function emitComponentCall(
     return `${state.clientBoundaryHelperName}(${JSON.stringify(clientReference.name)}, ${emitPropsObject(props, children, state)})`;
   }
 
-  return `${name}(${emitPropsObject(props, children, state)})`;
+  // Evaluate props in the parent scope, but do not subscribe that scope to
+  // incidental reads made while the child's setup runs.
+  const propsName = state.allocateName("_componentProps");
+  return `((${propsName}) => ${state.helperNames.untrack}(() => ${name}(${propsName})))(${emitPropsObject(props, children, state)})`;
 }
 
 function emitPropsObject(

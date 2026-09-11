@@ -150,6 +150,27 @@ export default function DebugCounter() {
 
 Prefer using JSX for UI updates. Reach for `effect()` when you need to connect reactive values to logging, imperative integrations, subscriptions, or low-level runtime code. If you create an effect manually outside a component or cleanup owner, keep the dispose function and call it when that owner is torn down.
 
+Native components mounted through JSX run their setup without subscribing the surrounding render scope to incidental reads. A synchronous helper called from a component body can read a cell without causing the parent conditional to recreate that component when the cell changes. JSX bindings and explicit effects still track their own reads, and changing a parent condition can unmount and mount the component again. This isolation applies to JSX component calls; an explicit JavaScript call such as `effect(() => App())` retains ordinary effect tracking.
+
+Use the existing `untrack()` helper when an imperative operation needs a snapshot inside an otherwise tracked scope:
+
+```ts
+import { cell, effect, untrack } from "@reckona/mreact-reactive-core";
+
+const query = cell("");
+const setupInFlight = cell(false);
+
+const dispose = effect(() => {
+  const currentQuery = query.get();
+  const busy = untrack(() => setupInFlight.get());
+  console.log(currentQuery, busy);
+});
+
+// Call dispose() when this manually owned effect is no longer needed.
+```
+
+Here, changing `query` reruns the effect; changing `setupInFlight` alone does not.
+
 For DOM-independent code, use `createCleanupScope()` when one owner creates several resources. Cleanup is idempotent and runs in last-in-first-out order. `runWithCleanupScope()` binds the existing automatic cleanup registration for the synchronous callback; an `await` ends that dynamic binding, so resources created afterward should use the explicit scope handle.
 
 ```ts

@@ -1438,7 +1438,7 @@ export function App() {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain('Header({ title: ("x") })');
+    expect(output.code).toContain('untrack(() => Header(_componentProps)))({ title: ("x") })');
     expect(output.code).not.toContain("<Header");
   });
 
