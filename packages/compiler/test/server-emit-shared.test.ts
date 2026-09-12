@@ -529,6 +529,19 @@ export function App() {
     ],
     ["defaulted arrow parameter", '((Nested = () => "<plain>") => Nested())()'],
     ["IIFE var binding", '(() => { var Nested = () => "<plain>"; return Nested(); })()'],
+    ["nested block const", '(() => { { const Nested = () => "<plain>"; return Nested(); } })()'],
+    [
+      "catch parameter",
+      '(() => { try { throw () => "<plain>"; } catch (Nested) { return Nested(); } })()',
+    ],
+    [
+      "switch lexical binding",
+      '(() => { switch (0) { case 0: const Nested = () => "<plain>"; return Nested(); } })()',
+    ],
+    [
+      "for-of lexical binding",
+      '(() => { for (const Nested of [() => "<plain>"]) return Nested(); })()',
+    ],
     ["shadowed coercion", '((Nested) => String(Nested()))(() => "<plain>")'],
     [
       "sink-aware untrusted callback parameter",
