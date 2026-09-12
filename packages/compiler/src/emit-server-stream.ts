@@ -259,7 +259,7 @@ export function emitServerStream(
             : { selectionMultipleParameterName }),
         },
       );
-      return component.serverRenderValuePlaceholder === undefined
+      const withRenderValueHelpers = component.serverRenderValuePlaceholder === undefined
         ? emitted
         : replaceServerRenderValuePlaceholders(
             emitted,
@@ -271,6 +271,10 @@ export function emitServerStream(
             compatRenderToStringHelperName,
             escapeHelperName,
           );
+      return withRenderValueHelpers.replaceAll(
+        oxcServerStringReactNodeRenderHelperPlaceholder,
+        compatRenderToStringHelperName,
+      );
     })
     .join("\n\n");
   const rawModuleStatements = emitModuleStatements(ir);
@@ -548,11 +552,17 @@ function hasReactSuspenseOutOfOrderBoundary(ir: ModuleIr): boolean {
 }
 
 function hasCompatComponentReference(ir: ModuleIr): boolean {
-  return ir.components.some((component) => containsCompatComponent(component.root));
+  return (
+    ir.components.some((component) => containsCompatComponent(component.root)) ||
+    ir.nestedRenderValueNodes?.some(containsCompatComponent) === true
+  );
 }
 
 function hasReactNodeRender(ir: ModuleIr): boolean {
-  return ir.components.some((component) => containsReactNodeRender(component.root));
+  return (
+    ir.components.some((component) => containsReactNodeRender(component.root)) ||
+    ir.nestedRenderValueNodes?.some(containsReactNodeRender) === true
+  );
 }
 
 function hasRawJsxDynamicRender(ir: ModuleIr): boolean {

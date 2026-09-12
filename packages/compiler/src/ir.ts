@@ -9,6 +9,8 @@ export interface ModuleIr {
   moduleBindingNames: string[];
   /** JSX tag names proven to resolve to the router `Link` export in this module. */
   routerLinkComponentNames?: string[];
+  /** Compiler-owned JSX roots emitted from JavaScript render values. */
+  nestedRenderValueNodes?: JsxNodeIr[];
   components: ComponentIr[];
 }
 

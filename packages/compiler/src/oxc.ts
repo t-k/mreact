@@ -189,6 +189,9 @@ const oxcBodyLowerers: OxcBodyLowerers = createOxcBodyLowerers();
 function createOxcBodyLowerers(
   compatRuntimeImports: ReadonlyMap<string, ClientReferenceIr> = new Map(),
   serverOutput?: AnalyzeModuleOptions["serverOutput"],
+  clientBoundaryImports: ReadonlyMap<string, ClientReferenceIr> = new Map(),
+  serverAwaitHydration = false,
+  nestedRenderValueNodes?: JsxNodeIr[],
 ): OxcBodyLowerers {
   return {
     lowerDomNodeExpression: (code, expression, componentNames, resolveExpressionCode) =>
@@ -212,6 +215,7 @@ function createOxcBodyLowerers(
             target,
             diagnostics,
             compatRuntimeImports,
+            clientBoundaryImports,
           )
         : lowerOxcNestedJsxExpression(
             code,
@@ -223,6 +227,10 @@ function createOxcBodyLowerers(
             serverRenderValueWrapper,
             serverRenderValueCallNames,
             serverOutput,
+            clientBoundaryImports,
+            compatRuntimeImports,
+            serverAwaitHydration,
+            nestedRenderValueNodes,
           ),
   };
 }
@@ -264,7 +272,38 @@ function createOxcChildAnalysisContext(
     ...(lazyRenderValueBindings === undefined ? {} : { lazyRenderValueBindings }),
     ...(nativeCellBindings === undefined ? {} : { nativeCellBindings }),
     bodyLowerers,
-    lowerNestedJsxExpression: lowerOxcNestedJsxExpression,
+    lowerNestedJsxExpression: (
+      code,
+      expression,
+      nestedComponentNames,
+      nestedTarget,
+      nestedDiagnostics,
+      nestedMode,
+      nestedWrapper,
+      nestedCallNames,
+      nestedServerOutput,
+    ) =>
+      nestedMode === "server-string" && nestedWrapper !== undefined
+        ? bodyLowerers.lowerServerStringExpression(
+            code,
+            expression,
+            nestedComponentNames,
+            nestedTarget,
+            nestedDiagnostics,
+            nestedWrapper,
+            nestedCallNames,
+          )
+        : lowerOxcNestedJsxExpression(
+            code,
+            expression,
+            nestedComponentNames,
+            nestedTarget,
+            nestedDiagnostics,
+            nestedMode,
+            nestedWrapper,
+            nestedCallNames,
+            nestedServerOutput,
+          ),
   };
 }
 
@@ -445,7 +484,14 @@ function analyzeOxcToIr(
     target === "server"
       ? collectLocalJsxHelperHtmlParameters(program, localJsxReturnFunctionNames)
       : new Map<string, Set<number>>();
-  const bodyLowerers = createOxcBodyLowerers(compatRuntimeImports, options?.serverOutput);
+  const nestedRenderValueNodes: JsxNodeIr[] = [];
+  const bodyLowerers = createOxcBodyLowerers(
+    compatRuntimeImports,
+    options?.serverOutput,
+    clientBoundaryImports,
+    options?.serverAwaitHydration === true,
+    nestedRenderValueNodes,
+  );
   const moduleRenderValueBindings = collectOxcBodyJsxBindingNames(
     body,
     localJsxReturnFunctionNames,
@@ -654,6 +700,7 @@ function analyzeOxcToIr(
       ? {}
       : { routerLinkComponentNames: Array.from(routerLinkComponentNames) }),
     components,
+    ...(nestedRenderValueNodes.length === 0 ? {} : { nestedRenderValueNodes }),
   };
 
   assignOxcAwaitIds(ir);

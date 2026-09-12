@@ -65,7 +65,9 @@ function transformWithAnalyzer(
           ? "server-string"
           : "diagnostic",
     bodyStatementJsx,
-    ...(input.target === "server" ? { serverOutput } : {}),
+    ...(input.target === "server"
+      ? { serverOutput, serverAwaitHydration: input.serverAwaitHydration === true }
+      : {}),
     awaitCompatComponents:
       input.target === "server" && serverOutput === "stream" ? "lower" : "diagnostic",
     clientBoundaryImports: input.clientBoundaryImports ?? [],
@@ -139,12 +141,18 @@ function transformWithAnalyzer(
       events,
     };
   }
-  const clientReferences = collectClientReferences(analyzed.ir.components);
+  const clientReferences = collectClientReferences(
+    analyzed.ir.components,
+    analyzed.ir.nestedRenderValueNodes,
+  );
 
   if (clientReferences.length > 0) {
     metadata.clientReferences = clientReferences;
   }
-  const clientReferenceManifest = collectClientReferenceManifest(analyzed.ir.components);
+  const clientReferenceManifest = collectClientReferenceManifest(
+    analyzed.ir.components,
+    analyzed.ir.nestedRenderValueNodes,
+  );
 
   if (clientReferenceManifest.length > 0) {
     metadata.clientReferenceManifest = clientReferenceManifest;
@@ -557,23 +565,31 @@ function collectEventHydrationEntries(
   });
 }
 
-function collectClientReferences(components: readonly ComponentIr[]): string[] {
+function collectClientReferences(
+  components: readonly ComponentIr[],
+  nestedRenderValueNodes: readonly JsxNodeIr[] = [],
+): string[] {
   const references = new Set<string>();
 
   for (const component of components) {
     collectClientReferencesFromNode(component.root, references);
   }
+  for (const node of nestedRenderValueNodes) collectClientReferencesFromNode(node, references);
 
   return Array.from(references);
 }
 
 function collectClientReferenceManifest(
   components: readonly ComponentIr[],
+  nestedRenderValueNodes: readonly JsxNodeIr[] = [],
 ): ClientReferenceMetadata[] {
   const references = new Map<string, ClientReferenceMetadata>();
 
   for (const component of components) {
     collectClientReferenceManifestFromNode(component.root, references);
+  }
+  for (const node of nestedRenderValueNodes) {
+    collectClientReferenceManifestFromNode(node, references);
   }
 
   return Array.from(references.values());

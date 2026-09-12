@@ -131,17 +131,35 @@ function emitOxcServerStreamNode(
   }
 
   const establishesSelection = node.tagName === "select";
-  const selectionValue = establishesSelection
-    ? emitOxcSelectionAttributeValue(node.attributes, "value", "defaultValue")
+  const explicitSelectionValue = establishesSelection
+    ? emitOxcSelectionAttributeValue(node.attributes, "value")
     : undefined;
+  const defaultSelectionValue = establishesSelection
+    ? emitOxcSelectionAttributeValue(node.attributes, "defaultValue")
+    : undefined;
+  const selectionValue =
+    explicitSelectionValue === undefined
+      ? defaultSelectionValue
+      : defaultSelectionValue === undefined
+        ? explicitSelectionValue
+        : `((${explicitSelectionValue}) ?? (${defaultSelectionValue}))`;
   const selectionMultiple = establishesSelection
     ? emitOxcSelectionAttributeValue(node.attributes, "multiple")
     : undefined;
+  const selectionId = establishesSelection ? state.nextLocal++ : undefined;
+  const selectionValueName =
+    selectionValue === undefined || selectionId === undefined
+      ? undefined
+      : `${names.localBase}$selectValue${selectionId}`;
+  const selectionMultipleName =
+    selectionMultiple === undefined || selectionId === undefined
+      ? undefined
+      : `${names.localBase}$selectMultiple${selectionId}`;
   const childNames = establishesSelection
     ? {
         ...names,
-        selectedValue: selectionValue ?? "undefined",
-        selectedMultiple: selectionMultiple ?? "undefined",
+        selectedValue: selectionValueName ?? "undefined",
+        selectedMultiple: selectionMultipleName ?? "undefined",
       }
     : names;
   const optionSelected =
@@ -158,7 +176,17 @@ function emitOxcServerStreamNode(
         ) &&
         !(optionSelected !== undefined && attr.kind !== "spread-attr" && attr.name === "selected"),
     )
-    .map((attr) => emitOxcServerAttribute(node.tagName, attr, names.escapeHtml))
+    .map((attr) =>
+      emitOxcServerAttribute(
+        node.tagName,
+        selectionMultipleName !== undefined &&
+          attr.kind === "dynamic-attr" &&
+          attr.name === "multiple"
+          ? { ...attr, code: selectionMultipleName }
+          : attr,
+        names.escapeHtml,
+      ),
+    )
     .join(" + ");
   const open =
     attrs === "" && optionSelected === undefined
@@ -168,7 +196,20 @@ function emitOxcServerStreamNode(
     return `${indent}${names.sink}.append(${open});`;
   }
   const body = emitOxcServerStreamStatements(node.children, childNames, state, indent);
-  return `${indent}${names.sink}.append(${open});\n${body}${body === "" ? "" : "\n"}${indent}${names.sink}.append(${JSON.stringify(`</${node.tagName}>`)});`;
+  const element = `${indent}${names.sink}.append(${open});\n${body}${body === "" ? "" : "\n"}${indent}${names.sink}.append(${JSON.stringify(`</${node.tagName}>`)});`;
+  if (!establishesSelection) return element;
+  const declarations = [
+    selectionValueName === undefined
+      ? undefined
+      : `${indent}  const ${selectionValueName} = ${selectionValue};`,
+    selectionMultipleName === undefined
+      ? undefined
+      : `${indent}  const ${selectionMultipleName} = ${selectionMultiple};`,
+  ].filter((line): line is string => line !== undefined);
+  return `${indent}{\n${declarations.join("\n")}${declarations.length === 0 ? "" : "\n"}${element
+    .split("\n")
+    .map((line) => `  ${line}`)
+    .join("\n")}\n${indent}}`;
 }
 
 function emitOxcSelectionAttributeValue(

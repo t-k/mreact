@@ -504,6 +504,38 @@ export function App() {
     },
   );
 
+  test("nested compat components keep the compat ABI and client reference metadata", () => {
+    const result = transform({
+      code: `import { Card } from "./Card.compat.tsx";
+export function App() {
+  return <main>{[<Card label="ok" />]}</main>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      serverOutput: "stream",
+      dev: false,
+    });
+    expect(result.diagnostics).toEqual([]);
+    expect(result.code).not.toContain("await Card(");
+    expect(result.code).toContain("_renderCompatToString(Card");
+    expect(result.metadata.clientReferences).toEqual(["Card"]);
+  });
+
+  test("synchronous coercion accepts nested compat components", () => {
+    const result = transform({
+      code: `import { Card } from "./Card.compat.tsx";
+export function App() {
+  return <main>{String(<Card label="ok" />)}</main>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      serverOutput: "stream",
+      dev: false,
+    });
+    expect(result.diagnostics).toEqual([]);
+    expect(result.code).toContain("_renderCompatToString(Card");
+  });
+
   test("nested stream renderers preserve in-order Await boundaries", async () => {
     const compiled = compileServerPair(`function InlineText(props) {
   return <strong>{props.value}</strong>;
@@ -523,6 +555,21 @@ export function App() {
     await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
       "<main><strong>failed</strong></main>",
     );
+  });
+
+  test("nested stream Await boundaries retain hydration ids", () => {
+    const result = transform({
+      code: `export function App() {
+  return <main>{[<Await value={Promise.resolve("resolved")}>{value => <strong>{value}</strong>}</Await>]}</main>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      serverOutput: "stream",
+      serverAwaitHydration: true,
+      dev: false,
+    });
+    expect(result.diagnostics).toEqual([]);
+    expect(result.code).toMatch(/hydrationAwaitId: "awaitNested[0-9a-z]+_0"/);
   });
 
   test("nested placeholder Await reports an explicit unsupported diagnostic", () => {
@@ -564,6 +611,23 @@ export function App() {
 }`);
     await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
       '<main><select><option>a</option><option selected="">b</option></select><select multiple=""><option value="a" selected="">A</option><option value="b">B</option><option value="c" selected="">C</option></select></main>',
+    );
+  });
+
+  test("nested stream select evaluates value once and gives it nullish precedence", async () => {
+    const compiled = compileServerPair(`let calls = 0;
+function next() {
+  calls += 1;
+  return calls === 1 ? "b" : "a";
+}
+export function App() {
+  return <main>{[
+    <select defaultValue="a" value={next()}><option value="a">A</option><option value="b">B</option></select>,
+    <select defaultValue="a" value={null}><option value="a">A</option><option value="b">B</option></select>
+  ]}<i>{calls}</i></main>;
+}`);
+    await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
+      '<main><select><option value="a">A</option><option value="b" selected="">B</option></select><select><option value="a" selected="">A</option><option value="b">B</option></select><i>1</i></main>',
     );
   });
 
