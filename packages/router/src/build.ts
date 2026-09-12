@@ -123,6 +123,7 @@ import {
 import { prepareRouteServerActionPlaceholders } from "./actions.js";
 import { viteDefineCacheKey, vitePluginsCacheKey } from "./vite-plugin-cache-key.js";
 import { workspacePackageFile } from "./workspace-packages.js";
+import { rewriteStaticModuleSpecifiers, staticModuleSpecifiers } from "./module-specifiers.js";
 import { prependTailwindSourceDirectives } from "./tailwind-source.js";
 import {
   parseRouteMiddlewareControl,
@@ -2040,25 +2041,19 @@ async function buildPublicAssetManifest(
   return [...new Set([...publicAssetPaths, ...appConventionPublicAssets])].sort();
 }
 
-const COMPAT_VENDOR_PLACEHOLDER_IMPORT_PATTERN = /(["'])mreact-compat-vendor:([\w-]+)\1/gu;
-const SERVER_RENDER_VALUE_PLACEHOLDER_IMPORT_PATTERN =
-  /(\bfrom\s*)(["'])mreact-server-render-value:internal\2/gu;
-const SERVER_RENDER_VALUE_PLACEHOLDER_USAGE_PATTERN =
-  /\bfrom\s*["']mreact-server-render-value:internal["']/u;
-
 function rewriteCompatVendorPlaceholderImports(code: string): string {
   // Module files live in server-modules/code/, vendor chunks in
   // server-modules/chunks/, so the relative path is stable.
-  return code
-    .replace(
-      COMPAT_VENDOR_PLACEHOLDER_IMPORT_PATTERN,
-      (_match, quote: string, entry: string) => `${quote}../chunks/compat.${entry}.mjs${quote}`,
-    )
-    .replace(
-      SERVER_RENDER_VALUE_PLACEHOLDER_IMPORT_PATTERN,
-      (_match, from: string, quote: string) =>
-        `${from}${quote}../chunks/server-render-value-internal.mjs${quote}`,
-    );
+  return rewriteStaticModuleSpecifiers(code, (specifier) => {
+    if (specifier === SERVER_RENDER_VALUE_PLACEHOLDER) {
+      return "../chunks/server-render-value-internal.mjs";
+    }
+    if (specifier.startsWith(COMPAT_VENDOR_PLACEHOLDER_PREFIX)) {
+      const entry = specifier.slice(COMPAT_VENDOR_PLACEHOLDER_PREFIX.length);
+      return `../chunks/compat.${entry}.mjs`;
+    }
+    return undefined;
+  });
 }
 
 function collectCompatVendorEntryUsage(
@@ -2070,15 +2065,13 @@ function collectCompatVendorEntryUsage(
     for (const output of [artifact.string, artifact.stream]) {
       const bundleCode = output?.bundleCode;
 
-      if (bundleCode === undefined || !bundleCode.includes(COMPAT_VENDOR_PLACEHOLDER_PREFIX)) {
+      if (bundleCode === undefined) {
         continue;
       }
 
-      for (const match of bundleCode.matchAll(COMPAT_VENDOR_PLACEHOLDER_IMPORT_PATTERN)) {
-        const entry = match[2];
-
-        if (entry !== undefined) {
-          usedEntries.add(entry);
+      for (const specifier of staticModuleSpecifiers(bundleCode)) {
+        if (specifier.startsWith(COMPAT_VENDOR_PLACEHOLDER_PREFIX)) {
+          usedEntries.add(specifier.slice(COMPAT_VENDOR_PLACEHOLDER_PREFIX.length));
         }
       }
     }
@@ -2196,7 +2189,7 @@ async function writeServerModuleArtifactFiles(
   if (
     artifactEntries.some(([, artifact]) =>
       [artifact.string, artifact.stream].some((output) =>
-        SERVER_RENDER_VALUE_PLACEHOLDER_USAGE_PATTERN.test(output?.bundleCode ?? ""),
+        staticModuleSpecifiers(output?.bundleCode ?? "").includes(SERVER_RENDER_VALUE_PLACEHOLDER),
       ),
     )
   ) {

@@ -39,6 +39,7 @@ import {
   type ClientRouteInferenceCache,
 } from "./client-route-inference.js";
 import { viteDefineCacheKey, vitePluginsCacheKey } from "./vite-plugin-cache-key.js";
+import { rewriteStaticModuleSpecifiers, staticModuleSpecifiers } from "./module-specifiers.js";
 
 const runnerConfig = {
   configFile: false,
@@ -346,35 +347,32 @@ export function resolveCompatVendorEntryFiles(resolveDir?: string): Map<string, 
   return files;
 }
 
-const compatVendorPlaceholderImportPattern = /(["'])mreact-compat-vendor:([\w-]+)\1/gu;
-const serverRenderValuePlaceholderImportPattern =
-  /(\bfrom\s*)(["'])mreact-server-render-value:internal\2/gu;
-
 export function rewriteCompatVendorPlaceholderImportsForRunner(
   code: string,
   resolveDir?: string,
 ): string {
-  let rewritten = code;
-  if (rewritten.includes(COMPAT_VENDOR_PLACEHOLDER_PREFIX)) {
-    const entryFiles = resolveCompatVendorEntryFiles(resolveDir);
-    rewritten = rewritten.replace(
-      compatVendorPlaceholderImportPattern,
-      (source, quote: string, entry: string) => {
-        const file = entryFiles.get(entry);
+  const specifiers = staticModuleSpecifiers(code);
+  const usesCompatVendor = specifiers.some((specifier) =>
+    specifier.startsWith(COMPAT_VENDOR_PLACEHOLDER_PREFIX),
+  );
+  const usesServerRenderValue = specifiers.includes(SERVER_RENDER_VALUE_PLACEHOLDER);
+  const entryFiles = usesCompatVendor ? resolveCompatVendorEntryFiles(resolveDir) : undefined;
+  const serverRenderValueFile = usesServerRenderValue
+    ? resolveServerRenderValueEntryFile(resolveDir)
+    : undefined;
 
-        return file === undefined ? source : `${quote}${pathToFileURL(file).href}${quote}`;
-      },
-    );
-  }
-  if (rewritten.includes(SERVER_RENDER_VALUE_PLACEHOLDER)) {
-    const file = resolveServerRenderValueEntryFile(resolveDir);
-    rewritten = rewritten.replace(
-      serverRenderValuePlaceholderImportPattern,
-      (_source, from: string, quote: string) =>
-        `${from}${quote}${pathToFileURL(file).href}${quote}`,
-    );
-  }
-  return rewritten;
+  return rewriteStaticModuleSpecifiers(code, (specifier) => {
+    if (specifier === SERVER_RENDER_VALUE_PLACEHOLDER && serverRenderValueFile !== undefined) {
+      return pathToFileURL(serverRenderValueFile).href;
+    }
+    if (specifier.startsWith(COMPAT_VENDOR_PLACEHOLDER_PREFIX)) {
+      const entry = specifier.slice(COMPAT_VENDOR_PLACEHOLDER_PREFIX.length);
+      const file = entryFiles?.get(entry);
+
+      return file === undefined ? undefined : pathToFileURL(file).href;
+    }
+    return undefined;
+  });
 }
 
 export function resolveServerRenderValueEntryFile(resolveDir?: string): string {

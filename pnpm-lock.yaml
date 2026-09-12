@@ -750,6 +750,9 @@ importers:
       '@typescript/typescript6':
         specifier: ^6.0.2
         version: 6.0.2
+      es-module-lexer:
+        specifier: 2.1.0
+        version: 2.1.0
       esbuild:
         specifier: '>=0.28.1 <0.29'
         version: 0.28.1

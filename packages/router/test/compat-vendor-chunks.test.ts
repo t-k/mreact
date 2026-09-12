@@ -144,7 +144,8 @@ async function createNativeServerRenderValueApp(): Promise<{ appDir: string; out
 
 export default function Page() {
   const literal = "${SERVER_RENDER_VALUE_PLACEHOLDER}";
-  return <main>{["${label}"].flatMap(() => [<InlineText />, "\\n"])}<code>{literal}</code></main>;
+  const importText = 'from "${SERVER_RENDER_VALUE_PLACEHOLDER}"';
+  return <main>{["${label}"].flatMap(() => [<InlineText />, "\\n"])}<code>{literal}</code><code>{importText}</code></main>;
 }
 `;
   await writeFile(join(appDir, "page.tsx"), page("one"));
@@ -176,6 +177,9 @@ describe("compat server vendor chunks", () => {
 export const exact = "${SERVER_RENDER_VALUE_PLACEHOLDER}";
 export const prefixed = "prefix:${SERVER_RENDER_VALUE_PLACEHOLDER}";
 export const template = \`${SERVER_RENDER_VALUE_PLACEHOLDER}\`;
+export const quotedImport = 'from "${SERVER_RENDER_VALUE_PLACEHOLDER}"';
+export const templateImport = \`from "${SERVER_RENDER_VALUE_PLACEHOLDER}"\`;
+// from "${SERVER_RENDER_VALUE_PLACEHOLDER}"
 // ${SERVER_RENDER_VALUE_PLACEHOLDER}
 `;
     const rewritten = rewriteCompatVendorPlaceholderImportsForRunner(code);
@@ -185,6 +189,13 @@ export const template = \`${SERVER_RENDER_VALUE_PLACEHOLDER}\`;
     expect(rewritten).toContain(
       `export const prefixed = "prefix:${SERVER_RENDER_VALUE_PLACEHOLDER}";`,
     );
+    expect(rewritten).toContain(
+      `export const quotedImport = 'from "${SERVER_RENDER_VALUE_PLACEHOLDER}"';`,
+    );
+    expect(rewritten).toContain(
+      `export const templateImport = \`from "${SERVER_RENDER_VALUE_PLACEHOLDER}"\`;`,
+    );
+    expect(rewritten).toContain(`// from "${SERVER_RENDER_VALUE_PLACEHOLDER}"`);
     expect(rewritten).toContain(`// ${SERVER_RENDER_VALUE_PLACEHOLDER}`);
   });
 
@@ -294,10 +305,10 @@ export const template = \`${SERVER_RENDER_VALUE_PLACEHOLDER}\`;
       const first = await (await fetch(`${server.url}/`)).text();
       const second = await (await fetch(`${server.url}/second`)).text();
       expect(first).toContain(
-        `<main><strong>one</strong>\n<code>${SERVER_RENDER_VALUE_PLACEHOLDER}</code></main>`,
+        `<main><strong>one</strong>\n<code>${SERVER_RENDER_VALUE_PLACEHOLDER}</code><code>from &quot;${SERVER_RENDER_VALUE_PLACEHOLDER}&quot;</code></main>`,
       );
       expect(second).toContain(
-        `<main><strong>two</strong>\n<code>${SERVER_RENDER_VALUE_PLACEHOLDER}</code></main>`,
+        `<main><strong>two</strong>\n<code>${SERVER_RENDER_VALUE_PLACEHOLDER}</code><code>from &quot;${SERVER_RENDER_VALUE_PLACEHOLDER}&quot;</code></main>`,
       );
       expect(first).not.toContain("function InlineText");
       expect(second).not.toContain("function InlineText");
