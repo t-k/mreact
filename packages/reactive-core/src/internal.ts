@@ -25,3 +25,9 @@ export type { Source } from "./state.js";
 
 /** Lazy invalidation for compiler-generated consuming computations. */
 export { deferredComputed } from "./computed.js";
+/** Request state integration helpers for server adapters. */
+export {
+  getRequestStateStorage,
+  installRequestStateStorage,
+  type RequestStateScope,
+} from "./request-state.js";
