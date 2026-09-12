@@ -436,6 +436,31 @@ export function App(props) {
     );
   });
 
+  test.each([
+    ["direct nested array", '[<InlineText />, "tail"]'],
+    ["second-level nested array", "[[<InlineText />]]"],
+    ["nested flatMap", '[0].flatMap(() => [<InlineText />, "tail"])'],
+    [
+      "nested flatMap block callback",
+      '[0].flatMap(() => { const child = <InlineText />; return [child, "tail"]; })',
+    ],
+    ["nested IIFE", '(() => [<InlineText />, "tail"])()'],
+  ])(
+    "nested stream render values preserve component ABI through %s",
+    async (_label, expression) => {
+      const compiled = compileServerPair(`function InlineText() {
+  return <b>ok</b>;
+}
+export function App() {
+  return <main>{[<div>{${expression}}</div>]}</main>;
+}`);
+      expect(compiled.stream).not.toContain("InlineText({})");
+      await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
+        `<main><div><b>ok</b>${expression.includes("tail") ? "tail" : ""}</div></main>`,
+      );
+    },
+  );
+
   test("nested stream renderers use the collision-safe escape helper", async () => {
     await expectServerPairHtml(
       `const _escapeHtml = (value) => String(value);

@@ -35,6 +35,12 @@ const oxcNestedBodyLowerers: OxcBodyLowerers = {
     lowerOxcServerStringExpression(code, expression, componentNames, target, diagnostics),
 };
 
+interface OxcNestedServerContext {
+  callNames: ReadonlySet<string>;
+  output: "stream" | "string";
+  wrapper: string;
+}
+
 export function lowerOxcCompatObjectExpression(
   code: string,
   expression: Record<string, unknown>,
@@ -135,6 +141,7 @@ export function lowerOxcNestedJsxExpression(
                   target,
                   diagnostics,
                   serverRenderValueWrapper,
+                  localJsxReturnFunctionNames,
                   renderValueMode === "collection",
                   clientReferences,
                   compatRuntimeReferences,
@@ -156,6 +163,13 @@ export function lowerOxcNestedJsxExpression(
                         compatRuntimeReferences,
                         serverAwaitHydration,
                         nestedRenderValueNodes,
+                        serverRenderValueWrapper === undefined || serverOutput === undefined
+                          ? undefined
+                          : {
+                              wrapper: serverRenderValueWrapper,
+                              callNames: localJsxReturnFunctionNames,
+                              output: serverOutput,
+                            },
                       ),
                       clientReferences,
                       compatRuntimeReferences,
@@ -232,6 +246,7 @@ function lowerOxcServerStreamExpression(
   target: CompileTarget,
   diagnostics: Diagnostic[],
   serverRenderValueWrapper: string,
+  serverRenderValueCallNames: ReadonlySet<string>,
   selfThunk: boolean,
   clientReferences: ReadonlyMap<string, ClientReferenceIr>,
   compatRuntimeReferences: ReadonlyMap<string, ClientReferenceIr>,
@@ -250,6 +265,11 @@ function lowerOxcServerStreamExpression(
       compatRuntimeReferences,
       serverAwaitHydration,
       nestedRenderValueNodes,
+      {
+        wrapper: serverRenderValueWrapper,
+        callNames: serverRenderValueCallNames,
+        output: "stream",
+      },
     ),
     "server-string",
   );
@@ -379,11 +399,7 @@ function nestedOxcChildren(node: JsxNodeIr): JsxNodeIr[] {
             ...node.props.flatMap((prop) => (prop.kind === "render-prop" ? prop.children : [])),
           ]
         : node.kind === "async-boundary"
-          ? [
-              ...node.children,
-              ...(node.placeholderChildren ?? []),
-              ...(node.catchChildren ?? []),
-            ]
+          ? [...node.children, ...(node.placeholderChildren ?? []), ...(node.catchChildren ?? [])]
           : [];
 }
 
@@ -773,16 +789,73 @@ function createOxcNestedChildAnalysisContext(
   compatRuntimeReferences: ReadonlyMap<string, ClientReferenceIr> = new Map(),
   serverAwaitHydration = false,
   nestedRenderValueNodes?: JsxNodeIr[],
+  activeServerContext?: OxcNestedServerContext,
 ): OxcChildAnalysisContext {
+  const bodyLowerers: OxcBodyLowerers =
+    activeServerContext === undefined
+      ? oxcNestedBodyLowerers
+      : {
+          ...oxcNestedBodyLowerers,
+          lowerServerStringExpression: (
+            code,
+            expression,
+            nestedComponentNames,
+            nestedTarget,
+            nestedDiagnostics,
+            wrapper,
+            callNames,
+          ) =>
+            lowerOxcNestedJsxExpression(
+              code,
+              expression,
+              nestedComponentNames,
+              nestedTarget,
+              nestedDiagnostics,
+              "server-string",
+              wrapper ?? activeServerContext.wrapper,
+              callNames ?? activeServerContext.callNames,
+              activeServerContext.output,
+              clientReferences,
+              compatRuntimeReferences,
+              serverAwaitHydration,
+              nestedRenderValueNodes,
+            ),
+        };
   return {
     componentNames,
     target,
     diagnostics,
     bodyStatementJsx,
-    bodyLowerers: oxcNestedBodyLowerers,
-    lowerNestedJsxExpression: (...args) =>
+    ...(activeServerContext === undefined
+      ? {}
+      : {
+          componentCallNames: new Set(activeServerContext.callNames),
+          serverOutput: activeServerContext.output,
+          serverRenderValueWrapper: activeServerContext.wrapper,
+          serverRenderValueCallNames: activeServerContext.callNames,
+        }),
+    bodyLowerers,
+    lowerNestedJsxExpression: (
+      nestedCode,
+      nestedExpression,
+      nestedComponentNames,
+      nestedTarget,
+      nestedDiagnostics,
+      nestedBodyStatementJsx,
+      wrapper,
+      callNames,
+      output,
+    ) =>
       lowerOxcNestedJsxExpression(
-        ...args,
+        nestedCode,
+        nestedExpression,
+        nestedComponentNames,
+        nestedTarget,
+        nestedDiagnostics,
+        nestedBodyStatementJsx,
+        wrapper ?? activeServerContext?.wrapper,
+        callNames ?? activeServerContext?.callNames,
+        output ?? activeServerContext?.output,
         clientReferences,
         compatRuntimeReferences,
         serverAwaitHydration,
