@@ -2,6 +2,7 @@ import type { AttributeIr, ComponentPropIr, JsxNodeIr } from "./ir.js";
 import {
   emitOptionSelectedAttributeCode,
   htmlAttributeNameForElement,
+  isBooleanishStringAttribute,
   isDangerousHtmlAttribute,
   isStaticUrlValueUnsafe,
   isUrlAttribute,
@@ -133,9 +134,10 @@ function emitOxcServerStreamNode(
   }
 
   const establishesSelection = node.tagName === "select";
-  const selectionId = establishesSelection ? state.nextLocal++ : undefined;
+  const attributeId =
+    establishesSelection || node.tagName === "option" ? state.nextLocal++ : undefined;
   const attributeBindings =
-    selectionId === undefined
+    attributeId === undefined
       ? []
       : node.attributes.flatMap((attribute, index) => {
           if (attribute.kind !== "dynamic-attr" && attribute.kind !== "static-attr") {
@@ -156,7 +158,7 @@ function emitOxcServerStreamNode(
                 {
                   attribute,
                   name: attribute.name,
-                  local: `${names.localBase}$selectAttr${attribute.name[0]?.toUpperCase()}${attribute.name.slice(1)}${selectionId}_${index}`,
+                  local: `${names.localBase}$streamAttr${attributeId}_${index}`,
                   code,
                 },
               ];
@@ -184,9 +186,23 @@ function emitOxcServerStreamNode(
         selectedMultiple: selectionMultipleName ?? "undefined",
       }
     : names;
+  const emittedNode =
+    attributeBindings.length === 0
+      ? node
+      : {
+          ...node,
+          attributes: node.attributes.map((attribute) => {
+            const local = attributeBindings.find(
+              (binding) => binding.attribute === attribute,
+            )?.local;
+            return local === undefined || attribute.kind !== "dynamic-attr"
+              ? attribute
+              : { ...attribute, code: local };
+          }),
+        };
   const optionSelected =
     node.tagName === "option" && names.selectedValue !== "undefined"
-      ? emitOxcOptionSelectedAttribute(node, names, state)
+      ? emitOxcOptionSelectedAttribute(emittedNode, names, state)
       : undefined;
   const attrs = node.attributes
     .filter(
@@ -222,7 +238,7 @@ function emitOxcServerStreamNode(
   }
   const body = emitOxcServerStreamStatements(node.children, childNames, state, indent);
   const element = `${indent}${names.sink}.append(${open});\n${body}${body === "" ? "" : "\n"}${indent}${names.sink}.append(${JSON.stringify(`</${node.tagName}>`)});`;
-  if (!establishesSelection) return element;
+  if (!establishesSelection && attributeBindings.length === 0) return element;
   const declarations = attributeBindings.map(
     (binding) => `${indent}  const ${binding.local} = ${binding.code};`,
   );
@@ -446,7 +462,13 @@ function emitOxcServerAttribute(
       return `(() => { const _value = (${attr.code}); if (_value == null || _value === false) return ""; const _checked = ${currentOxcServerStringUrlSafeHelperName}(${JSON.stringify(htmlName)}, _value === true ? "" : _value); return _checked === undefined ? "" : ${JSON.stringify(` ${htmlName}="`)} + ${escapeHelperName}(_checked) + ${JSON.stringify('"')}; })()`;
     }
 
-    return `${JSON.stringify(` ${htmlName}="`)} + ${escapeHelperName}(${attr.code}) + ${JSON.stringify('"')}`;
+    if (htmlName === "style") {
+      return `(() => { const _value = (${attr.code}); if (_value == null || _value === false) return ""; if (typeof _value === "string") { const _style = ${escapeHelperName}(_value); return _style === "" ? "" : ${JSON.stringify(' style="')} + _style + ${JSON.stringify('"')}; } if (typeof _value !== "object") return ""; const _style = Object.entries(_value).filter(([, _styleValue]) => _styleValue != null && _styleValue !== false).map(([_styleName, _styleValue]) => { const _cssName = String(_styleName).startsWith("--") ? String(_styleName) : String(_styleName).replace(/[A-Z]/g, (_char) => "-" + _char.toLowerCase()); return ${escapeHelperName}(_cssName) + ":" + ${escapeHelperName}(_styleValue === true ? "" : _styleValue); }).join(";"); return _style === "" ? "" : ${JSON.stringify(' style="')} + _style + ${JSON.stringify('"')}; })()`;
+    }
+
+    return isBooleanishStringAttribute(htmlName)
+      ? `(() => { const _value = (${attr.code}); return _value == null ? "" : ${JSON.stringify(` ${htmlName}="`)} + ${escapeHelperName}(_value) + ${JSON.stringify('"')}; })()`
+      : `(() => { const _value = (${attr.code}); return _value == null || _value === false ? "" : ${JSON.stringify(` ${htmlName}="`)} + ${escapeHelperName}(_value === true ? "" : _value) + ${JSON.stringify('"')}; })()`;
   }
 
   return '""';

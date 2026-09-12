@@ -666,12 +666,33 @@ function read(name, value) {
 }
 export function App() {
   return <main>{[
-    <select defaultValue={read("default", "a")} title={read("title", "choices")} multiple={read("multiple", false)} value={read("value", "b")}><option value="a">A</option><option value="b">B</option></select>,
+    <select defaultValue={read("default", "a")} data-testid={read("testid", "choices")} multiple={read("multiple", false)} value={read("value", "b")}><option value="a">A</option><option value="b">B</option></select>,
     <select><option selected={false}>A</option></select>
   ]}<i>{order.join(",")}</i></main>;
 }`);
     await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
-      '<main><select title="choices"><option value="a">A</option><option value="b" selected="">B</option></select><select><option>A</option></select><i>default,title,multiple,value</i></main>',
+      '<main><select data-testid="choices"><option value="a">A</option><option value="b" selected="">B</option></select><select><option>A</option></select><i>default,testid,multiple,value</i></main>',
+    );
+  });
+
+  test("nested stream attributes preserve style and false boolean semantics", async () => {
+    await expectServerPairHtml(
+      `function Inline() { return <strong>ok</strong>; }
+export function App() {
+  return <main>{[<section style={{ color: "red", marginTop: 2 }} disabled={false}><Inline /></section>]}</main>;
+}`,
+      '<main><section style="color:red;margin-top:2"><strong>ok</strong></section></main>',
+    );
+  });
+
+  test("nested stream options evaluate dynamic attributes once", async () => {
+    const compiled = compileServerPair(`let calls = 0;
+function optionValue() { calls += 1; return "b"; }
+export function App() {
+  return <main>{[<select value="b"><option value={optionValue()}>B</option></select>]}<i>{calls}</i></main>;
+}`);
+    await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
+      '<main><select><option value="b" selected="">B</option></select><i>1</i></main>',
     );
   });
 
