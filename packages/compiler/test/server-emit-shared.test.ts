@@ -685,6 +685,18 @@ export function App() {
     );
   });
 
+  test("nested stream attribute temporaries do not shadow user bindings", async () => {
+    const compiled = compileServerPair(`function Inline() { return <strong>ok</strong>; }
+export function App() {
+  const _value = "https://example.test/path";
+  const _styleValue = { color: "red" };
+  return <main>{[<a title={_value} href={_value} style={_styleValue}><Inline /></a>]}</main>;
+}`);
+    await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
+      '<main><a title="https://example.test/path" href="https://example.test/path" style="color:red"><strong>ok</strong></a></main>',
+    );
+  });
+
   test("nested stream options evaluate dynamic attributes once", async () => {
     const compiled = compileServerPair(`let calls = 0;
 function optionValue() { calls += 1; return "b"; }
@@ -693,6 +705,20 @@ export function App() {
 }`);
     await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
       '<main><select><option value="b" selected="">B</option></select><i>1</i></main>',
+    );
+  });
+
+  test("nested stream options evaluate text once and use it for nullish values", async () => {
+    const compiled = compileServerPair(`let reads = 0;
+function readStatus() { reads += 1; return reads === 1 ? "done" : "open"; }
+export function App() {
+  return <main>{[
+    <select value="done"><option>{readStatus()}</option></select>,
+    <select value="done"><option value={undefined}>done</option><option value={null}>open</option></select>
+  ]}<i>{reads}</i></main>;
+}`);
+    await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
+      '<main><select><option selected="">done</option></select><select><option selected="">done</option><option>open</option></select><i>1</i></main>',
     );
   });
 

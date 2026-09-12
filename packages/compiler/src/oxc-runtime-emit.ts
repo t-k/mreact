@@ -134,12 +134,8 @@ function emitOxcServerStreamNode(
   }
 
   const establishesSelection = node.tagName === "select";
-  const attributeId =
-    establishesSelection || node.tagName === "option" ? state.nextLocal++ : undefined;
-  const attributeBindings =
-    attributeId === undefined
-      ? []
-      : node.attributes.flatMap((attribute, index) => {
+  const attributeId = state.nextLocal++;
+  const attributeBindings = node.attributes.flatMap((attribute, index) => {
           if (attribute.kind !== "dynamic-attr" && attribute.kind !== "static-attr") {
             return [];
           }
@@ -162,7 +158,21 @@ function emitOxcServerStreamNode(
                   code,
                 },
               ];
-        });
+      });
+  const textBindings =
+    node.tagName === "option"
+      ? node.children.flatMap((child, index) =>
+          child.kind === "expr"
+            ? [
+                {
+                  child,
+                  local: `${names.localBase}$streamText${attributeId}_${index}`,
+                  code: `(${child.code})`,
+                },
+              ]
+            : [],
+        )
+      : [];
   const selectionBindings = attributeBindings.filter((binding) =>
     ["value", "defaultValue", "multiple"].includes(binding.name),
   );
@@ -187,7 +197,7 @@ function emitOxcServerStreamNode(
       }
     : names;
   const emittedNode =
-    attributeBindings.length === 0
+    attributeBindings.length === 0 && textBindings.length === 0
       ? node
       : {
           ...node,
@@ -198,6 +208,10 @@ function emitOxcServerStreamNode(
             return local === undefined || attribute.kind !== "dynamic-attr"
               ? attribute
               : { ...attribute, code: local };
+          }),
+          children: node.children.map((child) => {
+            const local = textBindings.find((binding) => binding.child === child)?.local;
+            return local === undefined || child.kind !== "expr" ? child : { ...child, code: local };
           }),
         };
   const optionSelected =
@@ -236,10 +250,12 @@ function emitOxcServerStreamNode(
   if (isVoidHtmlElement(node.tagName)) {
     return `${indent}${names.sink}.append(${open});`;
   }
-  const body = emitOxcServerStreamStatements(node.children, childNames, state, indent);
+  const body = emitOxcServerStreamStatements(emittedNode.children, childNames, state, indent);
   const element = `${indent}${names.sink}.append(${open});\n${body}${body === "" ? "" : "\n"}${indent}${names.sink}.append(${JSON.stringify(`</${node.tagName}>`)});`;
-  if (!establishesSelection && attributeBindings.length === 0) return element;
-  const declarations = attributeBindings.map(
+  if (!establishesSelection && attributeBindings.length === 0 && textBindings.length === 0) {
+    return element;
+  }
+  const declarations = [...attributeBindings, ...textBindings].map(
     (binding) => `${indent}  const ${binding.local} = ${binding.code};`,
   );
   return `${indent}{\n${declarations.join("\n")}${declarations.length === 0 ? "" : "\n"}${element
@@ -267,9 +283,14 @@ function emitOxcOptionSelectedAttribute(
   names: OxcServerStreamEmitterNames,
   state: { nextLocal: number },
 ): string {
+  const explicitOptionValue = emitOxcSelectionAttributeValue(node.attributes, "value");
+  const optionTextValue = emitOxcOptionTextValue(node.children);
   const optionValue =
-    emitOxcSelectionAttributeValue(node.attributes, "value") ??
-    emitOxcOptionTextValue(node.children);
+    explicitOptionValue === undefined
+      ? optionTextValue
+      : optionTextValue === undefined
+        ? explicitOptionValue
+        : `((${explicitOptionValue}) ?? (${optionTextValue}))`;
   const selectedAttribute = node.attributes.find(
     (attribute) => attribute.kind !== "spread-attr" && attribute.name === "selected",
   );
