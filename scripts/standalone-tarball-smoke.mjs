@@ -104,6 +104,7 @@ async function createStandaloneApp(appDir, tarballs) {
       "@reckona/mreact-compiler": tarballSpec(tarballs, "@reckona/mreact-compiler"),
       "@reckona/mreact-forms": tarballSpec(tarballs, "@reckona/mreact-forms"),
       "@reckona/mreact-query": tarballSpec(tarballs, "@reckona/mreact-query"),
+      "@reckona/mreact-reactive-core": tarballSpec(tarballs, "@reckona/mreact-reactive-core"),
       "@reckona/mreact-reactive-dom": tarballSpec(tarballs, "@reckona/mreact-reactive-dom"),
       "@reckona/mreact-router": tarballSpec(tarballs, "@reckona/mreact-router"),
       "@reckona/mreact-server": tarballSpec(tarballs, "@reckona/mreact-server"),
@@ -154,9 +155,64 @@ export default defineConfig({
 `,
   );
   await writeFile(
+    join(appDir, "app", "layout.tsx"),
+    `export default function Layout() {
+  return (
+    <html lang="en">
+      <head></head>
+      <body></body>
+    </html>
+  );
+}
+`,
+  );
+  await writeFile(
+    join(appDir, "app", "AppShell.tsx"),
+    `import type { JSX } from "@reckona/mreact";
+
+export function AppShell(props: { readonly children: JSX.Element }) {
+  return (
+    <div>
+      <main id="main-content">{props.children}</main>
+    </div>
+  );
+}
+`,
+  );
+  await writeFile(
+    join(appDir, "app", "Counter.tsx"),
+    `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter(props: { readonly initial: number; readonly label: string }) {
+  const count = cell(props.initial);
+  return (
+    <button type="button" onClick={() => count.set((value: number) => value + 1)}>
+      {props.label}: {count.get()}
+    </button>
+  );
+}
+`,
+  );
+  // The regex literal with a quote and the client boundary after it mirror the
+  // shape that broke the published SSR runner (issue 2026-09-12, 0.0.219).
+  await writeFile(
     join(appDir, "app", "page.tsx"),
-    `export default function Page() {
-  return <main>Standalone tarball smoke</main>;
+    `import { AppShell } from "./AppShell";
+import { Counter } from "./Counter";
+
+const stripQuotes = (text: string) => text.replace(/"/g, "");
+
+export default function Page() {
+  const unsafe = '<script>alert("unsafe")</script>';
+  return (
+    <AppShell>
+      <section>
+        <h1>Standalone tarball smoke</h1>
+        <p>{stripQuotes(unsafe)}</p>
+        <Counter initial={2} label="Count" />
+      </section>
+    </AppShell>
+  );
 }
 `,
   );
@@ -430,7 +486,7 @@ async function smokeDevServer(appDir) {
 
   try {
     const url = await server.waitForUrl(/mreact app router ready at (?<url>http:\/\/[^\s]+)/u);
-    await expectHtml(url, "Standalone tarball smoke");
+    await expectRenderedPage(url);
   } finally {
     await server.stop();
   }
@@ -458,7 +514,7 @@ async function smokeBuiltServer(appDir) {
     const url = await server.waitForUrl(
       /mreact app router serving built output at (?<url>http:\/\/[^\s]+)/u,
     );
-    await expectHtml(url, "Standalone tarball smoke");
+    await expectRenderedPage(url);
   } finally {
     await server.stop();
   }
@@ -570,13 +626,28 @@ function killLongRunningChild(child, signal) {
   }
 }
 
-async function expectHtml(url, expectedText) {
+async function expectRenderedPage(url) {
+  await expectHtml(url, {
+    excludes: ["ReferenceError", "&lt;section&gt;", "&lt;h1&gt;", "_selectedValue", "onclick"],
+    includes: [
+      '<main id="main-content"><section><h1>Standalone tarball smoke</h1>',
+      "<h1>Standalone tarball smoke</h1>",
+      "&lt;script&gt;alert(unsafe)&lt;/script&gt;",
+      'data-mreact-client-boundary="Counter"',
+      '{"initial":2,"label":"Count"}',
+    ],
+  });
+}
+
+async function expectHtml(url, expectations) {
   const response = await fetch(url);
   const text = await response.text();
+  const missing = expectations.includes.filter((expected) => !text.includes(expected));
+  const leaked = expectations.excludes.filter((forbidden) => text.includes(forbidden));
 
-  if (response.status !== 200 || !text.includes(expectedText)) {
+  if (response.status !== 200 || missing.length > 0 || leaked.length > 0) {
     throw new Error(
-      `Expected ${url} to return 200 with ${JSON.stringify(expectedText)}, got ${response.status}\n${text.slice(0, 500)}`,
+      `Expected ${url} to return 200 with ${JSON.stringify(missing)} and without ${JSON.stringify(leaked)}, got ${response.status}\n${text.slice(0, 1500)}`,
     );
   }
 }

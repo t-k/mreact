@@ -63,6 +63,81 @@ export const thunk = registerServerRenderThunk(() => "<form>trusted</form>");`,
     );
   });
 
+  test.each([false, true])(
+    "renders native ESM package bindings after escape regexes with stream=%s",
+    async (stream) => {
+      const fixture = await createAppFixture("mreact-render-native-esm");
+      try {
+        await fixture.write(
+          "node_modules/fixture-esm-badge/package.json",
+          JSON.stringify({ exports: "./index.js", name: "fixture-esm-badge", type: "module" }),
+        );
+        await fixture.write(
+          "node_modules/fixture-esm-badge/index.js",
+          `export let renders = 0;
+export function badge(text) {
+  renders += 1;
+  return text.toUpperCase();
+}
+`,
+        );
+        await fixture.write(
+          "layout.tsx",
+          `
+export default function Layout(props) {
+  return <html><head></head><body><main id="main-content">{props.children}</main></body></html>;
+}
+`,
+        );
+        await fixture.write(
+          "Counter.tsx",
+          `
+import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter(props) {
+  const count = cell(props.initial);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>{props.label}: {count.get()}</button>;
+}
+`,
+        );
+        await fixture.write(
+          "page.tsx",
+          `
+import { badge, renders } from "fixture-esm-badge";
+import { Counter } from "./Counter";
+export const stream = ${stream};
+const stripQuotes = (text: string) => text.replace(/"/g, '');
+export default function Page() {
+  const unsafe = '<script>alert("unsafe")</script>';
+  return (
+    <section>
+      <h1>{badge('hello')}</h1>
+      <p>{\`renders=\${renders}\`}</p>
+      <p>{stripQuotes(unsafe)}</p>
+      <Counter initial={2} label="Count" />
+    </section>
+  );
+}
+`,
+        );
+        const response = await fixture.render("/", {
+          importPolicy: { allowedPackages: ["fixture-esm-badge"] },
+        });
+        const html = await response.text();
+        expect(response.status).toBe(200);
+        expect(html).toContain('<main id="main-content">');
+        expect(html).toContain("<section><h1>HELLO</h1><p>renders=1</p>");
+        expect(html).toContain("&lt;script&gt;alert(unsafe)&lt;/script&gt;");
+        expect(html).toContain('data-mreact-client-boundary="Counter"');
+        expect(html).toContain('{"initial":2,"label":"Count"}');
+        expect(html).not.toContain("&lt;section&gt;");
+        expect(html).not.toContain("ReferenceError");
+      } finally {
+        await rm(fixture.appDir, { force: true, recursive: true });
+      }
+    },
+  );
+
   test.each([false, true])("renders imported layout children with stream=%s", async (stream) => {
     const fixture = await createAppFixture("mreact-render-values");
     try {

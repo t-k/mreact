@@ -11,6 +11,7 @@ import {
   createRunnableDevEnvironment,
   mergeConfig,
   resolveConfig,
+  type FetchResult,
   type InlineConfig,
   type PluginOption,
   type RunnableDevEnvironment,
@@ -237,6 +238,7 @@ async function createSharedRunnerEnvironment(): Promise<RunnableDevEnvironment> 
               : undefined;
           },
         },
+        nativeExternalModulePlugin(),
       ],
     } satisfies InlineConfig),
     "serve",
@@ -245,9 +247,67 @@ async function createSharedRunnerEnvironment(): Promise<RunnableDevEnvironment> 
     hot: false,
     runnerOptions: { hmr: { logger: false } },
   });
+  const fetchModule = environment.fetchModule.bind(environment);
+  // Vite treats file URLs as transformable sources, so without this override
+  // a node_modules file would be re-evaluated inside the runner graph instead
+  // of sharing the process-wide native instance (registries, hook dispatchers).
+  environment.fetchModule = (id, importer, options) => {
+    const external = nativeExternalModuleFetchResult(id);
+
+    return external === undefined ? fetchModule(id, importer, options) : Promise.resolve(external);
+  };
   await environment.init();
 
   return environment;
+}
+
+// Runs before vite:resolve so importAnalysis keeps the file URL as the import
+// specifier; module-runner transform then rewrites every reference through the
+// namespace object with real scope analysis, preserving live bindings.
+// Stryker disable all: the shared environment is created once per worker, so
+// creation-time mutants are only observable from a fresh process; the native
+// instance identity and missing-export tests cover this wiring there.
+function nativeExternalModulePlugin(): PluginOption {
+  return {
+    name: "mreact-router-native-external-module",
+    enforce: "pre",
+    resolveId(source) {
+      const url = nativeExternalModuleUrl(source);
+
+      return url === undefined ? undefined : { external: true, id: url };
+    },
+  };
+}
+// Stryker restore all
+
+function nativeExternalModuleFetchResult(id: string): FetchResult | undefined {
+  const file = nativeExternalModuleFile(id);
+
+  return file === undefined
+    ? undefined
+    : {
+        externalize: pathToFileURL(file).href,
+        type: isNodeCommonJsModuleFile(file) ? "commonjs" : "module",
+      };
+}
+
+function nativeExternalModuleUrl(specifier: string): string | undefined {
+  const file = nativeExternalModuleFile(specifier);
+
+  return file === undefined ? undefined : pathToFileURL(file).href;
+}
+
+// Only claims the specifier shapes the bundler emits for externals: plain
+// file URLs and absolute paths. Vite-owned URL forms (/@fs/ and /@id/ ids,
+// ?t= cache busting, ?raw style queries) stay in the runner graph.
+function nativeExternalModuleFile(specifier: string): string | undefined {
+  if (specifier.startsWith("/@") || specifier.includes("?") || specifier.includes("#")) {
+    return undefined;
+  }
+
+  const file = nodeModulesExternalImportPath(specifier);
+
+  return file !== undefined && isNodeImportableModuleFile(file) ? file : undefined;
 }
 
 export async function importAppRouterBuiltFileModule<T>(options: {
@@ -823,7 +883,7 @@ function withNodeRequireShimForEsmBundle(options: {
   const requireBaseUrl = pathToFileURL(
     join(options.requireBaseDir ?? process.cwd(), "__mreact_require_shim.cjs"),
   ).href;
-  const rewritten = rewriteNodeModulesExternalImports(options.code);
+  const rewritten = rewriteNodeModulesCommonJsImports(options.code);
   const code = rewritten.code.replaceAll(
     "createRequire(import.meta.url)",
     `createRequire(${JSON.stringify(requireBaseUrl)})`,
@@ -831,16 +891,11 @@ function withNodeRequireShimForEsmBundle(options: {
   const needsFilenameGlobalShim = needsCommonJsFilenameGlobalShim(options.code);
   const needsRequireShim = needsNodeRequireShim(options.code);
 
-  if (
-    !rewritten.needsNativeImport &&
-    !rewritten.needsRequire &&
-    !needsFilenameGlobalShim &&
-    !needsRequireShim
-  ) {
+  if (!rewritten.needsRequire && !needsFilenameGlobalShim && !needsRequireShim) {
     return code;
   }
 
-  return `${rewritten.needsNativeImport ? 'const __mreactNativeImport = Function("specifier", "return import(specifier)");\n' : ""}${
+  return `${
     needsFilenameGlobalShim
       ? `const __filename = ${JSON.stringify(options.filename)};
 const __dirname = ${JSON.stringify(dirname(options.filename))};
@@ -864,13 +919,14 @@ function needsNodeRequireShim(code: string): boolean {
   return code.includes("Dynamic require of") && /\b__require\s*=/.test(code);
 }
 
-function rewriteNodeModulesExternalImports(code: string): {
+// ESM externals keep their import statements: the shared runner externalizes
+// them natively (see nativeExternalModulePlugin). CommonJS externals cannot be
+// evaluated by the runner transform, so they become createRequire calls whose
+// destructured locals keep the original names; no identifier rewriting runs.
+function rewriteNodeModulesCommonJsImports(code: string): {
   code: string;
-  needsNativeImport: boolean;
   needsRequire: boolean;
 } {
-  const nativeImportBindings = new Map<string, string>();
-  let needsNativeImport = false;
   let needsRequire = false;
   let importIndex = 0;
   const importFromPattern = /^import\s+([^;\n]+?)\s+from\s+(["'])([^"']+)\2;?$/gm;
@@ -878,62 +934,45 @@ function rewriteNodeModulesExternalImports(code: string): {
   const withRewrittenImports = code.replace(
     importFromPattern,
     (statement: string, clause: string, _quote: string, specifier: string) => {
-      const file = nodeModulesExternalImportPath(specifier);
+      const file = nodeModulesCommonJsImportPath(specifier);
 
-      if (file === undefined || !isNodeImportableModuleFile(file)) {
+      if (file === undefined) {
         return statement;
       }
 
-      if (isNodeCommonJsModuleFile(file)) {
-        needsRequire = true;
-        const requireExpression = `__mreactRequire(${JSON.stringify(file)})`;
-        return commonJsImportClauseToRequireStatements(
-          clause.trim(),
-          requireExpression,
-          importIndex++,
-        );
-      }
+      needsRequire = true;
 
-      needsNativeImport = true;
-      const rewritten = esmImportClauseToNativeImportStatements(
+      return commonJsImportClauseToRequireStatements(
         clause.trim(),
-        specifier,
+        `__mreactRequire(${JSON.stringify(file)})`,
         importIndex++,
       );
-      for (const [name, replacement] of rewritten.bindings) {
-        nativeImportBindings.set(name, replacement);
-      }
-
-      return rewritten.code;
     },
   );
   const rewrittenCode = withRewrittenImports.replace(
     sideEffectImportPattern,
     (statement: string, _quote: string, specifier: string) => {
-      const file = nodeModulesExternalImportPath(specifier);
+      const file = nodeModulesCommonJsImportPath(specifier);
 
-      if (file === undefined || !isNodeImportableModuleFile(file)) {
+      if (file === undefined) {
         return statement;
       }
 
-      if (isNodeCommonJsModuleFile(file)) {
-        needsRequire = true;
-        return `__mreactRequire(${JSON.stringify(file)});`;
-      }
+      needsRequire = true;
 
-      needsNativeImport = true;
-      return `await __mreactNativeImport(${JSON.stringify(specifier)});`;
+      return `__mreactRequire(${JSON.stringify(file)});`;
     },
   );
 
-  return {
-    code:
-      nativeImportBindings.size === 0
-        ? rewrittenCode
-        : replaceImportedIdentifiers(rewrittenCode, nativeImportBindings),
-    needsNativeImport,
-    needsRequire,
-  };
+  return { code: rewrittenCode, needsRequire };
+}
+
+function nodeModulesCommonJsImportPath(specifier: string): string | undefined {
+  const file = nodeModulesExternalImportPath(specifier);
+
+  return file !== undefined && isNodeImportableModuleFile(file) && isNodeCommonJsModuleFile(file)
+    ? file
+    : undefined;
 }
 
 function nodeModulesExternalImportPath(specifier: string): string | undefined {
@@ -1056,56 +1095,6 @@ function commonJsImportClauseToRequireStatements(
   return statements.join("\n");
 }
 
-function esmImportClauseToNativeImportStatements(
-  clause: string,
-  specifier: string,
-  importIndex: number,
-): { bindings: Map<string, string>; code: string } {
-  const bindings = new Map<string, string>();
-  const temporaryName = `__mreactExternalModule${importIndex}`;
-  const statements = [
-    `const ${temporaryName} = await __mreactNativeImport(${JSON.stringify(specifier)});`,
-  ];
-
-  if (clause.startsWith("* as ")) {
-    statements.push(`const ${clause.slice(5).trim()} = ${temporaryName};`);
-  } else if (clause.startsWith("{")) {
-    collectNamedEsmImportBindings(clause, temporaryName, bindings);
-  } else {
-    const commaIndex = clause.indexOf(",");
-
-    if (commaIndex === -1) {
-      bindings.set(clause, `${temporaryName}.default`);
-    } else {
-      const defaultName = clause.slice(0, commaIndex).trim();
-      const namedOrNamespace = clause.slice(commaIndex + 1).trim();
-      bindings.set(defaultName, `${temporaryName}.default`);
-
-      if (namedOrNamespace.startsWith("* as ")) {
-        statements.push(`const ${namedOrNamespace.slice(5).trim()} = ${temporaryName};`);
-      } else if (namedOrNamespace.startsWith("{")) {
-        collectNamedEsmImportBindings(namedOrNamespace, temporaryName, bindings);
-      }
-    }
-  }
-
-  return { bindings, code: statements.join("\n") };
-}
-
-function collectNamedEsmImportBindings(
-  clause: string,
-  moduleName: string,
-  bindings: Map<string, string>,
-): void {
-  for (const binding of namedImportBindings(clause)) {
-    const replacement =
-      binding.imported === "default"
-        ? `${moduleName}.default`
-        : `${moduleName}[${JSON.stringify(binding.imported)}]`;
-    bindings.set(binding.local, replacement);
-  }
-}
-
 function namedCommonJsImportsToRequireStatements(clause: string, sourceExpression: string): string {
   const objectBindings: string[] = [];
   const statements: string[] = [];
@@ -1140,160 +1129,6 @@ function namedImportBindings(clause: string): Array<{ imported: string; local: s
 
       return { imported, local };
     });
-}
-
-function replaceImportedIdentifiers(code: string, bindings: ReadonlyMap<string, string>): string {
-  let rewritten = "";
-  let index = 0;
-
-  while (index < code.length) {
-    const char = code[index];
-    const next = code[index + 1];
-
-    if (char === '"' || char === "'") {
-      const end = quotedStringEnd(code, index, char);
-      rewritten += code.slice(index, end);
-      index = end;
-      continue;
-    }
-
-    if (char === "`") {
-      const end = templateLiteralEnd(code, index);
-      rewritten += code.slice(index, end);
-      index = end;
-      continue;
-    }
-
-    if (char === "/" && next === "/") {
-      const end = lineCommentEnd(code, index);
-      rewritten += code.slice(index, end);
-      index = end;
-      continue;
-    }
-
-    if (char === "/" && next === "*") {
-      const end = blockCommentEnd(code, index);
-      rewritten += code.slice(index, end);
-      index = end;
-      continue;
-    }
-
-    if (isIdentifierStart(char)) {
-      const end = identifierEnd(code, index);
-      const identifier = code.slice(index, end);
-      const replacement = bindings.get(identifier);
-
-      if (replacement !== undefined && shouldReplaceImportedIdentifier(code, index, end)) {
-        rewritten += importedIdentifierReplacement(code, index, end, identifier, replacement);
-      } else {
-        rewritten += identifier;
-      }
-
-      index = end;
-      continue;
-    }
-
-    rewritten += char;
-    index += 1;
-  }
-
-  return rewritten;
-}
-
-function shouldReplaceImportedIdentifier(code: string, start: number, end: number): boolean {
-  const previous = previousNonWhitespace(code, start);
-  const next = nextNonWhitespace(code, end);
-
-  return previous !== "." && previous !== "?" && next !== ":";
-}
-
-function importedIdentifierReplacement(
-  code: string,
-  start: number,
-  end: number,
-  identifier: string,
-  replacement: string,
-): string {
-  const previous = previousNonWhitespace(code, start);
-  const next = nextNonWhitespace(code, end);
-
-  return (previous === "{" || previous === ",") && (next === "," || next === "}")
-    ? `${identifier}: ${replacement}`
-    : replacement;
-}
-
-function previousNonWhitespace(code: string, index: number): string | undefined {
-  for (let position = index - 1; position >= 0; position -= 1) {
-    if (!/\s/u.test(code[position] ?? "")) {
-      return code[position];
-    }
-  }
-
-  return undefined;
-}
-
-function nextNonWhitespace(code: string, index: number): string | undefined {
-  for (let position = index; position < code.length; position += 1) {
-    if (!/\s/u.test(code[position] ?? "")) {
-      return code[position];
-    }
-  }
-
-  return undefined;
-}
-
-function quotedStringEnd(code: string, start: number, quote: string): number {
-  for (let index = start + 1; index < code.length; index += 1) {
-    if (code[index] === "\\") {
-      index += 1;
-    } else if (code[index] === quote) {
-      return index + 1;
-    }
-  }
-
-  return code.length;
-}
-
-function templateLiteralEnd(code: string, start: number): number {
-  for (let index = start + 1; index < code.length; index += 1) {
-    if (code[index] === "\\") {
-      index += 1;
-    } else if (code[index] === "`") {
-      return index + 1;
-    }
-  }
-
-  return code.length;
-}
-
-function lineCommentEnd(code: string, start: number): number {
-  const end = code.indexOf("\n", start + 2);
-
-  return end === -1 ? code.length : end;
-}
-
-function blockCommentEnd(code: string, start: number): number {
-  const end = code.indexOf("*/", start + 2);
-
-  return end === -1 ? code.length : end + 2;
-}
-
-function identifierEnd(code: string, start: number): number {
-  let end = start + 1;
-
-  while (end < code.length && isIdentifierPart(code[end] ?? "")) {
-    end += 1;
-  }
-
-  return end;
-}
-
-function isIdentifierStart(char: string | undefined): boolean {
-  return char !== undefined && /[A-Za-z_$]/u.test(char);
-}
-
-function isIdentifierPart(char: string): boolean {
-  return /[A-Za-z0-9_$]/u.test(char);
 }
 
 function workspacePackageResolutionPlugin() {
