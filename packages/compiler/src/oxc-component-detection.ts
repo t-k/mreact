@@ -901,11 +901,6 @@ export function withoutOxcLocalJsxHelperNamesShadowedByScope(
     }
     const body = readObject(node.body);
     collectOxcFunctionScopedVarNames(body, shadowedNames);
-    if (body.type === "BlockStatement") {
-      for (const statement of readArray(body.body)) {
-        collectOxcDirectLexicalBindingNames(readObject(statement), shadowedNames);
-      }
-    }
   } else if (node.type === "BlockStatement") {
     for (const statement of readArray(node.body)) {
       collectOxcDirectLexicalBindingNames(readObject(statement), shadowedNames);
@@ -924,7 +919,7 @@ export function withoutOxcLocalJsxHelperNamesShadowedByScope(
     node.type === "ForOfStatement"
   ) {
     const declaration = readObject(node.type === "ForStatement" ? node.init : node.left);
-    if (declaration.type === "VariableDeclaration" && declaration.kind !== "var") {
+    if (declaration.type === "VariableDeclaration") {
       for (const declarator of readArray(declaration.declarations)) {
         collectOxcPatternNames(readObject(readObject(declarator).id), shadowedNames);
       }

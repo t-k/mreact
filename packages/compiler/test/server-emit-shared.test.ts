@@ -542,6 +542,10 @@ export function App() {
       "for-of lexical binding",
       '(() => { for (const Nested of [() => "<plain>"]) return Nested(); })()',
     ],
+    [
+      "for initializer lexical binding",
+      '(() => { for (let Nested = () => "<plain>"; ; ) return Nested(); })()',
+    ],
     ["shadowed coercion", '((Nested) => String(Nested()))(() => "<plain>")'],
     [
       "sink-aware untrusted callback parameter",
