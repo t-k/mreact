@@ -6,9 +6,10 @@ const config = createStrykerConfig({
   breakThreshold: 80,
   mutate: [
     "packages/compiler/src/oxc-child-analysis.ts:695-697",
-    "packages/compiler/src/oxc-nested-lowering.ts:257-268",
-    "packages/compiler/src/oxc-nested-lowering.ts:352-352",
-    "packages/compiler/src/oxc-nested-lowering.ts:760-761",
+    "packages/compiler/src/oxc-nested-lowering.ts:268-277",
+    "packages/compiler/src/oxc-nested-lowering.ts:283-287",
+    "packages/compiler/src/oxc-nested-lowering.ts:372-372",
+    "packages/compiler/src/oxc-nested-lowering.ts:832-835",
     "packages/compiler/src/emit-server.ts:2560-2560",
     "packages/compiler/src/oxc-runtime-emit.ts:73-73",
     "packages/compiler/src/oxc-runtime-emit.ts:111-111",
