@@ -166,6 +166,26 @@ export function unsupportedRenderValueSelectSpreadDiagnostic(): Diagnostic {
   };
 }
 
+export function unsupportedRenderValueClientBoundaryDiagnostic(loc?: SourceLocation): Diagnostic {
+  return {
+    level: "error",
+    code: "MR_UNSUPPORTED_RENDER_VALUE_CLIENT_BOUNDARY",
+    message:
+      "A client boundary cannot be emitted inside a server render value yet. Move the client component outside the collection so the server can preserve its boundary protocol.",
+    ...(loc === undefined ? {} : { loc }),
+  };
+}
+
+export function unsupportedRenderValueAwaitHydrationDiagnostic(loc?: SourceLocation): Diagnostic {
+  return {
+    level: "error",
+    code: "MR_UNSUPPORTED_RENDER_VALUE_AWAIT_HYDRATION",
+    message:
+      "An <Await> inside a server render value cannot use server await hydration because repeated renderers require runtime-unique hydration IDs. Move the <Await> outside the collection or disable server await hydration.",
+    ...(loc === undefined ? {} : { loc }),
+  };
+}
+
 export function unserializableAwaitValueDiagnostic(
   reason: string,
   loc?: SourceLocation,

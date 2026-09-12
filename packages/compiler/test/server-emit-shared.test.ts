@@ -504,9 +504,19 @@ export function App() {
     },
   );
 
-  test("nested compat components keep the compat ABI and client reference metadata", () => {
+  test.each([
+    ["./Card.client.tsx", {}],
+    ["./Card.compat.tsx", {}],
+    [
+      "./Card.compat.tsx",
+      {
+        clientBoundaryFallbackImports: ["./Card.compat.tsx"],
+        clientBoundaryCompatImports: ["./Card.compat.tsx"],
+      },
+    ],
+  ])("diagnoses a nested client boundary without executing it: %s", (moduleId, options) => {
     const result = transform({
-      code: `import { Card } from "./Card.compat.tsx";
+      code: `import { Card } from ${JSON.stringify(moduleId)};
 export function App() {
   return <main>{[<Card label="ok" />]}</main>;
 }`,
@@ -514,14 +524,20 @@ export function App() {
       target: "server",
       serverOutput: "stream",
       dev: false,
+      ...options,
     });
-    expect(result.diagnostics).toEqual([]);
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MR_UNSUPPORTED_RENDER_VALUE_CLIENT_BOUNDARY",
+        level: "error",
+      }),
+    );
     expect(result.code).not.toContain("await Card(");
-    expect(result.code).toContain("_renderCompatToString(Card");
+    expect(result.code).not.toContain("_renderCompatToString(Card");
     expect(result.metadata.clientReferences).toEqual(["Card"]);
   });
 
-  test("synchronous coercion accepts nested compat components", () => {
+  test("synchronous coercion diagnoses a nested client boundary", () => {
     const result = transform({
       code: `import { Card } from "./Card.compat.tsx";
 export function App() {
@@ -532,8 +548,13 @@ export function App() {
       serverOutput: "stream",
       dev: false,
     });
-    expect(result.diagnostics).toEqual([]);
-    expect(result.code).toContain("_renderCompatToString(Card");
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MR_UNSUPPORTED_RENDER_VALUE_CLIENT_BOUNDARY",
+        level: "error",
+      }),
+    );
+    expect(result.code).not.toContain("_renderCompatToString(Card");
   });
 
   test("nested stream renderers preserve in-order Await boundaries", async () => {
@@ -557,7 +578,7 @@ export function App() {
     );
   });
 
-  test("nested stream Await boundaries retain hydration ids", () => {
+  test("nested stream Await hydration fails closed with valid generated syntax", () => {
     const result = transform({
       code: `export function App() {
   return <main>{[<Await value={Promise.resolve("resolved")}>{value => <strong>{value}</strong>}</Await>]}</main>;
@@ -568,8 +589,14 @@ export function App() {
       serverAwaitHydration: true,
       dev: false,
     });
-    expect(result.diagnostics).toEqual([]);
-    expect(result.code).toMatch(/hydrationAwaitId: "awaitNested[0-9a-z]+_0"/);
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MR_UNSUPPORTED_RENDER_VALUE_AWAIT_HYDRATION",
+        level: "error",
+      }),
+    );
+    expect(result.code).not.toContain("hydrationAwaitId");
+    expect(() => compileServerStreamModule(result.code)).not.toThrow();
   });
 
   test("nested placeholder Await reports an explicit unsupported diagnostic", () => {
@@ -628,6 +655,20 @@ export function App() {
 }`);
     await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
       '<main><select><option value="a">A</option><option value="b" selected="">B</option></select><select><option value="a" selected="">A</option><option value="b">B</option></select><i>1</i></main>',
+    );
+  });
+
+  test("nested stream select preserves attribute order and false boolean semantics", async () => {
+    const compiled = compileServerPair(`const order = [];
+function read(name, value) {
+  order.push(name);
+  return value;
+}
+export function App() {
+  return <main>{[<select defaultValue={read("default", "a")} multiple={read("multiple", false)} value={read("value", "b")}><option selected={false} value="a">A</option><option value="b">B</option></select>]}<i>{order.join(",")}</i></main>;
+}`);
+    await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
+      '<main><select><option value="a">A</option><option value="b" selected="">B</option></select><i>default,multiple,value</i></main>',
     );
   });
 

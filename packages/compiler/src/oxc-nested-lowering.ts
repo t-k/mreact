@@ -19,6 +19,8 @@ import { stripTypeScriptExpressionWithOxc } from "./oxc-transform.js";
 import type { ClientReferenceIr, JsxNodeIr } from "./ir.js";
 import type { CompileTarget, Diagnostic } from "./types.js";
 import {
+  unsupportedRenderValueAwaitHydrationDiagnostic,
+  unsupportedRenderValueClientBoundaryDiagnostic,
   unsupportedRenderValuePlaceholderAwaitDiagnostic,
   unsupportedRenderValueSelectSpreadDiagnostic,
   unsupportedStreamComponentCoercionDiagnostic,
@@ -256,8 +258,15 @@ function lowerOxcServerStreamExpression(
     markOxcClientReferences(child, new Map(clientReferences));
     markOxcCompatRuntimeReferences(child, compatRuntimeReferences);
   }
-  if (serverAwaitHydration) assignNestedAwaitIds(children, expression);
   nestedRenderValueNodes?.push(...children);
+  const clientBoundary = findClientBoundary(children);
+  if (clientBoundary !== undefined) {
+    diagnostics.push(unsupportedRenderValueClientBoundaryDiagnostic(clientBoundary.loc));
+  }
+  const nestedAwait = findNestedAwait(children);
+  if (serverAwaitHydration && nestedAwait !== undefined) {
+    diagnostics.push(unsupportedRenderValueAwaitHydrationDiagnostic(nestedAwait.loc));
+  }
   const placeholderAwait = findPlaceholderAwait(children);
   if (placeholderAwait !== undefined) {
     diagnostics.push(unsupportedRenderValuePlaceholderAwaitDiagnostic(placeholderAwait.loc));
@@ -334,6 +343,48 @@ function findPlaceholderAwait(
     if (found !== undefined) return found;
   }
   return undefined;
+}
+
+function findClientBoundary(
+  children: readonly JsxNodeIr[],
+): Extract<JsxNodeIr, { kind: "component" }> | undefined {
+  for (const child of children) {
+    if (child.kind === "component" && child.clientReference !== undefined) return child;
+    const nested = nestedOxcChildren(child);
+    const found = findClientBoundary(nested);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
+function findNestedAwait(
+  children: readonly JsxNodeIr[],
+): Extract<JsxNodeIr, { kind: "async-boundary" }> | undefined {
+  for (const child of children) {
+    if (child.kind === "async-boundary") return child;
+    const found = findNestedAwait(nestedOxcChildren(child));
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
+function nestedOxcChildren(node: JsxNodeIr): JsxNodeIr[] {
+  return node.kind === "conditional"
+    ? [...node.whenTrue, ...node.whenFalse]
+    : node.kind === "list" || node.kind === "fragment" || node.kind === "element"
+      ? node.children
+      : node.kind === "component"
+        ? [
+            ...node.children,
+            ...node.props.flatMap((prop) => (prop.kind === "render-prop" ? prop.children : [])),
+          ]
+        : node.kind === "async-boundary"
+          ? [
+              ...node.children,
+              ...(node.placeholderChildren ?? []),
+              ...(node.catchChildren ?? []),
+            ]
+          : [];
 }
 
 function containsSpreadSelect(children: readonly import("./ir.js").JsxNodeIr[]): boolean {
@@ -705,6 +756,10 @@ export function lowerOxcServerStringExpression(
     for (const child of children) markOxcClientReferences(child, new Map(clientReferences));
   }
   nestedRenderValueNodes?.push(...children);
+  const clientBoundary = findClientBoundary(children);
+  if (nestedRenderValueNodes !== undefined && clientBoundary !== undefined) {
+    diagnostics.push(unsupportedRenderValueClientBoundaryDiagnostic(clientBoundary.loc));
+  }
 
   return emitOxcServerStringChildren(children, escapeHelperName);
 }
@@ -734,37 +789,4 @@ function createOxcNestedChildAnalysisContext(
         nestedRenderValueNodes,
       ),
   };
-}
-
-function assignNestedAwaitIds(
-  children: readonly JsxNodeIr[],
-  expression: Record<string, unknown>,
-): void {
-  let counter = 0;
-  const sourceStart = typeof expression.start === "number" ? expression.start : 0;
-  const prefix = `awaitNested${sourceStart.toString(36)}_`;
-  const visit = (node: JsxNodeIr): void => {
-    if (node.kind === "async-boundary") node.awaitId = `${prefix}${(counter++).toString(36)}`;
-    const nested =
-      node.kind === "conditional"
-        ? [...node.whenTrue, ...node.whenFalse]
-        : node.kind === "list" || node.kind === "fragment" || node.kind === "element"
-          ? node.children
-          : node.kind === "component"
-            ? [
-                ...node.children,
-                ...node.props.flatMap((prop) =>
-                  prop.kind === "render-prop" ? prop.children : [],
-                ),
-              ]
-            : node.kind === "async-boundary"
-              ? [
-                  ...node.children,
-                  ...(node.placeholderChildren ?? []),
-                  ...(node.catchChildren ?? []),
-                ]
-              : [];
-    nested.forEach(visit);
-  };
-  children.forEach(visit);
 }

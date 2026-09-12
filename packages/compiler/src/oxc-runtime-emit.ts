@@ -107,6 +107,7 @@ function emitOxcServerStreamNode(
   }
 
   if (node.kind === "component") {
+    if (node.clientReference !== undefined) return "";
     const props = emitOxcServerStreamComponentProps(node.props, node.children, names, state);
     if (node.runtime === "compat") {
       return `${indent}${names.sink}.append(${names.compatRenderToString}(${node.name}, ${props}));`;
@@ -118,47 +119,60 @@ function emitOxcServerStreamNode(
     const body = emitOxcServerStreamStatements(node.children, names, state, `${indent}    `);
     const catchOption =
       node.catchName === undefined || node.catchChildren === undefined
-        ? ""
-        : `, catch: async (${names.sink}, ${node.catchName}) => {\n${emitOxcServerStreamStatements(node.catchChildren, names, state, `${indent}      `)}\n${indent}    }`;
+        ? undefined
+        : `catch: async (${names.sink}, ${node.catchName}) => {\n${emitOxcServerStreamStatements(node.catchChildren, names, state, `${indent}      `)}\n${indent}    }`;
     if (node.placeholderChildren !== undefined) return "";
-    const hydrationAwaitId =
-      node.awaitId === undefined ? "" : `, hydrationAwaitId: ${JSON.stringify(node.awaitId)}`;
-    const options =
-      catchOption === "" && hydrationAwaitId === ""
-        ? ""
-        : `, {${catchOption.slice(1)}${hydrationAwaitId} }`;
+    const hydrationAwaitId = node.awaitId === undefined
+      ? undefined
+      : `hydrationAwaitId: ${JSON.stringify(node.awaitId)}`;
+    const optionFields = [catchOption, hydrationAwaitId].filter(
+      (field): field is string => field !== undefined,
+    );
+    const options = optionFields.length === 0 ? "" : `, { ${optionFields.join(", ")} }`;
     return `${indent}await ${names.renderAsyncBoundary}(${names.sink}, (${node.valueCode}), async (${names.sink}, ${node.valueName}) => {\n${body}\n${indent}  }${options});`;
   }
 
   const establishesSelection = node.tagName === "select";
-  const explicitSelectionValue = establishesSelection
-    ? emitOxcSelectionAttributeValue(node.attributes, "value")
-    : undefined;
-  const defaultSelectionValue = establishesSelection
-    ? emitOxcSelectionAttributeValue(node.attributes, "defaultValue")
-    : undefined;
+  const selectionId = establishesSelection ? state.nextLocal++ : undefined;
+  const selectionBindings =
+    selectionId === undefined
+      ? []
+      : node.attributes.flatMap((attribute, index) => {
+          if (
+            attribute.kind === "spread-attr" ||
+            !["value", "defaultValue", "multiple"].includes(attribute.name)
+          ) {
+            return [];
+          }
+          const code = emitOxcSelectionAttributeValue([attribute], attribute.name);
+          return code === undefined
+            ? []
+            : [
+                {
+                  attribute,
+                  name: attribute.name,
+                  local: `${names.localBase}$select${attribute.name[0]?.toUpperCase()}${attribute.name.slice(1)}${selectionId}_${index}`,
+                  code,
+                },
+              ];
+        });
+  const explicitSelectionValue = selectionBindings.find((binding) => binding.name === "value")
+    ?.local;
+  const defaultSelectionValue = selectionBindings.find(
+    (binding) => binding.name === "defaultValue",
+  )?.local;
   const selectionValue =
     explicitSelectionValue === undefined
       ? defaultSelectionValue
       : defaultSelectionValue === undefined
         ? explicitSelectionValue
         : `((${explicitSelectionValue}) ?? (${defaultSelectionValue}))`;
-  const selectionMultiple = establishesSelection
-    ? emitOxcSelectionAttributeValue(node.attributes, "multiple")
-    : undefined;
-  const selectionId = establishesSelection ? state.nextLocal++ : undefined;
-  const selectionValueName =
-    selectionValue === undefined || selectionId === undefined
-      ? undefined
-      : `${names.localBase}$selectValue${selectionId}`;
-  const selectionMultipleName =
-    selectionMultiple === undefined || selectionId === undefined
-      ? undefined
-      : `${names.localBase}$selectMultiple${selectionId}`;
+  const selectionMultipleName = selectionBindings.find((binding) => binding.name === "multiple")
+    ?.local;
   const childNames = establishesSelection
     ? {
         ...names,
-        selectedValue: selectionValueName ?? "undefined",
+        selectedValue: selectionValue ?? "undefined",
         selectedMultiple: selectionMultipleName ?? "undefined",
       }
     : names;
@@ -176,17 +190,14 @@ function emitOxcServerStreamNode(
         ) &&
         !(optionSelected !== undefined && attr.kind !== "spread-attr" && attr.name === "selected"),
     )
-    .map((attr) =>
-      emitOxcServerAttribute(
-        node.tagName,
-        selectionMultipleName !== undefined &&
-          attr.kind === "dynamic-attr" &&
-          attr.name === "multiple"
-          ? { ...attr, code: selectionMultipleName }
-          : attr,
-        names.escapeHtml,
-      ),
-    )
+    .map((attr) => {
+      const dynamicMultiple = selectionBindings.find(
+        (binding) => binding.attribute === attr && binding.name === "multiple",
+      )?.local;
+      return dynamicMultiple === undefined
+        ? emitOxcServerAttribute(node.tagName, attr, names.escapeHtml)
+        : `((${dynamicMultiple}) ? ${JSON.stringify(' multiple=""')} : "")`;
+    })
     .join(" + ");
   const open =
     attrs === "" && optionSelected === undefined
@@ -198,14 +209,9 @@ function emitOxcServerStreamNode(
   const body = emitOxcServerStreamStatements(node.children, childNames, state, indent);
   const element = `${indent}${names.sink}.append(${open});\n${body}${body === "" ? "" : "\n"}${indent}${names.sink}.append(${JSON.stringify(`</${node.tagName}>`)});`;
   if (!establishesSelection) return element;
-  const declarations = [
-    selectionValueName === undefined
-      ? undefined
-      : `${indent}  const ${selectionValueName} = ${selectionValue};`,
-    selectionMultipleName === undefined
-      ? undefined
-      : `${indent}  const ${selectionMultipleName} = ${selectionMultiple};`,
-  ].filter((line): line is string => line !== undefined);
+  const declarations = selectionBindings.map(
+    (binding) => `${indent}  const ${binding.local} = ${binding.code};`,
+  );
   return `${indent}{\n${declarations.join("\n")}${declarations.length === 0 ? "" : "\n"}${element
     .split("\n")
     .map((line) => `  ${line}`)
@@ -234,11 +240,15 @@ function emitOxcOptionSelectedAttribute(
   const optionValue =
     emitOxcSelectionAttributeValue(node.attributes, "value") ??
     emitOxcOptionTextValue(node.children);
-  const ownSelected = node.attributes.some(
+  const selectedAttribute = node.attributes.find(
     (attribute) => attribute.kind !== "spread-attr" && attribute.name === "selected",
-  )
-    ? JSON.stringify(' selected=""')
-    : '""';
+  );
+  const ownSelected =
+    selectedAttribute?.kind === "dynamic-attr"
+      ? `((${selectedAttribute.code}) ? ${JSON.stringify(' selected=""')} : "")`
+      : selectedAttribute === undefined
+        ? '""'
+        : JSON.stringify(' selected=""');
   const id = state.nextLocal++;
   return emitOptionSelectedAttributeCode(
     names.selectedValue,
@@ -336,6 +346,7 @@ function emitOxcServerStringNode(node: JsxNodeIr, escapeHelperName: string): str
   }
 
   if (node.kind === "component") {
+    if (node.clientReference !== undefined) return '""';
     const props = emitOxcServerComponentProps(node.props, node.children, escapeHelperName);
     if (node.runtime === "compat") {
       return `${oxcServerStringReactNodeRenderHelperPlaceholder}(${node.name}, ${props})`;
