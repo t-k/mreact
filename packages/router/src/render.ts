@@ -1,3 +1,6 @@
+import { getRequestStateStorage } from "@reckona/mreact-reactive-core/internal";
+import { installRequestStateStorage, type RequestStateScope } from "@reckona/mreact-reactive-core";
+import { runWithRequestStateResponse } from "./request-state.js";
 import { isCompatSsrFilename } from "./compat-ssr.js";
 import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -178,6 +181,9 @@ const authRuntimeStateKey = "__mreactAuthRuntimeState";
 const authSessionScriptId = "__mreact_auth_session";
 
 installQueryAsyncStorage(new AsyncLocalStorage<QueryClient>());
+if (getRequestStateStorage() === undefined) {
+  installRequestStateStorage(new AsyncLocalStorage<RequestStateScope>());
+}
 
 interface AuthRuntimeRequestState {
   claims?: unknown;
@@ -701,10 +707,14 @@ interface RouteSourceAnalysis {
  * Renders a source app-router request into a `Response`.
  */
 export async function renderAppRequest(options: RenderAppRequestOptions): Promise<Response> {
+  return runWithRequestStateResponse(() => renderAppRequestWithState(options));
+}
+
+async function renderAppRequestWithState(options: RenderAppRequestOptions): Promise<Response> {
   const authStorage = authRequestStorage();
 
   if (authStorage.getStore() === undefined) {
-    return authStorage.run({}, () => renderAppRequest(options));
+    return authStorage.run({}, () => renderAppRequestWithState(options));
   }
 
   const trace = traceContextFromRequest(options.request);

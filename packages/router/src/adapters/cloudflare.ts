@@ -1,3 +1,4 @@
+import { runWithRequestStateResponse } from "../request-state.js";
 import type { BuiltPrerenderedRoute, BuiltServerManifest } from "../build.js";
 import type { ClientRouteManifestEntry } from "../client.js";
 import {
@@ -481,7 +482,7 @@ export function createCloudflareBuiltRequestHandler<Env = unknown>(
 export function createCloudflareRouteModuleRenderer<Env = unknown>(
   options: CloudflareRouteModuleRendererOptions<Env>,
 ): NonNullable<CloudflareBuiltRequestHandlerOptions<Env>["renderRoute"]> {
-  return async (request, context) => {
+  return (request, context) => runWithRequestStateResponse(async () => {
     const middlewareResult = await resolveCloudflareRouteModuleMiddleware(options.modules, request);
     if (middlewareResult.type === "response") {
       return middlewareResult.response;
@@ -679,7 +680,7 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
       request,
       metadata,
     );
-  };
+  });
 }
 
 async function resolveCloudflareRouteModuleMiddleware<Env>(

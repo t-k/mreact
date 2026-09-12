@@ -179,3 +179,33 @@ Use these contracts when deployment or ownership rules require an explicit bound
 - [Link and Navigation](/guides/link-and-navigation/)
 - [SSR and Streaming](/guides/ssr-and-streaming/)
 - [Route Module Exports](/reference/route-module-exports/)
+
+## Request-scoped state during SSR
+
+Module-level `cell()` values and ordinary module variables live as long as the server process or Worker isolate. Writing a user's loader data into such a cell can expose it to the next request, including when that request's loader returns `null`. Development module re-evaluation can hide this problem; test repeated requests against the same production artifact.
+
+Use `requestState()` from `@reckona/mreact-reactive-core` when several components or render helpers share mutable state. Declare the accessor at module scope and create the entire state graph inside its initializer, including cells, computed values, arrays, maps, and helper objects:
+
+```tsx
+import { cell, computed, requestState } from "@reckona/mreact-reactive-core";
+
+const usePageState = requestState(() => {
+  const name = cell<string | null>(null);
+  const hasProfile = computed(() => name.get() !== null);
+  return { name, hasProfile };
+});
+
+export default function Page({ data }: { data: { name: string } | null }) {
+  const state = usePageState();
+  if (data !== null) state.name.set(data.name);
+  return <main>{state.name.get()}</main>;
+}
+```
+
+The initializer runs lazily once per server request. A later request starts from fresh state even if its loader returns `null`. Nested components can call the same accessor instance to obtain that request's state. Loader and render code can be compiled into separate artifacts with separate module instances; return loader data and initialize render state from props instead of using module state as a loader-to-page transport. Put derived `computed()` values inside the initializer too: a module-level computed value has its own shared cache. Allocate mutable initial values inside the initializer rather than returning an object created outside it. Ordinary module variables and existing `cell()` declarations are not automatically isolated.
+
+The Node and Cloudflare App Router renderers establish the scope before application rendering and retain it for response body reads. State belongs to the render request independently of any query client supplied by the application. Outside a server request scope, calling the accessor throws. In the browser, the same accessor lazily creates one ordinary state graph shared by its callers; initialize it from loader props during hydration. This API does not serialize its state or automatically dispose controllers, subscriptions, or other resources.
+
+Cloudflare requires native `AsyncLocalStorage` for `requestState()`. Enable `nodejs_compat` or install a supported storage explicitly. The adapter also discovers `AsyncLocalStorage` through `process.getBuiltinModule()` when the runtime provides it. Without native storage, reading request state throws; ordinary routes and streaming responses that do not use this API continue to work. A serialized global fallback cannot safely isolate detached asynchronous callbacks. Keep request work awaited; for detached background work, resolve the accessor during the request and pass the required values explicitly instead of calling the ambient accessor later.
+
+Custom server integrations can install `AsyncLocalStorage` with `installRequestStateStorage(new AsyncLocalStorage())`, then call `runWithRequestState(() => render())`. Each call creates a fresh scope, including nested calls. Await all asynchronous rendering within the callback; custom integrations that return a stream must also execute subsequent reads and cancellation inside that scope. The built-in App Router adapters handle this stream binding automatically.
