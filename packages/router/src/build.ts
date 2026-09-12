@@ -58,10 +58,12 @@ import {
 } from "./navigation-runtime.js";
 import {
   COMPAT_VENDOR_PLACEHOLDER_PREFIX,
+  SERVER_RENDER_VALUE_PLACEHOLDER,
   bundleAppRouterSourceModule,
   fileImportMetaUrlPlugin,
   importAppRouterSourceModule,
   resolveCompatVendorEntryFiles,
+  resolveServerRenderValueEntryFile,
   sourceReferencesCompatVendorSpecifier,
 } from "./module-runner.js";
 import { dehydrateOptionsFromModule } from "./dehydrate-policy.js";
@@ -121,6 +123,7 @@ import {
 import { prepareRouteServerActionPlaceholders } from "./actions.js";
 import { viteDefineCacheKey, vitePluginsCacheKey } from "./vite-plugin-cache-key.js";
 import { workspacePackageFile } from "./workspace-packages.js";
+import { rewriteStaticModuleSpecifiers, staticModuleSpecifiers } from "./module-specifiers.js";
 import { prependTailwindSourceDirectives } from "./tailwind-source.js";
 import {
   parseRouteMiddlewareControl,
@@ -2038,19 +2041,19 @@ async function buildPublicAssetManifest(
   return [...new Set([...publicAssetPaths, ...appConventionPublicAssets])].sort();
 }
 
-const COMPAT_VENDOR_PLACEHOLDER_IMPORT_PATTERN = /(["'])mreact-compat-vendor:([\w-]+)\1/gu;
-
 function rewriteCompatVendorPlaceholderImports(code: string): string {
-  if (!code.includes(COMPAT_VENDOR_PLACEHOLDER_PREFIX)) {
-    return code;
-  }
-
   // Module files live in server-modules/code/, vendor chunks in
   // server-modules/chunks/, so the relative path is stable.
-  return code.replace(
-    COMPAT_VENDOR_PLACEHOLDER_IMPORT_PATTERN,
-    (_match, quote: string, entry: string) => `${quote}../chunks/compat.${entry}.mjs${quote}`,
-  );
+  return rewriteStaticModuleSpecifiers(code, (specifier) => {
+    if (specifier === SERVER_RENDER_VALUE_PLACEHOLDER) {
+      return "../chunks/server-render-value-internal.mjs";
+    }
+    if (specifier.startsWith(COMPAT_VENDOR_PLACEHOLDER_PREFIX)) {
+      const entry = specifier.slice(COMPAT_VENDOR_PLACEHOLDER_PREFIX.length);
+      return `../chunks/compat.${entry}.mjs`;
+    }
+    return undefined;
+  });
 }
 
 function collectCompatVendorEntryUsage(
@@ -2062,15 +2065,13 @@ function collectCompatVendorEntryUsage(
     for (const output of [artifact.string, artifact.stream]) {
       const bundleCode = output?.bundleCode;
 
-      if (bundleCode === undefined || !bundleCode.includes(COMPAT_VENDOR_PLACEHOLDER_PREFIX)) {
+      if (bundleCode === undefined) {
         continue;
       }
 
-      for (const match of bundleCode.matchAll(COMPAT_VENDOR_PLACEHOLDER_IMPORT_PATTERN)) {
-        const entry = match[2];
-
-        if (entry !== undefined) {
-          usedEntries.add(entry);
+      for (const specifier of staticModuleSpecifiers(bundleCode)) {
+        if (specifier.startsWith(COMPAT_VENDOR_PLACEHOLDER_PREFIX)) {
+          usedEntries.add(specifier.slice(COMPAT_VENDOR_PLACEHOLDER_PREFIX.length));
         }
       }
     }
@@ -2111,6 +2112,27 @@ async function writeCompatVendorChunks(
   });
   const chunksDir = join(serverDir, "server-modules", "chunks");
 
+  await mkdir(chunksDir, { recursive: true });
+  await Promise.all(
+    output.chunks.map((chunk) => writeFile(join(chunksDir, chunk.fileName), chunk.code)),
+  );
+}
+
+async function writeServerRenderValueChunk(serverDir: string): Promise<void> {
+  const filename = resolveServerRenderValueEntryFile(serverDir);
+  const output = await bundleRouterModules({
+    entries: [
+      {
+        code: await readFile(filename, "utf8"),
+        filename,
+        name: "server-render-value-internal",
+      },
+    ],
+    entryFileNames: "[name].mjs",
+    platform: "node",
+    root: dirname(filename),
+  });
+  const chunksDir = join(serverDir, "server-modules", "chunks");
   await mkdir(chunksDir, { recursive: true });
   await Promise.all(
     output.chunks.map((chunk) => writeFile(join(chunksDir, chunk.fileName), chunk.code)),
@@ -2163,6 +2185,15 @@ async function writeServerModuleArtifactFiles(
 
   if (usedCompatVendorEntries.size > 0) {
     await writeCompatVendorChunks(serverDir, usedCompatVendorEntries);
+  }
+  if (
+    artifactEntries.some(([, artifact]) =>
+      [artifact.string, artifact.stream].some((output) =>
+        staticModuleSpecifiers(output?.bundleCode ?? "").includes(SERVER_RENDER_VALUE_PLACEHOLDER),
+      ),
+    )
+  ) {
+    await writeServerRenderValueChunk(serverDir);
   }
 
   const writtenArtifacts = await mapWithBuildConcurrency<
@@ -3451,7 +3482,10 @@ async function buildServerModuleArtifacts(options: {
           : undefined;
       const clientBoundaryImports =
         routeAnalysis?.clientBoundaryImports ?? clientInference?.clientBoundaryImports ?? [];
-      const clientBoundaryCompatImports = routeAnalysis?.clientBoundaryCompatImports ?? clientInference?.clientBoundaryCompatImports ?? [];
+      const clientBoundaryCompatImports =
+        routeAnalysis?.clientBoundaryCompatImports ??
+        clientInference?.clientBoundaryCompatImports ??
+        [];
       const clientBoundaryFallbackImports =
         routeAnalysis?.clientBoundaryFallbackImports ??
         clientInference?.clientBoundaryFallbackImports ??
@@ -3527,6 +3561,7 @@ async function buildServerModuleArtifacts(options: {
                 clientRouteInferenceCache: options.clientRouteInferenceCache,
                 code: output.code,
                 externalizeCompatVendor,
+                externalizeServerRenderValueRuntime: options.prebundleServerComponents,
                 filename: absoluteFile,
                 define: options.define,
                 root: options.projectRoot,
@@ -3571,6 +3606,7 @@ async function buildServerComponentBundleArtifactCode(options: {
   code: string;
   define?: UserConfig["define"] | undefined;
   externalizeCompatVendor?: boolean | undefined;
+  externalizeServerRenderValueRuntime?: boolean | undefined;
   filename: string;
   root?: string | undefined;
   serverOutput: ServerOutputMode;
@@ -3580,6 +3616,7 @@ async function buildServerComponentBundleArtifactCode(options: {
     code: options.code,
     define: options.define,
     externalizeCompatVendor: options.externalizeCompatVendor,
+    externalizeServerRenderValueRuntime: options.externalizeServerRenderValueRuntime,
     label: `server-component:${options.filename}`,
     resolveDir: dirname(options.filename),
     root: options.root,
@@ -3638,8 +3675,8 @@ async function transformServerRouteSource(options: {
       serverEscape: nativeEscapeTransform,
       serverOutput: options.serverOutput,
       ...(isCompatSsrFilename(options.filename)
-      ? { target: "client" as const, mode: "compat" as const }
-      : { target: "server" as const }),
+        ? { target: "client" as const, mode: "compat" as const }
+        : { target: "server" as const }),
     });
   });
   options.cache.set(cacheKey, transformed);

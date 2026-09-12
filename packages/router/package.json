@@ -119,6 +119,7 @@
     "@reckona/mreact-server": "workspace:*",
     "@reckona/mreact-shared": "workspace:*",
     "@typescript/typescript6": "^6.0.2",
+    "es-module-lexer": "2.1.0",
     "esbuild": ">=0.28.1 <0.29"
   },
   "peerDependencies": {

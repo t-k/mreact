@@ -38,6 +38,7 @@ export interface AnalyzeModuleOptions {
   topLevelJsx?: "diagnostic" | "compat-object" | "server-string";
   bodyStatementJsx?: BodyStatementJsxMode;
   serverOutput?: ServerOutputMode;
+  serverAwaitHydration?: boolean;
   awaitCompatComponents?: "diagnostic" | "lower";
   clientBoundaryImports?: readonly string[];
   clientBoundaryFallbackImports?: readonly string[];

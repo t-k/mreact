@@ -3,7 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { buildApp } from "../src/build.js";
-import { rewriteCompatVendorPlaceholderImportsForRunner } from "../src/module-runner.js";
+import {
+  SERVER_RENDER_VALUE_PLACEHOLDER,
+  rewriteCompatVendorPlaceholderImportsForRunner,
+} from "../src/module-runner.js";
 import { startServer } from "../src/serve.js";
 
 // The react-compat server runtime must be emitted once as shared vendor
@@ -29,7 +32,9 @@ async function createCompatApp(): Promise<{ appDir: string; outDir: string }> {
   return <html lang="en"><body><Slot /></body></html>;
 }`,
   );
-  const page = (label: string) => `import { createElement, renderToString } from "@reckona/mreact-compat";
+  const page = (
+    label: string,
+  ) => `import { createElement, renderToString } from "@reckona/mreact-compat";
 
 function Row(props) {
   const tag = "span";
@@ -121,6 +126,33 @@ export const clientNavigation = false;
   return { appDir, outDir };
 }
 
+async function createNativeServerRenderValueApp(): Promise<{ appDir: string; outDir: string }> {
+  const rootDir = await mkdtemp(join(tmpdir(), "mreact-server-render-value-vendor-"));
+  tempRoots.push(rootDir);
+  const appDir = join(rootDir, "app");
+  const outDir = join(rootDir, ".mreact");
+  await mkdir(join(appDir, "second"), { recursive: true });
+  await writeFile(
+    join(appDir, "layout.tsx"),
+    `export default function Layout(props) {
+  return <html lang="en"><body>{props.children}</body></html>;
+}`,
+  );
+  const page = (label: string) => `function InlineText() {
+  return <strong>${label}</strong>;
+}
+
+export default function Page() {
+  const literal = "${SERVER_RENDER_VALUE_PLACEHOLDER}";
+  const importText = 'from "${SERVER_RENDER_VALUE_PLACEHOLDER}"';
+  return <main>{["${label}"].flatMap(() => [<InlineText />, "\\n"])}<code>{literal}</code><code>{importText}</code></main>;
+}
+`;
+  await writeFile(join(appDir, "page.tsx"), page("one"));
+  await writeFile(join(appDir, "second", "page.tsx"), page("two"));
+  return { appDir, outDir };
+}
+
 async function routeModuleSources(outDir: string): Promise<string[]> {
   const codeDir = join(outDir, "server", "server-modules", "code");
   const sources: string[] = [];
@@ -138,6 +170,39 @@ describe("compat server vendor chunks", () => {
     expect(rewritten).toContain('from "file://');
     expect(rewritten).not.toContain("mreact-compat-vendor:");
     expect(rewritten).not.toContain('from "@reckona/mreact-compat"');
+  });
+
+  test("rewrites only exact server render-value import specifiers", () => {
+    const code = `import { isServerRenderValue } from "${SERVER_RENDER_VALUE_PLACEHOLDER}";
+export { readServerRenderValue } from '${SERVER_RENDER_VALUE_PLACEHOLDER}';
+import localValue from "./local.js";
+const dynamicValue = import("${SERVER_RENDER_VALUE_PLACEHOLDER}");
+export const exact = "${SERVER_RENDER_VALUE_PLACEHOLDER}";
+export const prefixed = "prefix:${SERVER_RENDER_VALUE_PLACEHOLDER}";
+export const template = \`${SERVER_RENDER_VALUE_PLACEHOLDER}\`;
+export const quotedImport = 'from "${SERVER_RENDER_VALUE_PLACEHOLDER}"';
+export const templateImport = \`from "${SERVER_RENDER_VALUE_PLACEHOLDER}"\`;
+// from "${SERVER_RENDER_VALUE_PLACEHOLDER}"
+// ${SERVER_RENDER_VALUE_PLACEHOLDER}
+`;
+    const rewritten = rewriteCompatVendorPlaceholderImportsForRunner(code);
+
+    expect(rewritten).toContain('import { isServerRenderValue } from "file://');
+    expect(rewritten).toContain("export { readServerRenderValue } from 'file://");
+    expect(rewritten).toContain('import localValue from "./local.js";');
+    expect(rewritten).toContain(`import("${SERVER_RENDER_VALUE_PLACEHOLDER}")`);
+    expect(rewritten).toContain(`export const exact = "${SERVER_RENDER_VALUE_PLACEHOLDER}";`);
+    expect(rewritten).toContain(
+      `export const prefixed = "prefix:${SERVER_RENDER_VALUE_PLACEHOLDER}";`,
+    );
+    expect(rewritten).toContain(
+      `export const quotedImport = 'from "${SERVER_RENDER_VALUE_PLACEHOLDER}"';`,
+    );
+    expect(rewritten).toContain(
+      `export const templateImport = \`from "${SERVER_RENDER_VALUE_PLACEHOLDER}"\`;`,
+    );
+    expect(rewritten).toContain(`// from "${SERVER_RENDER_VALUE_PLACEHOLDER}"`);
+    expect(rewritten).toContain(`// ${SERVER_RENDER_VALUE_PLACEHOLDER}`);
   });
 
   test("emits shared compat chunks instead of inlining the runtime per route", async () => {
@@ -221,6 +286,40 @@ describe("compat server vendor chunks", () => {
     await expect(readdir(join(outDir, "server", "server-modules", "chunks"))).rejects.toThrow();
     for (const source of await routeModuleSources(outDir)) {
       expect(source).not.toContain("mreact-compat-vendor:");
+    }
+  }, 120_000);
+
+  test("shares compiler-owned server render values across native route bundles", async () => {
+    const { appDir, outDir } = await createNativeServerRenderValueApp();
+    await buildApp({ appDir, outDir });
+
+    const chunkDir = join(outDir, "server", "server-modules", "chunks");
+    expect(await readdir(chunkDir)).toContain("server-render-value-internal.mjs");
+
+    const sources = await routeModuleSources(outDir);
+    const renderValueSources = sources.filter((source) =>
+      source.includes("server-render-value-internal"),
+    );
+    expect(renderValueSources.length).toBeGreaterThanOrEqual(2);
+    for (const source of renderValueSources) {
+      expect(source).toContain("../chunks/server-render-value-internal.mjs");
+      expect(source).not.toContain("const serverRenderValues = /* @__PURE__ */ new WeakMap");
+    }
+
+    const server = await startServer({ outDir, port: 0 });
+    try {
+      const first = await (await fetch(`${server.url}/`)).text();
+      const second = await (await fetch(`${server.url}/second`)).text();
+      expect(first).toContain(
+        `<main><strong>one</strong>\n<code>${SERVER_RENDER_VALUE_PLACEHOLDER}</code><code>from &quot;${SERVER_RENDER_VALUE_PLACEHOLDER}&quot;</code></main>`,
+      );
+      expect(second).toContain(
+        `<main><strong>two</strong>\n<code>${SERVER_RENDER_VALUE_PLACEHOLDER}</code><code>from &quot;${SERVER_RENDER_VALUE_PLACEHOLDER}&quot;</code></main>`,
+      );
+      expect(first).not.toContain("function InlineText");
+      expect(second).not.toContain("function InlineText");
+    } finally {
+      await server.close();
     }
   }, 120_000);
 });

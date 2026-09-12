@@ -1,6 +1,8 @@
 import type { AttributeIr, ComponentPropIr, JsxNodeIr } from "./ir.js";
 import {
+  emitOptionSelectedAttributeCode,
   htmlAttributeNameForElement,
+  isBooleanishStringAttribute,
   isDangerousHtmlAttribute,
   isStaticUrlValueUnsafe,
   isUrlAttribute,
@@ -16,26 +18,381 @@ export function setOxcServerStringUrlSafeHelperName(name: string): void {
   currentOxcServerStringUrlSafeHelperName = name;
 }
 
-export function emitOxcServerStringChildren(children: readonly JsxNodeIr[]): string {
+export function emitOxcServerStringChildren(
+  children: readonly JsxNodeIr[],
+  escapeHelperName = "_escapeHtml",
+): string {
   if (children.length === 0) {
     return '""';
   }
 
-  return children.map(emitOxcServerStringNode).join(" + ");
+  return children.map((child) => emitOxcServerStringNode(child, escapeHelperName)).join(" + ");
 }
 
-function emitOxcServerStringNode(node: JsxNodeIr): string {
+export interface OxcServerStreamEmitterNames {
+  sink: string;
+  selectedValue: string;
+  selectedMultiple: string;
+  renderValue: string;
+  renderAsyncBoundary: string;
+  registerThunk: string;
+  compatRenderToString: string;
+  escapeHtml: string;
+  localBase: string;
+}
+
+/** Emits a compiler-owned stream renderer for JSX nested inside a JavaScript value. */
+export function emitOxcServerStreamRenderer(
+  children: readonly JsxNodeIr[],
+  names: OxcServerStreamEmitterNames,
+): string {
+  const state = { nextLocal: 0 };
+  return `async (${names.sink}, ${names.selectedValue}, ${names.selectedMultiple}) => {\n${emitOxcServerStreamStatements(children, names, state, "  ")}\n}`;
+}
+
+function emitOxcServerStreamStatements(
+  children: readonly JsxNodeIr[],
+  names: OxcServerStreamEmitterNames,
+  state: { nextLocal: number },
+  indent: string,
+): string {
+  return children
+    .map((node) => emitOxcServerStreamNode(node, names, state, indent))
+    .filter(Boolean)
+    .join("\n");
+}
+
+function emitOxcServerStreamNode(
+  node: JsxNodeIr,
+  names: OxcServerStreamEmitterNames,
+  state: { nextLocal: number },
+  indent: string,
+): string {
+  if (node.kind === "text") {
+    return `${indent}${names.sink}.append(${JSON.stringify(node.value)});`;
+  }
+
+  if (node.kind === "expr") {
+    const value =
+      node.renderMode === "stream-node" ? `${names.registerThunk}(${node.code})` : `(${node.code})`;
+    return `${indent}await ${names.renderValue}(${names.sink}, ${value}, ${names.escapeHtml}, 0, ${names.selectedValue}, ${names.selectedMultiple});`;
+  }
+
+  if (node.kind === "conditional") {
+    const whenTrue = emitOxcServerStreamStatements(node.whenTrue, names, state, `${indent}  `);
+    const whenFalse = emitOxcServerStreamStatements(node.whenFalse, names, state, `${indent}  `);
+    const condition = node.conditionTestCode ?? node.conditionValueName ?? node.conditionCode;
+    const declaration =
+      node.conditionValueName === undefined
+        ? ""
+        : `${indent}  const ${node.conditionValueName} = (${node.conditionCode});\n`;
+    return `${indent}{\n${declaration}${indent}  if (${condition}) {\n${whenTrue}\n${indent}  } else {\n${whenFalse}\n${indent}  }\n${indent}}`;
+  }
+
+  if (node.kind === "list") {
+    const id = state.nextLocal++;
+    const renderers = `${names.localBase}$renderers${id}`;
+    const renderer = `${names.localBase}$renderer${id}`;
+    const parameters = emitOxcListParameters(node);
+    const body = emitOxcServerStreamStatements(node.children, names, state, `${indent}    `);
+    const statements = (node.bodyStatements ?? [])
+      .map((statement) => `${indent}    ${statement}`)
+      .join("\n");
+    return `${indent}{\n${indent}  const ${renderers} = (${node.itemsCode}).map((${parameters}) => async () => {\n${statements}${statements === "" ? "" : "\n"}${body}\n${indent}  });\n${indent}  for (const ${renderer} of ${renderers}) { if (${renderer} !== undefined) await ${renderer}(); }\n${indent}}`;
+  }
+
+  if (node.kind === "fragment") {
+    const statements = (node.bodyStatements ?? [])
+      .map((statement) => `${indent}${statement}`)
+      .join("\n");
+    const body = emitOxcServerStreamStatements(node.children, names, state, indent);
+    return [statements, body].filter(Boolean).join("\n");
+  }
+
+  if (node.kind === "component") {
+    if (node.clientReference !== undefined) return "";
+    const props = emitOxcServerStreamComponentProps(node.props, node.children, names, state);
+    if (node.runtime === "compat") {
+      return `${indent}${names.sink}.append(${names.compatRenderToString}(${node.name}, ${props}));`;
+    }
+    return `${indent}await ${node.name}(${names.sink}, ${emitOxcServerSelectionProps(props, names)});`;
+  }
+
+  if (node.kind === "async-boundary") {
+    const body = emitOxcServerStreamStatements(node.children, names, state, `${indent}    `);
+    const catchOption =
+      node.catchName === undefined || node.catchChildren === undefined
+        ? undefined
+        : `catch: async (${names.sink}, ${node.catchName}) => {\n${emitOxcServerStreamStatements(node.catchChildren, names, state, `${indent}      `)}\n${indent}    }`;
+    if (node.placeholderChildren !== undefined) return "";
+    const hydrationAwaitId =
+      node.awaitId === undefined ? undefined : `hydrationAwaitId: ${JSON.stringify(node.awaitId)}`;
+    const optionFields = [catchOption, hydrationAwaitId].filter(
+      (field): field is string => field !== undefined,
+    );
+    const options = optionFields.length === 0 ? "" : `, { ${optionFields.join(", ")} }`;
+    return `${indent}await ${names.renderAsyncBoundary}(${names.sink}, (${node.valueCode}), async (${names.sink}, ${node.valueName}) => {\n${body}\n${indent}  }${options});`;
+  }
+
+  const establishesSelection = node.tagName === "select";
+  const attributeId = state.nextLocal++;
+  const attributeBindings = node.attributes.flatMap((attribute, index) => {
+    if (attribute.kind !== "dynamic-attr" && attribute.kind !== "static-attr") {
+      return [];
+    }
+    const isSelectionAttribute = ["value", "defaultValue", "multiple"].includes(attribute.name);
+    if (!isSelectionAttribute && attribute.kind !== "dynamic-attr") return [];
+    const code = isSelectionAttribute
+      ? emitOxcSelectionAttributeValue([attribute], attribute.name)
+      : attribute.kind === "dynamic-attr"
+        ? `(${attribute.code})`
+        : undefined;
+    return code === undefined
+      ? []
+      : [
+          {
+            attribute,
+            name: attribute.name,
+            local: `${names.localBase}$streamAttr${attributeId}_${index}`,
+            code,
+          },
+        ];
+  });
+  const textBindings =
+    node.tagName === "option"
+      ? node.children.flatMap((child, index) =>
+          child.kind === "expr"
+            ? [
+                {
+                  child,
+                  local: `${names.localBase}$streamText${attributeId}_${index}`,
+                  code: `(${child.code})`,
+                },
+              ]
+            : [],
+        )
+      : [];
+  const selectionBindings = attributeBindings.filter((binding) =>
+    ["value", "defaultValue", "multiple"].includes(binding.name),
+  );
+  const explicitSelectionValue = selectionBindings.find(
+    (binding) => binding.name === "value",
+  )?.local;
+  const defaultSelectionValue = selectionBindings.find(
+    (binding) => binding.name === "defaultValue",
+  )?.local;
+  const selectionValue =
+    explicitSelectionValue === undefined
+      ? defaultSelectionValue
+      : defaultSelectionValue === undefined
+        ? explicitSelectionValue
+        : `((${explicitSelectionValue}) ?? (${defaultSelectionValue}))`;
+  const selectionMultipleName = selectionBindings.find(
+    (binding) => binding.name === "multiple",
+  )?.local;
+  const childNames = establishesSelection
+    ? {
+        ...names,
+        selectedValue: selectionValue ?? "undefined",
+        selectedMultiple: selectionMultipleName ?? "undefined",
+      }
+    : names;
+  const emittedNode =
+    attributeBindings.length === 0 && textBindings.length === 0
+      ? node
+      : {
+          ...node,
+          attributes: node.attributes.map((attribute) => {
+            const local = attributeBindings.find(
+              (binding) => binding.attribute === attribute,
+            )?.local;
+            return local === undefined || attribute.kind !== "dynamic-attr"
+              ? attribute
+              : { ...attribute, code: local };
+          }),
+          children: node.children.map((child) => {
+            const local = textBindings.find((binding) => binding.child === child)?.local;
+            return local === undefined || child.kind !== "expr" ? child : { ...child, code: local };
+          }),
+        };
+  const optionSelected =
+    node.tagName === "option" && names.selectedValue !== "undefined"
+      ? emitOxcOptionSelectedAttribute(emittedNode, names, state)
+      : undefined;
+  const attrs = node.attributes
+    .filter(
+      (attr) =>
+        !(
+          node.tagName === "select" &&
+          attr.kind !== "spread-attr" &&
+          (attr.name === "value" || attr.name === "defaultValue")
+        ) &&
+        !(optionSelected !== undefined && attr.kind !== "spread-attr" && attr.name === "selected"),
+    )
+    .map((attr) => {
+      const binding = attributeBindings.find((candidate) => candidate.attribute === attr)?.local;
+      if (attr.kind === "dynamic-attr" && (attr.name === "multiple" || attr.name === "selected")) {
+        return `((${binding ?? `(${attr.code})`}) ? ${JSON.stringify(` ${htmlAttributeNameForElement(node.tagName, attr.name)}=""`)} : "")`;
+      }
+      return emitOxcServerAttribute(
+        node.tagName,
+        binding !== undefined && attr.kind === "dynamic-attr" ? { ...attr, code: binding } : attr,
+        names.escapeHtml,
+      );
+    })
+    .join(" + ");
+  const open =
+    attrs === "" && optionSelected === undefined
+      ? JSON.stringify(`<${node.tagName}>`)
+      : `${JSON.stringify(`<${node.tagName}`)}${attrs === "" ? "" : ` + ${attrs}`}${optionSelected === undefined ? "" : ` + ${optionSelected}`} + ">"`;
+  if (isVoidHtmlElement(node.tagName)) {
+    return `${indent}${names.sink}.append(${open});`;
+  }
+  const optionTextBody =
+    node.tagName === "option" && textBindings.length > 0
+      ? emitOxcOptionTextBody(emittedNode.children, names.escapeHtml)
+      : undefined;
+  const body =
+    optionTextBody === undefined
+      ? emitOxcServerStreamStatements(emittedNode.children, childNames, state, indent)
+      : `${indent}${names.sink}.append(${optionTextBody});`;
+  const element = `${indent}${names.sink}.append(${open});\n${body}${body === "" ? "" : "\n"}${indent}${names.sink}.append(${JSON.stringify(`</${node.tagName}>`)});`;
+  if (!establishesSelection && attributeBindings.length === 0 && textBindings.length === 0) {
+    return element;
+  }
+  const declarations = [...attributeBindings, ...textBindings].map(
+    (binding) => `${indent}  const ${binding.local} = ${binding.code};`,
+  );
+  return `${indent}{\n${declarations.join("\n")}${declarations.length === 0 ? "" : "\n"}${element
+    .split("\n")
+    .map((line) => `  ${line}`)
+    .join("\n")}\n${indent}}`;
+}
+
+function emitOxcSelectionAttributeValue(
+  attributes: readonly AttributeIr[],
+  ...names: readonly string[]
+): string | undefined {
+  const attribute = attributes.find(
+    (candidate) => candidate.kind !== "spread-attr" && names.includes(candidate.name),
+  );
+  if (attribute?.kind === "static-attr") {
+    return names.includes("multiple") ? "true" : JSON.stringify(attribute.value);
+  }
+  if (attribute?.kind === "dynamic-attr") return `(${attribute.code})`;
+  return undefined;
+}
+
+function emitOxcOptionSelectedAttribute(
+  node: Extract<JsxNodeIr, { kind: "element" }>,
+  names: OxcServerStreamEmitterNames,
+  state: { nextLocal: number },
+): string {
+  const explicitOptionValue = emitOxcSelectionAttributeValue(node.attributes, "value");
+  const optionTextValue = emitOxcOptionTextValue(node.children);
+  const optionValue =
+    explicitOptionValue === undefined
+      ? optionTextValue
+      : optionTextValue === undefined
+        ? explicitOptionValue
+        : `((${explicitOptionValue}) ?? (${optionTextValue}))`;
+  const selectedAttribute = node.attributes.find(
+    (attribute) => attribute.kind !== "spread-attr" && attribute.name === "selected",
+  );
+  const ownSelected =
+    selectedAttribute?.kind === "dynamic-attr"
+      ? `((${selectedAttribute.code}) ? ${JSON.stringify(' selected=""')} : "")`
+      : selectedAttribute === undefined
+        ? '""'
+        : JSON.stringify(' selected=""');
+  const id = state.nextLocal++;
+  return emitOptionSelectedAttributeCode(
+    names.selectedValue,
+    optionValue,
+    ownSelected,
+    {
+      selected: `${names.localBase}$selected${id}`,
+      optionValue: `${names.localBase}$option${id}`,
+      boundOptionValue: `${names.localBase}$boundOption${id}`,
+      textValue: `${names.localBase}$text${id}`,
+      textParts: `${names.localBase}$textParts${id}`,
+      textBody: `${names.localBase}$textBody${id}`,
+      textHasValue: `${names.localBase}$textHasValue${id}`,
+      selectValue: `${names.localBase}$selectValue${id}`,
+      selectValueAttribute: `${names.localBase}$selectValueAttribute${id}`,
+      selectDefaultValue: `${names.localBase}$selectDefaultValue${id}`,
+      selectMultiple: `${names.localBase}$selectMultiple${id}`,
+      attributes: `${names.localBase}$attributes${id}`,
+      index: `${names.localBase}$index${id}`,
+      candidate: `${names.localBase}$candidate${id}`,
+    },
+    names.selectedMultiple,
+  );
+}
+
+function emitOxcOptionTextValue(children: readonly JsxNodeIr[]): string | undefined {
+  if (!children.every((child) => child.kind === "text" || child.kind === "expr")) return undefined;
+  const parts = children.map((child) =>
+    child.kind === "text" ? JSON.stringify(child.value) : `String((${child.code}) ?? "")`,
+  );
+  return parts.length === 0 ? '""' : parts.join(" + ");
+}
+
+function emitOxcOptionTextBody(
+  children: readonly JsxNodeIr[],
+  escapeHelperName: string,
+): string | undefined {
+  if (!children.every((child) => child.kind === "text" || child.kind === "expr")) return undefined;
+  const parts = children.map((child) =>
+    child.kind === "text" ? JSON.stringify(child.value) : `String((${child.code}) ?? "")`,
+  );
+  if (parts.length === 0) return '""';
+  return `[${parts.join(", ")}].filter((_part) => _part !== "").map((_part) => ${escapeHelperName}(_part)).join("<!-- -->")`;
+}
+
+function emitOxcServerStreamComponentProps(
+  props: readonly ComponentPropIr[],
+  children: readonly JsxNodeIr[],
+  names: OxcServerStreamEmitterNames,
+  state: { nextLocal: number },
+): string {
+  const entries = props.map((prop) => {
+    if (prop.kind === "spread-prop") return `...(${prop.code})`;
+    if (prop.kind === "render-prop") {
+      const renderer = emitOxcServerStreamRenderer(prop.children, names);
+      return `${emitOxcCompatObjectPropName(prop.name)}: ${names.registerThunk}(${renderer})`;
+    }
+    return `${emitOxcCompatObjectPropName(prop.name)}: (${prop.code})`;
+  });
+  if (children.length > 0) {
+    const renderer = emitOxcServerStreamRenderer(children, {
+      ...names,
+      localBase: `${names.localBase}$children${state.nextLocal++}`,
+    });
+    entries.push(`children: ${names.registerThunk}(${renderer})`);
+  }
+  return `{ ${entries.join(", ")} }`;
+}
+
+function emitOxcServerSelectionProps(
+  props: string,
+  names: Pick<OxcServerStreamEmitterNames, "selectedValue" | "selectedMultiple">,
+): string {
+  return `Object.defineProperty(Object.defineProperty(${props}, Symbol.for("mreact.server.selected-value"), { value: ${names.selectedValue} }), Symbol.for("mreact.server.select-multiple"), { value: ${names.selectedMultiple} })`;
+}
+
+function emitOxcServerStringNode(node: JsxNodeIr, escapeHelperName: string): string {
   if (node.kind === "text") {
     return JSON.stringify(node.value);
   }
 
   if (node.kind === "expr") {
-    return `_escapeHtml(${node.code})`;
+    return `${escapeHelperName}(${node.code})`;
   }
 
   if (node.kind === "conditional") {
-    const whenTrue = emitOxcServerStringChildren(node.whenTrue);
-    const whenFalse = emitOxcServerStringChildren(node.whenFalse);
+    const whenTrue = emitOxcServerStringChildren(node.whenTrue, escapeHelperName);
+    const whenFalse = emitOxcServerStringChildren(node.whenFalse, escapeHelperName);
 
     return node.conditionValueName === undefined
       ? `((${node.conditionCode}) ? ${whenTrue} : ${whenFalse})`
@@ -44,7 +401,7 @@ function emitOxcServerStringNode(node: JsxNodeIr): string {
 
   if (node.kind === "list") {
     const parameters = emitOxcListParameters(node);
-    const valueExpression = emitOxcServerStringChildren(node.children);
+    const valueExpression = emitOxcServerStringChildren(node.children, escapeHelperName);
     if (node.bodyStatements === undefined || node.bodyStatements.length === 0) {
       return `(${node.itemsCode}).map((${parameters}) => ${valueExpression}).join("")`;
     }
@@ -53,11 +410,12 @@ function emitOxcServerStringNode(node: JsxNodeIr): string {
   }
 
   if (node.kind === "fragment") {
-    return emitOxcServerStringChildren(node.children);
+    return emitOxcServerStringChildren(node.children, escapeHelperName);
   }
 
   if (node.kind === "component") {
-    const props = emitOxcServerComponentProps(node.props, node.children);
+    if (node.clientReference !== undefined) return '""';
+    const props = emitOxcServerComponentProps(node.props, node.children, escapeHelperName);
     if (node.runtime === "compat") {
       return `${oxcServerStringReactNodeRenderHelperPlaceholder}(${node.name}, ${props})`;
     }
@@ -69,7 +427,7 @@ function emitOxcServerStringNode(node: JsxNodeIr): string {
   }
 
   const attrs = node.attributes
-    .map((attr) => emitOxcServerAttribute(node.tagName, attr))
+    .map((attr) => emitOxcServerAttribute(node.tagName, attr, escapeHelperName))
     .join(" + ");
   const open =
     attrs === ""
@@ -79,12 +437,13 @@ function emitOxcServerStringNode(node: JsxNodeIr): string {
     return open;
   }
 
-  return `${open} + ${emitOxcServerStringChildren(node.children)} + ${JSON.stringify(`</${node.tagName}>`)}`;
+  return `${open} + ${emitOxcServerStringChildren(node.children, escapeHelperName)} + ${JSON.stringify(`</${node.tagName}>`)}`;
 }
 
 function emitOxcServerComponentProps(
   props: readonly ComponentPropIr[],
   children: readonly JsxNodeIr[],
+  escapeHelperName: string,
 ): string {
   const entries = props.map((prop) => {
     if (prop.kind === "spread-prop") {
@@ -92,20 +451,24 @@ function emitOxcServerComponentProps(
     }
 
     if (prop.kind === "render-prop") {
-      return `${emitOxcCompatObjectPropName(prop.name)}: ${emitOxcServerStringChildren(prop.children)}`;
+      return `${emitOxcCompatObjectPropName(prop.name)}: ${emitOxcServerStringChildren(prop.children, escapeHelperName)}`;
     }
 
     return `${emitOxcCompatObjectPropName(prop.name)}: (${prop.code})`;
   });
 
   if (children.length > 0) {
-    entries.push(`children: ${emitOxcServerStringChildren(children)}`);
+    entries.push(`children: ${emitOxcServerStringChildren(children, escapeHelperName)}`);
   }
 
   return `{ ${entries.join(", ")} }`;
 }
 
-function emitOxcServerAttribute(tagName: string, attr: AttributeIr): string {
+function emitOxcServerAttribute(
+  tagName: string,
+  attr: AttributeIr,
+  escapeHelperName = "_escapeHtml",
+): string {
   if (attr.kind === "spread-attr" || attr.kind === "event" || attr.kind === "dom-ref") {
     return '""';
   }
@@ -130,14 +493,20 @@ function emitOxcServerAttribute(tagName: string, attr: AttributeIr): string {
 
   if (attr.kind === "dynamic-attr") {
     if (isDangerousHtmlAttribute(htmlName)) {
-      return `(() => { const _value = (${attr.code}); if (typeof _value !== "object" || _value === null) return ""; try { const _descriptor = Object.getOwnPropertyDescriptor(_value, "__html"); if (_descriptor !== undefined && "value" in _descriptor && typeof _descriptor.value === "string") return ${JSON.stringify(` ${htmlName}="`)} + _escapeHtml(_descriptor.value) + ${JSON.stringify('"')}; return ""; } catch { return ""; } })()`;
+      return `((function (_value) { if (typeof _value !== "object" || _value === null) return ""; try { const _descriptor = Object.getOwnPropertyDescriptor(_value, "__html"); if (_descriptor !== undefined && "value" in _descriptor && typeof _descriptor.value === "string") return ${JSON.stringify(` ${htmlName}="`)} + ${escapeHelperName}(_descriptor.value) + ${JSON.stringify('"')}; return ""; } catch { return ""; } })(${attr.code}))`;
     }
 
     if (isUrlAttribute(htmlName)) {
-      return `(() => { const _value = (${attr.code}); if (_value == null || _value === false) return ""; const _checked = ${currentOxcServerStringUrlSafeHelperName}(${JSON.stringify(htmlName)}, _value === true ? "" : _value); return _checked === undefined ? "" : ${JSON.stringify(` ${htmlName}="`)} + _escapeHtml(_checked) + ${JSON.stringify('"')}; })()`;
+      return `((function (_value) { if (_value == null || _value === false) return ""; const _checked = ${currentOxcServerStringUrlSafeHelperName}(${JSON.stringify(htmlName)}, _value === true ? "" : _value); return _checked === undefined ? "" : ${JSON.stringify(` ${htmlName}="`)} + ${escapeHelperName}(_checked) + ${JSON.stringify('"')}; })(${attr.code}))`;
     }
 
-    return `${JSON.stringify(` ${htmlName}="`)} + _escapeHtml(${attr.code}) + ${JSON.stringify('"')}`;
+    if (htmlName === "style") {
+      return `((function (_value) { if (_value == null || _value === false) return ""; if (typeof _value === "string") { const _style = ${escapeHelperName}(_value); return _style === "" ? "" : ${JSON.stringify(' style="')} + _style + ${JSON.stringify('"')}; } if (typeof _value !== "object") return ""; const _style = Object.entries(_value).filter(([, _styleValue]) => _styleValue != null && _styleValue !== false).map(([_styleName, _styleValue]) => { const _cssName = String(_styleName).startsWith("--") ? String(_styleName) : String(_styleName).replace(/[A-Z]/g, (_char) => "-" + _char.toLowerCase()); return ${escapeHelperName}(_cssName) + ":" + ${escapeHelperName}(_styleValue === true ? "" : _styleValue); }).join(";"); return _style === "" ? "" : ${JSON.stringify(' style="')} + _style + ${JSON.stringify('"')}; })(${attr.code}))`;
+    }
+
+    return isBooleanishStringAttribute(htmlName)
+      ? `((function (_value) { return _value == null ? "" : ${JSON.stringify(` ${htmlName}="`)} + ${escapeHelperName}(_value) + ${JSON.stringify('"')}; })(${attr.code}))`
+      : `((function (_value) { return _value == null || _value === false ? "" : ${JSON.stringify(` ${htmlName}="`)} + ${escapeHelperName}(_value === true ? "" : _value) + ${JSON.stringify('"')}; })(${attr.code}))`;
   }
 
   return '""';

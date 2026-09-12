@@ -95,7 +95,6 @@ let currentOptionSelectedLocalNames: OptionSelectedLocalNames = {
 };
 const serverSelectionContextKey = "mreact.server.selected-value";
 const serverSelectionMultipleContextKey = "mreact.server.select-multiple";
-const serverSelectionRenderValueKey = "mreact.server.selection-render-value";
 
 export function emitServerStream(
   ir: ModuleIr,
@@ -260,21 +259,37 @@ export function emitServerStream(
             : { selectionMultipleParameterName }),
         },
       );
-      return component.serverRenderValuePlaceholder === undefined
+      const withRenderValueHelpers = component.serverRenderValuePlaceholder === undefined
         ? emitted
-        : emitted.replaceAll(
+        : replaceServerRenderValuePlaceholders(
+            emitted,
             component.serverRenderValuePlaceholder,
             markServerRenderValueHelperName,
+            currentMarkServerRenderThunkHelperName,
+            renderServerValueHelperName,
+            asyncBoundaryHelperName,
+            compatRenderToStringHelperName,
+            escapeHelperName,
           );
+      return withRenderValueHelpers.replaceAll(
+        oxcServerStringReactNodeRenderHelperPlaceholder,
+        compatRenderToStringHelperName,
+      );
     })
     .join("\n\n");
   const rawModuleStatements = emitModuleStatements(ir);
   const moduleStatements =
     ir.serverRenderValuePlaceholder === undefined
       ? rawModuleStatements
-      : rawModuleStatements.replaceAll(
+      : replaceServerRenderValuePlaceholders(
+          rawModuleStatements,
           ir.serverRenderValuePlaceholder,
           markServerRenderValueHelperName,
+          currentMarkServerRenderThunkHelperName,
+          renderServerValueHelperName,
+          asyncBoundaryHelperName,
+          compatRenderToStringHelperName,
+          escapeHelperName,
         );
   const emittedServerCode = `${moduleStatements}\n${components}`;
   // Emit batch escape import only when the helper is actually referenced
@@ -286,6 +301,7 @@ export function emitServerStream(
       ? ""
       : `import { ${options.escape.batchImportName} as ${escapeBatchHelperName} } from ${stringLiteral(options.escape.batchImportSource)};`;
   const imports = collectImports(ir, serverBootstrap);
+  ensureServerRuntimeImport(imports, components, asyncBoundaryHelperName, "renderAsyncBoundary");
   const importAliases: Record<string, string> = {
     renderAsyncBoundary: asyncBoundaryHelperName,
     renderOutOfOrderBoundary: outOfOrderBoundaryHelperName,
@@ -383,12 +399,48 @@ export function emitServerStream(
   };
 }
 
+function replaceServerRenderValuePlaceholders(
+  code: string,
+  placeholder: string,
+  registerValueName: string,
+  registerThunkName: string,
+  renderValueName: string,
+  asyncBoundaryName: string,
+  compatRenderToStringName: string,
+  escapeHelperName: string,
+): string {
+  return code
+    .replaceAll(`${placeholder}$render`, renderValueName)
+    .replaceAll(`${placeholder}$async`, asyncBoundaryName)
+    .replaceAll(`${placeholder}$thunk`, registerThunkName)
+    .replaceAll(`${placeholder}$compat`, compatRenderToStringName)
+    .replaceAll(`${placeholder}$escape`, escapeHelperName)
+    .replaceAll(placeholder, registerValueName);
+}
+
 function emitUserImports(ir: ModuleIr): string {
   return ir.components.length === 0 ? "" : ir.userImports.join("\n");
 }
 
 function emitModuleStatements(ir: ModuleIr): string {
   return ir.components.length === 0 ? "" : ir.moduleStatements.join("\n");
+}
+
+function ensureServerRuntimeImport(
+  imports: RuntimeImport[],
+  emittedCode: string,
+  localName: string,
+  specifier: string,
+): void {
+  if (!emittedCode.includes(localName)) return;
+  const existing = imports.find(
+    (runtimeImport) => runtimeImport.source === "@reckona/mreact-server",
+  );
+  if (existing === undefined) {
+    imports.push({ source: "@reckona/mreact-server", specifiers: [specifier] });
+  } else if (!existing.specifiers.includes(specifier)) {
+    existing.specifiers.push(specifier);
+  }
 }
 
 function collectImports(ir: ModuleIr, serverBootstrap: ServerBootstrapMode): RuntimeImport[] {
@@ -500,11 +552,17 @@ function hasReactSuspenseOutOfOrderBoundary(ir: ModuleIr): boolean {
 }
 
 function hasCompatComponentReference(ir: ModuleIr): boolean {
-  return ir.components.some((component) => containsCompatComponent(component.root));
+  return (
+    ir.components.some((component) => containsCompatComponent(component.root)) ||
+    ir.nestedRenderValueNodes?.some(containsCompatComponent) === true
+  );
 }
 
 function hasReactNodeRender(ir: ModuleIr): boolean {
-  return ir.components.some((component) => containsReactNodeRender(component.root));
+  return (
+    ir.components.some((component) => containsReactNodeRender(component.root)) ||
+    ir.nestedRenderValueNodes?.some(containsReactNodeRender) === true
+  );
 }
 
 function hasRawJsxDynamicRender(ir: ModuleIr): boolean {
@@ -735,12 +793,7 @@ function emitStreamNodeHelper(
     `async function ${name}($sink, value, escapeHtml, selectedValue, selectedMultiple) {`,
     `  if (value == null || value === false) return;`,
     `  if (${isRenderValueName}(value)) { await ${renderValueName}($sink, value, escapeHtml, 0, selectedValue, selectedMultiple); return; }`,
-    `  if (typeof value === "function") {`,
-    `    if (value[Symbol.for(${JSON.stringify(serverSelectionRenderValueKey)})] === true) { await value($sink, selectedValue, selectedMultiple); return; }`,
-    `    await value($sink); return;`,
-    `  }`,
     `  if (Array.isArray(value)) { await ${renderValueName}($sink, value, escapeHtml, 0, selectedValue, selectedMultiple); return; }`,
-    `  if (typeof value === "string") { $sink.append(value); return; }`,
     `  $sink.append(escapeHtml(value === true ? "" : value));`,
     `}`,
   ].join("\n");
@@ -1011,7 +1064,7 @@ function emitAppendStatements(
       }
 
       if (part.kind === "stream-node") {
-        return `  await ${currentStreamNodeHelperName}(${sinkName}, (${part.code}), ${part.escapeHelperName}${emitStreamSelectionArguments(part)});`;
+        return `  await ${currentStreamNodeHelperName}(${sinkName}, ${currentMarkServerRenderThunkHelperName}((${part.code})), ${part.escapeHelperName}${emitStreamSelectionArguments(part)});`;
       }
 
       if (part.kind === "list") {
@@ -1107,7 +1160,7 @@ function emitSyncPartAsAppendStatement(
   }
 
   if (part.kind === "stream-node") {
-    return `${indent}await ${currentStreamNodeHelperName}(${sinkName}, (${part.code}), ${part.escapeHelperName}${emitStreamSelectionArguments(part)});`;
+    return `${indent}await ${currentStreamNodeHelperName}(${sinkName}, ${currentMarkServerRenderThunkHelperName}((${part.code})), ${part.escapeHelperName}${emitStreamSelectionArguments(part)});`;
   }
 
   if (part.kind === "list") {
@@ -1521,7 +1574,10 @@ function collectHtmlParts(
       return [{ kind: "react-node", code: node.code }];
     }
 
-    if (node.renderMode === "server-render-value" || (node.renderMode === "html" && isChildrenExpressionCode(node.code))) {
+    if (
+      node.renderMode === "server-render-value" ||
+      (node.renderMode === "html" && isChildrenExpressionCode(node.code))
+    ) {
       return [
         {
           kind: "stream-node",
@@ -1918,11 +1974,12 @@ function collectHtmlParts(
       if (helperName !== undefined) {
         const hasComponentFallback = shouldRenderClientBoundaryFallback(node);
         const boundaryProps = emitPropsObject(node.props, [], escapeHelperName);
-        const fallbackHtml = node.clientReference?.compatSsr === true
-          ? `(_childrenHtml, _identifierPrefix, _props) => ${currentCompatRenderToStringHelperName}(${node.name}, _props, { identifierPrefix: _identifierPrefix, stringResult: "text" })`
-          : hasComponentFallback
-          ? `(_childrenHtml) => async (${currentClientBoundaryFallbackSinkName}) => { await ${node.name}(${currentClientBoundaryFallbackSinkName}, ${emitPropsObject(node.props, node.children, escapeHelperName, node.name, "_childrenHtml")}); }`
-          : emitHtmlExpressionFromChildren(node.children, escapeHelperName);
+        const fallbackHtml =
+          node.clientReference?.compatSsr === true
+            ? `(_childrenHtml, _identifierPrefix, _props) => ${currentCompatRenderToStringHelperName}(${node.name}, _props, { identifierPrefix: _identifierPrefix, stringResult: "text" })`
+            : hasComponentFallback
+              ? `(_childrenHtml) => async (${currentClientBoundaryFallbackSinkName}) => { await ${node.name}(${currentClientBoundaryFallbackSinkName}, ${emitPropsObject(node.props, node.children, escapeHelperName, node.name, "_childrenHtml")}); }`
+              : emitHtmlExpressionFromChildren(node.children, escapeHelperName);
         const originalChildrenHtml = hasComponentFallback
           ? (emitStreamRendererFromChildren(node.children, escapeHelperName, true) ??
             emitHtmlExpressionFromChildren(node.children, escapeHelperName))
@@ -4394,7 +4451,7 @@ function emitServerRenderValueHelpers(
     `    const rendered = ${readHelperName}(value);`,
     `    if (typeof rendered === "function") {`,
     `      if (rendered === value) await rendered($sink, selectedValue, selectedMultiple);`,
-    `      else await rendered($sink);`,
+    `      else await rendered($sink, selectedValue, selectedMultiple);`,
     `    }`,
     `    else $sink.append(String(rendered));`,
     `    return;`,

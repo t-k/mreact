@@ -2,15 +2,34 @@ import type { OxcBodyStatementJsxMode } from "./oxc-analysis-types.js";
 import { type OxcBodyLowerers } from "./oxc-body-lowering.js";
 import { allocateOxcServerRenderValuePlaceholder } from "./oxc-code-utils.js";
 import { analyzeOxcExpressionChild, type OxcChildAnalysisContext } from "./oxc-child-analysis.js";
-import { markOxcCompatRuntimeReferences } from "./oxc-component-references.js";
+import {
+  markOxcClientReferences,
+  markOxcCompatRuntimeReferences,
+} from "./oxc-component-references.js";
 import { lowerOxcDomNodeExpression, lowerOxcNormalizedDomChildAppend } from "./oxc-dom-lowering.js";
 import { readOxcJsxTagName } from "./oxc-jsx-attributes.js";
 import { normalizeOxcJsxText } from "./oxc-jsx-text.js";
 import { readArray, readObject, readSource, unwrapOxcParentheses } from "./oxc-node-utils.js";
-import { emitOxcCompatObjectChildren, emitOxcServerStringChildren } from "./oxc-runtime-emit.js";
+import {
+  emitOxcCompatObjectChildren,
+  emitOxcServerStreamRenderer,
+  emitOxcServerStringChildren,
+} from "./oxc-runtime-emit.js";
 import { stripTypeScriptExpressionWithOxc } from "./oxc-transform.js";
-import type { ClientReferenceIr } from "./ir.js";
+import type { ClientReferenceIr, JsxNodeIr } from "./ir.js";
 import type { CompileTarget, Diagnostic } from "./types.js";
+import {
+  unsupportedRenderValueAwaitHydrationDiagnostic,
+  unsupportedRenderValueClientBoundaryDiagnostic,
+  unsupportedRenderValuePlaceholderAwaitDiagnostic,
+  unsupportedRenderValueSelectSpreadDiagnostic,
+  unsupportedStreamComponentCoercionDiagnostic,
+} from "./diagnostics.js";
+import {
+  containsOxcLocalJsxHelperCall,
+  isOxcLocalJsxHelperCallExpression,
+  withoutOxcLocalJsxHelperNamesShadowedByScope,
+} from "./oxc-component-detection.js";
 
 const oxcNestedBodyLowerers: OxcBodyLowerers = {
   lowerDomNodeExpression: (code, expression, componentNames) =>
@@ -20,6 +39,12 @@ const oxcNestedBodyLowerers: OxcBodyLowerers = {
   lowerServerStringExpression: (code, expression, componentNames, target, diagnostics) =>
     lowerOxcServerStringExpression(code, expression, componentNames, target, diagnostics),
 };
+
+interface OxcNestedServerContext {
+  callNames: ReadonlySet<string>;
+  output: "stream" | "string";
+  wrapper: string;
+}
 
 export function lowerOxcCompatObjectExpression(
   code: string,
@@ -85,51 +110,128 @@ export function lowerOxcNestedJsxExpression(
   serverRenderValueWrapper?: string,
   localJsxReturnFunctionNames: ReadonlySet<string> = new Set(),
   serverOutput?: "stream" | "string",
+  clientReferences: ReadonlyMap<string, ClientReferenceIr> = new Map(),
+  compatRuntimeReferences: ReadonlyMap<string, ClientReferenceIr> = new Map(),
+  serverAwaitHydration = false,
+  nestedRenderValueNodes?: JsxNodeIr[],
 ): string | undefined {
   const source = readSource(code, expression);
   const expressionStart = typeof expression.start === "number" ? expression.start : 0;
   const replacements: Array<{ start: number; end: number; value: string }> = [];
 
-  visitOxcExpressionJsxRoots(expression, localJsxReturnFunctionNames, (node, kind) => {
-    const start = typeof node.start === "number" ? node.start : undefined;
-    const end = typeof node.end === "number" ? node.end : undefined;
+  visitOxcExpressionJsxRoots(
+    expression,
+    localJsxReturnFunctionNames,
+    (node, kind, renderValueMode) => {
+      const start = typeof node.start === "number" ? node.start : undefined;
+      const end = typeof node.end === "number" ? node.end : undefined;
 
-    if (start === undefined || end === undefined) {
-      return;
-    }
+      if (start === undefined || end === undefined) {
+        return;
+      }
 
-    const lowered =
-      kind === "jsx" && bodyStatementJsx === "compat-object"
-        ? lowerOxcCompatReactNodeExpression(code, node, componentNames, target, diagnostics)
-        : kind === "jsx" && bodyStatementJsx === "server-string"
-          ? lowerOxcServerStringExpression(code, node, componentNames, target, diagnostics)
-          : kind === "jsx"
-            ? lowerOxcReactiveValueExpression(code, node, componentNames)
-            : emitOxcServerRenderValueCall(
-                code,
-                node,
-                expression,
-                serverRenderValueWrapper,
-                componentNames,
-                target,
-                diagnostics,
-                localJsxReturnFunctionNames,
-                serverOutput,
-              );
+      const lowered =
+        kind === "jsx" && bodyStatementJsx === "compat-object"
+          ? lowerOxcCompatReactNodeExpression(code, node, componentNames, target, diagnostics)
+          : kind === "jsx" && bodyStatementJsx === "server-string"
+            ? serverOutput === "stream" &&
+              serverRenderValueWrapper !== undefined &&
+              renderValueMode !== "coerced" &&
+              (containsOxcStreamComponentJsx(node, componentNames) ||
+                containsOxcStreamSemanticJsx(node) ||
+                containsOxcLocalJsxHelperCall(node, localJsxReturnFunctionNames))
+              ? lowerOxcServerStreamExpression(
+                  code,
+                  node,
+                  componentNames,
+                  target,
+                  diagnostics,
+                  serverRenderValueWrapper,
+                  localJsxReturnFunctionNames,
+                  renderValueMode === "collection",
+                  clientReferences,
+                  compatRuntimeReferences,
+                  serverAwaitHydration,
+                  nestedRenderValueNodes,
+                )
+              : serverOutput === "stream" &&
+                  renderValueMode === "coerced" &&
+                  containsNativeStreamComponent(
+                    analyzeMarkedOxcExpressionChildren(
+                      code,
+                      node,
+                      createOxcNestedChildAnalysisContext(
+                        componentNames,
+                        target,
+                        diagnostics,
+                        "server-string",
+                        clientReferences,
+                        compatRuntimeReferences,
+                        serverAwaitHydration,
+                        nestedRenderValueNodes,
+                        serverRenderValueWrapper === undefined || serverOutput === undefined
+                          ? undefined
+                          : {
+                              wrapper: serverRenderValueWrapper,
+                              callNames: localJsxReturnFunctionNames,
+                              output: serverOutput,
+                            },
+                      ),
+                      clientReferences,
+                      compatRuntimeReferences,
+                    ),
+                  )
+                ? (diagnostics.push(unsupportedStreamComponentCoercionDiagnostic()), '""')
+                : lowerOxcServerStringExpression(
+                    code,
+                    node,
+                    componentNames,
+                    target,
+                    diagnostics,
+                    compatRuntimeReferences,
+                    clientReferences,
+                    serverRenderValueWrapper === undefined
+                      ? undefined
+                      : `${serverRenderValueWrapper}$escape`,
+                    nestedRenderValueNodes,
+                  )
+            : kind === "call" && serverOutput === "stream" && renderValueMode === "coerced"
+              ? (diagnostics.push(unsupportedStreamComponentCoercionDiagnostic()), '""')
+              : kind === "jsx"
+                ? lowerOxcReactiveValueExpression(code, node, componentNames)
+                : emitOxcServerRenderValueCall(
+                    code,
+                    node,
+                    expression,
+                    serverRenderValueWrapper,
+                    componentNames,
+                    target,
+                    diagnostics,
+                    localJsxReturnFunctionNames,
+                    serverOutput,
+                  );
 
-    if (lowered !== undefined) {
-      replacements.push({
-        start,
-        end,
-        value:
-          kind === "jsx" &&
-          bodyStatementJsx === "server-string" &&
-          serverRenderValueWrapper !== undefined
-            ? `${serverRenderValueWrapper}(${lowered})`
-            : lowered,
-      });
-    }
-  });
+      if (lowered !== undefined) {
+        replacements.push({
+          start,
+          end,
+          value:
+            kind === "jsx" &&
+            bodyStatementJsx === "server-string" &&
+            serverRenderValueWrapper !== undefined &&
+            !(
+              serverOutput === "stream" &&
+              renderValueMode !== "coerced" &&
+              (containsOxcStreamComponentJsx(node, componentNames) ||
+                containsOxcStreamSemanticJsx(node) ||
+                containsOxcLocalJsxHelperCall(node, localJsxReturnFunctionNames))
+            )
+              ? `${serverRenderValueWrapper}(${lowered})`
+              : lowered,
+        });
+      }
+    },
+  );
 
   if (replacements.length === 0) {
     return undefined;
@@ -146,29 +248,225 @@ export function lowerOxcNestedJsxExpression(
   return stripTypeScriptExpressionWithOxc(lowered);
 }
 
+function lowerOxcServerStreamExpression(
+  code: string,
+  expression: Record<string, unknown>,
+  componentNames: Set<string>,
+  target: CompileTarget,
+  diagnostics: Diagnostic[],
+  serverRenderValueWrapper: string,
+  serverRenderValueCallNames: ReadonlySet<string>,
+  selfThunk: boolean,
+  clientReferences: ReadonlyMap<string, ClientReferenceIr>,
+  compatRuntimeReferences: ReadonlyMap<string, ClientReferenceIr>,
+  serverAwaitHydration: boolean,
+  nestedRenderValueNodes?: JsxNodeIr[],
+): string | undefined {
+  const children = analyzeOxcExpressionChild(
+    code,
+    expression,
+    createOxcNestedChildAnalysisContext(
+      componentNames,
+      target,
+      diagnostics,
+      "server-string",
+      clientReferences,
+      compatRuntimeReferences,
+      serverAwaitHydration,
+      nestedRenderValueNodes,
+      {
+        wrapper: serverRenderValueWrapper,
+        callNames: serverRenderValueCallNames,
+        output: "stream",
+      },
+    ),
+    "server-string",
+  );
+  if (children.length === 0) return undefined;
+  for (const child of children) {
+    markOxcClientReferences(child, new Map(clientReferences));
+    markOxcCompatRuntimeReferences(child, compatRuntimeReferences);
+  }
+  nestedRenderValueNodes?.push(...children);
+  const clientBoundary = findClientBoundary(children);
+  if (clientBoundary !== undefined) {
+    diagnostics.push(unsupportedRenderValueClientBoundaryDiagnostic(clientBoundary.loc));
+  }
+  const nestedAwait = findNestedAwait(children);
+  if (serverAwaitHydration && nestedAwait !== undefined) {
+    diagnostics.push(unsupportedRenderValueAwaitHydrationDiagnostic(nestedAwait.loc));
+  }
+  const placeholderAwait = findPlaceholderAwait(children);
+  if (placeholderAwait !== undefined) {
+    diagnostics.push(unsupportedRenderValuePlaceholderAwaitDiagnostic(placeholderAwait.loc));
+  }
+  if (containsSpreadSelect(children)) {
+    diagnostics.push(unsupportedRenderValueSelectSpreadDiagnostic());
+  }
+
+  const localBase = allocateOxcServerRenderValuePlaceholder(code, expression);
+  const renderer = emitOxcServerStreamRenderer(children, {
+    sink: `${localBase}$sink`,
+    selectedValue: `${localBase}$selectedValue`,
+    selectedMultiple: `${localBase}$selectedMultiple`,
+    renderValue: `${serverRenderValueWrapper}$render`,
+    renderAsyncBoundary: `${serverRenderValueWrapper}$async`,
+    registerThunk: `${serverRenderValueWrapper}$thunk`,
+    compatRenderToString: `${serverRenderValueWrapper}$compat`,
+    escapeHtml: `${serverRenderValueWrapper}$escape`,
+    localBase,
+  });
+  return selfThunk
+    ? `${serverRenderValueWrapper}$thunk(${renderer})`
+    : `${serverRenderValueWrapper}(${renderer})`;
+}
+
+function containsNativeStreamComponent(children: readonly import("./ir.js").JsxNodeIr[]): boolean {
+  return children.some((child) => {
+    if (child.kind === "component" && child.runtime !== "compat") return true;
+    const nested =
+      child.kind === "conditional"
+        ? [...child.whenTrue, ...child.whenFalse]
+        : child.kind === "list" || child.kind === "fragment" || child.kind === "element"
+          ? child.children
+          : child.kind === "async-boundary"
+            ? [
+                ...child.children,
+                ...(child.placeholderChildren ?? []),
+                ...(child.catchChildren ?? []),
+              ]
+            : [];
+    return containsNativeStreamComponent(nested);
+  });
+}
+
+function analyzeMarkedOxcExpressionChildren(
+  code: string,
+  expression: Record<string, unknown>,
+  context: OxcChildAnalysisContext,
+  clientReferences: ReadonlyMap<string, ClientReferenceIr>,
+  compatRuntimeReferences: ReadonlyMap<string, ClientReferenceIr>,
+): JsxNodeIr[] {
+  const children = analyzeOxcExpressionChild(code, expression, context, "server-string");
+  for (const child of children) {
+    markOxcClientReferences(child, new Map(clientReferences));
+    markOxcCompatRuntimeReferences(child, compatRuntimeReferences);
+  }
+  return children;
+}
+
+function findPlaceholderAwait(
+  children: readonly import("./ir.js").JsxNodeIr[],
+): Extract<import("./ir.js").JsxNodeIr, { kind: "async-boundary" }> | undefined {
+  for (const child of children) {
+    if (child.kind === "async-boundary" && child.placeholderChildren !== undefined) return child;
+    const found = findPlaceholderAwait(nestedOxcChildren(child));
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
+function findClientBoundary(
+  children: readonly JsxNodeIr[],
+): Extract<JsxNodeIr, { kind: "component" }> | undefined {
+  for (const child of children) {
+    if (child.kind === "component" && child.clientReference !== undefined) return child;
+    const nested = nestedOxcChildren(child);
+    const found = findClientBoundary(nested);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
+function findNestedAwait(
+  children: readonly JsxNodeIr[],
+): Extract<JsxNodeIr, { kind: "async-boundary" }> | undefined {
+  for (const child of children) {
+    if (child.kind === "async-boundary") return child;
+    const found = findNestedAwait(nestedOxcChildren(child));
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
+function nestedOxcChildren(node: JsxNodeIr): JsxNodeIr[] {
+  return node.kind === "conditional"
+    ? [...node.whenTrue, ...node.whenFalse]
+    : node.kind === "list" || node.kind === "fragment" || node.kind === "element"
+      ? node.children
+      : node.kind === "component"
+        ? [
+            ...node.children,
+            ...node.props.flatMap((prop) => (prop.kind === "render-prop" ? prop.children : [])),
+          ]
+        : node.kind === "async-boundary"
+          ? [...node.children, ...(node.placeholderChildren ?? []), ...(node.catchChildren ?? [])]
+          : [];
+}
+
+function containsSpreadSelect(children: readonly import("./ir.js").JsxNodeIr[]): boolean {
+  return children.some((child) => {
+    if (
+      child.kind === "element" &&
+      child.tagName === "select" &&
+      child.attributes.some((attribute) => attribute.kind === "spread-attr")
+    ) {
+      return true;
+    }
+    return containsSpreadSelect(nestedOxcChildren(child));
+  });
+}
+
 function visitOxcExpressionJsxRoots(
   node: Record<string, unknown>,
   localJsxReturnFunctionNames: ReadonlySet<string>,
-  visit: (node: Record<string, unknown>, kind: "call" | "jsx") => void,
+  visit: (
+    node: Record<string, unknown>,
+    kind: "call" | "jsx",
+    renderValueMode: "coerced" | "collection" | "value",
+  ) => void,
+  coercesToPrimitive = false,
+  insideCollection = false,
 ): void {
   const unwrapped = unwrapOxcParentheses(node);
+  const availableLocalJsxReturnFunctionNames = withoutOxcLocalJsxHelperNamesShadowedByScope(
+    unwrapped,
+    localJsxReturnFunctionNames,
+  );
 
   if (unwrapped.type === "JSXElement" || unwrapped.type === "JSXFragment") {
-    visit(unwrapped, "jsx");
+    visit(
+      unwrapped,
+      "jsx",
+      coercesToPrimitive ? "coerced" : insideCollection ? "collection" : "value",
+    );
     return;
   }
 
-  if (isOxcLocalJsxHelperCall(unwrapped, localJsxReturnFunctionNames)) {
-    visit(unwrapped, "call");
+  if (isOxcLocalJsxHelperCallExpression(unwrapped, availableLocalJsxReturnFunctionNames)) {
+    visit(
+      unwrapped,
+      "call",
+      coercesToPrimitive ? "coerced" : insideCollection ? "collection" : "value",
+    );
     return;
   }
+
+  const childCoercesToPrimitive = coercesToPrimitive || isOxcExplicitPrimitiveCoercion(unwrapped);
+  const childInsideCollection = insideCollection || unwrapped.type === "ArrayExpression";
 
   for (const value of Object.values(unwrapped)) {
     if (Array.isArray(value)) {
       for (const item of value) {
         const object = readObject(item);
         if (Object.keys(object).length > 0) {
-          visitOxcExpressionJsxRoots(object, localJsxReturnFunctionNames, visit);
+          visitOxcExpressionJsxRoots(
+            object,
+            availableLocalJsxReturnFunctionNames,
+            visit,
+            childCoercesToPrimitive,
+            childInsideCollection,
+          );
         }
       }
       continue;
@@ -177,23 +475,65 @@ function visitOxcExpressionJsxRoots(
     if (typeof value === "object" && value !== null) {
       const object = readObject(value);
       if (Object.keys(object).length > 0) {
-        visitOxcExpressionJsxRoots(object, localJsxReturnFunctionNames, visit);
+        visitOxcExpressionJsxRoots(
+          object,
+          availableLocalJsxReturnFunctionNames,
+          visit,
+          childCoercesToPrimitive,
+          childInsideCollection,
+        );
       }
     }
   }
 }
 
-function isOxcLocalJsxHelperCall(
-  expression: Record<string, unknown>,
-  localJsxReturnFunctionNames: ReadonlySet<string>,
-): boolean {
+function isOxcExplicitPrimitiveCoercion(expression: Record<string, unknown>): boolean {
+  if (expression.type === "TemplateLiteral") return true;
+  if (expression.type === "UnaryExpression") {
+    return (
+      expression.operator === "+" || expression.operator === "-" || expression.operator === "~"
+    );
+  }
+  if (expression.type === "BinaryExpression") {
+    return expression.operator !== "===" && expression.operator !== "!==";
+  }
   if (expression.type !== "CallExpression") return false;
-
   const callee = unwrapOxcParentheses(readObject(expression.callee));
-  return (
-    callee.type === "Identifier" &&
-    typeof callee.name === "string" &&
-    localJsxReturnFunctionNames.has(callee.name)
+  return callee.type === "Identifier" && callee.name === "String";
+}
+
+function containsOxcStreamComponentJsx(
+  expression: Record<string, unknown>,
+  componentNames: ReadonlySet<string>,
+): boolean {
+  const unwrapped = unwrapOxcParentheses(expression);
+  if (unwrapped.type === "JSXElement") {
+    const openingElement = readObject(unwrapped.openingElement);
+    const tagName = readOxcJsxTagName(readObject(openingElement.name));
+    if (/^[A-Z]/u.test(tagName) || componentNames.has(tagName)) return true;
+  }
+  return Object.values(unwrapped).some((value) =>
+    Array.isArray(value)
+      ? value.some((item) => containsOxcStreamComponentJsx(readObject(item), componentNames))
+      : typeof value === "object" &&
+        value !== null &&
+        containsOxcStreamComponentJsx(readObject(value), componentNames),
+  );
+}
+
+function containsOxcStreamSemanticJsx(expression: Record<string, unknown>): boolean {
+  const unwrapped = unwrapOxcParentheses(expression);
+  if (unwrapped.type === "JSXElement") {
+    const openingElement = readObject(unwrapped.openingElement);
+    const tagName = readOxcJsxTagName(readObject(openingElement.name));
+    if (tagName === "Await" || tagName === "select" || tagName === "option") return true;
+  }
+  return Object.values(unwrapped).some((value) =>
+    Array.isArray(value)
+      ? value.some((item) => containsOxcStreamSemanticJsx(readObject(item)))
+      : typeof value === "object" &&
+        value !== null &&
+        containsOxcStreamSemanticJsx(readObject(value)),
   );
 }
 
@@ -387,6 +727,9 @@ export function lowerOxcServerStringExpression(
   target: CompileTarget,
   diagnostics: Diagnostic[],
   compatRuntimeReferences: ReadonlyMap<string, ClientReferenceIr> = new Map(),
+  clientReferences: ReadonlyMap<string, ClientReferenceIr> = new Map(),
+  escapeHelperName?: string,
+  nestedRenderValueNodes?: JsxNodeIr[],
 ): string | undefined {
   const children = analyzeOxcExpressionChild(
     code,
@@ -404,8 +747,16 @@ export function lowerOxcServerStringExpression(
       markOxcCompatRuntimeReferences(child, compatRuntimeReferences);
     }
   }
+  if (clientReferences.size > 0) {
+    for (const child of children) markOxcClientReferences(child, new Map(clientReferences));
+  }
+  nestedRenderValueNodes?.push(...children);
+  const clientBoundary = findClientBoundary(children);
+  if (nestedRenderValueNodes !== undefined && clientBoundary !== undefined) {
+    diagnostics.push(unsupportedRenderValueClientBoundaryDiagnostic(clientBoundary.loc));
+  }
 
-  return emitOxcServerStringChildren(children);
+  return emitOxcServerStringChildren(children, escapeHelperName);
 }
 
 function createOxcNestedChildAnalysisContext(
@@ -413,13 +764,81 @@ function createOxcNestedChildAnalysisContext(
   target: CompileTarget,
   diagnostics: Diagnostic[],
   bodyStatementJsx: OxcBodyStatementJsxMode,
+  clientReferences: ReadonlyMap<string, ClientReferenceIr> = new Map(),
+  compatRuntimeReferences: ReadonlyMap<string, ClientReferenceIr> = new Map(),
+  serverAwaitHydration = false,
+  nestedRenderValueNodes?: JsxNodeIr[],
+  activeServerContext?: OxcNestedServerContext,
 ): OxcChildAnalysisContext {
+  const bodyLowerers: OxcBodyLowerers =
+    activeServerContext === undefined
+      ? oxcNestedBodyLowerers
+      : {
+          ...oxcNestedBodyLowerers,
+          lowerServerStringExpression: (
+            code,
+            expression,
+            nestedComponentNames,
+            nestedTarget,
+            nestedDiagnostics,
+            wrapper,
+            callNames,
+          ) =>
+            lowerOxcNestedJsxExpression(
+              code,
+              expression,
+              nestedComponentNames,
+              nestedTarget,
+              nestedDiagnostics,
+              "server-string",
+              wrapper ?? activeServerContext.wrapper,
+              callNames ?? activeServerContext.callNames,
+              activeServerContext.output,
+              clientReferences,
+              compatRuntimeReferences,
+              serverAwaitHydration,
+              nestedRenderValueNodes,
+            ),
+        };
   return {
     componentNames,
     target,
     diagnostics,
     bodyStatementJsx,
-    bodyLowerers: oxcNestedBodyLowerers,
-    lowerNestedJsxExpression: lowerOxcNestedJsxExpression,
+    ...(activeServerContext === undefined
+      ? {}
+      : {
+          componentCallNames: new Set(activeServerContext.callNames),
+          serverOutput: activeServerContext.output,
+          serverRenderValueWrapper: activeServerContext.wrapper,
+          serverRenderValueCallNames: activeServerContext.callNames,
+        }),
+    bodyLowerers,
+    lowerNestedJsxExpression: (
+      nestedCode,
+      nestedExpression,
+      nestedComponentNames,
+      nestedTarget,
+      nestedDiagnostics,
+      nestedBodyStatementJsx,
+      wrapper,
+      callNames,
+      output,
+    ) =>
+      lowerOxcNestedJsxExpression(
+        nestedCode,
+        nestedExpression,
+        nestedComponentNames,
+        nestedTarget,
+        nestedDiagnostics,
+        nestedBodyStatementJsx,
+        wrapper ?? activeServerContext?.wrapper,
+        callNames ?? activeServerContext?.callNames,
+        output ?? activeServerContext?.output,
+        clientReferences,
+        compatRuntimeReferences,
+        serverAwaitHydration,
+        nestedRenderValueNodes,
+      ),
   };
 }

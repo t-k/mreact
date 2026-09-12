@@ -422,6 +422,519 @@ export function App() {
     expect(streamHtml).toBe("<header><b>Watch</b></header>");
   });
 
+  test("string and stream preserve component elements mixed with text in nested arrays", async () => {
+    await expectServerPairHtml(
+      `function InlineText(props) {
+  return <span><strong>{props.text}</strong></span>;
+}
+export function App(props) {
+  const last = props.lines.length - 1;
+  return <p>{props.lines.flatMap((line, index) => index < last ? [<InlineText text={line} />, "\\n"] : [[<InlineText text={line} />], props.suffix])}</p>;
+}`,
+      "<p><span><strong>A &amp; B</strong></span>\n<span><strong>C</strong></span>&lt;script&gt;unsafe&lt;/script&gt;</p>",
+      { lines: ["A & B", "C"], suffix: "<script>unsafe</script>" },
+    );
+  });
+
+  test.each([
+    ["direct nested array", '[<InlineText />, "tail"]'],
+    ["second-level nested array", "[[<InlineText />]]"],
+    ["nested flatMap", '[0].flatMap(() => [<InlineText />, "tail"])'],
+    [
+      "nested flatMap block callback",
+      '[0].flatMap(() => { const child = <InlineText />; return [child, "tail"]; })',
+    ],
+    ["nested IIFE", '(() => [<InlineText />, "tail"])()'],
+  ])(
+    "nested stream render values preserve component ABI through %s",
+    async (_label, expression) => {
+      const compiled = compileServerPair(`function InlineText() {
+  return <b>ok</b>;
+}
+export function App() {
+  return <main>{[<div>{${expression}}</div>]}</main>;
+}`);
+      expect(compiled.stream).not.toContain("InlineText({})");
+      await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
+        `<main><div><b>ok</b>${expression.includes("tail") ? "tail" : ""}</div></main>`,
+      );
+    },
+  );
+
+  test.each([
+    ["direct local component call", "Nested()"],
+    ["nested local component call", "[Nested()]"],
+    ["flatMap local component call", "[0].flatMap(() => [Nested()])"],
+    ["IIFE local component call", "(() => Nested())()"],
+  ])("nested stream render values preserve %s", async (_label, expression) => {
+    const compiled = compileServerPair(`function Nested() {
+  return <b>ok</b>;
+}
+export function App() {
+  return <main>{[<div>{${expression}}</div>]}</main>;
+}`);
+    await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
+      "<main><div><b>ok</b></div></main>",
+    );
+  });
+
+  test.each(["String(Nested())", "`${Nested()}`"])(
+    "nested stream render values diagnose local component coercion: %s",
+    (expression) => {
+      const result = transform({
+        code: `function Nested() {
+  return <b>ok</b>;
+}
+export function App() {
+  return <main>{[<div>{${expression}}</div>]}</main>;
+}`,
+        filename: "App.tsx",
+        target: "server",
+        serverOutput: "stream",
+        dev: false,
+      });
+      expect(result.diagnostics).toContainEqual(
+        expect.objectContaining({
+          code: "MR_UNSUPPORTED_STREAM_COMPONENT_COERCION",
+          level: "error",
+        }),
+      );
+    },
+  );
+
+  test("nested stream render values do not reinterpret a shadowed local call as a component", async () => {
+    const compiled = compileServerPair(`function Nested() {
+  return <b>module</b>;
+}
+export function App() {
+  const Nested = () => "<plain>";
+  return <main>{[<div>{Nested()}</div>]}</main>;
+}`);
+    await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
+      "<main><div>&lt;plain&gt;</div></main>",
+    );
+  });
+
+  test.each([
+    ["callback parameter", '[() => "<plain>"].map((Nested) => Nested())'],
+    ["IIFE const", '(() => { const Nested = () => "<plain>"; return Nested(); })()'],
+    [
+      "IIFE function declaration",
+      '(() => { function Nested() { return "<plain>"; } return Nested(); })()',
+    ],
+    ["immediate arrow parameter", '((Nested) => Nested())(() => "<plain>")'],
+    [
+      "destructured callback parameter",
+      '[{ value: () => "<plain>" }].map(({ value: Nested }) => Nested())',
+    ],
+    ["defaulted arrow parameter", '((Nested = () => "<plain>") => Nested())()'],
+    ["IIFE var binding", '(() => { var Nested = () => "<plain>"; return Nested(); })()'],
+    ["nested block const", '(() => { { const Nested = () => "<plain>"; return Nested(); } })()'],
+    [
+      "catch parameter",
+      '(() => { try { throw () => "<plain>"; } catch (Nested) { return Nested(); } })()',
+    ],
+    [
+      "switch lexical binding",
+      '(() => { switch (0) { case 0: const Nested = () => "<plain>"; return Nested(); } })()',
+    ],
+    [
+      "for-of lexical binding",
+      '(() => { for (const Nested of [() => "<plain>"]) return Nested(); })()',
+    ],
+    [
+      "for initializer lexical binding",
+      '(() => { for (let Nested = () => "<plain>"; ; ) return Nested(); })()',
+    ],
+    ["shadowed coercion", '((Nested) => String(Nested()))(() => "<plain>")'],
+    [
+      "sink-aware untrusted callback parameter",
+      '((Nested) => Nested())((sink) => { if (sink) sink.append("<script>unsafe</script>"); return "<plain>"; })',
+    ],
+  ])(
+    "nested stream render values preserve a plain call shadowed by a %s",
+    async (_label, expression) => {
+      await expectServerPairHtml(
+        `function Nested() {
+  return <b>module</b>;
+}
+export function App() {
+  return <main>{[<div>{${expression}}</div>]}</main>;
+}`,
+        "<main><div>&lt;plain&gt;</div></main>",
+      );
+    },
+  );
+
+  test("nested stream render value shadowing stays local to its expression branch", async () => {
+    const compiled = compileServerPair(`function Nested() {
+  return <b>module</b>;
+}
+export function App() {
+  return <main>{[<div>{[((Nested) => Nested())(() => "<plain>"), Nested()]}</div>]}</main>;
+}`);
+    await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
+      "<main><div>&lt;plain&gt;<b>module</b></div></main>",
+    );
+  });
+
+  test.each([
+    [
+      "select spread inside component children",
+      '<Wrapper><select {...props.selection}><option value="a">A</option></select></Wrapper>',
+      "MR_UNSUPPORTED_RENDER_VALUE_SELECT_SPREAD",
+    ],
+    [
+      "placeholder Await inside component children",
+      '<Wrapper><Await value={Promise.resolve("ok")} placeholder={<i>wait</i>}>{value => <b>{value}</b>}</Await></Wrapper>',
+      "MR_UNSUPPORTED_RENDER_VALUE_PLACEHOLDER_AWAIT",
+    ],
+  ])("nested stream render values diagnose %s", (_label, nested, diagnosticCode) => {
+    const result = transform({
+      code: `function Wrapper(props) {
+  return <section>{props.children}</section>;
+}
+export function App(props) {
+  return <main>{[${nested}]}</main>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      serverOutput: "stream",
+      dev: false,
+    });
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({ code: diagnosticCode, level: "error" }),
+    );
+  });
+
+  test("nested stream renderers use the collision-safe escape helper", async () => {
+    await expectServerPairHtml(
+      `const _escapeHtml = (value) => String(value);
+function InlineText() {
+  return <strong>ok</strong>;
+}
+export function App(props) {
+  return <main>{[<div><InlineText /><span>{props.suffix}</span></div>]}</main>;
+}`,
+      "<main><div><strong>ok</strong><span>&lt;script&gt;unsafe&lt;/script&gt;</span></div></main>",
+      { suffix: "<script>unsafe</script>" },
+    );
+  });
+
+  test("nested stream attributes use the collision-safe escape helper", async () => {
+    await expectServerPairHtml(
+      `const _escapeHtml = (value) => String(value);
+function InlineText() {
+  return <strong>ok</strong>;
+}
+export function App(props) {
+  return <main>{[<a title={props.title} href={props.href} srcdoc={props.srcdoc}><InlineText /></a>]}</main>;
+}`,
+      '<main><a title="x&quot; onmouseover=&quot;globalThis.pwned=1" href="https://example.test/&quot; onfocus=&quot;globalThis.pwned=1" srcdoc="&lt;script&gt;globalThis.pwned=1&lt;/script&gt;"><strong>ok</strong></a></main>',
+      {
+        title: 'x" onmouseover="globalThis.pwned=1',
+        href: 'https://example.test/" onfocus="globalThis.pwned=1',
+        srcdoc: { __html: "<script>globalThis.pwned=1</script>" },
+      },
+    );
+  });
+
+  test("nested stream renderers preserve select context for component leaves", async () => {
+    const compiled = compileServerPair(`function SelectOption(props) {
+  return <option value={props.value}>{props.value}</option>;
+}
+export function App() {
+  return <select value="b">{["a", "b"].flatMap((value) => [<SelectOption value={value} />, "\\n"])}</select>;
+}`);
+    await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
+      '<select><option value="a">a</option>\n<option value="b" selected="">b</option>\n</select>',
+    );
+  });
+
+  test.each(["String(<InlineText />)", '"" + (<InlineText />)', "`${<InlineText />}`"])(
+    "diagnoses synchronous native component coercion in stream output: %s",
+    (expression) => {
+      const result = transform({
+        code: `function InlineText() {
+  return <strong>ok</strong>;
+}
+export function App() {
+  return <main>{${expression}}</main>;
+}`,
+        filename: "App.tsx",
+        target: "server",
+        serverOutput: "stream",
+        dev: false,
+      });
+      expect(result.diagnostics).toContainEqual(
+        expect.objectContaining({
+          code: "MR_UNSUPPORTED_STREAM_COMPONENT_COERCION",
+          level: "error",
+        }),
+      );
+    },
+  );
+
+  test.each([
+    ["./Card.client.tsx", {}],
+    ["./Card.compat.tsx", {}],
+    [
+      "./Card.compat.tsx",
+      {
+        clientBoundaryFallbackImports: ["./Card.compat.tsx"],
+        clientBoundaryCompatImports: ["./Card.compat.tsx"],
+      },
+    ],
+  ])("diagnoses a nested client boundary without executing it: %s", (moduleId, options) => {
+    const result = transform({
+      code: `import { Card } from ${JSON.stringify(moduleId)};
+export function App() {
+  return <main>{[<Card label="ok" />]}</main>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      serverOutput: "stream",
+      dev: false,
+      ...options,
+    });
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MR_UNSUPPORTED_RENDER_VALUE_CLIENT_BOUNDARY",
+        level: "error",
+      }),
+    );
+    expect(result.code).not.toContain("await Card(");
+    expect(result.code).not.toContain("_renderCompatToString(Card");
+    expect(result.metadata.clientReferences).toEqual(["Card"]);
+  });
+
+  test("synchronous coercion diagnoses a nested client boundary", () => {
+    const result = transform({
+      code: `import { Card } from "./Card.compat.tsx";
+export function App() {
+  return <main>{String(<Card label="ok" />)}</main>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      serverOutput: "stream",
+      dev: false,
+    });
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MR_UNSUPPORTED_RENDER_VALUE_CLIENT_BOUNDARY",
+        level: "error",
+      }),
+    );
+    expect(result.code).not.toContain("_renderCompatToString(Card");
+  });
+
+  test("nested stream renderers preserve in-order Await boundaries", async () => {
+    const compiled = compileServerPair(`function InlineText(props) {
+  return <strong>{props.value}</strong>;
+}
+export function App() {
+  return <main>{[<Await value={Promise.resolve("resolved")}>{value => <InlineText value={value} />}</Await>]}</main>;
+}`);
+    await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
+      "<main><strong>resolved</strong></main>",
+    );
+  });
+
+  test("nested stream Await boundaries render catch output", async () => {
+    const compiled = compileServerPair(`export function App() {
+  return <main>{[<Await value={Promise.reject(new Error("failed"))} catch={error => <strong>{error.message}</strong>}>{value => <i>{value}</i>}</Await>]}</main>;
+}`);
+    await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
+      "<main><strong>failed</strong></main>",
+    );
+  });
+
+  test("nested stream Await hydration fails closed with valid generated syntax", () => {
+    const result = transform({
+      code: `export function App() {
+  return <main>{[<Await value={Promise.resolve("resolved")}>{value => <strong>{value}</strong>}</Await>]}</main>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      serverOutput: "stream",
+      serverAwaitHydration: true,
+      dev: false,
+    });
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MR_UNSUPPORTED_RENDER_VALUE_AWAIT_HYDRATION",
+        level: "error",
+      }),
+    );
+    expect(result.code).not.toContain("hydrationAwaitId");
+    expect(() => compileServerStreamModule(result.code)).not.toThrow();
+  });
+
+  test("nested placeholder Await reports an explicit unsupported diagnostic", () => {
+    const result = transform({
+      code: `export function App() {
+  return <main>{[<Await value={Promise.resolve("resolved")} placeholder={<i>loading</i>}>{value => <strong>{value}</strong>}</Await>]}</main>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      serverOutput: "stream",
+      dev: false,
+    });
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MR_UNSUPPORTED_RENDER_VALUE_PLACEHOLDER_AWAIT",
+        level: "error",
+      }),
+    );
+  });
+
+  test("nested stream select elements establish their own selection context", async () => {
+    const compiled = compileServerPair(`function SelectOption(props) {
+  return <option value={props.value}>{props.value}</option>;
+}
+export function App() {
+  return <main>{[<select value="b">{["a", "b"].map(value => <SelectOption value={value} />)}</select>]}</main>;
+}`);
+    await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
+      '<main><select><option value="a">a</option><option value="b" selected="">b</option></select></main>',
+    );
+  });
+
+  test("nested stream select supports defaultValue, multiple, and direct option text", async () => {
+    const compiled = compileServerPair(`export function App() {
+  return <main>{[
+    <select defaultValue="b"><option>a</option><option>b</option></select>,
+    <select multiple value={["a", "c"]}><option value="a">A</option><option value="b">B</option><option value="c">C</option></select>
+  ]}</main>;
+}`);
+    await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
+      '<main><select><option>a</option><option selected="">b</option></select><select multiple=""><option value="a" selected="">A</option><option value="b">B</option><option value="c" selected="">C</option></select></main>',
+    );
+  });
+
+  test("nested stream select evaluates value once and gives it nullish precedence", async () => {
+    const compiled = compileServerPair(`let calls = 0;
+function next() {
+  calls += 1;
+  return calls === 1 ? "b" : "a";
+}
+export function App() {
+  return <main>{[
+    <select defaultValue="a" value={next()}><option value="a">A</option><option value="b">B</option></select>,
+    <select defaultValue="a" value={null}><option value="a">A</option><option value="b">B</option></select>
+  ]}<i>{calls}</i></main>;
+}`);
+    await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
+      '<main><select><option value="a">A</option><option value="b" selected="">B</option></select><select><option value="a" selected="">A</option><option value="b">B</option></select><i>1</i></main>',
+    );
+  });
+
+  test("nested stream select preserves attribute order and false boolean semantics", async () => {
+    const compiled = compileServerPair(`const order = [];
+function read(name, value) {
+  order.push(name);
+  return value;
+}
+export function App() {
+  return <main>{[
+    <select defaultValue={read("default", "a")} data-testid={read("testid", "choices")} multiple={read("multiple", false)} value={read("value", "b")}><option value="a">A</option><option value="b">B</option></select>,
+    <select><option selected={false}>A</option></select>
+  ]}<i>{order.join(",")}</i></main>;
+}`);
+    await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
+      '<main><select data-testid="choices"><option value="a">A</option><option value="b" selected="">B</option></select><select><option>A</option></select><i>default,testid,multiple,value</i></main>',
+    );
+  });
+
+  test("nested stream attributes preserve style and false boolean semantics", async () => {
+    await expectServerPairHtml(
+      `function Inline() { return <strong>ok</strong>; }
+export function App() {
+  return <main>{[<section style={{ color: "red", marginTop: 2 }} disabled={false}><Inline /></section>]}</main>;
+}`,
+      '<main><section style="color:red;margin-top:2"><strong>ok</strong></section></main>',
+    );
+  });
+
+  test("nested SSR attribute temporaries do not shadow user bindings", async () => {
+    await expectServerPairHtml(
+      `function Inline() { return <strong>ok</strong>; }
+export function App() {
+  const _value = "https://example.test/path";
+  const _styleValue = { color: "red" };
+  return <main>{[
+    <a title={_value} href={_value} style={_styleValue}><Inline /></a>,
+    <iframe srcdoc={_value}></iframe>
+  ]}</main>;
+}`,
+      '<main><a title="https://example.test/path" href="https://example.test/path" style="color:red"><strong>ok</strong></a><iframe></iframe></main>',
+    );
+  });
+
+  test("nested stream options evaluate dynamic attributes once", async () => {
+    const compiled = compileServerPair(`let calls = 0;
+function optionValue() { calls += 1; return "b"; }
+export function App() {
+  return <main>{[<select value="b"><option value={optionValue()}>B</option></select>]}<i>{calls}</i></main>;
+}`);
+    await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
+      '<main><select><option value="b" selected="">B</option></select><i>1</i></main>',
+    );
+  });
+
+  test("nested stream options evaluate text once and use it for nullish values", async () => {
+    const compiled = compileServerPair(`let reads = 0;
+function readStatus() { reads += 1; return reads === 1 ? "done" : "open"; }
+export function App() {
+  return <main>{[
+    <select value="done"><option>{readStatus()}</option></select>,
+    <select value="done"><option value={undefined}>done</option><option value={null}>open</option></select>
+  ]}<i>{reads}</i></main>;
+}`);
+    await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
+      '<main><select><option selected="">done</option></select><select><option selected="">done</option><option>open</option></select><i>1</i></main>',
+    );
+  });
+
+  test("nested stream option text preserves scalar and array string semantics", async () => {
+    const compiled = compileServerPair(`export function App() {
+  return <main>{[
+    <select value="false"><option>{false}</option><option>{true}</option></select>,
+    <select value="a,b"><option>{["a", "b"]}</option></select>
+  ]}</main>;
+}`);
+    await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
+      '<main><select><option selected="">false</option><option>true</option></select><select><option selected="">a,b</option></select></main>',
+    );
+  });
+
+  test("nested stream select diagnoses spread selection props", () => {
+    const result = transform({
+      code: `export function App(props) {
+  return <main>{[<select {...props.selectProps}><option value="a">A</option></select>]}</main>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      serverOutput: "stream",
+      dev: false,
+    });
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MR_UNSUPPORTED_RENDER_VALUE_SELECT_SPREAD",
+        level: "error",
+      }),
+    );
+  });
+
+  test("stream nodes authorize only compiler-registered function execution", () => {
+    const compiled = compileServerPair(`export function App(props) {
+  return <main>{props.children}</main>;
+}`);
+
+    expect(compiled.stream).not.toContain("mreact.server.selection-render-value");
+    expect(compiled.stream).not.toContain('if (typeof value === "function")');
+  });
+
   test("component spreads lower direct JSX values", async () => {
     await expectServerPairHtml(
       `function Detail(props) {
@@ -741,6 +1254,34 @@ export function App() {
   const direct = String(<b>A</b>);
   const interpolated = "" + (<i>B</i>);
   return <Detail value={direct + interpolated} />;
+}`,
+      "<p>&lt;b&gt;A&lt;/b&gt;&lt;i&gt;B&lt;/i&gt;</p>",
+    );
+  });
+
+  test("stream render values keep component bindings opaque until rendered", async () => {
+    await expectServerPairHtml(
+      `function InlineText() {
+  return <strong>Bound</strong>;
+}
+function Detail(props) {
+  return <section>{typeof props.value}:{props.value}</section>;
+}
+export function App() {
+  const value = <InlineText />;
+  return <Detail value={value} />;
+}`,
+      "<section>object<!-- -->:<!-- --><strong>Bound</strong></section>",
+    );
+  });
+
+  test("explicit coercion of JSX aggregates never exposes stream renderer source", async () => {
+    await expectServerPairHtml(
+      `function Detail(props) {
+  return <p>{props.value}</p>;
+}
+export function App() {
+  return <Detail value={String([<b>A</b>]) + \`${"${<i>B</i>}"}\`} />;
 }`,
       "<p>&lt;b&gt;A&lt;/b&gt;&lt;i&gt;B&lt;/i&gt;</p>",
     );

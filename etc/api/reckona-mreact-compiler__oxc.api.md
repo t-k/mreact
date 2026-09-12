@@ -29,6 +29,8 @@ export interface AnalyzeModuleOptions {
     // (undocumented)
     compatReactNodeReturnRenderMode?: "react-node";
     // (undocumented)
+    serverAwaitHydration?: boolean;
+    // (undocumented)
     serverOutput?: ServerOutputMode;
     // (undocumented)
     topLevelJsx?: "diagnostic" | "compat-object" | "server-string";
@@ -410,6 +412,7 @@ export interface ModuleIr {
     moduleBindingNames: string[];
     // (undocumented)
     moduleStatements: string[];
+    nestedRenderValueNodes?: JsxNodeIr[];
     routerLinkComponentNames?: string[];
     // (undocumented)
     serverRenderValuePlaceholder?: string;
