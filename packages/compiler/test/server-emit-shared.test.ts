@@ -450,6 +450,24 @@ export function App(props) {
     );
   });
 
+  test("nested stream attributes use the collision-safe escape helper", async () => {
+    await expectServerPairHtml(
+      `const _escapeHtml = (value) => String(value);
+function InlineText() {
+  return <strong>ok</strong>;
+}
+export function App(props) {
+  return <main>{[<a title={props.title} href={props.href} srcdoc={props.srcdoc}><InlineText /></a>]}</main>;
+}`,
+      '<main><a title="x&quot; onmouseover=&quot;globalThis.pwned=1" href="https://example.test/&quot; onfocus=&quot;globalThis.pwned=1" srcdoc="&lt;script&gt;globalThis.pwned=1&lt;/script&gt;"><strong>ok</strong></a></main>',
+      {
+        title: 'x" onmouseover="globalThis.pwned=1',
+        href: 'https://example.test/" onfocus="globalThis.pwned=1',
+        srcdoc: { __html: "<script>globalThis.pwned=1</script>" },
+      },
+    );
+  });
+
   test("nested stream renderers preserve select context for component leaves", async () => {
     const compiled = compileServerPair(`function SelectOption(props) {
   return <option value={props.value}>{props.value}</option>;

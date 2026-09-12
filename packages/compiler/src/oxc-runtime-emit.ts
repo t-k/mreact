@@ -158,7 +158,7 @@ function emitOxcServerStreamNode(
         ) &&
         !(optionSelected !== undefined && attr.kind !== "spread-attr" && attr.name === "selected"),
     )
-    .map((attr) => emitOxcServerAttribute(node.tagName, attr))
+    .map((attr) => emitOxcServerAttribute(node.tagName, attr, names.escapeHtml))
     .join(" + ");
   const open =
     attrs === "" && optionSelected === undefined
