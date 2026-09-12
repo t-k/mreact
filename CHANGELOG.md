@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.220 - 2026-09-12
+
+### Fixed
+
+- Fixed the source module server runner so node_modules ESM externals such as the shared render value runtime are externalized natively through Vite instead of a textual identifier rewrite that lost references after regex literals, in template expressions, for shadowed locals, and in re-exports, which returned `ReferenceError` responses from the development server and `renderAppRequest` in installed applications.
+- Fixed CommonJS externals in the source module runner to evaluate in source order with ESM externals, keep `.node` addons on `require`, and retry a module that threw while loading. Missing named or default exports of ESM externals now fail at link time, as under Node, instead of resolving to `undefined`.
+
 ## 0.0.219 - 2026-09-12
 
 ### Fixed
