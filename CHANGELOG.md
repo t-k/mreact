@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.0.217 - 2026-09-12
+
+### Changed
+
+- Reduced production client navigation delivery by emitting a dedicated navigation runtime entry and sharing route-independent hydration helpers across route and navigation bundles.
+- Expanded conservative App Router compat SSR eligibility to support safe hook subpath imports while retaining the client-only fallback for unproven boundaries.
+
+### Fixed
+
+- Fixed client navigation history traversal, deferred startup, route data replacement, and hydration cleanup so restored entries and overtaking refetches settle consistently.
+- Fixed JSX component setup tracking so incidental reactive reads do not subscribe the surrounding render scope.
+- Fixed server and streaming rendering of component children to preserve value identity, truthiness, and trusted HTML provenance across component and layout boundaries.
+
 ## 0.0.216 - 2026-09-10
 
 ### Added
