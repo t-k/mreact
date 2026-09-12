@@ -516,6 +516,52 @@ export function App() {
   });
 
   test.each([
+    ["callback parameter", '[() => "<plain>"].map((Nested) => Nested())'],
+    ["IIFE const", '(() => { const Nested = () => "<plain>"; return Nested(); })()'],
+    [
+      "IIFE function declaration",
+      '(() => { function Nested() { return "<plain>"; } return Nested(); })()',
+    ],
+    ["immediate arrow parameter", '((Nested) => Nested())(() => "<plain>")'],
+    [
+      "destructured callback parameter",
+      '[{ value: () => "<plain>" }].map(({ value: Nested }) => Nested())',
+    ],
+    ["defaulted arrow parameter", '((Nested = () => "<plain>") => Nested())()'],
+    ["IIFE var binding", '(() => { var Nested = () => "<plain>"; return Nested(); })()'],
+    ["shadowed coercion", '((Nested) => String(Nested()))(() => "<plain>")'],
+    [
+      "sink-aware untrusted callback parameter",
+      '((Nested) => Nested())((sink) => { if (sink) sink.append("<script>unsafe</script>"); return "<plain>"; })',
+    ],
+  ])(
+    "nested stream render values preserve a plain call shadowed by a %s",
+    async (_label, expression) => {
+      await expectServerPairHtml(
+        `function Nested() {
+  return <b>module</b>;
+}
+export function App() {
+  return <main>{[<div>{${expression}}</div>]}</main>;
+}`,
+        "<main><div>&lt;plain&gt;</div></main>",
+      );
+    },
+  );
+
+  test("nested stream render value shadowing stays local to its expression branch", async () => {
+    const compiled = compileServerPair(`function Nested() {
+  return <b>module</b>;
+}
+export function App() {
+  return <main>{[<div>{[((Nested) => Nested())(() => "<plain>"), Nested()]}</div>]}</main>;
+}`);
+    await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
+      "<main><div>&lt;plain&gt;<b>module</b></div></main>",
+    );
+  });
+
+  test.each([
     [
       "select spread inside component children",
       '<Wrapper><select {...props.selection}><option value="a">A</option></select></Wrapper>',

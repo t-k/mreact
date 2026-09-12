@@ -28,6 +28,7 @@ import {
 import {
   containsOxcLocalJsxHelperCall,
   isOxcLocalJsxHelperCallExpression,
+  withoutOxcLocalJsxHelperNamesShadowedByScope,
 } from "./oxc-component-detection.js";
 
 const oxcNestedBodyLowerers: OxcBodyLowerers = {
@@ -428,6 +429,10 @@ function visitOxcExpressionJsxRoots(
   insideCollection = false,
 ): void {
   const unwrapped = unwrapOxcParentheses(node);
+  const availableLocalJsxReturnFunctionNames = withoutOxcLocalJsxHelperNamesShadowedByScope(
+    unwrapped,
+    localJsxReturnFunctionNames,
+  );
 
   if (unwrapped.type === "JSXElement" || unwrapped.type === "JSXFragment") {
     visit(
@@ -438,7 +443,7 @@ function visitOxcExpressionJsxRoots(
     return;
   }
 
-  if (isOxcLocalJsxHelperCallExpression(unwrapped, localJsxReturnFunctionNames)) {
+  if (isOxcLocalJsxHelperCallExpression(unwrapped, availableLocalJsxReturnFunctionNames)) {
     visit(
       unwrapped,
       "call",
@@ -457,7 +462,7 @@ function visitOxcExpressionJsxRoots(
         if (Object.keys(object).length > 0) {
           visitOxcExpressionJsxRoots(
             object,
-            localJsxReturnFunctionNames,
+            availableLocalJsxReturnFunctionNames,
             visit,
             childCoercesToPrimitive,
             childInsideCollection,
@@ -472,7 +477,7 @@ function visitOxcExpressionJsxRoots(
       if (Object.keys(object).length > 0) {
         visitOxcExpressionJsxRoots(
           object,
-          localJsxReturnFunctionNames,
+          availableLocalJsxReturnFunctionNames,
           visit,
           childCoercesToPrimitive,
           childInsideCollection,
