@@ -11,9 +11,9 @@ export default {
     breakThreshold: 100,
     mutate: [
       "packages/router/src/module-runner.ts:184-189",
-      "packages/router/src/module-runner.ts:209-218",
-      "packages/router/src/module-runner.ts:269-340",
-      "packages/router/src/module-runner.ts:955-1045",
+      "packages/router/src/module-runner.ts:212-229",
+      "packages/router/src/module-runner.ts:280-351",
+      "packages/router/src/module-runner.ts:966-1056",
     ],
     testFiles: [
       "packages/router/test/module-runner-native-externals.test.ts",

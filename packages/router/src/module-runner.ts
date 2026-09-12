@@ -184,7 +184,7 @@ async function importWithSharedRunner<T>(
   try {
     module = (await environment.runner.import(moduleId)) as T;
   } catch (error) {
-    invalidateCommonJsShims(environment.runner.evaluatedModules);
+    await invalidateRejectedCommonJsShims(environment.runner.evaluatedModules);
     throw error;
   }
 
@@ -204,17 +204,28 @@ async function importWithSharedRunner<T>(
 
 // A CommonJS external that threw while loading must run again on the next
 // import, as createRequire would; the runner would otherwise keep the rejected
-// shim evaluation for the rest of the process. Re-evaluating a shim whose
-// require succeeded only re-reads the cached module.exports.
-function invalidateCommonJsShims(
+// shim evaluation for the rest of the process. Shims that evaluated stay
+// untouched so concurrent imports never observe a cleared module.
+// Invalidating evaluated shims or rejected entries as well would only be
+// wasteful (shims re-read cached module.exports, rejected entries are
+// discarded), so the narrower selection is not observable from tests.
+async function invalidateRejectedCommonJsShims(
   evaluatedModules: RunnableDevEnvironment["runner"]["evaluatedModules"],
-): void {
+): Promise<void> {
   for (const module of evaluatedModules.idToModuleMap.values()) {
-    // Stryker disable next-line ConditionalExpression: invalidating every module is only wasteful, since externals reload from their caches.
-    if (module.id.includes(runnerCommonJsShimPrefix)) {
+    // Stryker disable next-line LogicalOperator,ConditionalExpression: see above.
+    if (module.id.includes(runnerCommonJsShimPrefix) && (await hasRejected(module.promise))) {
       evaluatedModules.invalidateModule(module);
     }
   }
+}
+
+function hasRejected(promise: Promise<unknown> | undefined): Promise<boolean> {
+  return Promise.resolve(promise).then(
+    // Stryker disable next-line ArrowFunction,BooleanLiteral: see above.
+    () => false,
+    () => true,
+  );
 }
 
 async function getSharedRunnerEnvironment(): Promise<RunnableDevEnvironment> {
