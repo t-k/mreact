@@ -1,6 +1,6 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, test } from "vitest";
 import { importAppRouterFileModule, importAppRouterSourceModule } from "../src/module-runner.js";
@@ -126,13 +126,17 @@ export function label() {
     const entryFile = await writeNativeEsmPackage("shapes-esm-package");
     const entryUrl = pathToFileURL(entryFile).href;
     const module = await importAppRouterSourceModule<{
+      isTrusted: (candidate: unknown) => boolean;
       namespaceValue: () => number;
       readDefault: () => string;
+      trusted: object;
+      value: number;
     }>({
       code: `import ${JSON.stringify(entryUrl)};
 import packageDefault from ${JSON.stringify(entryUrl)};
 import * as shapes from ${JSON.stringify(entryUrl)};
 
+export * from ${JSON.stringify(entryUrl)};
 export function readDefault() {
   return packageDefault;
 }
@@ -145,6 +149,8 @@ export function namespaceValue() {
 
     expect(module.readDefault()).toBe("default-export");
     expect(module.namespaceValue()).toBe(2);
+    expect(module.value).toBe(2);
+    expect(module.isTrusted(module.trusted)).toBe(true);
   });
 
   test("shares one native instance across runner modules and the host process", async () => {
@@ -160,6 +166,7 @@ export function bump() {
       label: "module-runner-shared-esm-producer",
     });
     const consumer = await importAppRouterSourceModule<{
+      loadDynamically: () => Promise<{ trusted: object }>;
       read: () => number;
       trustedValue: () => object;
     }>({
@@ -170,6 +177,9 @@ export function read() {
 }
 export function trustedValue() {
   return trusted;
+}
+export function loadDynamically() {
+  return import(${JSON.stringify(entryUrl)});
 }`,
       label: "module-runner-shared-esm-consumer",
     });
@@ -179,6 +189,7 @@ export function trustedValue() {
     expect(consumer.read()).toBe(2);
     expect(host.value).toBe(2);
     expect(consumer.trustedValue()).toBe(host.trusted);
+    expect((await consumer.loadDynamically()).trusted).toBe(host.trusted);
   });
 
   test("requires CommonJS packages through createRequire without identifier rewriting", async () => {
@@ -218,8 +229,12 @@ export function quoted() {
     expect(module.quoted()).toBe("'dynamic'");
   });
 
-  test("reports missing named exports of native ESM packages", async () => {
+  test("reports missing named and default exports of native ESM packages", async () => {
     const entryFile = await writeNativeEsmPackage("missing-esm-package");
+    const namedOnlyDir = join(dirname(dirname(entryFile)), "named-only-package");
+    const namedOnlyFile = join(namedOnlyDir, "index.mjs");
+    await mkdir(namedOnlyDir, { recursive: true });
+    await writeFile(namedOnlyFile, "export const named = 1;\n");
 
     await expect(
       importAppRouterSourceModule({
@@ -229,6 +244,14 @@ export const value = missing;`,
         label: "module-runner-missing-esm-package",
       }),
     ).rejects.toThrow(/does not provide an export named 'missing'/u);
+    await expect(
+      importAppRouterSourceModule({
+        code: `import missingDefault from ${JSON.stringify(pathToFileURL(namedOnlyFile).href)};
+
+export const value = missingDefault;`,
+        label: "module-runner-missing-default-esm-package",
+      }),
+    ).rejects.toThrow(/does not provide an export named 'default'/u);
   });
 
   test("keeps TypeScript node_modules sources and their relative imports in the runner graph", async () => {
@@ -308,5 +331,69 @@ export const value = missing;`,
         label: "module-runner-multiline-cjs-missing",
       }),
     ).rejects.toThrow(/is a CommonJS module/u);
+  });
+
+  test("keeps root-relative node_modules imports of Vite-transformed sources in the runner graph", async () => {
+    // A real directory inside the Vite root (not the symlinked node_modules) so
+    // Vite normalizes the helper import to a root-relative /coverage/... URL.
+    await mkdir(join(process.cwd(), "coverage"), { recursive: true });
+    const scratchDir = await mkdtemp(join(process.cwd(), "coverage", "native-externals-"));
+    try {
+      const packageDir = join(scratchDir, "node_modules", "root-relative-package");
+      const entryFile = join(packageDir, "index.ts");
+      await mkdir(packageDir, { recursive: true });
+      await writeFile(
+        join(packageDir, "package.json"),
+        JSON.stringify({ name: "root-relative-package", type: "module" }),
+      );
+      await writeFile(join(packageDir, "helper.js"), "export const suffix = '?';\n");
+      await writeFile(
+        entryFile,
+        `import { suffix } from "./helper.js";
+
+export function ask(text: string): string {
+  return text + suffix;
+}
+`,
+      );
+      const module = await importAppRouterSourceModule<{ ask: (text: string) => string }>({
+        code: `export { ask } from ${JSON.stringify(pathToFileURL(entryFile).href)};`,
+        label: "module-runner-root-relative-package",
+      });
+      const rootRelativeSpecifier = `/${relative(process.cwd(), join(packageDir, "helper.js"))}`;
+      const rootRelative = await importAppRouterSourceModule<{ suffix: string }>({
+        code: `export { suffix } from ${JSON.stringify(rootRelativeSpecifier)};`,
+        label: "module-runner-root-relative-specifier",
+      });
+
+      expect(module.ask("why")).toBe("why?");
+      expect(rootRelative.suffix).toBe("?");
+    } finally {
+      await rm(scratchDir, { force: true, recursive: true });
+    }
+  });
+
+  test("mixes native ESM and CommonJS externals in one source module", async () => {
+    const esmEntryFile = await writeNativeEsmPackage("mixed-esm-package");
+    const cjsDir = join(dirname(dirname(esmEntryFile)), "mixed-cjs-package");
+    const cjsEntryFile = join(cjsDir, "index.js");
+    await mkdir(cjsDir, { recursive: true });
+    await writeFile(
+      join(cjsDir, "package.json"),
+      JSON.stringify({ main: "index.js", name: "mixed-cjs-package" }),
+    );
+    await writeFile(cjsEntryFile, "exports.prefix = 'cjs:';\n");
+    const module = await importAppRouterSourceModule<{ describe: () => string }>({
+      code: `import { prefix } from ${JSON.stringify(pathToFileURL(cjsEntryFile).href)};
+import { increment, value } from ${JSON.stringify(pathToFileURL(esmEntryFile).href)};
+
+export function describe() {
+  increment();
+  return prefix + value;
+}`,
+      label: "module-runner-mixed-externals",
+    });
+
+    expect(module.describe()).toBe("cjs:2");
   });
 });

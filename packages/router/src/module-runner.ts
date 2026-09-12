@@ -280,8 +280,11 @@ function nativeExternalModulePlugin(): PluginOption {
 }
 // Stryker restore all
 
+// The runner only sees file URLs for native externals because resolveId
+// rewrites accepted absolute paths to URLs; every other id (Vite's /@fs/ and
+// root-relative forms, ?t= cache busting) belongs to the runner graph.
 function nativeExternalModuleFetchResult(id: string): FetchResult | undefined {
-  const file = nativeExternalModuleFile(id);
+  const file = id.startsWith("file://") ? nativeExternalModuleFile(id) : undefined;
 
   return file === undefined
     ? undefined
@@ -291,17 +294,18 @@ function nativeExternalModuleFetchResult(id: string): FetchResult | undefined {
       };
 }
 
+// Claims the specifier shapes the bundler emits for externals: file URLs and
+// absolute paths of existing files. Vite's own ids (/@fs/..., /@id/..., and
+// root-relative /node_modules/... URLs) do not exist as paths and stay with Vite.
 function nativeExternalModuleUrl(specifier: string): string | undefined {
   const file = nativeExternalModuleFile(specifier);
 
-  return file === undefined ? undefined : pathToFileURL(file).href;
+  // Stryker disable next-line ConditionalExpression: existsSync(undefined) is false, so the type guard has no runtime effect.
+  return file === undefined || !existsSync(file) ? undefined : pathToFileURL(file).href;
 }
 
-// Only claims the specifier shapes the bundler emits for externals: plain
-// file URLs and absolute paths. Vite-owned URL forms (/@fs/ and /@id/ ids,
-// ?t= cache busting, ?raw style queries) stay in the runner graph.
 function nativeExternalModuleFile(specifier: string): string | undefined {
-  if (specifier.startsWith("/@") || specifier.includes("?") || specifier.includes("#")) {
+  if (specifier.includes("?") || specifier.includes("#")) {
     return undefined;
   }
 
@@ -998,7 +1002,7 @@ function externalImportFilePath(specifier: string): string | undefined {
 }
 
 function isNodeModulesPath(file: string): boolean {
-  return file.split(sep).includes("node_modules");
+  return file.split(/[\\/]/u).includes("node_modules");
 }
 
 function isNodeImportableModuleFile(file: string): boolean {

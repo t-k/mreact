@@ -7,8 +7,8 @@ export default {
     name: "native-external-modules",
     breakThreshold: 100,
     mutate: [
-      "packages/router/src/module-runner.ts:250-312",
-      "packages/router/src/module-runner.ts:970-976",
+      "packages/router/src/module-runner.ts:250-316",
+      "packages/router/src/module-runner.ts:974-980",
     ],
     testFiles: [
       "packages/router/test/module-runner-native-externals.test.ts",
