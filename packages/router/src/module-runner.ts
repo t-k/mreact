@@ -61,6 +61,7 @@ const maxServerSourceTransformCacheEntries = resolveRouterCacheLimit(
 const serverSourceTransformCacheCounters = createRouterRuntimeCacheCounters();
 const packageTypeCache = new Map<string, string | undefined>();
 const runnerVirtualModulePrefix = "virtual:mreact-router-source/";
+const runnerCommonJsShimPrefix = "virtual:mreact-router-commonjs/";
 const runnerVirtualModules = new Map<string, string>();
 let sharedRunnerEnvironment: Promise<RunnableDevEnvironment> | undefined;
 let fileImportVersion = 0;
@@ -231,11 +232,7 @@ async function createSharedRunnerEnvironment(): Promise<RunnableDevEnvironment> 
             return runnerVirtualModules.has(source) ? `\0${source}` : undefined;
           },
           load(id) {
-            const source = id.startsWith("\0") ? id.slice(1) : id;
-
-            return source.startsWith(runnerVirtualModulePrefix)
-              ? runnerVirtualModules.get(source)
-              : undefined;
+            return runnerVirtualModules.get(id.startsWith("\0") ? id.slice(1) : id);
           },
         },
         nativeExternalModulePlugin(),
@@ -280,11 +277,11 @@ function nativeExternalModulePlugin(): PluginOption {
 }
 // Stryker restore all
 
-// The runner only sees file URLs for native externals because resolveId
-// rewrites accepted absolute paths to URLs; every other id (Vite's /@fs/ and
-// root-relative forms, ?t= cache busting) belongs to the runner graph.
+// Static imports reach the runner as the file URL resolveId returned, while a
+// computed import() reaches it with the raw specifier, so both hooks accept
+// exactly the same shapes.
 function nativeExternalModuleFetchResult(id: string): FetchResult | undefined {
-  const file = id.startsWith("file://") ? nativeExternalModuleFile(id) : undefined;
+  const file = nativeExternalModuleFile(id);
 
   return file === undefined
     ? undefined
@@ -294,16 +291,18 @@ function nativeExternalModuleFetchResult(id: string): FetchResult | undefined {
       };
 }
 
-// Claims the specifier shapes the bundler emits for externals: file URLs and
-// absolute paths of existing files. Vite's own ids (/@fs/..., /@id/..., and
-// root-relative /node_modules/... URLs) do not exist as paths and stay with Vite.
 function nativeExternalModuleUrl(specifier: string): string | undefined {
   const file = nativeExternalModuleFile(specifier);
 
-  // Stryker disable next-line ConditionalExpression: existsSync(undefined) is false, so the type guard has no runtime effect.
-  return file === undefined || !existsSync(file) ? undefined : pathToFileURL(file).href;
+  return file === undefined ? undefined : pathToFileURL(file).href;
 }
 
+// Claims the specifier shapes the bundler emits for externals: file URLs and
+// absolute paths of existing files. Vite's own ids (/@fs/..., /@id/..., and
+// root-relative /node_modules/... URLs) do not exist as paths and stay with Vite,
+// as do ?t= cache busting and other query forms. The node_modules test selects
+// the loader; it is not a security boundary, as the runner evaluates every
+// module in-process and the import policy is enforced when the module is bundled.
 function nativeExternalModuleFile(specifier: string): string | undefined {
   if (specifier.includes("?") || specifier.includes("#")) {
     return undefined;
@@ -311,7 +310,10 @@ function nativeExternalModuleFile(specifier: string): string | undefined {
 
   const file = nodeModulesExternalImportPath(specifier);
 
-  return file !== undefined && isNodeImportableModuleFile(file) ? file : undefined;
+  // Stryker disable next-line ConditionalExpression: existsSync(undefined) is false, so the type guard has no runtime effect.
+  return file !== undefined && isNodeImportableModuleFile(file) && existsSync(file)
+    ? file
+    : undefined;
 }
 
 export async function importAppRouterBuiltFileModule<T>(options: {
@@ -887,15 +889,14 @@ function withNodeRequireShimForEsmBundle(options: {
   const requireBaseUrl = pathToFileURL(
     join(options.requireBaseDir ?? process.cwd(), "__mreact_require_shim.cjs"),
   ).href;
-  const rewritten = rewriteNodeModulesCommonJsImports(options.code);
-  const code = rewritten.code.replaceAll(
+  const code = rewriteNodeModulesCommonJsImports(options.code, requireBaseUrl).replaceAll(
     "createRequire(import.meta.url)",
     `createRequire(${JSON.stringify(requireBaseUrl)})`,
   );
   const needsFilenameGlobalShim = needsCommonJsFilenameGlobalShim(options.code);
   const needsRequireShim = needsNodeRequireShim(options.code);
 
-  if (!rewritten.needsRequire && !needsFilenameGlobalShim && !needsRequireShim) {
+  if (!needsFilenameGlobalShim && !needsRequireShim) {
     return code;
   }
 
@@ -906,10 +907,9 @@ const __dirname = ${JSON.stringify(dirname(options.filename))};
 `
       : ""
   }${
-    rewritten.needsRequire || needsRequireShim
+    needsRequireShim
       ? `import { createRequire as __mreactCreateRequire } from "node:module";
-const __mreactRequire = __mreactCreateRequire(${JSON.stringify(requireBaseUrl)});
-const require = __mreactRequire;
+const require = __mreactCreateRequire(${JSON.stringify(requireBaseUrl)});
 `
       : ""
   }${code}`;
@@ -924,51 +924,84 @@ function needsNodeRequireShim(code: string): boolean {
 }
 
 // ESM externals keep their import statements: the shared runner externalizes
-// them natively (see nativeExternalModulePlugin). CommonJS externals cannot be
-// evaluated by the runner transform, so they become createRequire calls whose
-// destructured locals keep the original names; no identifier rewriting runs.
-function rewriteNodeModulesCommonJsImports(code: string): {
-  code: string;
-  needsRequire: boolean;
-} {
-  let needsRequire = false;
-  let importIndex = 0;
+// them natively (see nativeExternalModulePlugin), which also covers side-effect
+// imports of CommonJS files. CommonJS bindings cannot come from the runner
+// transform, so binding imports are redirected to a virtual shim module that
+// requires the file and re-exports the requested names. The statements stay
+// import declarations, so CommonJS and ESM externals evaluate in source order
+// and no identifier rewriting runs.
+function rewriteNodeModulesCommonJsImports(code: string, requireBaseUrl: string): string {
+  // Stryker disable next-line Regex: rolldown emits one semicolon-terminated import statement per line, so the anchors and quantifiers only tighten the match.
   const importFromPattern = /^import\s+([^;\n]+?)\s+from\s+(["'])([^"']+)\2;?$/gm;
-  const sideEffectImportPattern = /^import\s+(["'])([^"']+)\1;?$/gm;
-  const withRewrittenImports = code.replace(
+
+  return code.replace(
     importFromPattern,
     (statement: string, clause: string, _quote: string, specifier: string) => {
       const file = nodeModulesCommonJsImportPath(specifier);
 
-      if (file === undefined) {
-        return statement;
-      }
-
-      needsRequire = true;
-
-      return commonJsImportClauseToRequireStatements(
-        clause.trim(),
-        `__mreactRequire(${JSON.stringify(file)})`,
-        importIndex++,
-      );
+      return file === undefined
+        ? statement
+        : commonJsShimImportStatements(
+            registerCommonJsShim(file, requireBaseUrl, namedImportedNames(clause)),
+            clause,
+          );
     },
   );
-  const rewrittenCode = withRewrittenImports.replace(
-    sideEffectImportPattern,
-    (statement: string, _quote: string, specifier: string) => {
-      const file = nodeModulesCommonJsImportPath(specifier);
+}
 
-      if (file === undefined) {
-        return statement;
-      }
+function namedImportedNames(clause: string): string[] {
+  const named = /\{[^}]*\}/u.exec(clause);
 
-      needsRequire = true;
+  return named === null ? [] : namedImportBindings(named[0]).map((binding) => binding.imported);
+}
 
-      return `__mreactRequire(${JSON.stringify(file)});`;
-    },
-  );
+// The shim exports default and every requested name, so default and named
+// clauses import from it verbatim. A namespace import instead receives
+// module.exports through the shim default export, matching what createRequire
+// returns, so ns.anything keeps working.
+function commonJsShimImportStatements(shimId: string, clause: string): string {
+  const specifier = JSON.stringify(shimId);
+  const namespaceStart = clause.indexOf("* as ");
 
-  return { code: rewrittenCode, needsRequire };
+  if (namespaceStart === -1) {
+    return `import ${clause} from ${specifier};`;
+  }
+
+  const namespaceImport = `import ${clause.slice(namespaceStart + 5)} from ${specifier};`;
+
+  // Stryker disable ConditionalExpression,MethodExpression: the runner transform tolerates the duplicate namespace binding these variants would declare.
+  return namespaceStart === 0
+    ? namespaceImport
+    : `import ${clause.slice(0, clause.indexOf(","))} from ${specifier};\n${namespaceImport}`;
+  // Stryker restore ConditionalExpression,MethodExpression
+}
+
+function registerCommonJsShim(
+  file: string,
+  requireBaseUrl: string,
+  importedNames: readonly string[],
+): string {
+  const names = [...new Set(importedNames.filter((name) => name !== "default"))];
+  // Stryker disable next-line StringLiteral: the joined names only feed the shim id hash.
+  const shimId = `${runnerCommonJsShimPrefix}${hashText(`${requireBaseUrl}\0${file}\0${names.join(",")}`)}.mjs`;
+
+  // Stryker disable next-line ConditionalExpression: re-registering identical shim code changes nothing.
+  if (!runnerVirtualModules.has(shimId)) {
+    runnerVirtualModules.set(
+      shimId,
+      [
+        'import { createRequire as __mreactCreateRequire } from "node:module";\n',
+        `const __mreactCommonJs = __mreactCreateRequire(${JSON.stringify(requireBaseUrl)})(${JSON.stringify(file)});\n`,
+        "export default __mreactCommonJs;\n",
+        ...names.map(
+          (name, index) =>
+            `const __mreactCommonJs${index} = __mreactCommonJs[${JSON.stringify(name)}];\nexport { __mreactCommonJs${index} as ${name} };\n`,
+        ),
+      ].join(""),
+    );
+  }
+
+  return shimId;
 }
 
 function nodeModulesCommonJsImportPath(specifier: string): string | undefined {
@@ -1061,63 +1094,6 @@ function readPackageType(packageJson: string): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-function commonJsImportClauseToRequireStatements(
-  clause: string,
-  requireExpression: string,
-  importIndex: number,
-): string {
-  if (clause.startsWith("* as ")) {
-    return `const ${clause.slice(5).trim()} = ${requireExpression};`;
-  }
-
-  if (clause.startsWith("{")) {
-    return namedCommonJsImportsToRequireStatements(clause, requireExpression);
-  }
-
-  const commaIndex = clause.indexOf(",");
-
-  if (commaIndex === -1) {
-    return `const ${clause} = ${requireExpression};`;
-  }
-
-  const defaultName = clause.slice(0, commaIndex).trim();
-  const namedOrNamespace = clause.slice(commaIndex + 1).trim();
-  const temporaryName = `__mreactExternalCommonJs${importIndex}`;
-  const statements = [
-    `const ${temporaryName} = ${requireExpression};`,
-    `const ${defaultName} = ${temporaryName};`,
-  ];
-
-  if (namedOrNamespace.startsWith("* as ")) {
-    statements.push(`const ${namedOrNamespace.slice(5).trim()} = ${temporaryName};`);
-  } else if (namedOrNamespace.startsWith("{")) {
-    statements.push(namedCommonJsImportsToRequireStatements(namedOrNamespace, temporaryName));
-  }
-
-  return statements.join("\n");
-}
-
-function namedCommonJsImportsToRequireStatements(clause: string, sourceExpression: string): string {
-  const objectBindings: string[] = [];
-  const statements: string[] = [];
-
-  for (const binding of namedImportBindings(clause)) {
-    if (binding.imported === "default") {
-      statements.push(`const ${binding.local} = ${sourceExpression};`);
-    } else if (binding.imported === binding.local) {
-      objectBindings.push(binding.imported);
-    } else {
-      objectBindings.push(`${JSON.stringify(binding.imported)}: ${binding.local}`);
-    }
-  }
-
-  if (objectBindings.length > 0) {
-    statements.unshift(`const { ${objectBindings.join(", ")} } = ${sourceExpression};`);
-  }
-
-  return statements.join("\n");
 }
 
 function namedImportBindings(clause: string): Array<{ imported: string; local: string }> {
