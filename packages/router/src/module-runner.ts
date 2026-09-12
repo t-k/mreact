@@ -179,7 +179,14 @@ async function importWithSharedRunner<T>(
   options?: { invalidateEntry?: boolean | undefined },
 ): Promise<T> {
   const environment = await getSharedRunnerEnvironment();
-  const module = (await environment.runner.import(moduleId)) as T;
+  let module: T;
+
+  try {
+    module = (await environment.runner.import(moduleId)) as T;
+  } catch (error) {
+    invalidateCommonJsShims(environment.runner.evaluatedModules);
+    throw error;
+  }
 
   if (options?.invalidateEntry === true) {
     const evaluatedModule =
@@ -193,6 +200,21 @@ async function importWithSharedRunner<T>(
   }
 
   return module;
+}
+
+// A CommonJS external that threw while loading must run again on the next
+// import, as createRequire would; the runner would otherwise keep the rejected
+// shim evaluation for the rest of the process. Re-evaluating a shim whose
+// require succeeded only re-reads the cached module.exports.
+function invalidateCommonJsShims(
+  evaluatedModules: RunnableDevEnvironment["runner"]["evaluatedModules"],
+): void {
+  for (const module of evaluatedModules.idToModuleMap.values()) {
+    // Stryker disable next-line ConditionalExpression: invalidating every module is only wasteful, since externals reload from their caches.
+    if (module.id.includes(runnerCommonJsShimPrefix)) {
+      evaluatedModules.invalidateModule(module);
+    }
+  }
 }
 
 async function getSharedRunnerEnvironment(): Promise<RunnableDevEnvironment> {
@@ -924,29 +946,39 @@ function needsNodeRequireShim(code: string): boolean {
 }
 
 // ESM externals keep their import statements: the shared runner externalizes
-// them natively (see nativeExternalModulePlugin), which also covers side-effect
-// imports of CommonJS files. CommonJS bindings cannot come from the runner
-// transform, so binding imports are redirected to a virtual shim module that
-// requires the file and re-exports the requested names. The statements stay
-// import declarations, so CommonJS and ESM externals evaluate in source order
-// and no identifier rewriting runs.
+// them natively (see nativeExternalModulePlugin). CommonJS files cannot be
+// evaluated by the runner transform, and native import() rejects .node addons,
+// so their imports are redirected to a virtual shim module that requires the
+// file and re-exports the requested names. The statements stay import
+// declarations, so CommonJS and ESM externals evaluate in source order and no
+// identifier rewriting runs.
 function rewriteNodeModulesCommonJsImports(code: string, requireBaseUrl: string): string {
-  // Stryker disable next-line Regex: rolldown emits one semicolon-terminated import statement per line, so the anchors and quantifiers only tighten the match.
+  // Stryker disable Regex: rolldown emits one semicolon-terminated import statement per line, so the anchors and quantifiers only tighten the match.
   const importFromPattern = /^import\s+([^;\n]+?)\s+from\s+(["'])([^"']+)\2;?$/gm;
+  const sideEffectImportPattern = /^import\s+(["'])([^"']+)\1;?$/gm;
+  // Stryker restore Regex
 
-  return code.replace(
-    importFromPattern,
-    (statement: string, clause: string, _quote: string, specifier: string) => {
+  return code
+    .replace(
+      importFromPattern,
+      (statement: string, clause: string, _quote: string, specifier: string) => {
+        const file = nodeModulesCommonJsImportPath(specifier);
+
+        return file === undefined
+          ? statement
+          : commonJsShimImportStatements(
+              registerCommonJsShim(file, requireBaseUrl, namedImportedNames(clause)),
+              clause,
+            );
+      },
+    )
+    .replace(sideEffectImportPattern, (statement: string, _quote: string, specifier: string) => {
       const file = nodeModulesCommonJsImportPath(specifier);
 
       return file === undefined
         ? statement
-        : commonJsShimImportStatements(
-            registerCommonJsShim(file, requireBaseUrl, namedImportedNames(clause)),
-            clause,
-          );
-    },
-  );
+        : `import ${JSON.stringify(registerCommonJsShim(file, requireBaseUrl, []))};`;
+    });
 }
 
 function namedImportedNames(clause: string): string[] {

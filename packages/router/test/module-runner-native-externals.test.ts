@@ -557,4 +557,75 @@ export function isMissing(value) {
     expect((globalThis as { __mreactCjsShapeLoads?: number }).__mreactCjsShapeLoads).toBe(1);
     expect((globalThis as { __mreactCjsEffectLoads?: number }).__mreactCjsEffectLoads).toBe(1);
   });
+
+  test("requires .node addons for side-effect imports instead of native import()", async () => {
+    const projectDir = await mkdtemp(join(tmpdir(), "mreact-module-runner-addon-"));
+    const packageDir = join(projectDir, "node_modules", "addon-package");
+    const addonFile = join(packageDir, "addon.node");
+    await mkdir(packageDir, { recursive: true });
+    await writeFile(join(packageDir, "package.json"), JSON.stringify({ name: "addon-package" }));
+    await writeFile(addonFile, "not a real addon\n");
+    let failure: unknown;
+
+    try {
+      await importAppRouterSourceModule({
+        code: `import ${JSON.stringify(pathToFileURL(addonFile).href)};
+
+export const loaded = true;`,
+        label: "module-runner-addon-side-effect",
+      });
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).not.toMatch(/Unknown file extension/u);
+  });
+
+  test("retries CommonJS externals that threw while loading", async () => {
+    const projectDir = await mkdtemp(join(tmpdir(), "mreact-module-runner-flaky-cjs-"));
+    const packageDir = join(projectDir, "node_modules", "flaky-cjs-package");
+    const entryFile = join(packageDir, "index.js");
+    await mkdir(packageDir, { recursive: true });
+    await writeFile(
+      join(packageDir, "package.json"),
+      JSON.stringify({ main: "index.js", name: "flaky-cjs-package" }),
+    );
+    await writeFile(
+      entryFile,
+      `if (!globalThis.__mreactFlakyReady) {
+  throw new Error("boom-first-load");
+}
+globalThis.__mreactFlakyLoads = (globalThis.__mreactFlakyLoads ?? 0) + 1;
+exports.value = 1;
+`,
+    );
+    const state = globalThis as { __mreactFlakyLoads?: number; __mreactFlakyReady?: boolean };
+    state.__mreactFlakyReady = false;
+    const entryUrl = pathToFileURL(entryFile).href;
+    const named = (label: string) =>
+      importAppRouterSourceModule<{ value: number }>({
+        code: `import { value } from ${JSON.stringify(entryUrl)};
+
+export { value };`,
+        label,
+      });
+    const sideEffect = (label: string) =>
+      importAppRouterSourceModule<{ loaded: boolean }>({
+        code: `import ${JSON.stringify(entryUrl)};
+
+export const loaded = true;`,
+        label,
+      });
+
+    await expect(named("module-runner-flaky-named-first")).rejects.toThrow(/boom-first-load/u);
+    await expect(sideEffect("module-runner-flaky-effect-first")).rejects.toThrow(
+      /boom-first-load/u,
+    );
+    state.__mreactFlakyReady = true;
+
+    expect((await named("module-runner-flaky-named-second")).value).toBe(1);
+    expect((await sideEffect("module-runner-flaky-effect-second")).loaded).toBe(true);
+    expect(state.__mreactFlakyLoads).toBe(1);
+  });
 });
