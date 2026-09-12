@@ -118,7 +118,8 @@ function collectOxcPatternNames(pattern: Record<string, unknown>, names: Set<str
     return;
   }
   if (pattern.type === "ArrayPattern") {
-    for (const element of readArray(pattern.elements)) collectOxcPatternNames(readObject(element), names);
+    for (const element of readArray(pattern.elements))
+      collectOxcPatternNames(readObject(element), names);
   }
 }
 
@@ -151,10 +152,7 @@ function hasOxcFunctionLikeLocalJsxHelperReturn(
   return results.every((result) => result.safe) && results.some((result) => result.trusted);
 }
 
-function collectOxcFunctionScopedVarNames(
-  node: Record<string, unknown>,
-  names: Set<string>,
-): void {
+function collectOxcFunctionScopedVarNames(node: Record<string, unknown>, names: Set<string>): void {
   const pending: unknown[] = [node];
   const seen = new Set<object>();
   while (pending.length > 0) {
@@ -864,6 +862,23 @@ export function isOxcLocalJsxHelperCallExpression(
     callee.type === "Identifier" &&
     typeof callee.name === "string" &&
     localJsxReturnFunctionNames.has(callee.name)
+  );
+}
+
+export function containsOxcLocalJsxHelperCall(
+  node: Record<string, unknown>,
+  localJsxReturnFunctionNames: ReadonlySet<string>,
+): boolean {
+  const unwrapped = unwrapOxcParentheses(node);
+  if (isOxcLocalJsxHelperCallExpression(unwrapped, localJsxReturnFunctionNames)) return true;
+  return Object.values(unwrapped).some((value) =>
+    Array.isArray(value)
+      ? value.some((item) =>
+          containsOxcLocalJsxHelperCall(readObject(item), localJsxReturnFunctionNames),
+        )
+      : typeof value === "object" &&
+        value !== null &&
+        containsOxcLocalJsxHelperCall(readObject(value), localJsxReturnFunctionNames),
   );
 }
 

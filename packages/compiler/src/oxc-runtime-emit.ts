@@ -73,7 +73,9 @@ function emitOxcServerStreamNode(
   }
 
   if (node.kind === "expr") {
-    return `${indent}await ${names.renderValue}(${names.sink}, (${node.code}), ${names.escapeHtml}, 0, ${names.selectedValue}, ${names.selectedMultiple});`;
+    const value =
+      node.renderMode === "stream-node" ? `${names.registerThunk}(${node.code})` : `(${node.code})`;
+    return `${indent}await ${names.renderValue}(${names.sink}, ${value}, ${names.escapeHtml}, 0, ${names.selectedValue}, ${names.selectedMultiple});`;
   }
 
   if (node.kind === "conditional") {

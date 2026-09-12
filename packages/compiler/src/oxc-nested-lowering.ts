@@ -25,6 +25,10 @@ import {
   unsupportedRenderValueSelectSpreadDiagnostic,
   unsupportedStreamComponentCoercionDiagnostic,
 } from "./diagnostics.js";
+import {
+  containsOxcLocalJsxHelperCall,
+  isOxcLocalJsxHelperCallExpression,
+} from "./oxc-component-detection.js";
 
 const oxcNestedBodyLowerers: OxcBodyLowerers = {
   lowerDomNodeExpression: (code, expression, componentNames) =>
@@ -133,7 +137,8 @@ export function lowerOxcNestedJsxExpression(
               serverRenderValueWrapper !== undefined &&
               renderValueMode !== "coerced" &&
               (containsOxcStreamComponentJsx(node, componentNames) ||
-                containsOxcStreamSemanticJsx(node))
+                containsOxcStreamSemanticJsx(node) ||
+                containsOxcLocalJsxHelperCall(node, localJsxReturnFunctionNames))
               ? lowerOxcServerStreamExpression(
                   code,
                   node,
@@ -189,19 +194,21 @@ export function lowerOxcNestedJsxExpression(
                       : `${serverRenderValueWrapper}$escape`,
                     nestedRenderValueNodes,
                   )
-            : kind === "jsx"
-              ? lowerOxcReactiveValueExpression(code, node, componentNames)
-              : emitOxcServerRenderValueCall(
-                  code,
-                  node,
-                  expression,
-                  serverRenderValueWrapper,
-                  componentNames,
-                  target,
-                  diagnostics,
-                  localJsxReturnFunctionNames,
-                  serverOutput,
-                );
+            : kind === "call" && serverOutput === "stream" && renderValueMode === "coerced"
+              ? (diagnostics.push(unsupportedStreamComponentCoercionDiagnostic()), '""')
+              : kind === "jsx"
+                ? lowerOxcReactiveValueExpression(code, node, componentNames)
+                : emitOxcServerRenderValueCall(
+                    code,
+                    node,
+                    expression,
+                    serverRenderValueWrapper,
+                    componentNames,
+                    target,
+                    diagnostics,
+                    localJsxReturnFunctionNames,
+                    serverOutput,
+                  );
 
       if (lowered !== undefined) {
         replacements.push({
@@ -215,7 +222,8 @@ export function lowerOxcNestedJsxExpression(
               serverOutput === "stream" &&
               renderValueMode !== "coerced" &&
               (containsOxcStreamComponentJsx(node, componentNames) ||
-                containsOxcStreamSemanticJsx(node))
+                containsOxcStreamSemanticJsx(node) ||
+                containsOxcLocalJsxHelperCall(node, localJsxReturnFunctionNames))
             )
               ? `${serverRenderValueWrapper}(${lowered})`
               : lowered,
@@ -351,15 +359,7 @@ function findPlaceholderAwait(
 ): Extract<import("./ir.js").JsxNodeIr, { kind: "async-boundary" }> | undefined {
   for (const child of children) {
     if (child.kind === "async-boundary" && child.placeholderChildren !== undefined) return child;
-    const nested =
-      child.kind === "conditional"
-        ? [...child.whenTrue, ...child.whenFalse]
-        : child.kind === "list" || child.kind === "fragment" || child.kind === "element"
-          ? child.children
-          : child.kind === "async-boundary"
-            ? [...child.children, ...(child.catchChildren ?? [])]
-            : [];
-    const found = findPlaceholderAwait(nested);
+    const found = findPlaceholderAwait(nestedOxcChildren(child));
     if (found !== undefined) return found;
   }
   return undefined;
@@ -412,19 +412,7 @@ function containsSpreadSelect(children: readonly import("./ir.js").JsxNodeIr[]):
     ) {
       return true;
     }
-    const nested =
-      child.kind === "conditional"
-        ? [...child.whenTrue, ...child.whenFalse]
-        : child.kind === "list" || child.kind === "fragment" || child.kind === "element"
-          ? child.children
-          : child.kind === "async-boundary"
-            ? [
-                ...child.children,
-                ...(child.placeholderChildren ?? []),
-                ...(child.catchChildren ?? []),
-              ]
-            : [];
-    return containsSpreadSelect(nested);
+    return containsSpreadSelect(nestedOxcChildren(child));
   });
 }
 
@@ -450,7 +438,7 @@ function visitOxcExpressionJsxRoots(
     return;
   }
 
-  if (isOxcLocalJsxHelperCall(unwrapped, localJsxReturnFunctionNames)) {
+  if (isOxcLocalJsxHelperCallExpression(unwrapped, localJsxReturnFunctionNames)) {
     visit(
       unwrapped,
       "call",
@@ -541,20 +529,6 @@ function containsOxcStreamSemanticJsx(expression: Record<string, unknown>): bool
       : typeof value === "object" &&
         value !== null &&
         containsOxcStreamSemanticJsx(readObject(value)),
-  );
-}
-
-function isOxcLocalJsxHelperCall(
-  expression: Record<string, unknown>,
-  localJsxReturnFunctionNames: ReadonlySet<string>,
-): boolean {
-  if (expression.type !== "CallExpression") return false;
-
-  const callee = unwrapOxcParentheses(readObject(expression.callee));
-  return (
-    callee.type === "Identifier" &&
-    typeof callee.name === "string" &&
-    localJsxReturnFunctionNames.has(callee.name)
   );
 }
 

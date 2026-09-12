@@ -32,6 +32,7 @@ import {
   analyzeOxcSingleArrowJsxChild,
   readOxcConsumerRenderProp,
 } from "./oxc-component-props.js";
+import { containsOxcLocalJsxHelperCall } from "./oxc-component-detection.js";
 import {
   formatOxcBodyStatement,
   lowerOxcBodyStatementJsx,
@@ -641,8 +642,13 @@ export function analyzeOxcExpressionChild(
     sameModuleComponentStreamCall !== undefined ||
     isOxcSameModuleComponentCallExpression(expression, declaredComponentCallNames);
   const legacyRenderValue = isOxcRenderValueExpression(expression) || sameModuleComponentCall;
-  const containsNestedJsx = containsOxcJsxSyntax(unwrappedExpression);
-  const loweredNestedJsx = containsNestedJsx
+  const containsNestedRenderValue =
+    containsOxcJsxSyntax(unwrappedExpression) ||
+    containsOxcLocalJsxHelperCall(
+      unwrappedExpression,
+      context.serverRenderValueCallNames ?? new Set(),
+    );
+  const loweredNestedJsx = containsNestedRenderValue
     ? context.lowerNestedJsxExpression(
         code,
         expression,
@@ -711,7 +717,7 @@ export function analyzeOxcExpressionChild(
       kind: "expr",
       code:
         sameModuleComponentStreamCall ??
-        (containsNestedJsx
+        (containsNestedRenderValue
           ? normalizeOxcExpressionCode(
               loweredNestedJsx ??
                 (bodyStatementJsx === "compat-object"

@@ -55,6 +55,7 @@ import {
 } from "./oxc-expression-facts.js";
 import {
   collectOxcAsyncComponentNames,
+  containsOxcLocalJsxHelperCall,
   collectOxcExportedComponents,
   collectOxcExportedFunctionNames,
   collectOxcLocalJsxReturnFunctionNames,
@@ -640,8 +641,7 @@ function analyzeOxcToIr(
       const rootName = name.split(".")[0] ?? name;
 
       return !components.some(
-        (component) =>
-          component.name === rootName || component.bindingNames.includes(rootName),
+        (component) => component.name === rootName || component.bindingNames.includes(rootName),
       );
     }),
   );
@@ -902,23 +902,6 @@ function collectLocalJsxHelperHtmlParameters(
   }
 
   return parameters;
-}
-
-function containsOxcLocalJsxHelperCall(
-  node: Record<string, unknown>,
-  localJsxReturnFunctionNames: ReadonlySet<string>,
-): boolean {
-  const unwrapped = unwrapOxcParentheses(node);
-  if (isOxcLocalJsxHelperCallExpression(unwrapped, localJsxReturnFunctionNames)) return true;
-  return Object.values(unwrapped).some((value) =>
-    Array.isArray(value)
-      ? value.some((item) =>
-          containsOxcLocalJsxHelperCall(readObject(item), localJsxReturnFunctionNames),
-        )
-      : typeof value === "object" &&
-        value !== null &&
-        containsOxcLocalJsxHelperCall(readObject(value), localJsxReturnFunctionNames),
-  );
 }
 
 function collectOxcReassignedNames(node: unknown, names: ReadonlySet<string>): Set<string> {
@@ -2006,14 +1989,10 @@ function analyzeOxcFunctionLikeComponent(
     ),
     ...collectOxcConstBindingNames(body),
   ]);
-  const nativeCellBindings = resolveOxcComponentNativeCellBindings(
-    moduleExpressionFacts,
-    body,
-    [
-      ...collectOxcFunctionParameterShadowedNames(functionLike, new Set()),
-      ...reactiveAliasBindings.keys(),
-    ],
-  );
+  const nativeCellBindings = resolveOxcComponentNativeCellBindings(moduleExpressionFacts, body, [
+    ...collectOxcFunctionParameterShadowedNames(functionLike, new Set()),
+    ...reactiveAliasBindings.keys(),
+  ]);
   const childAnalysisContext = createOxcChildAnalysisContext(
     unshadowedBodyComponentNames,
     target,

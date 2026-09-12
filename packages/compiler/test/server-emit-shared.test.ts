@@ -461,6 +461,89 @@ export function App() {
     },
   );
 
+  test.each([
+    ["direct local component call", "Nested()"],
+    ["nested local component call", "[Nested()]"],
+    ["flatMap local component call", "[0].flatMap(() => [Nested()])"],
+    ["IIFE local component call", "(() => Nested())()"],
+  ])("nested stream render values preserve %s", async (_label, expression) => {
+    const compiled = compileServerPair(`function Nested() {
+  return <b>ok</b>;
+}
+export function App() {
+  return <main>{[<div>{${expression}}</div>]}</main>;
+}`);
+    await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
+      "<main><div><b>ok</b></div></main>",
+    );
+  });
+
+  test.each(["String(Nested())", "`${Nested()}`"])(
+    "nested stream render values diagnose local component coercion: %s",
+    (expression) => {
+      const result = transform({
+        code: `function Nested() {
+  return <b>ok</b>;
+}
+export function App() {
+  return <main>{[<div>{${expression}}</div>]}</main>;
+}`,
+        filename: "App.tsx",
+        target: "server",
+        serverOutput: "stream",
+        dev: false,
+      });
+      expect(result.diagnostics).toContainEqual(
+        expect.objectContaining({
+          code: "MR_UNSUPPORTED_STREAM_COMPONENT_COERCION",
+          level: "error",
+        }),
+      );
+    },
+  );
+
+  test("nested stream render values do not reinterpret a shadowed local call as a component", async () => {
+    const compiled = compileServerPair(`function Nested() {
+  return <b>module</b>;
+}
+export function App() {
+  const Nested = () => "<plain>";
+  return <main>{[<div>{Nested()}</div>]}</main>;
+}`);
+    await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
+      "<main><div>&lt;plain&gt;</div></main>",
+    );
+  });
+
+  test.each([
+    [
+      "select spread inside component children",
+      '<Wrapper><select {...props.selection}><option value="a">A</option></select></Wrapper>',
+      "MR_UNSUPPORTED_RENDER_VALUE_SELECT_SPREAD",
+    ],
+    [
+      "placeholder Await inside component children",
+      '<Wrapper><Await value={Promise.resolve("ok")} placeholder={<i>wait</i>}>{value => <b>{value}</b>}</Await></Wrapper>',
+      "MR_UNSUPPORTED_RENDER_VALUE_PLACEHOLDER_AWAIT",
+    ],
+  ])("nested stream render values diagnose %s", (_label, nested, diagnosticCode) => {
+    const result = transform({
+      code: `function Wrapper(props) {
+  return <section>{props.children}</section>;
+}
+export function App(props) {
+  return <main>{[${nested}]}</main>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      serverOutput: "stream",
+      dev: false,
+    });
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({ code: diagnosticCode, level: "error" }),
+    );
+  });
+
   test("nested stream renderers use the collision-safe escape helper", async () => {
     await expectServerPairHtml(
       `const _escapeHtml = (value) => String(value);
