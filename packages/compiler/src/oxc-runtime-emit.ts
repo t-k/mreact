@@ -1,5 +1,6 @@
 import type { AttributeIr, ComponentPropIr, JsxNodeIr } from "./ir.js";
 import {
+  emitOptionSelectedAttributeCode,
   htmlAttributeNameForElement,
   isDangerousHtmlAttribute,
   isStaticUrlValueUnsafe,
@@ -32,6 +33,7 @@ export interface OxcServerStreamEmitterNames {
   selectedValue: string;
   selectedMultiple: string;
   renderValue: string;
+  renderAsyncBoundary: string;
   registerThunk: string;
   compatRenderToString: string;
   escapeHtml: string;
@@ -113,21 +115,120 @@ function emitOxcServerStreamNode(
   }
 
   if (node.kind === "async-boundary") {
-    return "";
+    const body = emitOxcServerStreamStatements(node.children, names, state, `${indent}    `);
+    const catchOption =
+      node.catchName === undefined || node.catchChildren === undefined
+        ? ""
+        : `, catch: async (${names.sink}, ${node.catchName}) => {\n${emitOxcServerStreamStatements(node.catchChildren, names, state, `${indent}      `)}\n${indent}    }`;
+    if (node.placeholderChildren !== undefined) return "";
+    const hydrationAwaitId =
+      node.awaitId === undefined ? "" : `, hydrationAwaitId: ${JSON.stringify(node.awaitId)}`;
+    const options =
+      catchOption === "" && hydrationAwaitId === ""
+        ? ""
+        : `, {${catchOption.slice(1)}${hydrationAwaitId} }`;
+    return `${indent}await ${names.renderAsyncBoundary}(${names.sink}, (${node.valueCode}), async (${names.sink}, ${node.valueName}) => {\n${body}\n${indent}  }${options});`;
   }
 
+  const establishesSelection = node.tagName === "select";
+  const selectionValue = establishesSelection
+    ? emitOxcSelectionAttributeValue(node.attributes, "value", "defaultValue")
+    : undefined;
+  const selectionMultiple = establishesSelection
+    ? emitOxcSelectionAttributeValue(node.attributes, "multiple")
+    : undefined;
+  const childNames = establishesSelection
+    ? {
+        ...names,
+        selectedValue: selectionValue ?? "undefined",
+        selectedMultiple: selectionMultiple ?? "undefined",
+      }
+    : names;
+  const optionSelected =
+    node.tagName === "option" && names.selectedValue !== "undefined"
+      ? emitOxcOptionSelectedAttribute(node, names, state)
+      : undefined;
   const attrs = node.attributes
+    .filter(
+      (attr) =>
+        !(
+          node.tagName === "select" &&
+          attr.kind !== "spread-attr" &&
+          (attr.name === "value" || attr.name === "defaultValue")
+        ) &&
+        !(optionSelected !== undefined && attr.kind !== "spread-attr" && attr.name === "selected"),
+    )
     .map((attr) => emitOxcServerAttribute(node.tagName, attr))
     .join(" + ");
   const open =
-    attrs === ""
+    attrs === "" && optionSelected === undefined
       ? JSON.stringify(`<${node.tagName}>`)
-      : `${JSON.stringify(`<${node.tagName}`)} + ${attrs} + ">"`;
+      : `${JSON.stringify(`<${node.tagName}`)}${attrs === "" ? "" : ` + ${attrs}`}${optionSelected === undefined ? "" : ` + ${optionSelected}`} + ">"`;
   if (isVoidHtmlElement(node.tagName)) {
     return `${indent}${names.sink}.append(${open});`;
   }
-  const body = emitOxcServerStreamStatements(node.children, names, state, indent);
+  const body = emitOxcServerStreamStatements(node.children, childNames, state, indent);
   return `${indent}${names.sink}.append(${open});\n${body}${body === "" ? "" : "\n"}${indent}${names.sink}.append(${JSON.stringify(`</${node.tagName}>`)});`;
+}
+
+function emitOxcSelectionAttributeValue(
+  attributes: readonly AttributeIr[],
+  ...names: readonly string[]
+): string | undefined {
+  const attribute = attributes.find(
+    (candidate) => candidate.kind !== "spread-attr" && names.includes(candidate.name),
+  );
+  if (attribute?.kind === "static-attr") {
+    return names.includes("multiple") ? "true" : JSON.stringify(attribute.value);
+  }
+  if (attribute?.kind === "dynamic-attr") return `(${attribute.code})`;
+  return undefined;
+}
+
+function emitOxcOptionSelectedAttribute(
+  node: Extract<JsxNodeIr, { kind: "element" }>,
+  names: OxcServerStreamEmitterNames,
+  state: { nextLocal: number },
+): string {
+  const optionValue =
+    emitOxcSelectionAttributeValue(node.attributes, "value") ??
+    emitOxcOptionTextValue(node.children);
+  const ownSelected = node.attributes.some(
+    (attribute) => attribute.kind !== "spread-attr" && attribute.name === "selected",
+  )
+    ? JSON.stringify(' selected=""')
+    : '""';
+  const id = state.nextLocal++;
+  return emitOptionSelectedAttributeCode(
+    names.selectedValue,
+    optionValue,
+    ownSelected,
+    {
+      selected: `${names.localBase}$selected${id}`,
+      optionValue: `${names.localBase}$option${id}`,
+      boundOptionValue: `${names.localBase}$boundOption${id}`,
+      textValue: `${names.localBase}$text${id}`,
+      textParts: `${names.localBase}$textParts${id}`,
+      textBody: `${names.localBase}$textBody${id}`,
+      textHasValue: `${names.localBase}$textHasValue${id}`,
+      selectValue: `${names.localBase}$selectValue${id}`,
+      selectValueAttribute: `${names.localBase}$selectValueAttribute${id}`,
+      selectDefaultValue: `${names.localBase}$selectDefaultValue${id}`,
+      selectMultiple: `${names.localBase}$selectMultiple${id}`,
+      attributes: `${names.localBase}$attributes${id}`,
+      index: `${names.localBase}$index${id}`,
+      candidate: `${names.localBase}$candidate${id}`,
+    },
+    names.selectedMultiple,
+  );
+}
+
+function emitOxcOptionTextValue(children: readonly JsxNodeIr[]): string | undefined {
+  if (!children.every((child) => child.kind === "text" || child.kind === "expr")) return undefined;
+  const parts = children.map((child) =>
+    child.kind === "text" ? JSON.stringify(child.value) : `String((${child.code}) ?? "")`,
+  );
+  return parts.length === 0 ? '""' : parts.join(" + ");
 }
 
 function emitOxcServerStreamComponentProps(

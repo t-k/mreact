@@ -267,6 +267,7 @@ export function emitServerStream(
             markServerRenderValueHelperName,
             currentMarkServerRenderThunkHelperName,
             renderServerValueHelperName,
+            asyncBoundaryHelperName,
             compatRenderToStringHelperName,
             escapeHelperName,
           );
@@ -282,6 +283,7 @@ export function emitServerStream(
           markServerRenderValueHelperName,
           currentMarkServerRenderThunkHelperName,
           renderServerValueHelperName,
+          asyncBoundaryHelperName,
           compatRenderToStringHelperName,
           escapeHelperName,
         );
@@ -295,6 +297,7 @@ export function emitServerStream(
       ? ""
       : `import { ${options.escape.batchImportName} as ${escapeBatchHelperName} } from ${stringLiteral(options.escape.batchImportSource)};`;
   const imports = collectImports(ir, serverBootstrap);
+  ensureServerRuntimeImport(imports, components, asyncBoundaryHelperName, "renderAsyncBoundary");
   const importAliases: Record<string, string> = {
     renderAsyncBoundary: asyncBoundaryHelperName,
     renderOutOfOrderBoundary: outOfOrderBoundaryHelperName,
@@ -398,11 +401,13 @@ function replaceServerRenderValuePlaceholders(
   registerValueName: string,
   registerThunkName: string,
   renderValueName: string,
+  asyncBoundaryName: string,
   compatRenderToStringName: string,
   escapeHelperName: string,
 ): string {
   return code
     .replaceAll(`${placeholder}$render`, renderValueName)
+    .replaceAll(`${placeholder}$async`, asyncBoundaryName)
     .replaceAll(`${placeholder}$thunk`, registerThunkName)
     .replaceAll(`${placeholder}$compat`, compatRenderToStringName)
     .replaceAll(`${placeholder}$escape`, escapeHelperName)
@@ -415,6 +420,23 @@ function emitUserImports(ir: ModuleIr): string {
 
 function emitModuleStatements(ir: ModuleIr): string {
   return ir.components.length === 0 ? "" : ir.moduleStatements.join("\n");
+}
+
+function ensureServerRuntimeImport(
+  imports: RuntimeImport[],
+  emittedCode: string,
+  localName: string,
+  specifier: string,
+): void {
+  if (!emittedCode.includes(localName)) return;
+  const existing = imports.find(
+    (runtimeImport) => runtimeImport.source === "@reckona/mreact-server",
+  );
+  if (existing === undefined) {
+    imports.push({ source: "@reckona/mreact-server", specifiers: [specifier] });
+  } else if (!existing.specifiers.includes(specifier)) {
+    existing.specifiers.push(specifier);
+  }
 }
 
 function collectImports(ir: ModuleIr, serverBootstrap: ServerBootstrapMode): RuntimeImport[] {

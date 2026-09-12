@@ -462,6 +462,111 @@ export function App() {
     );
   });
 
+  test.each(["String(<InlineText />)", '"" + (<InlineText />)', "`${<InlineText />}`"])(
+    "diagnoses synchronous native component coercion in stream output: %s",
+    (expression) => {
+      const result = transform({
+        code: `function InlineText() {
+  return <strong>ok</strong>;
+}
+export function App() {
+  return <main>{${expression}}</main>;
+}`,
+        filename: "App.tsx",
+        target: "server",
+        serverOutput: "stream",
+        dev: false,
+      });
+      expect(result.diagnostics).toContainEqual(
+        expect.objectContaining({
+          code: "MR_UNSUPPORTED_STREAM_COMPONENT_COERCION",
+          level: "error",
+        }),
+      );
+    },
+  );
+
+  test("nested stream renderers preserve in-order Await boundaries", async () => {
+    const compiled = compileServerPair(`function InlineText(props) {
+  return <strong>{props.value}</strong>;
+}
+export function App() {
+  return <main>{[<Await value={Promise.resolve("resolved")}>{value => <InlineText value={value} />}</Await>]}</main>;
+}`);
+    await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
+      "<main><strong>resolved</strong></main>",
+    );
+  });
+
+  test("nested stream Await boundaries render catch output", async () => {
+    const compiled = compileServerPair(`export function App() {
+  return <main>{[<Await value={Promise.reject(new Error("failed"))} catch={error => <strong>{error.message}</strong>}>{value => <i>{value}</i>}</Await>]}</main>;
+}`);
+    await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
+      "<main><strong>failed</strong></main>",
+    );
+  });
+
+  test("nested placeholder Await reports an explicit unsupported diagnostic", () => {
+    const result = transform({
+      code: `export function App() {
+  return <main>{[<Await value={Promise.resolve("resolved")} placeholder={<i>loading</i>}>{value => <strong>{value}</strong>}</Await>]}</main>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      serverOutput: "stream",
+      dev: false,
+    });
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MR_UNSUPPORTED_RENDER_VALUE_PLACEHOLDER_AWAIT",
+        level: "error",
+      }),
+    );
+  });
+
+  test("nested stream select elements establish their own selection context", async () => {
+    const compiled = compileServerPair(`function SelectOption(props) {
+  return <option value={props.value}>{props.value}</option>;
+}
+export function App() {
+  return <main>{[<select value="b">{["a", "b"].map(value => <SelectOption value={value} />)}</select>]}</main>;
+}`);
+    await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
+      '<main><select><option value="a">a</option><option value="b" selected="">b</option></select></main>',
+    );
+  });
+
+  test("nested stream select supports defaultValue, multiple, and direct option text", async () => {
+    const compiled = compileServerPair(`export function App() {
+  return <main>{[
+    <select defaultValue="b"><option>a</option><option>b</option></select>,
+    <select multiple value={["a", "c"]}><option value="a">A</option><option value="b">B</option><option value="c">C</option></select>
+  ]}</main>;
+}`);
+    await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
+      '<main><select><option>a</option><option selected="">b</option></select><select multiple=""><option value="a" selected="">A</option><option value="b">B</option><option value="c" selected="">C</option></select></main>',
+    );
+  });
+
+  test("nested stream select diagnoses spread selection props", () => {
+    const result = transform({
+      code: `export function App(props) {
+  return <main>{[<select {...props.selectProps}><option value="a">A</option></select>]}</main>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      serverOutput: "stream",
+      dev: false,
+    });
+    expect(result.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MR_UNSUPPORTED_RENDER_VALUE_SELECT_SPREAD",
+        level: "error",
+      }),
+    );
+  });
+
   test("stream nodes authorize only compiler-registered function execution", () => {
     const compiled = compileServerPair(`export function App(props) {
   return <main>{props.children}</main>;

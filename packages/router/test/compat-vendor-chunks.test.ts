@@ -174,6 +174,9 @@ describe("compat server vendor chunks", () => {
 
   test("rewrites only exact server render-value import specifiers", () => {
     const code = `import { isServerRenderValue } from "${SERVER_RENDER_VALUE_PLACEHOLDER}";
+export { readServerRenderValue } from '${SERVER_RENDER_VALUE_PLACEHOLDER}';
+import localValue from "./local.js";
+const dynamicValue = import("${SERVER_RENDER_VALUE_PLACEHOLDER}");
 export const exact = "${SERVER_RENDER_VALUE_PLACEHOLDER}";
 export const prefixed = "prefix:${SERVER_RENDER_VALUE_PLACEHOLDER}";
 export const template = \`${SERVER_RENDER_VALUE_PLACEHOLDER}\`;
@@ -185,6 +188,9 @@ export const templateImport = \`from "${SERVER_RENDER_VALUE_PLACEHOLDER}"\`;
     const rewritten = rewriteCompatVendorPlaceholderImportsForRunner(code);
 
     expect(rewritten).toContain('import { isServerRenderValue } from "file://');
+    expect(rewritten).toContain("export { readServerRenderValue } from 'file://");
+    expect(rewritten).toContain('import localValue from "./local.js";');
+    expect(rewritten).toContain(`import("${SERVER_RENDER_VALUE_PLACEHOLDER}")`);
     expect(rewritten).toContain(`export const exact = "${SERVER_RENDER_VALUE_PLACEHOLDER}";`);
     expect(rewritten).toContain(
       `export const prefixed = "prefix:${SERVER_RENDER_VALUE_PLACEHOLDER}";`,

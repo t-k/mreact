@@ -15,6 +15,11 @@ import {
 import { stripTypeScriptExpressionWithOxc } from "./oxc-transform.js";
 import type { ClientReferenceIr } from "./ir.js";
 import type { CompileTarget, Diagnostic } from "./types.js";
+import {
+  unsupportedRenderValuePlaceholderAwaitDiagnostic,
+  unsupportedRenderValueSelectSpreadDiagnostic,
+  unsupportedStreamComponentCoercionDiagnostic,
+} from "./diagnostics.js";
 
 const oxcNestedBodyLowerers: OxcBodyLowerers = {
   lowerDomNodeExpression: (code, expression, componentNames) =>
@@ -112,7 +117,8 @@ export function lowerOxcNestedJsxExpression(
             ? serverOutput === "stream" &&
               serverRenderValueWrapper !== undefined &&
               renderValueMode !== "coerced" &&
-              containsOxcStreamComponentJsx(node, componentNames)
+              (containsOxcStreamComponentJsx(node, componentNames) ||
+                containsOxcStreamSemanticJsx(node))
               ? lowerOxcServerStreamExpression(
                   code,
                   node,
@@ -122,17 +128,33 @@ export function lowerOxcNestedJsxExpression(
                   serverRenderValueWrapper,
                   renderValueMode === "collection",
                 )
-              : lowerOxcServerStringExpression(
-                  code,
-                  node,
-                  componentNames,
-                  target,
-                  diagnostics,
-                  new Map(),
-                  serverRenderValueWrapper === undefined
-                    ? undefined
-                    : `${serverRenderValueWrapper}$escape`,
-                )
+              : serverOutput === "stream" &&
+                  renderValueMode === "coerced" &&
+                  containsNativeStreamComponent(
+                    analyzeOxcExpressionChild(
+                      code,
+                      node,
+                      createOxcNestedChildAnalysisContext(
+                        componentNames,
+                        target,
+                        diagnostics,
+                        "server-string",
+                      ),
+                      "server-string",
+                    ),
+                  )
+                ? (diagnostics.push(unsupportedStreamComponentCoercionDiagnostic()), '""')
+                : lowerOxcServerStringExpression(
+                    code,
+                    node,
+                    componentNames,
+                    target,
+                    diagnostics,
+                    new Map(),
+                    serverRenderValueWrapper === undefined
+                      ? undefined
+                      : `${serverRenderValueWrapper}$escape`,
+                  )
             : kind === "jsx"
               ? lowerOxcReactiveValueExpression(code, node, componentNames)
               : emitOxcServerRenderValueCall(
@@ -158,7 +180,8 @@ export function lowerOxcNestedJsxExpression(
             !(
               serverOutput === "stream" &&
               renderValueMode !== "coerced" &&
-              containsOxcStreamComponentJsx(node, componentNames)
+              (containsOxcStreamComponentJsx(node, componentNames) ||
+                containsOxcStreamSemanticJsx(node))
             )
               ? `${serverRenderValueWrapper}(${lowered})`
               : lowered,
@@ -198,6 +221,13 @@ function lowerOxcServerStreamExpression(
     "server-string",
   );
   if (children.length === 0) return undefined;
+  const placeholderAwait = findPlaceholderAwait(children);
+  if (placeholderAwait !== undefined) {
+    diagnostics.push(unsupportedRenderValuePlaceholderAwaitDiagnostic(placeholderAwait.loc));
+  }
+  if (containsSpreadSelect(children)) {
+    diagnostics.push(unsupportedRenderValueSelectSpreadDiagnostic());
+  }
 
   const localBase = allocateOxcServerRenderValuePlaceholder(code, expression);
   const renderer = emitOxcServerStreamRenderer(children, {
@@ -205,6 +235,7 @@ function lowerOxcServerStreamExpression(
     selectedValue: `${localBase}$selectedValue`,
     selectedMultiple: `${localBase}$selectedMultiple`,
     renderValue: `${serverRenderValueWrapper}$render`,
+    renderAsyncBoundary: `${serverRenderValueWrapper}$async`,
     registerThunk: `${serverRenderValueWrapper}$thunk`,
     compatRenderToString: `${serverRenderValueWrapper}$compat`,
     escapeHtml: `${serverRenderValueWrapper}$escape`,
@@ -213,6 +244,69 @@ function lowerOxcServerStreamExpression(
   return selfThunk
     ? `${serverRenderValueWrapper}$thunk(${renderer})`
     : `${serverRenderValueWrapper}(${renderer})`;
+}
+
+function containsNativeStreamComponent(children: readonly import("./ir.js").JsxNodeIr[]): boolean {
+  return children.some((child) => {
+    if (child.kind === "component" && child.runtime !== "compat") return true;
+    const nested =
+      child.kind === "conditional"
+        ? [...child.whenTrue, ...child.whenFalse]
+        : child.kind === "list" || child.kind === "fragment" || child.kind === "element"
+          ? child.children
+          : child.kind === "async-boundary"
+            ? [
+                ...child.children,
+                ...(child.placeholderChildren ?? []),
+                ...(child.catchChildren ?? []),
+              ]
+            : [];
+    return containsNativeStreamComponent(nested);
+  });
+}
+
+function findPlaceholderAwait(
+  children: readonly import("./ir.js").JsxNodeIr[],
+): Extract<import("./ir.js").JsxNodeIr, { kind: "async-boundary" }> | undefined {
+  for (const child of children) {
+    if (child.kind === "async-boundary" && child.placeholderChildren !== undefined) return child;
+    const nested =
+      child.kind === "conditional"
+        ? [...child.whenTrue, ...child.whenFalse]
+        : child.kind === "list" || child.kind === "fragment" || child.kind === "element"
+          ? child.children
+          : child.kind === "async-boundary"
+            ? [...child.children, ...(child.catchChildren ?? [])]
+            : [];
+    const found = findPlaceholderAwait(nested);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
+function containsSpreadSelect(children: readonly import("./ir.js").JsxNodeIr[]): boolean {
+  return children.some((child) => {
+    if (
+      child.kind === "element" &&
+      child.tagName === "select" &&
+      child.attributes.some((attribute) => attribute.kind === "spread-attr")
+    ) {
+      return true;
+    }
+    const nested =
+      child.kind === "conditional"
+        ? [...child.whenTrue, ...child.whenFalse]
+        : child.kind === "list" || child.kind === "fragment" || child.kind === "element"
+          ? child.children
+          : child.kind === "async-boundary"
+            ? [
+                ...child.children,
+                ...(child.placeholderChildren ?? []),
+                ...(child.catchChildren ?? []),
+              ]
+            : [];
+    return containsSpreadSelect(nested);
+  });
 }
 
 function visitOxcExpressionJsxRoots(
@@ -312,6 +406,22 @@ function containsOxcStreamComponentJsx(
       : typeof value === "object" &&
         value !== null &&
         containsOxcStreamComponentJsx(readObject(value), componentNames),
+  );
+}
+
+function containsOxcStreamSemanticJsx(expression: Record<string, unknown>): boolean {
+  const unwrapped = unwrapOxcParentheses(expression);
+  if (unwrapped.type === "JSXElement") {
+    const openingElement = readObject(unwrapped.openingElement);
+    const tagName = readOxcJsxTagName(readObject(openingElement.name));
+    if (tagName === "Await" || tagName === "select" || tagName === "option") return true;
+  }
+  return Object.values(unwrapped).some((value) =>
+    Array.isArray(value)
+      ? value.some((item) => containsOxcStreamSemanticJsx(readObject(item)))
+      : typeof value === "object" &&
+        value !== null &&
+        containsOxcStreamSemanticJsx(readObject(value)),
   );
 }
 

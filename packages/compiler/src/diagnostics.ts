@@ -1,14 +1,9 @@
 import type { Diagnostic, SourceLocation } from "./types.js";
 
 /** Formats a compiler diagnostic with filename, location, code, message, and suggestion details. */
-export function formatDiagnostic(
-  filename: string,
-  diagnostic: Diagnostic,
-): string {
+export function formatDiagnostic(filename: string, diagnostic: Diagnostic): string {
   const loc =
-    diagnostic.loc === undefined
-      ? ""
-      : `:${diagnostic.loc.line}:${diagnostic.loc.column}`;
+    diagnostic.loc === undefined ? "" : `:${diagnostic.loc.line}:${diagnostic.loc.column}`;
   const suggestion =
     diagnostic.suggestion === undefined
       ? ""
@@ -143,6 +138,34 @@ export function unsupportedNestedAwaitDiagnostic(loc?: SourceLocation): Diagnost
   };
 }
 
+export function unsupportedStreamComponentCoercionDiagnostic(): Diagnostic {
+  return {
+    level: "error",
+    code: "MR_UNSUPPORTED_STREAM_COMPONENT_COERCION",
+    message:
+      "Native components cannot be synchronously coerced to strings in the server stream target. Render the component as JSX, or move the coercion to an intrinsic-only value.",
+  };
+}
+
+export function unsupportedRenderValuePlaceholderAwaitDiagnostic(loc?: SourceLocation): Diagnostic {
+  return {
+    level: "error",
+    code: "MR_UNSUPPORTED_RENDER_VALUE_PLACEHOLDER_AWAIT",
+    message:
+      "An <Await> with a placeholder cannot be emitted inside a server render value because repeated renderers require runtime-unique boundary IDs. Move the <Await> outside the collection or omit its placeholder.",
+    ...(loc === undefined ? {} : { loc }),
+  };
+}
+
+export function unsupportedRenderValueSelectSpreadDiagnostic(): Diagnostic {
+  return {
+    level: "error",
+    code: "MR_UNSUPPORTED_RENDER_VALUE_SELECT_SPREAD",
+    message:
+      "A <select> inside a server render value cannot use spread attributes yet. Pass value, defaultValue, and multiple as explicit attributes or move the <select> outside the collection.",
+  };
+}
+
 export function unserializableAwaitValueDiagnostic(
   reason: string,
   loc?: SourceLocation,
@@ -159,9 +182,7 @@ export function unserializableAwaitValueDiagnostic(
   };
 }
 
-export function unsupportedBodyStatementJsxDiagnostic(
-  loc?: SourceLocation,
-): Diagnostic {
+export function unsupportedBodyStatementJsxDiagnostic(loc?: SourceLocation): Diagnostic {
   return {
     level: "error",
     code: "MR_UNSUPPORTED_BODY_STATEMENT_JSX",
@@ -171,9 +192,7 @@ export function unsupportedBodyStatementJsxDiagnostic(
   };
 }
 
-export function unsupportedTopLevelJsxInitializerDiagnostic(
-  loc?: SourceLocation,
-): Diagnostic {
+export function unsupportedTopLevelJsxInitializerDiagnostic(loc?: SourceLocation): Diagnostic {
   return {
     level: "error",
     code: "MR_UNSUPPORTED_TOP_LEVEL_JSX_INITIALIZER",
@@ -202,7 +221,8 @@ export function unsupportedCallbackLocalListKeyDiagnostic(
     code: "MR_UNSUPPORTED_CALLBACK_LOCAL_LIST_KEY",
     message: `A keyed list key cannot depend on callback-local binding '${name}' because the key selector executes outside the callback body.`,
     suggestion: {
-      title: "Derive the key directly from a callback parameter or move the stable key onto the item.",
+      title:
+        "Derive the key directly from a callback parameter or move the stable key onto the item.",
     },
     ...(loc === undefined ? {} : { loc }),
   };
