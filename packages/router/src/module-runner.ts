@@ -137,7 +137,15 @@ async function importAppRouterSourceModuleWithoutCache<T>(options: {
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<T> {
   const code =
-    options.resolveDir === undefined ? options.code : await bundleAppRouterSourceModule(options);
+    options.resolveDir === undefined
+      ? options.code
+      : rewriteCompatVendorPlaceholderImportsForRunner(
+          await bundleAppRouterSourceModule({
+            ...options,
+            externalizeServerRenderValueRuntime: true,
+          }),
+          options.resolveDir,
+        );
   const sourcefile = options.sourcefile ?? join(options.resolveDir ?? process.cwd(), "module.js");
   const executableCode = withNodeRequireShimForEsmBundle({
     code: withFileImportMetaUrl(code, sourcefile),
