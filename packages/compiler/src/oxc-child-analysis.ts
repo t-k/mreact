@@ -105,6 +105,8 @@ export interface OxcChildAnalysisContext {
     diagnostics: Diagnostic[],
     bodyStatementJsx: OxcBodyStatementJsxMode,
     serverRenderValueWrapper?: string,
+    localJsxReturnFunctionNames?: ReadonlySet<string>,
+    serverOutput?: "stream" | "string",
   ) => string | undefined;
 }
 
@@ -648,8 +650,15 @@ export function analyzeOxcExpressionChild(
         context.target,
         context.diagnostics,
         bodyStatementJsx,
+        context.serverRenderValueWrapper,
+        context.serverRenderValueCallNames,
+        context.serverOutput,
       )
     : undefined;
+  const containsNestedStreamRenderThunk =
+    context.serverOutput === "stream" &&
+    context.serverRenderValueWrapper !== undefined &&
+    loweredNestedJsx?.includes(`${context.serverRenderValueWrapper}$thunk`) === true;
   const isKnownRenderValue = legacyRenderValue || sameModuleComponentCall;
   const isLazyRenderValueBinding =
     unwrappedExpression.type === "Identifier" &&
@@ -683,7 +692,9 @@ export function analyzeOxcExpressionChild(
             : isUnoptimizedCall
               ? ("dynamic" as const)
               : loweredNestedJsx !== undefined && bodyStatementJsx === "server-string"
-                ? ("html" as const)
+                ? containsNestedStreamRenderThunk
+                  ? ("server-render-value" as const)
+                  : ("html" as const)
                 : loweredNestedJsx !== undefined && bodyStatementJsx === "dom-node"
                   ? ("dynamic" as const)
                   : undefined;

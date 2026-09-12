@@ -4279,6 +4279,51 @@ export default function Page() {
     expect(html).not.toContain("[object Object]");
   });
 
+  test("renders an imported component passed through ordinary layout children", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-layout-component-children-"));
+    const appDir = join(rootDir, "src", "app");
+    const componentsDir = join(rootDir, "src", "components");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(componentsDir, { recursive: true });
+    await writeFile(
+      join(componentsDir, "AuthLayout.tsx"),
+      `export function AuthLayout(props) {
+  return <main><div>{props.children}</div></main>;
+}`,
+    );
+    await writeFile(
+      join(componentsDir, "LoginForm.tsx"),
+      `export function LoginForm() {
+  return <form><label>Email<input name="email" /></label></form>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { AuthLayout } from "../components/AuthLayout";
+import { LoginForm } from "../components/LoginForm";
+
+export default function Page() {
+  return <AuthLayout><LoginForm /></AuthLayout>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain(
+      '<main><div><form><label>Email<input name="email"></label></form></div></main>',
+    );
+    expect(html).not.toContain("_selectedValue");
+    expect(html).not.toContain("_selectedMultiple");
+    expect(html).not.toContain("=&gt;");
+    expect(html).not.toContain("&lt;form");
+    expect(html).not.toContain("&amp;lt;form");
+  });
+
   test("renders router Link inside imported shared renderer function calls", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-imported-renderer-link-"));
     const appDir = join(rootDir, "src", "app");

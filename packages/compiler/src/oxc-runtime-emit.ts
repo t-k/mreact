@@ -24,6 +24,139 @@ export function emitOxcServerStringChildren(children: readonly JsxNodeIr[]): str
   return children.map(emitOxcServerStringNode).join(" + ");
 }
 
+export interface OxcServerStreamEmitterNames {
+  sink: string;
+  selectedValue: string;
+  selectedMultiple: string;
+  renderValue: string;
+  registerThunk: string;
+  compatRenderToString: string;
+  localBase: string;
+}
+
+/** Emits a compiler-owned stream renderer for JSX nested inside a JavaScript value. */
+export function emitOxcServerStreamRenderer(
+  children: readonly JsxNodeIr[],
+  names: OxcServerStreamEmitterNames,
+): string {
+  const state = { nextLocal: 0 };
+  return `async (${names.sink}, ${names.selectedValue}, ${names.selectedMultiple}) => {\n${emitOxcServerStreamStatements(children, names, state, "  ")}\n}`;
+}
+
+function emitOxcServerStreamStatements(
+  children: readonly JsxNodeIr[],
+  names: OxcServerStreamEmitterNames,
+  state: { nextLocal: number },
+  indent: string,
+): string {
+  return children
+    .map((node) => emitOxcServerStreamNode(node, names, state, indent))
+    .filter(Boolean)
+    .join("\n");
+}
+
+function emitOxcServerStreamNode(
+  node: JsxNodeIr,
+  names: OxcServerStreamEmitterNames,
+  state: { nextLocal: number },
+  indent: string,
+): string {
+  if (node.kind === "text") {
+    return `${indent}${names.sink}.append(${JSON.stringify(node.value)});`;
+  }
+
+  if (node.kind === "expr") {
+    return `${indent}await ${names.renderValue}(${names.sink}, (${node.code}), _escapeHtml, 0, ${names.selectedValue}, ${names.selectedMultiple});`;
+  }
+
+  if (node.kind === "conditional") {
+    const whenTrue = emitOxcServerStreamStatements(node.whenTrue, names, state, `${indent}  `);
+    const whenFalse = emitOxcServerStreamStatements(node.whenFalse, names, state, `${indent}  `);
+    const condition = node.conditionTestCode ?? node.conditionValueName ?? node.conditionCode;
+    const declaration =
+      node.conditionValueName === undefined
+        ? ""
+        : `${indent}  const ${node.conditionValueName} = (${node.conditionCode});\n`;
+    return `${indent}{\n${declaration}${indent}  if (${condition}) {\n${whenTrue}\n${indent}  } else {\n${whenFalse}\n${indent}  }\n${indent}}`;
+  }
+
+  if (node.kind === "list") {
+    const id = state.nextLocal++;
+    const renderers = `${names.localBase}$renderers${id}`;
+    const renderer = `${names.localBase}$renderer${id}`;
+    const parameters = emitOxcListParameters(node);
+    const body = emitOxcServerStreamStatements(node.children, names, state, `${indent}    `);
+    const statements = (node.bodyStatements ?? [])
+      .map((statement) => `${indent}    ${statement}`)
+      .join("\n");
+    return `${indent}{\n${indent}  const ${renderers} = (${node.itemsCode}).map((${parameters}) => async () => {\n${statements}${statements === "" ? "" : "\n"}${body}\n${indent}  });\n${indent}  for (const ${renderer} of ${renderers}) { if (${renderer} !== undefined) await ${renderer}(); }\n${indent}}`;
+  }
+
+  if (node.kind === "fragment") {
+    const statements = (node.bodyStatements ?? [])
+      .map((statement) => `${indent}${statement}`)
+      .join("\n");
+    const body = emitOxcServerStreamStatements(node.children, names, state, indent);
+    return [statements, body].filter(Boolean).join("\n");
+  }
+
+  if (node.kind === "component") {
+    const props = emitOxcServerStreamComponentProps(node.props, node.children, names, state);
+    if (node.runtime === "compat") {
+      return `${indent}${names.sink}.append(${names.compatRenderToString}(${node.name}, ${props}));`;
+    }
+    return `${indent}await ${node.name}(${names.sink}, ${emitOxcServerSelectionProps(props, names)});`;
+  }
+
+  if (node.kind === "async-boundary") {
+    return "";
+  }
+
+  const attrs = node.attributes
+    .map((attr) => emitOxcServerAttribute(node.tagName, attr))
+    .join(" + ");
+  const open =
+    attrs === ""
+      ? JSON.stringify(`<${node.tagName}>`)
+      : `${JSON.stringify(`<${node.tagName}`)} + ${attrs} + ">"`;
+  if (isVoidHtmlElement(node.tagName)) {
+    return `${indent}${names.sink}.append(${open});`;
+  }
+  const body = emitOxcServerStreamStatements(node.children, names, state, indent);
+  return `${indent}${names.sink}.append(${open});\n${body}${body === "" ? "" : "\n"}${indent}${names.sink}.append(${JSON.stringify(`</${node.tagName}>`)});`;
+}
+
+function emitOxcServerStreamComponentProps(
+  props: readonly ComponentPropIr[],
+  children: readonly JsxNodeIr[],
+  names: OxcServerStreamEmitterNames,
+  state: { nextLocal: number },
+): string {
+  const entries = props.map((prop) => {
+    if (prop.kind === "spread-prop") return `...(${prop.code})`;
+    if (prop.kind === "render-prop") {
+      const renderer = emitOxcServerStreamRenderer(prop.children, names);
+      return `${emitOxcCompatObjectPropName(prop.name)}: ${names.registerThunk}(${renderer})`;
+    }
+    return `${emitOxcCompatObjectPropName(prop.name)}: (${prop.code})`;
+  });
+  if (children.length > 0) {
+    const renderer = emitOxcServerStreamRenderer(children, {
+      ...names,
+      localBase: `${names.localBase}$children${state.nextLocal++}`,
+    });
+    entries.push(`children: ${names.registerThunk}(${renderer})`);
+  }
+  return `{ ${entries.join(", ")} }`;
+}
+
+function emitOxcServerSelectionProps(
+  props: string,
+  names: Pick<OxcServerStreamEmitterNames, "selectedValue" | "selectedMultiple">,
+): string {
+  return `Object.defineProperty(Object.defineProperty(${props}, Symbol.for("mreact.server.selected-value"), { value: ${names.selectedValue} }), Symbol.for("mreact.server.select-multiple"), { value: ${names.selectedMultiple} })`;
+}
+
 function emitOxcServerStringNode(node: JsxNodeIr): string {
   if (node.kind === "text") {
     return JSON.stringify(node.value);

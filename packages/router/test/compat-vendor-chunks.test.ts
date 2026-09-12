@@ -29,7 +29,9 @@ async function createCompatApp(): Promise<{ appDir: string; outDir: string }> {
   return <html lang="en"><body><Slot /></body></html>;
 }`,
   );
-  const page = (label: string) => `import { createElement, renderToString } from "@reckona/mreact-compat";
+  const page = (
+    label: string,
+  ) => `import { createElement, renderToString } from "@reckona/mreact-compat";
 
 function Row(props) {
   const tag = "span";
@@ -118,6 +120,31 @@ export default function Page() {
 export const clientNavigation = false;
 `,
   );
+  return { appDir, outDir };
+}
+
+async function createNativeServerRenderValueApp(): Promise<{ appDir: string; outDir: string }> {
+  const rootDir = await mkdtemp(join(tmpdir(), "mreact-server-render-value-vendor-"));
+  tempRoots.push(rootDir);
+  const appDir = join(rootDir, "app");
+  const outDir = join(rootDir, ".mreact");
+  await mkdir(join(appDir, "second"), { recursive: true });
+  await writeFile(
+    join(appDir, "layout.tsx"),
+    `export default function Layout(props) {
+  return <html lang="en"><body>{props.children}</body></html>;
+}`,
+  );
+  const page = (label: string) => `function InlineText() {
+  return <strong>${label}</strong>;
+}
+
+export default function Page() {
+  return <main>{["${label}"].flatMap(() => [<InlineText />, "\\n"])}</main>;
+}
+`;
+  await writeFile(join(appDir, "page.tsx"), page("one"));
+  await writeFile(join(appDir, "second", "page.tsx"), page("two"));
   return { appDir, outDir };
 }
 
@@ -221,6 +248,36 @@ describe("compat server vendor chunks", () => {
     await expect(readdir(join(outDir, "server", "server-modules", "chunks"))).rejects.toThrow();
     for (const source of await routeModuleSources(outDir)) {
       expect(source).not.toContain("mreact-compat-vendor:");
+    }
+  }, 120_000);
+
+  test("shares compiler-owned server render values across native route bundles", async () => {
+    const { appDir, outDir } = await createNativeServerRenderValueApp();
+    await buildApp({ appDir, outDir });
+
+    const chunkDir = join(outDir, "server", "server-modules", "chunks");
+    expect(await readdir(chunkDir)).toContain("server-render-value-internal.mjs");
+
+    const sources = await routeModuleSources(outDir);
+    const renderValueSources = sources.filter((source) =>
+      source.includes("server-render-value-internal"),
+    );
+    expect(renderValueSources.length).toBeGreaterThanOrEqual(2);
+    for (const source of renderValueSources) {
+      expect(source).toContain("../chunks/server-render-value-internal.mjs");
+      expect(source).not.toContain("const serverRenderValues = /* @__PURE__ */ new WeakMap");
+    }
+
+    const server = await startServer({ outDir, port: 0 });
+    try {
+      const first = await (await fetch(`${server.url}/`)).text();
+      const second = await (await fetch(`${server.url}/second`)).text();
+      expect(first).toContain("<main><strong>one</strong>\n</main>");
+      expect(second).toContain("<main><strong>two</strong>\n</main>");
+      expect(first).not.toContain("function InlineText");
+      expect(second).not.toContain("function InlineText");
+    } finally {
+      await server.close();
     }
   }, 120_000);
 });

@@ -422,6 +422,41 @@ export function App() {
     expect(streamHtml).toBe("<header><b>Watch</b></header>");
   });
 
+  test("string and stream preserve component elements mixed with text in nested arrays", async () => {
+    await expectServerPairHtml(
+      `function InlineText(props) {
+  return <span><strong>{props.text}</strong></span>;
+}
+export function App(props) {
+  const last = props.lines.length - 1;
+  return <p>{props.lines.flatMap((line, index) => index < last ? [<InlineText text={line} />, "\\n"] : [[<InlineText text={line} />], props.suffix])}</p>;
+}`,
+      "<p><span><strong>A &amp; B</strong></span>\n<span><strong>C</strong></span>&lt;script&gt;unsafe&lt;/script&gt;</p>",
+      { lines: ["A & B", "C"], suffix: "<script>unsafe</script>" },
+    );
+  });
+
+  test("nested stream renderers preserve select context for component leaves", async () => {
+    const compiled = compileServerPair(`function SelectOption(props) {
+  return <option value={props.value}>{props.value}</option>;
+}
+export function App() {
+  return <select value="b">{["a", "b"].flatMap((value) => [<SelectOption value={value} />, "\\n"])}</select>;
+}`);
+    await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
+      '<select><option value="a">a</option>\n<option value="b" selected="">b</option>\n</select>',
+    );
+  });
+
+  test("stream nodes authorize only compiler-registered function execution", () => {
+    const compiled = compileServerPair(`export function App(props) {
+  return <main>{props.children}</main>;
+}`);
+
+    expect(compiled.stream).not.toContain("mreact.server.selection-render-value");
+    expect(compiled.stream).not.toContain('if (typeof value === "function")');
+  });
+
   test("component spreads lower direct JSX values", async () => {
     await expectServerPairHtml(
       `function Detail(props) {
@@ -741,6 +776,34 @@ export function App() {
   const direct = String(<b>A</b>);
   const interpolated = "" + (<i>B</i>);
   return <Detail value={direct + interpolated} />;
+}`,
+      "<p>&lt;b&gt;A&lt;/b&gt;&lt;i&gt;B&lt;/i&gt;</p>",
+    );
+  });
+
+  test("stream render values keep component bindings opaque until rendered", async () => {
+    await expectServerPairHtml(
+      `function InlineText() {
+  return <strong>Bound</strong>;
+}
+function Detail(props) {
+  return <section>{typeof props.value}:{props.value}</section>;
+}
+export function App() {
+  const value = <InlineText />;
+  return <Detail value={value} />;
+}`,
+      "<section>object<!-- -->:<!-- --><strong>Bound</strong></section>",
+    );
+  });
+
+  test("explicit coercion of JSX aggregates never exposes stream renderer source", async () => {
+    await expectServerPairHtml(
+      `function Detail(props) {
+  return <p>{props.value}</p>;
+}
+export function App() {
+  return <Detail value={String([<b>A</b>]) + \`${"${<i>B</i>}"}\`} />;
 }`,
       "<p>&lt;b&gt;A&lt;/b&gt;&lt;i&gt;B&lt;/i&gt;</p>",
     );

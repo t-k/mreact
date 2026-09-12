@@ -275,8 +275,9 @@ export async function importAppRouterBuiltFileModule<T>(options: {
   return (await import(pathToFileURL(options.file).href)) as T;
 }
 
-
 export const COMPAT_VENDOR_PLACEHOLDER_PREFIX = "mreact-compat-vendor:";
+export const SERVER_RENDER_VALUE_PLACEHOLDER = "mreact-server-render-value:internal";
+const serverRenderValueSpecifier = "@reckona/mreact-shared/server-render-value-internal";
 
 // Specifier-to-dist-entry table for the react-compat server family. The
 // per-route externalization plugin and the shared vendor chunk build must
@@ -345,26 +346,40 @@ export function resolveCompatVendorEntryFiles(resolveDir?: string): Map<string, 
   return files;
 }
 
-const compatVendorPlaceholderImportPattern =
-  /(["'])mreact-compat-vendor:([\w-]+)\1/gu;
+const compatVendorPlaceholderImportPattern = /(["'])mreact-compat-vendor:([\w-]+)\1/gu;
 
 export function rewriteCompatVendorPlaceholderImportsForRunner(
   code: string,
   resolveDir?: string,
 ): string {
-  if (!code.includes(COMPAT_VENDOR_PLACEHOLDER_PREFIX)) {
-    return code;
+  let rewritten = code;
+  if (rewritten.includes(COMPAT_VENDOR_PLACEHOLDER_PREFIX)) {
+    const entryFiles = resolveCompatVendorEntryFiles(resolveDir);
+    rewritten = rewritten.replace(
+      compatVendorPlaceholderImportPattern,
+      (source, quote: string, entry: string) => {
+        const file = entryFiles.get(entry);
+
+        return file === undefined ? source : `${quote}${pathToFileURL(file).href}${quote}`;
+      },
+    );
   }
-  const entryFiles = resolveCompatVendorEntryFiles(resolveDir);
+  if (rewritten.includes(SERVER_RENDER_VALUE_PLACEHOLDER)) {
+    const file = resolveServerRenderValueEntryFile(resolveDir);
+    rewritten = rewritten.replaceAll(SERVER_RENDER_VALUE_PLACEHOLDER, pathToFileURL(file).href);
+  }
+  return rewritten;
+}
 
-  return code.replace(
-    compatVendorPlaceholderImportPattern,
-    (source, quote: string, entry: string) => {
-      const file = entryFiles.get(entry);
-
-      return file === undefined ? source : `${quote}${pathToFileURL(file).href}${quote}`;
-    },
-  );
+export function resolveServerRenderValueEntryFile(resolveDir?: string): string {
+  return resolveWorkspacePackageFile({
+    currentFileUrl: import.meta.url,
+    entry: "server-render-value-internal",
+    monorepoDir: "shared",
+    packageName: "@reckona/mreact-shared",
+    resolveDir,
+    specifier: serverRenderValueSpecifier,
+  });
 }
 
 // Marks every compat-family import as external with a deterministic
@@ -375,7 +390,9 @@ export function compatVendorExternalizePlugin(): RouterCompatPlugin {
     name: "mreact-compat-vendor-externalize",
     setup(buildApi) {
       buildApi.onResolve(
-        { filter: /^(?:react|react-dom|react\/.+|react-dom\/.+|@reckona\/mreact-compat(?:\/.+)?)$/u },
+        {
+          filter: /^(?:react|react-dom|react\/.+|react-dom\/.+|@reckona\/mreact-compat(?:\/.+)?)$/u,
+        },
         (args) => {
           const entry = compatVendorSpecifierEntries.get(args.path);
 
@@ -388,11 +405,27 @@ export function compatVendorExternalizePlugin(): RouterCompatPlugin {
   };
 }
 
+export function serverRenderValueExternalizePlugin(): RouterCompatPlugin {
+  return {
+    name: "mreact-server-render-value-externalize",
+    setup(buildApi) {
+      buildApi.onResolve(
+        { filter: /^@reckona\/mreact-shared\/server-render-value-internal$/u },
+        () => ({
+          external: true,
+          path: SERVER_RENDER_VALUE_PLACEHOLDER,
+        }),
+      );
+    },
+  };
+}
+
 export async function bundleAppRouterSourceModule(options: {
   code: string;
   define?: UserConfig["define"] | undefined;
   externalizeAppSourceModuleDirs?: readonly string[] | undefined;
   externalizeCompatVendor?: boolean | undefined;
+  externalizeServerRenderValueRuntime?: boolean | undefined;
   label: string;
   plugins?: readonly RouterCompatPlugin[] | undefined;
   resolveDir?: string | undefined;
@@ -411,6 +444,9 @@ export async function bundleAppRouterSourceModule(options: {
     vitePlugins: options.vitePlugins,
     plugins: [
       ...(options.externalizeCompatVendor === true ? [compatVendorExternalizePlugin()] : []),
+      ...(options.externalizeServerRenderValueRuntime === true
+        ? [serverRenderValueExternalizePlugin()]
+        : []),
       workspacePackageResolutionPlugin(),
       ...(options.serverSourceTransform === undefined
         ? []

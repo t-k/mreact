@@ -7,7 +7,11 @@ import { lowerOxcDomNodeExpression, lowerOxcNormalizedDomChildAppend } from "./o
 import { readOxcJsxTagName } from "./oxc-jsx-attributes.js";
 import { normalizeOxcJsxText } from "./oxc-jsx-text.js";
 import { readArray, readObject, readSource, unwrapOxcParentheses } from "./oxc-node-utils.js";
-import { emitOxcCompatObjectChildren, emitOxcServerStringChildren } from "./oxc-runtime-emit.js";
+import {
+  emitOxcCompatObjectChildren,
+  emitOxcServerStreamRenderer,
+  emitOxcServerStringChildren,
+} from "./oxc-runtime-emit.js";
 import { stripTypeScriptExpressionWithOxc } from "./oxc-transform.js";
 import type { ClientReferenceIr } from "./ir.js";
 import type { CompileTarget, Diagnostic } from "./types.js";
@@ -90,46 +94,68 @@ export function lowerOxcNestedJsxExpression(
   const expressionStart = typeof expression.start === "number" ? expression.start : 0;
   const replacements: Array<{ start: number; end: number; value: string }> = [];
 
-  visitOxcExpressionJsxRoots(expression, localJsxReturnFunctionNames, (node, kind) => {
-    const start = typeof node.start === "number" ? node.start : undefined;
-    const end = typeof node.end === "number" ? node.end : undefined;
+  visitOxcExpressionJsxRoots(
+    expression,
+    localJsxReturnFunctionNames,
+    (node, kind, renderValueMode) => {
+      const start = typeof node.start === "number" ? node.start : undefined;
+      const end = typeof node.end === "number" ? node.end : undefined;
 
-    if (start === undefined || end === undefined) {
-      return;
-    }
+      if (start === undefined || end === undefined) {
+        return;
+      }
 
-    const lowered =
-      kind === "jsx" && bodyStatementJsx === "compat-object"
-        ? lowerOxcCompatReactNodeExpression(code, node, componentNames, target, diagnostics)
-        : kind === "jsx" && bodyStatementJsx === "server-string"
-          ? lowerOxcServerStringExpression(code, node, componentNames, target, diagnostics)
-          : kind === "jsx"
-            ? lowerOxcReactiveValueExpression(code, node, componentNames)
-            : emitOxcServerRenderValueCall(
-                code,
-                node,
-                expression,
-                serverRenderValueWrapper,
-                componentNames,
-                target,
-                diagnostics,
-                localJsxReturnFunctionNames,
-                serverOutput,
-              );
+      const lowered =
+        kind === "jsx" && bodyStatementJsx === "compat-object"
+          ? lowerOxcCompatReactNodeExpression(code, node, componentNames, target, diagnostics)
+          : kind === "jsx" && bodyStatementJsx === "server-string"
+            ? serverOutput === "stream" &&
+              serverRenderValueWrapper !== undefined &&
+              renderValueMode !== "coerced" &&
+              containsOxcStreamComponentJsx(node, componentNames)
+              ? lowerOxcServerStreamExpression(
+                  code,
+                  node,
+                  componentNames,
+                  target,
+                  diagnostics,
+                  serverRenderValueWrapper,
+                  renderValueMode === "collection",
+                )
+              : lowerOxcServerStringExpression(code, node, componentNames, target, diagnostics)
+            : kind === "jsx"
+              ? lowerOxcReactiveValueExpression(code, node, componentNames)
+              : emitOxcServerRenderValueCall(
+                  code,
+                  node,
+                  expression,
+                  serverRenderValueWrapper,
+                  componentNames,
+                  target,
+                  diagnostics,
+                  localJsxReturnFunctionNames,
+                  serverOutput,
+                );
 
-    if (lowered !== undefined) {
-      replacements.push({
-        start,
-        end,
-        value:
-          kind === "jsx" &&
-          bodyStatementJsx === "server-string" &&
-          serverRenderValueWrapper !== undefined
-            ? `${serverRenderValueWrapper}(${lowered})`
-            : lowered,
-      });
-    }
-  });
+      if (lowered !== undefined) {
+        replacements.push({
+          start,
+          end,
+          value:
+            kind === "jsx" &&
+            bodyStatementJsx === "server-string" &&
+            serverRenderValueWrapper !== undefined &&
+            !(
+              serverOutput === "stream" &&
+              renderValueMode !== "coerced" &&
+              containsOxcStreamComponentJsx(node, componentNames)
+            )
+              ? `${serverRenderValueWrapper}(${lowered})`
+              : lowered,
+        });
+      }
+    },
+  );
 
   if (replacements.length === 0) {
     return undefined;
@@ -146,29 +172,84 @@ export function lowerOxcNestedJsxExpression(
   return stripTypeScriptExpressionWithOxc(lowered);
 }
 
+function lowerOxcServerStreamExpression(
+  code: string,
+  expression: Record<string, unknown>,
+  componentNames: Set<string>,
+  target: CompileTarget,
+  diagnostics: Diagnostic[],
+  serverRenderValueWrapper: string,
+  selfThunk: boolean,
+): string | undefined {
+  const children = analyzeOxcExpressionChild(
+    code,
+    expression,
+    createOxcNestedChildAnalysisContext(componentNames, target, diagnostics, "server-string"),
+    "server-string",
+  );
+  if (children.length === 0) return undefined;
+
+  const localBase = allocateOxcServerRenderValuePlaceholder(code, expression);
+  const renderer = emitOxcServerStreamRenderer(children, {
+    sink: `${localBase}$sink`,
+    selectedValue: `${localBase}$selectedValue`,
+    selectedMultiple: `${localBase}$selectedMultiple`,
+    renderValue: `${serverRenderValueWrapper}$render`,
+    registerThunk: `${serverRenderValueWrapper}$thunk`,
+    compatRenderToString: `${serverRenderValueWrapper}$compat`,
+    localBase,
+  });
+  return selfThunk
+    ? `${serverRenderValueWrapper}$thunk(${renderer})`
+    : `${serverRenderValueWrapper}(${renderer})`;
+}
+
 function visitOxcExpressionJsxRoots(
   node: Record<string, unknown>,
   localJsxReturnFunctionNames: ReadonlySet<string>,
-  visit: (node: Record<string, unknown>, kind: "call" | "jsx") => void,
+  visit: (
+    node: Record<string, unknown>,
+    kind: "call" | "jsx",
+    renderValueMode: "coerced" | "collection" | "value",
+  ) => void,
+  coercesToPrimitive = false,
+  insideCollection = false,
 ): void {
   const unwrapped = unwrapOxcParentheses(node);
 
   if (unwrapped.type === "JSXElement" || unwrapped.type === "JSXFragment") {
-    visit(unwrapped, "jsx");
+    visit(
+      unwrapped,
+      "jsx",
+      coercesToPrimitive ? "coerced" : insideCollection ? "collection" : "value",
+    );
     return;
   }
 
   if (isOxcLocalJsxHelperCall(unwrapped, localJsxReturnFunctionNames)) {
-    visit(unwrapped, "call");
+    visit(
+      unwrapped,
+      "call",
+      coercesToPrimitive ? "coerced" : insideCollection ? "collection" : "value",
+    );
     return;
   }
+
+  const childCoercesToPrimitive = coercesToPrimitive || isOxcExplicitPrimitiveCoercion(unwrapped);
+  const childInsideCollection = insideCollection || unwrapped.type === "ArrayExpression";
 
   for (const value of Object.values(unwrapped)) {
     if (Array.isArray(value)) {
       for (const item of value) {
         const object = readObject(item);
         if (Object.keys(object).length > 0) {
-          visitOxcExpressionJsxRoots(object, localJsxReturnFunctionNames, visit);
+          visitOxcExpressionJsxRoots(
+            object,
+            localJsxReturnFunctionNames,
+            visit,
+            childCoercesToPrimitive,
+            childInsideCollection,
+          );
         }
       }
       continue;
@@ -177,10 +258,50 @@ function visitOxcExpressionJsxRoots(
     if (typeof value === "object" && value !== null) {
       const object = readObject(value);
       if (Object.keys(object).length > 0) {
-        visitOxcExpressionJsxRoots(object, localJsxReturnFunctionNames, visit);
+        visitOxcExpressionJsxRoots(
+          object,
+          localJsxReturnFunctionNames,
+          visit,
+          childCoercesToPrimitive,
+          childInsideCollection,
+        );
       }
     }
   }
+}
+
+function isOxcExplicitPrimitiveCoercion(expression: Record<string, unknown>): boolean {
+  if (expression.type === "TemplateLiteral") return true;
+  if (expression.type === "UnaryExpression") {
+    return (
+      expression.operator === "+" || expression.operator === "-" || expression.operator === "~"
+    );
+  }
+  if (expression.type === "BinaryExpression") {
+    return expression.operator !== "===" && expression.operator !== "!==";
+  }
+  if (expression.type !== "CallExpression") return false;
+  const callee = unwrapOxcParentheses(readObject(expression.callee));
+  return callee.type === "Identifier" && callee.name === "String";
+}
+
+function containsOxcStreamComponentJsx(
+  expression: Record<string, unknown>,
+  componentNames: ReadonlySet<string>,
+): boolean {
+  const unwrapped = unwrapOxcParentheses(expression);
+  if (unwrapped.type === "JSXElement") {
+    const openingElement = readObject(unwrapped.openingElement);
+    const tagName = readOxcJsxTagName(readObject(openingElement.name));
+    if (/^[A-Z]/u.test(tagName) || componentNames.has(tagName)) return true;
+  }
+  return Object.values(unwrapped).some((value) =>
+    Array.isArray(value)
+      ? value.some((item) => containsOxcStreamComponentJsx(readObject(item), componentNames))
+      : typeof value === "object" &&
+        value !== null &&
+        containsOxcStreamComponentJsx(readObject(value), componentNames),
+  );
 }
 
 function isOxcLocalJsxHelperCall(
