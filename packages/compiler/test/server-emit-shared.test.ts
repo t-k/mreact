@@ -665,10 +665,13 @@ function read(name, value) {
   return value;
 }
 export function App() {
-  return <main>{[<select defaultValue={read("default", "a")} multiple={read("multiple", false)} value={read("value", "b")}><option selected={false} value="a">A</option><option value="b">B</option></select>]}<i>{order.join(",")}</i></main>;
+  return <main>{[
+    <select defaultValue={read("default", "a")} title={read("title", "choices")} multiple={read("multiple", false)} value={read("value", "b")}><option value="a">A</option><option value="b">B</option></select>,
+    <select><option selected={false}>A</option></select>
+  ]}<i>{order.join(",")}</i></main>;
 }`);
     await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
-      '<main><select><option value="a">A</option><option value="b" selected="">B</option></select><i>default,multiple,value</i></main>',
+      '<main><select title="choices"><option value="a">A</option><option value="b" selected="">B</option></select><select><option>A</option></select><i>default,title,multiple,value</i></main>',
     );
   });
 

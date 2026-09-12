@@ -134,28 +134,36 @@ function emitOxcServerStreamNode(
 
   const establishesSelection = node.tagName === "select";
   const selectionId = establishesSelection ? state.nextLocal++ : undefined;
-  const selectionBindings =
+  const attributeBindings =
     selectionId === undefined
       ? []
       : node.attributes.flatMap((attribute, index) => {
-          if (
-            attribute.kind === "spread-attr" ||
-            !["value", "defaultValue", "multiple"].includes(attribute.name)
-          ) {
+          if (attribute.kind !== "dynamic-attr" && attribute.kind !== "static-attr") {
             return [];
           }
-          const code = emitOxcSelectionAttributeValue([attribute], attribute.name);
+          const isSelectionAttribute = ["value", "defaultValue", "multiple"].includes(
+            attribute.name,
+          );
+          if (!isSelectionAttribute && attribute.kind !== "dynamic-attr") return [];
+          const code = isSelectionAttribute
+            ? emitOxcSelectionAttributeValue([attribute], attribute.name)
+            : attribute.kind === "dynamic-attr"
+              ? `(${attribute.code})`
+              : undefined;
           return code === undefined
             ? []
             : [
                 {
                   attribute,
                   name: attribute.name,
-                  local: `${names.localBase}$select${attribute.name[0]?.toUpperCase()}${attribute.name.slice(1)}${selectionId}_${index}`,
+                  local: `${names.localBase}$selectAttr${attribute.name[0]?.toUpperCase()}${attribute.name.slice(1)}${selectionId}_${index}`,
                   code,
                 },
               ];
         });
+  const selectionBindings = attributeBindings.filter((binding) =>
+    ["value", "defaultValue", "multiple"].includes(binding.name),
+  );
   const explicitSelectionValue = selectionBindings.find((binding) => binding.name === "value")
     ?.local;
   const defaultSelectionValue = selectionBindings.find(
@@ -191,12 +199,18 @@ function emitOxcServerStreamNode(
         !(optionSelected !== undefined && attr.kind !== "spread-attr" && attr.name === "selected"),
     )
     .map((attr) => {
-      const dynamicMultiple = selectionBindings.find(
-        (binding) => binding.attribute === attr && binding.name === "multiple",
-      )?.local;
-      return dynamicMultiple === undefined
-        ? emitOxcServerAttribute(node.tagName, attr, names.escapeHtml)
-        : `((${dynamicMultiple}) ? ${JSON.stringify(' multiple=""')} : "")`;
+      const binding = attributeBindings.find((candidate) => candidate.attribute === attr)?.local;
+      if (
+        attr.kind === "dynamic-attr" &&
+        (attr.name === "multiple" || attr.name === "selected")
+      ) {
+        return `((${binding ?? `(${attr.code})`}) ? ${JSON.stringify(` ${htmlAttributeNameForElement(node.tagName, attr.name)}=""`)} : "")`;
+      }
+      return emitOxcServerAttribute(
+        node.tagName,
+        binding !== undefined && attr.kind === "dynamic-attr" ? { ...attr, code: binding } : attr,
+        names.escapeHtml,
+      );
     })
     .join(" + ");
   const open =
@@ -209,7 +223,7 @@ function emitOxcServerStreamNode(
   const body = emitOxcServerStreamStatements(node.children, childNames, state, indent);
   const element = `${indent}${names.sink}.append(${open});\n${body}${body === "" ? "" : "\n"}${indent}${names.sink}.append(${JSON.stringify(`</${node.tagName}>`)});`;
   if (!establishesSelection) return element;
-  const declarations = selectionBindings.map(
+  const declarations = attributeBindings.map(
     (binding) => `${indent}  const ${binding.local} = ${binding.code};`,
   );
   return `${indent}{\n${declarations.join("\n")}${declarations.length === 0 ? "" : "\n"}${element
