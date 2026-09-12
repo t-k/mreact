@@ -785,6 +785,7 @@ interface EmitSetupState {
   clientBoundaryHelperName?: string | undefined;
   inlineMemoComponents: ReadonlyMap<string, CompatInlineMemo>;
   nonNullishComponents: ReadonlySet<string>;
+  parentTrackedComponents: ReadonlySet<string>;
   debugLabel?: string | undefined;
   compilerKeyedEventSlotKeys?: ReadonlyMap<string, string> | undefined;
   compilerKeyedElementPath?: string | undefined;
