@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.218 - 2026-09-12
+
+### Fixed
+
+- Fixed compiler lowering and server rendering for component children, nested stream boundaries, detached component calls, and detached attribute or render-value expressions so evaluation context, value identity, escaping, and reactive update semantics remain consistent across string and streaming SSR.
+
 ## 0.0.217 - 2026-09-12
 
 ### Changed
