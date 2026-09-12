@@ -123,9 +123,8 @@ function emitOxcServerStreamNode(
         ? undefined
         : `catch: async (${names.sink}, ${node.catchName}) => {\n${emitOxcServerStreamStatements(node.catchChildren, names, state, `${indent}      `)}\n${indent}    }`;
     if (node.placeholderChildren !== undefined) return "";
-    const hydrationAwaitId = node.awaitId === undefined
-      ? undefined
-      : `hydrationAwaitId: ${JSON.stringify(node.awaitId)}`;
+    const hydrationAwaitId =
+      node.awaitId === undefined ? undefined : `hydrationAwaitId: ${JSON.stringify(node.awaitId)}`;
     const optionFields = [catchOption, hydrationAwaitId].filter(
       (field): field is string => field !== undefined,
     );
@@ -136,29 +135,27 @@ function emitOxcServerStreamNode(
   const establishesSelection = node.tagName === "select";
   const attributeId = state.nextLocal++;
   const attributeBindings = node.attributes.flatMap((attribute, index) => {
-          if (attribute.kind !== "dynamic-attr" && attribute.kind !== "static-attr") {
-            return [];
-          }
-          const isSelectionAttribute = ["value", "defaultValue", "multiple"].includes(
-            attribute.name,
-          );
-          if (!isSelectionAttribute && attribute.kind !== "dynamic-attr") return [];
-          const code = isSelectionAttribute
-            ? emitOxcSelectionAttributeValue([attribute], attribute.name)
-            : attribute.kind === "dynamic-attr"
-              ? `(${attribute.code})`
-              : undefined;
-          return code === undefined
-            ? []
-            : [
-                {
-                  attribute,
-                  name: attribute.name,
-                  local: `${names.localBase}$streamAttr${attributeId}_${index}`,
-                  code,
-                },
-              ];
-      });
+    if (attribute.kind !== "dynamic-attr" && attribute.kind !== "static-attr") {
+      return [];
+    }
+    const isSelectionAttribute = ["value", "defaultValue", "multiple"].includes(attribute.name);
+    if (!isSelectionAttribute && attribute.kind !== "dynamic-attr") return [];
+    const code = isSelectionAttribute
+      ? emitOxcSelectionAttributeValue([attribute], attribute.name)
+      : attribute.kind === "dynamic-attr"
+        ? `(${attribute.code})`
+        : undefined;
+    return code === undefined
+      ? []
+      : [
+          {
+            attribute,
+            name: attribute.name,
+            local: `${names.localBase}$streamAttr${attributeId}_${index}`,
+            code,
+          },
+        ];
+  });
   const textBindings =
     node.tagName === "option"
       ? node.children.flatMap((child, index) =>
@@ -176,8 +173,9 @@ function emitOxcServerStreamNode(
   const selectionBindings = attributeBindings.filter((binding) =>
     ["value", "defaultValue", "multiple"].includes(binding.name),
   );
-  const explicitSelectionValue = selectionBindings.find((binding) => binding.name === "value")
-    ?.local;
+  const explicitSelectionValue = selectionBindings.find(
+    (binding) => binding.name === "value",
+  )?.local;
   const defaultSelectionValue = selectionBindings.find(
     (binding) => binding.name === "defaultValue",
   )?.local;
@@ -187,8 +185,9 @@ function emitOxcServerStreamNode(
       : defaultSelectionValue === undefined
         ? explicitSelectionValue
         : `((${explicitSelectionValue}) ?? (${defaultSelectionValue}))`;
-  const selectionMultipleName = selectionBindings.find((binding) => binding.name === "multiple")
-    ?.local;
+  const selectionMultipleName = selectionBindings.find(
+    (binding) => binding.name === "multiple",
+  )?.local;
   const childNames = establishesSelection
     ? {
         ...names,
@@ -230,10 +229,7 @@ function emitOxcServerStreamNode(
     )
     .map((attr) => {
       const binding = attributeBindings.find((candidate) => candidate.attribute === attr)?.local;
-      if (
-        attr.kind === "dynamic-attr" &&
-        (attr.name === "multiple" || attr.name === "selected")
-      ) {
+      if (attr.kind === "dynamic-attr" && (attr.name === "multiple" || attr.name === "selected")) {
         return `((${binding ?? `(${attr.code})`}) ? ${JSON.stringify(` ${htmlAttributeNameForElement(node.tagName, attr.name)}=""`)} : "")`;
       }
       return emitOxcServerAttribute(
@@ -250,7 +246,14 @@ function emitOxcServerStreamNode(
   if (isVoidHtmlElement(node.tagName)) {
     return `${indent}${names.sink}.append(${open});`;
   }
-  const body = emitOxcServerStreamStatements(emittedNode.children, childNames, state, indent);
+  const optionTextBody =
+    node.tagName === "option" && textBindings.length > 0
+      ? emitOxcOptionTextBody(emittedNode.children, names.escapeHtml)
+      : undefined;
+  const body =
+    optionTextBody === undefined
+      ? emitOxcServerStreamStatements(emittedNode.children, childNames, state, indent)
+      : `${indent}${names.sink}.append(${optionTextBody});`;
   const element = `${indent}${names.sink}.append(${open});\n${body}${body === "" ? "" : "\n"}${indent}${names.sink}.append(${JSON.stringify(`</${node.tagName}>`)});`;
   if (!establishesSelection && attributeBindings.length === 0 && textBindings.length === 0) {
     return element;
@@ -331,6 +334,18 @@ function emitOxcOptionTextValue(children: readonly JsxNodeIr[]): string | undefi
     child.kind === "text" ? JSON.stringify(child.value) : `String((${child.code}) ?? "")`,
   );
   return parts.length === 0 ? '""' : parts.join(" + ");
+}
+
+function emitOxcOptionTextBody(
+  children: readonly JsxNodeIr[],
+  escapeHelperName: string,
+): string | undefined {
+  if (!children.every((child) => child.kind === "text" || child.kind === "expr")) return undefined;
+  const parts = children.map((child) =>
+    child.kind === "text" ? JSON.stringify(child.value) : `String((${child.code}) ?? "")`,
+  );
+  if (parts.length === 0) return '""';
+  return `[${parts.join(", ")}].filter((_part) => _part !== "").map((_part) => ${escapeHelperName}(_part)).join("<!-- -->")`;
 }
 
 function emitOxcServerStreamComponentProps(
@@ -476,20 +491,20 @@ function emitOxcServerAttribute(
 
   if (attr.kind === "dynamic-attr") {
     if (isDangerousHtmlAttribute(htmlName)) {
-      return `(() => { const _value = (${attr.code}); if (typeof _value !== "object" || _value === null) return ""; try { const _descriptor = Object.getOwnPropertyDescriptor(_value, "__html"); if (_descriptor !== undefined && "value" in _descriptor && typeof _descriptor.value === "string") return ${JSON.stringify(` ${htmlName}="`)} + ${escapeHelperName}(_descriptor.value) + ${JSON.stringify('"')}; return ""; } catch { return ""; } })()`;
+      return `((function (_value) { if (typeof _value !== "object" || _value === null) return ""; try { const _descriptor = Object.getOwnPropertyDescriptor(_value, "__html"); if (_descriptor !== undefined && "value" in _descriptor && typeof _descriptor.value === "string") return ${JSON.stringify(` ${htmlName}="`)} + ${escapeHelperName}(_descriptor.value) + ${JSON.stringify('"')}; return ""; } catch { return ""; } })(${attr.code}))`;
     }
 
     if (isUrlAttribute(htmlName)) {
-      return `(() => { const _value = (${attr.code}); if (_value == null || _value === false) return ""; const _checked = ${currentOxcServerStringUrlSafeHelperName}(${JSON.stringify(htmlName)}, _value === true ? "" : _value); return _checked === undefined ? "" : ${JSON.stringify(` ${htmlName}="`)} + ${escapeHelperName}(_checked) + ${JSON.stringify('"')}; })()`;
+      return `((function (_value) { if (_value == null || _value === false) return ""; const _checked = ${currentOxcServerStringUrlSafeHelperName}(${JSON.stringify(htmlName)}, _value === true ? "" : _value); return _checked === undefined ? "" : ${JSON.stringify(` ${htmlName}="`)} + ${escapeHelperName}(_checked) + ${JSON.stringify('"')}; })(${attr.code}))`;
     }
 
     if (htmlName === "style") {
-      return `(() => { const _value = (${attr.code}); if (_value == null || _value === false) return ""; if (typeof _value === "string") { const _style = ${escapeHelperName}(_value); return _style === "" ? "" : ${JSON.stringify(' style="')} + _style + ${JSON.stringify('"')}; } if (typeof _value !== "object") return ""; const _style = Object.entries(_value).filter(([, _styleValue]) => _styleValue != null && _styleValue !== false).map(([_styleName, _styleValue]) => { const _cssName = String(_styleName).startsWith("--") ? String(_styleName) : String(_styleName).replace(/[A-Z]/g, (_char) => "-" + _char.toLowerCase()); return ${escapeHelperName}(_cssName) + ":" + ${escapeHelperName}(_styleValue === true ? "" : _styleValue); }).join(";"); return _style === "" ? "" : ${JSON.stringify(' style="')} + _style + ${JSON.stringify('"')}; })()`;
+      return `((function (_value) { if (_value == null || _value === false) return ""; if (typeof _value === "string") { const _style = ${escapeHelperName}(_value); return _style === "" ? "" : ${JSON.stringify(' style="')} + _style + ${JSON.stringify('"')}; } if (typeof _value !== "object") return ""; const _style = Object.entries(_value).filter(([, _styleValue]) => _styleValue != null && _styleValue !== false).map(([_styleName, _styleValue]) => { const _cssName = String(_styleName).startsWith("--") ? String(_styleName) : String(_styleName).replace(/[A-Z]/g, (_char) => "-" + _char.toLowerCase()); return ${escapeHelperName}(_cssName) + ":" + ${escapeHelperName}(_styleValue === true ? "" : _styleValue); }).join(";"); return _style === "" ? "" : ${JSON.stringify(' style="')} + _style + ${JSON.stringify('"')}; })(${attr.code}))`;
     }
 
     return isBooleanishStringAttribute(htmlName)
-      ? `(() => { const _value = (${attr.code}); return _value == null ? "" : ${JSON.stringify(` ${htmlName}="`)} + ${escapeHelperName}(_value) + ${JSON.stringify('"')}; })()`
-      : `(() => { const _value = (${attr.code}); return _value == null || _value === false ? "" : ${JSON.stringify(` ${htmlName}="`)} + ${escapeHelperName}(_value === true ? "" : _value) + ${JSON.stringify('"')}; })()`;
+      ? `((function (_value) { return _value == null ? "" : ${JSON.stringify(` ${htmlName}="`)} + ${escapeHelperName}(_value) + ${JSON.stringify('"')}; })(${attr.code}))`
+      : `((function (_value) { return _value == null || _value === false ? "" : ${JSON.stringify(` ${htmlName}="`)} + ${escapeHelperName}(_value === true ? "" : _value) + ${JSON.stringify('"')}; })(${attr.code}))`;
   }
 
   return '""';

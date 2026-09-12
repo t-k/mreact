@@ -685,15 +685,18 @@ export function App() {
     );
   });
 
-  test("nested stream attribute temporaries do not shadow user bindings", async () => {
-    const compiled = compileServerPair(`function Inline() { return <strong>ok</strong>; }
+  test("nested SSR attribute temporaries do not shadow user bindings", async () => {
+    await expectServerPairHtml(
+      `function Inline() { return <strong>ok</strong>; }
 export function App() {
   const _value = "https://example.test/path";
   const _styleValue = { color: "red" };
-  return <main>{[<a title={_value} href={_value} style={_styleValue}><Inline /></a>]}</main>;
-}`);
-    await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
-      '<main><a title="https://example.test/path" href="https://example.test/path" style="color:red"><strong>ok</strong></a></main>',
+  return <main>{[
+    <a title={_value} href={_value} style={_styleValue}><Inline /></a>,
+    <iframe srcdoc={_value}></iframe>
+  ]}</main>;
+}`,
+      '<main><a title="https://example.test/path" href="https://example.test/path" style="color:red"><strong>ok</strong></a><iframe></iframe></main>',
     );
   });
 
@@ -719,6 +722,18 @@ export function App() {
 }`);
     await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
       '<main><select><option selected="">done</option></select><select><option selected="">done</option><option>open</option></select><i>1</i></main>',
+    );
+  });
+
+  test("nested stream option text preserves scalar and array string semantics", async () => {
+    const compiled = compileServerPair(`export function App() {
+  return <main>{[
+    <select value="false"><option>{false}</option><option>{true}</option></select>,
+    <select value="a,b"><option>{["a", "b"]}</option></select>
+  ]}</main>;
+}`);
+    await expect(runServerStreamComponent(compiled.stream, "App")).resolves.toBe(
+      '<main><select><option selected="">false</option><option>true</option></select><select><option selected="">a,b</option></select></main>',
     );
   });
 

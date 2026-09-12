@@ -2557,7 +2557,7 @@ function findOptionTextValueCode(
 }
 
 function rawHtmlExpression(code: string): string {
-  return `(() => { const _value = (${code}); return Array.isArray(_value) ? _value.join("") : String(_value ?? ""); })()`;
+  return `(function (_renderValue) { return Array.isArray(_renderValue) ? _renderValue.join("") : String(_renderValue ?? ""); })(${code})`;
 }
 
 function emitTextSeparatedSimpleChildrenExpression(
