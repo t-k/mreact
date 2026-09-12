@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.219 - 2026-09-12
+
+### Fixed
+
+- Fixed source module server rendering so separately bundled modules share trusted render values and thunks, while already bundled code is not transformed again by build-time definitions.
+
 ## 0.0.218 - 2026-09-12
 
 ### Fixed
