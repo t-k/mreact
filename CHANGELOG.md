@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.0.221 - 2026-09-13
+
+### Added
+
+- Added `requestState()` and related request-local storage APIs to create lazily initialized state graphs isolated per server request while retaining browser-local state.
+
+### Fixed
+
+- Fixed SSR request state isolation across streamed response lifetimes and Cloudflare adapter requests so concurrent and deferred rendering does not share mutable state.
+
 ## 0.0.220 - 2026-09-12
 
 ### Fixed
