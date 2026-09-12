@@ -50,13 +50,33 @@ export function createCleanupScope(): CleanupScope;
 export function effect(fn: () => void | (() => void)): () => void;
 
 // @public
+export function installRequestStateStorage(storage: RequestStateStorage | undefined): void;
+
+// @public
 export interface ReadonlyCell<T> {
     // (undocumented)
     get(): T;
 }
 
 // @public
+export function requestState<T>(initialize: () => T): () => T;
+
+// @public
+export type RequestStateScope = Map<object, unknown>;
+
+// @public
+export interface RequestStateStorage {
+    // (undocumented)
+    getStore(): RequestStateScope | undefined;
+    // (undocumented)
+    run<T>(scope: RequestStateScope, callback: () => T): T;
+}
+
+// @public
 export function runWithCleanupScope<T>(scope: CleanupScope, run: () => T): T;
+
+// @public
+export function runWithRequestState<T>(callback: () => T): T;
 
 // @public
 export interface Selector<TValue, TKey = TValue> {
