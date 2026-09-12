@@ -16,12 +16,15 @@ export function setOxcServerStringUrlSafeHelperName(name: string): void {
   currentOxcServerStringUrlSafeHelperName = name;
 }
 
-export function emitOxcServerStringChildren(children: readonly JsxNodeIr[]): string {
+export function emitOxcServerStringChildren(
+  children: readonly JsxNodeIr[],
+  escapeHelperName = "_escapeHtml",
+): string {
   if (children.length === 0) {
     return '""';
   }
 
-  return children.map(emitOxcServerStringNode).join(" + ");
+  return children.map((child) => emitOxcServerStringNode(child, escapeHelperName)).join(" + ");
 }
 
 export interface OxcServerStreamEmitterNames {
@@ -31,6 +34,7 @@ export interface OxcServerStreamEmitterNames {
   renderValue: string;
   registerThunk: string;
   compatRenderToString: string;
+  escapeHtml: string;
   localBase: string;
 }
 
@@ -66,7 +70,7 @@ function emitOxcServerStreamNode(
   }
 
   if (node.kind === "expr") {
-    return `${indent}await ${names.renderValue}(${names.sink}, (${node.code}), _escapeHtml, 0, ${names.selectedValue}, ${names.selectedMultiple});`;
+    return `${indent}await ${names.renderValue}(${names.sink}, (${node.code}), ${names.escapeHtml}, 0, ${names.selectedValue}, ${names.selectedMultiple});`;
   }
 
   if (node.kind === "conditional") {
@@ -157,18 +161,18 @@ function emitOxcServerSelectionProps(
   return `Object.defineProperty(Object.defineProperty(${props}, Symbol.for("mreact.server.selected-value"), { value: ${names.selectedValue} }), Symbol.for("mreact.server.select-multiple"), { value: ${names.selectedMultiple} })`;
 }
 
-function emitOxcServerStringNode(node: JsxNodeIr): string {
+function emitOxcServerStringNode(node: JsxNodeIr, escapeHelperName: string): string {
   if (node.kind === "text") {
     return JSON.stringify(node.value);
   }
 
   if (node.kind === "expr") {
-    return `_escapeHtml(${node.code})`;
+    return `${escapeHelperName}(${node.code})`;
   }
 
   if (node.kind === "conditional") {
-    const whenTrue = emitOxcServerStringChildren(node.whenTrue);
-    const whenFalse = emitOxcServerStringChildren(node.whenFalse);
+    const whenTrue = emitOxcServerStringChildren(node.whenTrue, escapeHelperName);
+    const whenFalse = emitOxcServerStringChildren(node.whenFalse, escapeHelperName);
 
     return node.conditionValueName === undefined
       ? `((${node.conditionCode}) ? ${whenTrue} : ${whenFalse})`
@@ -177,7 +181,7 @@ function emitOxcServerStringNode(node: JsxNodeIr): string {
 
   if (node.kind === "list") {
     const parameters = emitOxcListParameters(node);
-    const valueExpression = emitOxcServerStringChildren(node.children);
+    const valueExpression = emitOxcServerStringChildren(node.children, escapeHelperName);
     if (node.bodyStatements === undefined || node.bodyStatements.length === 0) {
       return `(${node.itemsCode}).map((${parameters}) => ${valueExpression}).join("")`;
     }
@@ -186,11 +190,11 @@ function emitOxcServerStringNode(node: JsxNodeIr): string {
   }
 
   if (node.kind === "fragment") {
-    return emitOxcServerStringChildren(node.children);
+    return emitOxcServerStringChildren(node.children, escapeHelperName);
   }
 
   if (node.kind === "component") {
-    const props = emitOxcServerComponentProps(node.props, node.children);
+    const props = emitOxcServerComponentProps(node.props, node.children, escapeHelperName);
     if (node.runtime === "compat") {
       return `${oxcServerStringReactNodeRenderHelperPlaceholder}(${node.name}, ${props})`;
     }
@@ -202,7 +206,7 @@ function emitOxcServerStringNode(node: JsxNodeIr): string {
   }
 
   const attrs = node.attributes
-    .map((attr) => emitOxcServerAttribute(node.tagName, attr))
+    .map((attr) => emitOxcServerAttribute(node.tagName, attr, escapeHelperName))
     .join(" + ");
   const open =
     attrs === ""
@@ -212,12 +216,13 @@ function emitOxcServerStringNode(node: JsxNodeIr): string {
     return open;
   }
 
-  return `${open} + ${emitOxcServerStringChildren(node.children)} + ${JSON.stringify(`</${node.tagName}>`)}`;
+  return `${open} + ${emitOxcServerStringChildren(node.children, escapeHelperName)} + ${JSON.stringify(`</${node.tagName}>`)}`;
 }
 
 function emitOxcServerComponentProps(
   props: readonly ComponentPropIr[],
   children: readonly JsxNodeIr[],
+  escapeHelperName: string,
 ): string {
   const entries = props.map((prop) => {
     if (prop.kind === "spread-prop") {
@@ -225,20 +230,24 @@ function emitOxcServerComponentProps(
     }
 
     if (prop.kind === "render-prop") {
-      return `${emitOxcCompatObjectPropName(prop.name)}: ${emitOxcServerStringChildren(prop.children)}`;
+      return `${emitOxcCompatObjectPropName(prop.name)}: ${emitOxcServerStringChildren(prop.children, escapeHelperName)}`;
     }
 
     return `${emitOxcCompatObjectPropName(prop.name)}: (${prop.code})`;
   });
 
   if (children.length > 0) {
-    entries.push(`children: ${emitOxcServerStringChildren(children)}`);
+    entries.push(`children: ${emitOxcServerStringChildren(children, escapeHelperName)}`);
   }
 
   return `{ ${entries.join(", ")} }`;
 }
 
-function emitOxcServerAttribute(tagName: string, attr: AttributeIr): string {
+function emitOxcServerAttribute(
+  tagName: string,
+  attr: AttributeIr,
+  escapeHelperName = "_escapeHtml",
+): string {
   if (attr.kind === "spread-attr" || attr.kind === "event" || attr.kind === "dom-ref") {
     return '""';
   }
@@ -263,14 +272,14 @@ function emitOxcServerAttribute(tagName: string, attr: AttributeIr): string {
 
   if (attr.kind === "dynamic-attr") {
     if (isDangerousHtmlAttribute(htmlName)) {
-      return `(() => { const _value = (${attr.code}); if (typeof _value !== "object" || _value === null) return ""; try { const _descriptor = Object.getOwnPropertyDescriptor(_value, "__html"); if (_descriptor !== undefined && "value" in _descriptor && typeof _descriptor.value === "string") return ${JSON.stringify(` ${htmlName}="`)} + _escapeHtml(_descriptor.value) + ${JSON.stringify('"')}; return ""; } catch { return ""; } })()`;
+      return `(() => { const _value = (${attr.code}); if (typeof _value !== "object" || _value === null) return ""; try { const _descriptor = Object.getOwnPropertyDescriptor(_value, "__html"); if (_descriptor !== undefined && "value" in _descriptor && typeof _descriptor.value === "string") return ${JSON.stringify(` ${htmlName}="`)} + ${escapeHelperName}(_descriptor.value) + ${JSON.stringify('"')}; return ""; } catch { return ""; } })()`;
     }
 
     if (isUrlAttribute(htmlName)) {
-      return `(() => { const _value = (${attr.code}); if (_value == null || _value === false) return ""; const _checked = ${currentOxcServerStringUrlSafeHelperName}(${JSON.stringify(htmlName)}, _value === true ? "" : _value); return _checked === undefined ? "" : ${JSON.stringify(` ${htmlName}="`)} + _escapeHtml(_checked) + ${JSON.stringify('"')}; })()`;
+      return `(() => { const _value = (${attr.code}); if (_value == null || _value === false) return ""; const _checked = ${currentOxcServerStringUrlSafeHelperName}(${JSON.stringify(htmlName)}, _value === true ? "" : _value); return _checked === undefined ? "" : ${JSON.stringify(` ${htmlName}="`)} + ${escapeHelperName}(_checked) + ${JSON.stringify('"')}; })()`;
     }
 
-    return `${JSON.stringify(` ${htmlName}="`)} + _escapeHtml(${attr.code}) + ${JSON.stringify('"')}`;
+    return `${JSON.stringify(` ${htmlName}="`)} + ${escapeHelperName}(${attr.code}) + ${JSON.stringify('"')}`;
   }
 
   return '""';

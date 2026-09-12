@@ -2041,6 +2041,10 @@ async function buildPublicAssetManifest(
 }
 
 const COMPAT_VENDOR_PLACEHOLDER_IMPORT_PATTERN = /(["'])mreact-compat-vendor:([\w-]+)\1/gu;
+const SERVER_RENDER_VALUE_PLACEHOLDER_IMPORT_PATTERN =
+  /(\bfrom\s*)(["'])mreact-server-render-value:internal\2/gu;
+const SERVER_RENDER_VALUE_PLACEHOLDER_USAGE_PATTERN =
+  /\bfrom\s*["']mreact-server-render-value:internal["']/u;
 
 function rewriteCompatVendorPlaceholderImports(code: string): string {
   // Module files live in server-modules/code/, vendor chunks in
@@ -2050,7 +2054,11 @@ function rewriteCompatVendorPlaceholderImports(code: string): string {
       COMPAT_VENDOR_PLACEHOLDER_IMPORT_PATTERN,
       (_match, quote: string, entry: string) => `${quote}../chunks/compat.${entry}.mjs${quote}`,
     )
-    .replaceAll(SERVER_RENDER_VALUE_PLACEHOLDER, "../chunks/server-render-value-internal.mjs");
+    .replace(
+      SERVER_RENDER_VALUE_PLACEHOLDER_IMPORT_PATTERN,
+      (_match, from: string, quote: string) =>
+        `${from}${quote}../chunks/server-render-value-internal.mjs${quote}`,
+    );
 }
 
 function collectCompatVendorEntryUsage(
@@ -2188,7 +2196,7 @@ async function writeServerModuleArtifactFiles(
   if (
     artifactEntries.some(([, artifact]) =>
       [artifact.string, artifact.stream].some((output) =>
-        output?.bundleCode?.includes(SERVER_RENDER_VALUE_PLACEHOLDER),
+        SERVER_RENDER_VALUE_PLACEHOLDER_USAGE_PATTERN.test(output?.bundleCode ?? ""),
       ),
     )
   ) {

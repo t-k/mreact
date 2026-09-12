@@ -122,7 +122,17 @@ export function lowerOxcNestedJsxExpression(
                   serverRenderValueWrapper,
                   renderValueMode === "collection",
                 )
-              : lowerOxcServerStringExpression(code, node, componentNames, target, diagnostics)
+              : lowerOxcServerStringExpression(
+                  code,
+                  node,
+                  componentNames,
+                  target,
+                  diagnostics,
+                  new Map(),
+                  serverRenderValueWrapper === undefined
+                    ? undefined
+                    : `${serverRenderValueWrapper}$escape`,
+                )
             : kind === "jsx"
               ? lowerOxcReactiveValueExpression(code, node, componentNames)
               : emitOxcServerRenderValueCall(
@@ -197,6 +207,7 @@ function lowerOxcServerStreamExpression(
     renderValue: `${serverRenderValueWrapper}$render`,
     registerThunk: `${serverRenderValueWrapper}$thunk`,
     compatRenderToString: `${serverRenderValueWrapper}$compat`,
+    escapeHtml: `${serverRenderValueWrapper}$escape`,
     localBase,
   });
   return selfThunk
@@ -508,6 +519,7 @@ export function lowerOxcServerStringExpression(
   target: CompileTarget,
   diagnostics: Diagnostic[],
   compatRuntimeReferences: ReadonlyMap<string, ClientReferenceIr> = new Map(),
+  escapeHelperName?: string,
 ): string | undefined {
   const children = analyzeOxcExpressionChild(
     code,
@@ -526,7 +538,7 @@ export function lowerOxcServerStringExpression(
     }
   }
 
-  return emitOxcServerStringChildren(children);
+  return emitOxcServerStringChildren(children, escapeHelperName);
 }
 
 function createOxcNestedChildAnalysisContext(

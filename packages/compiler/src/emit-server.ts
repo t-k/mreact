@@ -251,20 +251,18 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
       );
       return component.serverRenderValuePlaceholder === undefined
         ? emitted
-        : emitted.replaceAll(
-            component.serverRenderValuePlaceholder,
-            markServerRenderValueHelperName,
-          );
+        : emitted
+            .replaceAll(`${component.serverRenderValuePlaceholder}$escape`, escapeHelperName)
+            .replaceAll(component.serverRenderValuePlaceholder, markServerRenderValueHelperName);
     })
     .join("\n\n");
   const rawModuleStatements = emitModuleStatements(ir);
   const moduleStatements =
     ir.serverRenderValuePlaceholder === undefined
       ? rawModuleStatements
-      : rawModuleStatements.replaceAll(
-          ir.serverRenderValuePlaceholder,
-          markServerRenderValueHelperName,
-        );
+      : rawModuleStatements
+          .replaceAll(`${ir.serverRenderValuePlaceholder}$escape`, escapeHelperName)
+          .replaceAll(ir.serverRenderValuePlaceholder, markServerRenderValueHelperName);
   const emittedServerCode = `${moduleStatements}\n${components}`;
   // Tree-shake the URL-safety helper when it is not referenced by any
   // component output. Same shape as the existing escapeImport check.
@@ -819,37 +817,38 @@ function collectHtmlStatements(
           undefined,
           false,
         );
-        const fallbackHtml = node.clientReference?.compatSsr === true
-          ? `(_childrenHtml, _identifierPrefix, _props) => ${reactNodeRenderHelperName}(${node.name}, _props, { identifierPrefix: _identifierPrefix, stringResult: "text" })`
-          : hasComponentFallback
-          ? `(_childrenHtml) => ${emitComponentCallExpression(
-              node.name,
-              emitPropsObject(
-                node.props,
-                node.children,
-                escapeHelperName,
-                escapeBatchHelperName,
-                asyncComponentNames,
-                dynamicAttributes,
-                contextProviderHelperName,
-                contextConsumerHelperName,
-                reactNodeRenderHelperName,
-                node.name,
-                "_childrenHtml",
-                false,
-              ),
-              asyncComponentNames,
-            )}`
-          : emitHtmlExpressionFromChildren(
-              node.children,
-              escapeHelperName,
-              escapeBatchHelperName,
-              asyncComponentNames,
-              dynamicAttributes,
-              contextProviderHelperName,
-              contextConsumerHelperName,
-              reactNodeRenderHelperName,
-            );
+        const fallbackHtml =
+          node.clientReference?.compatSsr === true
+            ? `(_childrenHtml, _identifierPrefix, _props) => ${reactNodeRenderHelperName}(${node.name}, _props, { identifierPrefix: _identifierPrefix, stringResult: "text" })`
+            : hasComponentFallback
+              ? `(_childrenHtml) => ${emitComponentCallExpression(
+                  node.name,
+                  emitPropsObject(
+                    node.props,
+                    node.children,
+                    escapeHelperName,
+                    escapeBatchHelperName,
+                    asyncComponentNames,
+                    dynamicAttributes,
+                    contextProviderHelperName,
+                    contextConsumerHelperName,
+                    reactNodeRenderHelperName,
+                    node.name,
+                    "_childrenHtml",
+                    false,
+                  ),
+                  asyncComponentNames,
+                )}`
+              : emitHtmlExpressionFromChildren(
+                  node.children,
+                  escapeHelperName,
+                  escapeBatchHelperName,
+                  asyncComponentNames,
+                  dynamicAttributes,
+                  contextProviderHelperName,
+                  contextConsumerHelperName,
+                  reactNodeRenderHelperName,
+                );
         const originalChildrenHtml = hasComponentFallback
           ? emitHtmlExpressionFromChildren(
               node.children,
@@ -3577,7 +3576,10 @@ function containsReactNodeRender(node: JsxNodeIr): boolean {
   }
 
   if (node.kind === "component") {
-    if (node.clientReference?.compatSsr === true || (node.runtime === "compat" && !isClientBoundaryPlaceholder(node))) {
+    if (
+      node.clientReference?.compatSsr === true ||
+      (node.runtime === "compat" && !isClientBoundaryPlaceholder(node))
+    ) {
       return true;
     }
 

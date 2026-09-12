@@ -3,7 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { buildApp } from "../src/build.js";
-import { rewriteCompatVendorPlaceholderImportsForRunner } from "../src/module-runner.js";
+import {
+  SERVER_RENDER_VALUE_PLACEHOLDER,
+  rewriteCompatVendorPlaceholderImportsForRunner,
+} from "../src/module-runner.js";
 import { startServer } from "../src/serve.js";
 
 // The react-compat server runtime must be emitted once as shared vendor
@@ -140,7 +143,8 @@ async function createNativeServerRenderValueApp(): Promise<{ appDir: string; out
 }
 
 export default function Page() {
-  return <main>{["${label}"].flatMap(() => [<InlineText />, "\\n"])}</main>;
+  const literal = "${SERVER_RENDER_VALUE_PLACEHOLDER}";
+  return <main>{["${label}"].flatMap(() => [<InlineText />, "\\n"])}<code>{literal}</code></main>;
 }
 `;
   await writeFile(join(appDir, "page.tsx"), page("one"));
@@ -165,6 +169,23 @@ describe("compat server vendor chunks", () => {
     expect(rewritten).toContain('from "file://');
     expect(rewritten).not.toContain("mreact-compat-vendor:");
     expect(rewritten).not.toContain('from "@reckona/mreact-compat"');
+  });
+
+  test("rewrites only exact server render-value import specifiers", () => {
+    const code = `import { isServerRenderValue } from "${SERVER_RENDER_VALUE_PLACEHOLDER}";
+export const exact = "${SERVER_RENDER_VALUE_PLACEHOLDER}";
+export const prefixed = "prefix:${SERVER_RENDER_VALUE_PLACEHOLDER}";
+export const template = \`${SERVER_RENDER_VALUE_PLACEHOLDER}\`;
+// ${SERVER_RENDER_VALUE_PLACEHOLDER}
+`;
+    const rewritten = rewriteCompatVendorPlaceholderImportsForRunner(code);
+
+    expect(rewritten).toContain('import { isServerRenderValue } from "file://');
+    expect(rewritten).toContain(`export const exact = "${SERVER_RENDER_VALUE_PLACEHOLDER}";`);
+    expect(rewritten).toContain(
+      `export const prefixed = "prefix:${SERVER_RENDER_VALUE_PLACEHOLDER}";`,
+    );
+    expect(rewritten).toContain(`// ${SERVER_RENDER_VALUE_PLACEHOLDER}`);
   });
 
   test("emits shared compat chunks instead of inlining the runtime per route", async () => {
@@ -272,8 +293,12 @@ describe("compat server vendor chunks", () => {
     try {
       const first = await (await fetch(`${server.url}/`)).text();
       const second = await (await fetch(`${server.url}/second`)).text();
-      expect(first).toContain("<main><strong>one</strong>\n</main>");
-      expect(second).toContain("<main><strong>two</strong>\n</main>");
+      expect(first).toContain(
+        `<main><strong>one</strong>\n<code>${SERVER_RENDER_VALUE_PLACEHOLDER}</code></main>`,
+      );
+      expect(second).toContain(
+        `<main><strong>two</strong>\n<code>${SERVER_RENDER_VALUE_PLACEHOLDER}</code></main>`,
+      );
       expect(first).not.toContain("function InlineText");
       expect(second).not.toContain("function InlineText");
     } finally {

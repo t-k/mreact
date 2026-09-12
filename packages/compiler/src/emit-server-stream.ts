@@ -268,6 +268,7 @@ export function emitServerStream(
             currentMarkServerRenderThunkHelperName,
             renderServerValueHelperName,
             compatRenderToStringHelperName,
+            escapeHelperName,
           );
     })
     .join("\n\n");
@@ -282,6 +283,7 @@ export function emitServerStream(
           currentMarkServerRenderThunkHelperName,
           renderServerValueHelperName,
           compatRenderToStringHelperName,
+          escapeHelperName,
         );
   const emittedServerCode = `${moduleStatements}\n${components}`;
   // Emit batch escape import only when the helper is actually referenced
@@ -397,11 +399,13 @@ function replaceServerRenderValuePlaceholders(
   registerThunkName: string,
   renderValueName: string,
   compatRenderToStringName: string,
+  escapeHelperName: string,
 ): string {
   return code
     .replaceAll(`${placeholder}$render`, renderValueName)
     .replaceAll(`${placeholder}$thunk`, registerThunkName)
     .replaceAll(`${placeholder}$compat`, compatRenderToStringName)
+    .replaceAll(`${placeholder}$escape`, escapeHelperName)
     .replaceAll(placeholder, registerValueName);
 }
 

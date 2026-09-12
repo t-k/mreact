@@ -436,6 +436,20 @@ export function App(props) {
     );
   });
 
+  test("nested stream renderers use the collision-safe escape helper", async () => {
+    await expectServerPairHtml(
+      `const _escapeHtml = (value) => String(value);
+function InlineText() {
+  return <strong>ok</strong>;
+}
+export function App(props) {
+  return <main>{[<div><InlineText /><span>{props.suffix}</span></div>]}</main>;
+}`,
+      "<main><div><strong>ok</strong><span>&lt;script&gt;unsafe&lt;/script&gt;</span></div></main>",
+      { suffix: "<script>unsafe</script>" },
+    );
+  });
+
   test("nested stream renderers preserve select context for component leaves", async () => {
     const compiled = compileServerPair(`function SelectOption(props) {
   return <option value={props.value}>{props.value}</option>;

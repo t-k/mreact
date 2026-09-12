@@ -347,6 +347,8 @@ export function resolveCompatVendorEntryFiles(resolveDir?: string): Map<string, 
 }
 
 const compatVendorPlaceholderImportPattern = /(["'])mreact-compat-vendor:([\w-]+)\1/gu;
+const serverRenderValuePlaceholderImportPattern =
+  /(\bfrom\s*)(["'])mreact-server-render-value:internal\2/gu;
 
 export function rewriteCompatVendorPlaceholderImportsForRunner(
   code: string,
@@ -366,7 +368,11 @@ export function rewriteCompatVendorPlaceholderImportsForRunner(
   }
   if (rewritten.includes(SERVER_RENDER_VALUE_PLACEHOLDER)) {
     const file = resolveServerRenderValueEntryFile(resolveDir);
-    rewritten = rewritten.replaceAll(SERVER_RENDER_VALUE_PLACEHOLDER, pathToFileURL(file).href);
+    rewritten = rewritten.replace(
+      serverRenderValuePlaceholderImportPattern,
+      (_source, from: string, quote: string) =>
+        `${from}${quote}${pathToFileURL(file).href}${quote}`,
+    );
   }
   return rewritten;
 }
