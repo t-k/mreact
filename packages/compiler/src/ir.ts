@@ -62,6 +62,7 @@ export interface JsxElementIr {
 export interface ComponentRefIr {
   kind: "component";
   name: string;
+  calleeCode?: string;
   loc?: SourceLocation;
   runtime?: "compat";
   async?: boolean;

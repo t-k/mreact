@@ -107,7 +107,10 @@ export async function runClientComponent(code: string): Promise<Node> {
   return node;
 }
 
-export function compileClientModule(code: string): ComponentExports {
+export function compileClientModule(
+  code: string,
+  imports: Record<string, unknown> = {},
+): ComponentExports {
   const exports = extractFunctionExports(code);
   const runnableCode = stripTypeScriptWithOxc(stripFunctionExports(stripImports(code)));
   const returnEntries = exports
@@ -118,6 +121,7 @@ export function compileClientModule(code: string): ComponentExports {
     ...extractClientInternalRuntimeEntries(code),
     ...extractReactiveCoreRuntimeEntries(code),
     ...extractRouterLinkRuntimeEntries(code),
+    ...Object.entries(imports).map(([localName, value]) => ({ localName, value })),
   ];
 
   return new Function(

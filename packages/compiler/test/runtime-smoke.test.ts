@@ -3641,7 +3641,7 @@ export function App() {
     expect(node.querySelector("h1")?.textContent).toBe("Success");
   });
 
-  test("client transform leaves unsafe and mutable reactive snapshots on the tracked fallback", () => {
+  test("client transform caches helper derivations while preserving mutable and mutating snapshots", () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";
 
@@ -3664,11 +3664,10 @@ export function App() {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain("let mutable = active.get();");
-    expect(output.code).toContain("const called = normalize(active.get());");
-    expect(output.code).toContain("const snapshot = active.get();");
-    expect(output.code).toContain("const chained = normalize(snapshot);");
+    expect(output.code).toContain("deferredComputed(() => (normalize(active.get())))");
+    expect(output.code).toContain("const snapshot = untrack(() => (active.get()));");
+    expect(output.code).toContain("deferredComputed(() => (normalize((active.get()))))");
     expect(output.code).toContain("const sorted = rows.get().sort(");
-    expect(output.code).not.toContain("untrack");
   });
 
   test("client transform keeps imperative safe alias uses on the tracked fallback", () => {

@@ -217,9 +217,14 @@ export function analyzeOxcJsxNode(
       : undefined;
     const componentLoc = getOxcLocation(code, openingElement.name);
 
-    return {
+    const calleeCode =
+      context.target === "client" && bodyStatementJsx !== "compat-object"
+        ? context.reactiveAliasBindings?.get(tagName)
+        : undefined;
+    const component: Extract<JsxNodeIr, { kind: "component" }> = {
       kind: "component",
       name: tagName,
+      ...(calleeCode === undefined ? {} : { calleeCode }),
       ...(componentLoc === undefined ? {} : { loc: componentLoc }),
       ...(keyCode === undefined ? {} : { keyCode }),
       props: attributes
@@ -299,6 +304,14 @@ export function analyzeOxcJsxNode(
             )
           : [],
     };
+    return calleeCode === undefined
+      ? component
+      : {
+          kind: "conditional",
+          conditionCode: calleeCode,
+          whenTrue: [component],
+          whenFalse: [],
+        };
   }
 
   if (/^[A-Z]/.test(tagName)) {

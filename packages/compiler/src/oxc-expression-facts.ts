@@ -348,6 +348,7 @@ function collectOxcWrittenBindingName(target: Record<string, unknown>, names: Se
 
 /** Groups the module-wide inputs required to resolve expression facts inside a component. */
 export interface OxcModuleExpressionFacts {
+  reactiveSetupCallNames?: ReadonlySet<string>;
   nativeCellFactoryNames: ReadonlySet<string>;
   moduleNativeCellBindings: ReadonlyMap<string, ResolvedBindingIr>;
   mutatedBindingNames: ReadonlySet<string>;
@@ -360,8 +361,26 @@ export function collectOxcModuleExpressionFacts(
   statements: readonly unknown[],
 ): OxcModuleExpressionFacts {
   const nativeCellFactoryNames = collectOxcNativeCellFactoryNames(statements);
+  const reactiveSetupCallNames = new Set<string>();
+  for (const statement of statements) {
+    const object = readObject(statement);
+    if (
+      object.type !== "ImportDeclaration" ||
+      readObject(object.source).value !== NATIVE_CELL_MODULE
+    )
+      continue;
+    for (const entry of readArray(object.specifiers)) {
+      const specifier = readObject(entry);
+      const local = readObject(specifier.local);
+      if (typeof local.name !== "string") continue;
+      reactiveSetupCallNames.add(
+        specifier.type === "ImportNamespaceSpecifier" ? `${local.name}.*` : local.name,
+      );
+    }
+  }
 
   return {
+    reactiveSetupCallNames,
     nativeCellFactoryNames,
     moduleNativeCellBindings:
       nativeCellFactoryNames.size === 0

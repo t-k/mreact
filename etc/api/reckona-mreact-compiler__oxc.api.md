@@ -197,6 +197,8 @@ export interface ComponentRefIr {
     // (undocumented)
     async?: boolean;
     // (undocumented)
+    calleeCode?: string;
+    // (undocumented)
     children: JsxNodeIr[];
     // (undocumented)
     clientReference?: ClientReferenceIr;

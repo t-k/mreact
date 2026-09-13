@@ -1913,11 +1913,22 @@ function analyzeOxcFunctionLikeComponent(
       ? new Set([...componentNames].filter((componentName) => componentName !== name))
       : componentNames;
   const unshadowedBodyComponentNames = collectOxcUnshadowedNames(functionLike, bodyComponentNames);
+  const componentPropBindings = collectOxcComponentPropBindings(
+    functionLike.params,
+    body,
+    parameterPropAliases,
+  );
+  const memoizedAliases = new Map<string, { name: string; expression: string }>();
   const reactiveAliasBindings = collectOxcReactiveReadAliases(
     code,
     body,
     reactiveDerivedFunctionNames,
     target === "client",
+    target === "client" && bodyStatementJsx !== "compat-object"
+      ? componentPropBindings.objectNames
+      : undefined,
+    target === "client" && bodyStatementJsx !== "compat-object" ? memoizedAliases : undefined,
+    moduleExpressionFacts?.reactiveSetupCallNames,
   );
   const componentBodyStatements = body.filter(
     (bodyStatement) =>
@@ -1972,17 +1983,13 @@ function analyzeOxcFunctionLikeComponent(
           reactiveAliasBindings,
           compilerOwnedReactiveAliasBindings,
           loweredDeclarators,
+          memoizedAliases,
         ) ??
           loweredStatement ??
           formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx))
       : (loweredStatement ?? formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx));
   });
   const componentBodyBindings = collectOxcVariableInitializers(body);
-  const componentPropBindings = collectOxcComponentPropBindings(
-    functionLike.params,
-    body,
-    parameterPropAliases,
-  );
   const componentConstBindings = new Set([
     ...[...moduleConstBindings].filter(
       (binding) => !componentBodyBindings.has(binding) && !parameters.includes(binding),

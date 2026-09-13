@@ -152,6 +152,21 @@ Prefer using JSX for UI updates. Reach for `effect()` when you need to connect r
 
 Native components mounted through JSX run their setup without subscribing the surrounding render scope to incidental reads. A synchronous helper called from a component body can read a cell without causing the parent conditional to recreate that component when the cell changes. JSX bindings and explicit effects still track their own reads, and changing a parent condition can unmount and mount the component again. This isolation applies to JSX component calls; an explicit JavaScript call such as `effect(() => App())` retains ordinary effect tracking.
 
+Component-body `const` values derived from cell reads or props remain reactive when used in JSX. This includes chains through helper calls, values passed to child components, and locally selected component tags. The compiler shares helper results through a computed value, so multiple JSX consumers reuse the same result until its dependencies change. Keep derivation helpers free of side effects; use `effect()` for imperative work. Creating a local `cell(props.initialValue)` still initializes that state once per mount.
+
+```tsx
+function SelectedPhoto(props) {
+  const id = selectedPhotoId.get();
+  const item = findPhoto(id);
+  const caption = props.caption;
+  return <PhotoViewer item={item} caption={caption} />;
+}
+```
+
+Changing `selectedPhotoId` updates the viewer's `item` without rerunning `SelectedPhoto` setup. Reading a prop into a `const` in `PhotoViewer` also preserves updates in its JSX. Mutable locals and explicitly untracked reads remain snapshots; use `computed()` when a reusable reactive value is needed outside compiler-managed JSX.
+
+For a resource that must be created once during setup, make that snapshot explicit: `const resource = untrack(() => createResource(props.id))`. The compiler cannot infer whether an application helper allocates a resource or computes a value; a helper called with reactive inputs must follow the derivation contract unless its read is explicitly untracked.
+
 Use the existing `untrack()` helper when an imperative operation needs a snapshot inside an otherwise tracked scope:
 
 ```ts

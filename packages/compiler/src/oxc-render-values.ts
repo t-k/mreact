@@ -17,6 +17,11 @@ export const OXC_COMPUTED_REACTIVE_ALIAS_PLACEHOLDER = "__mreactComputedReactive
 
 export const OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER = "__mreactUntrackReactiveAlias";
 
+export interface OxcMemoizedReactiveAlias {
+  name: string;
+  expression: string;
+}
+
 export function collectOxcBodyJsxBindingNames(
   statements: readonly unknown[],
   jsxReturnFunctionNames: ReadonlySet<string> = new Set(),
@@ -54,8 +59,11 @@ export function collectOxcReactiveReadAliases(
   statements: readonly unknown[],
   reactiveDerivedFunctions: ReadonlySet<string> = new Set(),
   memoizeComputedKeys = false,
+  propsNames: ReadonlySet<string> = new Set(),
+  memoizedAliases?: Map<string, OxcMemoizedReactiveAlias>,
+  setupCallNames: ReadonlySet<string> = new Set(),
 ): Map<string, string> {
-  const aliases = new Map<string, string>();
+  const aliases = new Map<string, string>([...propsNames].map((name) => [name, name]));
 
   for (const statement of statements) {
     const object = readObject(statement);
@@ -70,7 +78,14 @@ export function collectOxcReactiveReadAliases(
       const initializer = unwrapOxcParentheses(readObject(declaration.init));
 
       if (
-        !isOxcReactiveAliasExpression(initializer, aliases) &&
+        initializer.type === "CallExpression" &&
+        isOxcSetupCall(readObject(initializer.callee), setupCallNames)
+      ) {
+        continue;
+      }
+
+      if (
+        !isOxcReactiveAliasExpression(initializer, aliases, memoizedAliases !== undefined) &&
         !isOxcReactiveDerivedAliasExpression(initializer, reactiveDerivedFunctions)
       ) {
         continue;
@@ -80,23 +95,59 @@ export function collectOxcReactiveReadAliases(
         rewriteOxcReactiveAliasExpressionCode(code, initializer, aliases) ??
         readSource(code, initializer);
 
+      let aliasCode = initializerCode;
+      if (
+        memoizedAliases !== undefined &&
+        (containsOxcDerivationCall(initializer) || !/\.\s*get\s*\(/.test(initializerCode))
+      ) {
+        let name = `__mreactDerived_${id.start}`;
+        while (code.includes(name)) name += "$";
+        memoizedAliases.set(reactiveAliasKey(id), { name, expression: initializerCode });
+        aliasCode = `${name}.get()`;
+      }
       if (typeof id.name === "string") {
-        aliases.set(id.name, initializerCode);
+        aliases.set(id.name, aliasCode);
         continue;
       }
 
       for (const [name, expressionCode] of collectOxcPatternReactiveAliases(
         code,
         id,
-        initializerCode,
+        aliasCode,
         memoizeComputedKeys,
+        memoizedAliases?.has(reactiveAliasKey(id)) === true,
       )) {
         aliases.set(name, expressionCode);
       }
     }
   }
 
+  for (const name of propsNames) aliases.delete(name);
   return aliases;
+}
+
+function reactiveAliasKey(id: Record<string, unknown>): string {
+  return typeof id.name === "string" ? id.name : `pattern:${id.start}`;
+}
+
+function isOxcSetupCall(callee: Record<string, unknown>, names: ReadonlySet<string>): boolean {
+  if (callee.type === "Identifier") return names.has(String(callee.name));
+  const object = readObject(callee.object);
+  return (
+    callee.type === "MemberExpression" &&
+    object.type === "Identifier" &&
+    names.has(`${object.name}.*`)
+  );
+}
+
+function containsOxcDerivationCall(node: Record<string, unknown>): boolean {
+  if (isOxcFunctionNode(node)) return false;
+  if (node.type === "CallExpression" && !isOxcReactiveReadExpression(node)) return true;
+  return Object.values(node).some((value) =>
+    Array.isArray(value)
+      ? value.some((item) => containsOxcDerivationCall(readObject(item)))
+      : typeof value === "object" && value !== null && containsOxcDerivationCall(readObject(value)),
+  );
 }
 
 export function collectOxcReactiveJsxBindingNames(
@@ -160,6 +211,7 @@ export function formatOxcUntrackedReactiveAliasDeclaration(
   aliases: ReadonlyMap<string, string>,
   ownedAliases: ReadonlyMap<string, string> = aliases,
   loweredDeclarators?: ReadonlyMap<unknown, string>,
+  memoizedAliases?: ReadonlyMap<string, OxcMemoizedReactiveAlias>,
 ): string | undefined {
   const statement = readObject(statementValue);
 
@@ -184,6 +236,36 @@ export function formatOxcUntrackedReactiveAliasDeclaration(
     const initializer = unwrapOxcParentheses(readObject(declaration.init));
     const start = readNumber(initializer.start);
     const end = readNumber(initializer.end);
+
+    const memoized = memoizedAliases?.get(reactiveAliasKey(id));
+    if (
+      memoized !== undefined &&
+      typeof id.name === "string" &&
+      start !== undefined &&
+      end !== undefined
+    ) {
+      const owned = ownedAliases.has(id.name);
+      replacements.push({
+        start,
+        end,
+        name: id.name,
+        text: owned
+          ? `${OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER}(() => ${memoized.name}.get())`
+          : `${memoized.name}.get()`,
+      });
+      // Declare immediately before this declarator so multi-declaration consts
+      // retain left-to-right initialization and can consume earlier bindings.
+      const declarationStart = readNumber(declaration.start);
+      if (declarationStart !== undefined) {
+        replacements.push({
+          start: declarationStart,
+          end: declarationStart,
+          name: memoized.name,
+          text: `${memoized.name} = ${OXC_COMPUTED_REACTIVE_ALIAS_PLACEHOLDER}(() => (${memoized.expression})), `,
+        });
+      }
+      continue;
+    }
 
     const loweredDeclarator = loweredDeclarators?.get(declarationValue);
     if (loweredDeclarator !== undefined) {
@@ -212,7 +294,7 @@ export function formatOxcUntrackedReactiveAliasDeclaration(
       typeof id.name === "string"
         ? ownedAliases.has(id.name)
         : collectOxcReactiveAliasBindingNames(id, aliases).every((name) => ownedAliases.has(name));
-    if (containsArrayPattern(id)) {
+    if (containsArrayPattern(id) || memoized !== undefined) {
       const names = collectOxcReactiveAliasBindingNames(id, aliases);
       const cacheName = patternBindingName(readNumber(id.start) ?? start);
       const keys = new Map<number, Record<string, unknown>>();
@@ -239,6 +321,7 @@ export function formatOxcUntrackedReactiveAliasDeclaration(
       }
 
       const initializerCode =
+        memoized?.expression ??
         rewriteOxcReactiveAliasExpressionCode(code, initializer, aliases) ??
         readSource(code, initializer);
       patternDeclarations.push(
@@ -381,10 +464,11 @@ function collectOxcPatternReactiveAliases(
   pattern: Record<string, unknown>,
   initializerCode: string,
   memoizeComputedKeys: boolean,
+  memoizePattern = false,
 ): Map<string, string> {
   const aliases = new Map<string, string>();
 
-  if (memoizeComputedKeys && containsArrayPattern(pattern)) {
+  if (memoizeComputedKeys && (containsArrayPattern(pattern) || memoizePattern)) {
     const cacheName = patternBindingName(readNumber(pattern.start) ?? 0);
     const names = new Set<string>();
     collectOxcBindingNames(pattern, names);
@@ -1208,8 +1292,9 @@ function isOxcReactiveReadExpression(expression: Record<string, unknown>): boole
 function isOxcReactiveAliasExpression(
   expression: Record<string, unknown>,
   aliases: ReadonlyMap<string, string> = new Map(),
+  allowCalls = false,
 ): boolean {
-  const state = analyzeOxcReactiveAliasExpression(expression, aliases);
+  const state = analyzeOxcReactiveAliasExpression(expression, aliases, allowCalls);
   return state.safe && state.reactive;
 }
 
@@ -1396,6 +1481,7 @@ function isLikelyMutatingMethodName(name: string): boolean {
 function analyzeOxcReactiveAliasExpression(
   expression: Record<string, unknown>,
   aliases: ReadonlyMap<string, string> = new Map(),
+  allowCalls = false,
 ): ReactiveAliasExpressionState {
   const unwrappedExpression = unwrapOxcParentheses(expression);
 
@@ -1415,8 +1501,31 @@ function analyzeOxcReactiveAliasExpression(
     return { reactive: true, safe: true };
   }
 
+  if (allowCalls && unwrappedExpression.type === "CallExpression") {
+    const callee = readObject(unwrappedExpression.callee);
+    const property = readObject(callee.property);
+    if (
+      (callee.type === "Identifier" && callee.name === "untrack") ||
+      (callee.type === "MemberExpression" &&
+        (callee.computed === true ||
+          (typeof property.name === "string" && isLikelyMutatingMethodName(property.name))))
+    ) {
+      return { reactive: false, safe: false };
+    }
+    return mergeReactiveAliasStates([
+      analyzeOxcReactiveAliasExpression(callee, aliases, allowCalls),
+      ...readArray(unwrappedExpression.arguments).map((argument) =>
+        analyzeOxcReactiveAliasExpression(readObject(argument), aliases, allowCalls),
+      ),
+    ]);
+  }
+
   if (unwrappedExpression.type === "ChainExpression") {
-    return analyzeOxcReactiveAliasExpression(readObject(unwrappedExpression.expression), aliases);
+    return analyzeOxcReactiveAliasExpression(
+      readObject(unwrappedExpression.expression),
+      aliases,
+      allowCalls,
+    );
   }
 
   if (
@@ -1426,17 +1535,26 @@ function analyzeOxcReactiveAliasExpression(
     unwrappedExpression.type === "TSInstantiationExpression" ||
     unwrappedExpression.type === "TypeCastExpression"
   ) {
-    return analyzeOxcReactiveAliasExpression(readObject(unwrappedExpression.expression), aliases);
+    return analyzeOxcReactiveAliasExpression(
+      readObject(unwrappedExpression.expression),
+      aliases,
+      allowCalls,
+    );
   }
 
   if (unwrappedExpression.type === "MemberExpression") {
     const objectState = analyzeOxcReactiveAliasExpression(
       readObject(unwrappedExpression.object),
       aliases,
+      allowCalls,
     );
     const propertyState =
       unwrappedExpression.computed === true
-        ? analyzeOxcReactiveAliasExpression(readObject(unwrappedExpression.property), aliases)
+        ? analyzeOxcReactiveAliasExpression(
+            readObject(unwrappedExpression.property),
+            aliases,
+            allowCalls,
+          )
         : { reactive: false, safe: true };
 
     return {
@@ -1446,7 +1564,11 @@ function analyzeOxcReactiveAliasExpression(
   }
 
   if (unwrappedExpression.type === "UnaryExpression") {
-    return analyzeOxcReactiveAliasExpression(readObject(unwrappedExpression.argument), aliases);
+    return analyzeOxcReactiveAliasExpression(
+      readObject(unwrappedExpression.argument),
+      aliases,
+      allowCalls,
+    );
   }
 
   if (
@@ -1456,10 +1578,12 @@ function analyzeOxcReactiveAliasExpression(
     const leftState = analyzeOxcReactiveAliasExpression(
       readObject(unwrappedExpression.left),
       aliases,
+      allowCalls,
     );
     const rightState = analyzeOxcReactiveAliasExpression(
       readObject(unwrappedExpression.right),
       aliases,
+      allowCalls,
     );
 
     return {
@@ -1472,14 +1596,17 @@ function analyzeOxcReactiveAliasExpression(
     const testState = analyzeOxcReactiveAliasExpression(
       readObject(unwrappedExpression.test),
       aliases,
+      allowCalls,
     );
     const consequentState = analyzeOxcReactiveAliasExpression(
       readObject(unwrappedExpression.consequent),
       aliases,
+      allowCalls,
     );
     const alternateState = analyzeOxcReactiveAliasExpression(
       readObject(unwrappedExpression.alternate),
       aliases,
+      allowCalls,
     );
 
     return {

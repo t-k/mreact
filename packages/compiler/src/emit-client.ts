@@ -78,11 +78,6 @@ function emitClientModule(ir: ModuleIr, options: { dev?: boolean; filename?: str
       )
       .map((component) => component.name),
   );
-  const parentTrackedComponents = new Set(
-    ir.components
-      .filter(componentBodyReadFeedsRenderedTree)
-      .map((component) => component.name),
-  );
   const components = ir.components
     .map((component) =>
       emitComponent(
@@ -92,7 +87,6 @@ function emitClientModule(ir: ModuleIr, options: { dev?: boolean; filename?: str
         clientBoundaryHelperName,
         inlineMemoComponents,
         nonNullishComponents,
-        parentTrackedComponents,
         options,
       ),
     )
@@ -542,7 +536,6 @@ function emitComponent(
   clientBoundaryHelperName: string | undefined,
   inlineMemoComponents: ReadonlyMap<string, CompatInlineMemo>,
   nonNullishComponents: ReadonlySet<string>,
-  parentTrackedComponents: ReadonlySet<string>,
   options: { dev?: boolean; filename?: string },
 ): string {
   const templateName = moduleAllocator("_tmpl_" + component.name, component.bindingNames);
@@ -572,7 +565,6 @@ function emitComponent(
       clientBoundaryHelperName,
       inlineMemoComponents,
       nonNullishComponents,
-      parentTrackedComponents,
       debugLabel,
       ownerDeclarations: [],
       listBindingCaches: new Map(),
@@ -585,6 +577,7 @@ function emitComponent(
       component.root.clientReference === undefined
         ? undefined
         : { moduleId: component.root.clientReference.moduleId, name: component.root.name },
+      component.root.calleeCode,
     );
     return [
       `${functionKeyword} ${component.name}(${parameters}) {`,
@@ -603,7 +596,6 @@ function emitComponent(
       clientBoundaryHelperName,
       inlineMemoComponents,
       nonNullishComponents,
-      parentTrackedComponents,
       debugLabel,
       ownerDeclarations: [],
       listBindingCaches: new Map(),
@@ -635,7 +627,6 @@ function emitComponent(
     clientBoundaryHelperName,
     inlineMemoComponents,
     nonNullishComponents,
-    parentTrackedComponents,
     debugLabel,
     ownerDeclarations: [],
     listBindingCaches: new Map(),
@@ -785,7 +776,6 @@ interface EmitSetupState {
   clientBoundaryHelperName?: string | undefined;
   inlineMemoComponents: ReadonlyMap<string, CompatInlineMemo>;
   nonNullishComponents: ReadonlySet<string>;
-  parentTrackedComponents: ReadonlySet<string>;
   debugLabel?: string | undefined;
   compilerKeyedEventSlotKeys?: ReadonlyMap<string, string> | undefined;
   compilerKeyedElementPath?: string | undefined;
@@ -839,6 +829,7 @@ function emitSetup(
       node.clientReference === undefined
         ? undefined
         : { moduleId: node.clientReference.moduleId, name: node.name },
+      node.calleeCode,
     );
 
     // A same-module component the emitter itself lowers always returns a node,
@@ -1198,7 +1189,6 @@ function emitSetup(
 
   return lines.filter(Boolean).join("\n");
 }
-
 
 function shouldDeferSelectBinding(
   node: Extract<JsxNodeIr, { kind: "element" }>,
@@ -1561,6 +1551,7 @@ function emitNodeRenderValueExpression(
       node.clientReference === undefined
         ? undefined
         : { moduleId: node.clientReference.moduleId, name: node.name },
+      node.calleeCode,
     );
   }
 
@@ -1739,7 +1730,6 @@ function isOwnerScopedMemoBranches(
     )
   );
 }
-
 
 function emitConditionalRenderValueExpression(
   node: Extract<JsxNodeIr, { kind: "conditional" }>,
@@ -1987,6 +1977,7 @@ function emitComponentCall(
   children: JsxNodeIr[],
   state: EmitSetupState,
   clientReference?: { moduleId: string; name: string } | undefined,
+  calleeCode?: string,
 ): string {
   if (
     clientReference !== undefined &&
@@ -1997,35 +1988,15 @@ function emitComponentCall(
   }
 
   const propsCode = emitPropsObject(props, children, state);
-  const call = `${name}(${propsCode})`;
-  if (state.parentTrackedComponents.has(name)) {
-    return call;
-  }
 
   // Evaluate props in the parent scope, but do not subscribe that scope to
   // incidental reads made while the child's setup runs.
   const propsName = state.allocateName("_componentProps");
+  if (calleeCode !== undefined) {
+    const calleeName = state.allocateName("_componentType");
+    return `((${calleeName}, ${propsName}) => ${state.helperNames.untrack}(() => ${calleeName}(${propsName})))((${calleeCode}), ${propsCode})`;
+  }
   return `((${propsName}) => ${state.helperNames.untrack}(() => ${name}(${propsName})))(${propsCode})`;
-}
-
-/** Keeps parent tracking for a body declaration whose reactive value feeds the rendered tree. */
-function componentBodyReadFeedsRenderedTree(component: ComponentIr): boolean {
-  const renderedTree = JSON.stringify(component.root);
-
-  return component.bodyStatements.some((statement) => {
-    if (!/\.\s*get\s*\(/.test(statement)) {
-      return false;
-    }
-
-    return [...statement.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/g)].some(
-      ([, name]) =>
-        name !== undefined && new RegExp(`\\b${escapeRegExp(name)}\\b`).test(renderedTree),
-    );
-  });
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function emitPropsObject(
