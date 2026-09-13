@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.223 - 2026-09-13
+
+### Fixed
+
+- Fixed compiler-generated component-body derivations, including props, cell reads, helper results, and dynamic component tags, so they remain reactive without rerunning component setup unnecessarily.
+- Fixed runtime component setup tracking so reactive reads hidden inside helpers recreate the component when their sources change while excluding synchronous setup writes that would otherwise self-trigger.
+
 ## 0.0.222 - 2026-09-13
 
 ### Added
