@@ -19,6 +19,7 @@ const resumeRuntimeMarker = "data-mreact-layout-boundary";
 const clientBoundaryRuntimeMarker = "data-mreact-client-boundary-nonserializable";
 /** A DOM selector that only the shared out-of-order fragment runtime emits. */
 const fragmentRuntimeMarker = "template[data-mreact-oob-fragment]";
+const duplicateCopyStateKey = "__mreactReactiveCoreCopies";
 /** Parse diagnostics of a generated entry. A group a route skips must leave valid JavaScript. */
 function entryParseErrors(code: string): readonly unknown[] {
   return createCompilerModuleContext({ code, filename: "route-entry.js" }).parseErrors;
@@ -51,6 +52,7 @@ describe("shared route hydration runtime", () => {
     delete (globalThis as { __mreactRouteStates?: unknown }).__mreactRouteStates;
     delete (globalThis as { __mreactRouteDisposers?: unknown }).__mreactRouteDisposers;
     delete (globalThis as { __mreactRouteCell?: unknown }).__mreactRouteCell;
+    delete (globalThis as Record<string, unknown>)[duplicateCopyStateKey];
   });
 
   test("route entries import the resume runtime instead of inlining its helpers", async () => {
