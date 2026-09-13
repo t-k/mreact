@@ -4,14 +4,37 @@ import { afterEach, expect, test } from "vitest";
 import {
   cell,
   computed,
+  createCleanupScope,
   effect,
   requestState,
   runWithRequestState,
+  runWithCleanupScope,
   installRequestStateStorage,
   type RequestStateScope,
 } from "../src/index.js";
 
 afterEach(() => installRequestStateStorage(undefined));
+
+test("keeps the browser singleton alive after its first caller's scope ends", async () => {
+  const count = cell(1);
+  const seen: number[] = [];
+  const useGraph = requestState(() => ({
+    doubled: computed(() => count.get() * 2),
+    stop: effect(() => {
+      seen.push(count.get());
+    }),
+  }));
+  const renderScope = createCleanupScope();
+  const graph = runWithCleanupScope(renderScope, useGraph);
+  expect(graph.doubled.get()).toBe(2);
+  renderScope.dispose();
+  count.set(2);
+  expect(useGraph()).toBe(graph);
+  expect(graph.doubled.get()).toBe(4);
+  await Promise.resolve();
+  graph.stop();
+  expect(seen).toEqual([1, 2]);
+});
 
 test("creates one lazy browser graph with ordinary reactive cell behavior", () => {
   let calls = 0;

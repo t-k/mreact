@@ -27,6 +27,7 @@ export type { Source } from "./state.js";
 export { deferredComputed } from "./computed.js";
 /** Request state integration helpers for server adapters. */
 export {
+  disposeRequestStateScope,
   getRequestStateStorage,
   installRequestStateStorage,
   type RequestStateScope,

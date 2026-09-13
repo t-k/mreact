@@ -2,6 +2,8 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { afterEach, expect, test } from "vitest";
 import {
   cell,
+  computed,
+  effect,
   requestState,
   installRequestStateStorage,
   type RequestStateScope,
@@ -19,6 +21,176 @@ function deferred() {
   });
   return { promise, resolve };
 }
+
+test("repeated responses leave no module-cell effect subscriptions", async () => {
+  installRequestStateStorage(new AsyncLocalStorage<RequestStateScope>());
+  const moduleCell = cell(0);
+  let runs = 0;
+  const useResource = requestState(() =>
+    effect(() => {
+      moduleCell.get();
+      runs++;
+    }),
+  );
+  for (let i = 0; i < 50; i++) {
+    const response = await runWithRequestStateResponse(async () => {
+      useResource();
+      return new Response("ok");
+    });
+    expect(await response.text()).toBe("ok");
+  }
+  expect(runs).toBe(50);
+  moduleCell.set(1);
+  await Promise.resolve();
+  expect(runs).toBe(50);
+});
+
+test.each(["null", "eof", "cancel", "body-error", "cancel-error", "render-error"])(
+  "propagates cleanup failures without hiding a %s failure",
+  async (exit) => {
+    installRequestStateStorage(new AsyncLocalStorage<RequestStateScope>());
+    const cleaned: number[] = [];
+    const useResource = requestState(() => {
+      effect(() => () => {
+        cleaned.push(1);
+      });
+      effect(() => () => {
+        cleaned.push(2);
+        throw new Error("cleanup");
+      });
+    });
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    let source!: ReadableStream<Uint8Array>;
+    const rendered = runWithRequestStateResponse(async () => {
+      useResource();
+      if (exit === "null") return new Response(null, { status: 204 });
+      if (exit === "render-error") throw new Error("primary");
+      source = new ReadableStream({
+        start(value) {
+          controller = value;
+        },
+        cancel() {
+          if (exit === "cancel-error") throw new Error("primary");
+        },
+      });
+      return new Response(source);
+    });
+    if (exit === "null" || exit === "render-error") {
+      await expect(rendered).rejects.toThrow(exit === "null" ? "cleanup" : "primary");
+    } else {
+      const response = await rendered;
+      if (exit === "eof") controller.close();
+      if (exit === "body-error") controller.error(new Error("primary"));
+      const result = exit.startsWith("cancel") ? response.body!.cancel() : response.text();
+      await expect(result).rejects.toThrow(exit.endsWith("error") ? "primary" : "cleanup");
+      expect(source.locked).toBe(false);
+    }
+    expect(cleaned).toEqual([2, 1]);
+  },
+);
+
+test.each(["eof", "error", "cancel", "cancel-error", "null", "render-error"])(
+  "disposes request effects once after %s",
+  async (exit) => {
+    installRequestStateStorage(new AsyncLocalStorage<RequestStateScope>());
+    const sourceCell = cell(0);
+    let runs = 0;
+    const cleaned: string[] = [];
+    const useResource = requestState(() => {
+      effect(() => {
+        sourceCell.get();
+        runs++;
+        return () => {
+          cleaned.push(useState().get());
+        };
+      });
+      return computed(() => sourceCell.get());
+    });
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    let source!: ReadableStream<Uint8Array>;
+    const rendered = runWithRequestStateResponse(async () => {
+      useState().set("alice");
+      useResource();
+      if (exit === "render-error") throw new Error("render");
+      if (exit === "null") return new Response(null, { status: 204 });
+      source = new ReadableStream({
+        start(value) {
+          controller = value;
+        },
+        cancel() {
+          expect(useResource().get()).toBe(0);
+          if (exit === "cancel-error") throw new Error("cancel");
+        },
+      });
+      return new Response(source);
+    });
+    if (exit === "render-error") await expect(rendered).rejects.toThrow("render");
+    else {
+      const response = await rendered;
+      if (exit !== "null") {
+        expect(cleaned).toEqual([]);
+        if (exit === "eof") {
+          controller.enqueue(encoder.encode("ok"));
+          controller.close();
+          expect(await response.text()).toBe("ok");
+        } else if (exit === "error") {
+          controller.error(new Error("body"));
+          await expect(response.text()).rejects.toThrow("body");
+        } else if (exit === "cancel-error") {
+          await expect(response.body!.cancel()).rejects.toThrow("cancel");
+        } else await response.body!.cancel();
+        expect(source.locked).toBe(false);
+      }
+    }
+    expect(cleaned).toEqual(["alice"]);
+    sourceCell.set(1);
+    await Promise.resolve();
+    expect(runs).toBe(1);
+  },
+);
+
+test.each([false, true])(
+  "waits for asynchronous cancellation despite a pending read (reject=%s)",
+  async (fail) => {
+    installRequestStateStorage(new AsyncLocalStorage<RequestStateScope>());
+    const gate = deferred();
+    const started = deferred();
+    let cleanups = 0;
+    const useResource = requestState(() => {
+      effect(() => () => {
+        cleanups++;
+      });
+      return computed(() => "alive");
+    });
+    let source!: ReadableStream<Uint8Array>;
+    const response = await runWithRequestStateResponse(async () => {
+      useResource();
+      source = new ReadableStream({
+        async cancel() {
+          started.resolve();
+          await gate.promise;
+          expect(cleanups).toBe(0);
+          expect(useResource().get()).toBe("alive");
+          if (fail) throw new Error("cancel");
+        },
+      });
+      return new Response(source);
+    });
+    const reader = response.body!.getReader();
+    const pending = reader.read();
+    const cancelled = reader.cancel("disconnect");
+    await started.promise;
+    expect(await pending).toEqual({ done: true, value: undefined });
+    expect(cleanups).toBe(0);
+    expect(source.locked).toBe(true);
+    gate.resolve();
+    if (fail) await expect(cancelled).rejects.toThrow("cancel");
+    else await cancelled;
+    expect(cleanups).toBe(1);
+    expect(source.locked).toBe(false);
+    reader.releaseLock();
+  },
+);
 
 test("binds delayed stream pulls to the original native request scope", async () => {
   installRequestStateStorage(new AsyncLocalStorage<RequestStateScope>());
