@@ -1,4 +1,10 @@
 import { runWithRequestStateResponse } from "../request-state.js";
+import {
+  applyCloudflareCachePolicy,
+  beginCloudflareCacheScope,
+  currentCloudflareCachePolicy,
+} from "../cloudflare-cache.js";
+import type { RouteCachePolicy } from "../cache-policy.js";
 import type { BuiltPrerenderedRoute, BuiltServerManifest } from "../build.js";
 import type { ClientRouteManifestEntry } from "../client.js";
 import {
@@ -36,7 +42,12 @@ import {
 import { middlewareMatches, type MiddlewareModule } from "../middleware.js";
 import { normalizeRoutePath } from "../route-path.js";
 import type { AppRoute } from "../routes.js";
-import { routeLocationFromRequest } from "../request-header-tracking.js";
+import {
+  trackRequestHeaderReads,
+  withTrackedRequest,
+  withTrackedRouteLocation,
+  type TrackedHeaderRequest,
+} from "../request-header-tracking.js";
 import { contentSecurityPolicy } from "../csp.js";
 import { isNotFoundError, isRedirectError, rewriteLocation } from "../navigation.js";
 import { validateRouteMetadata } from "../metadata.js";
@@ -482,211 +493,296 @@ export function createCloudflareBuiltRequestHandler<Env = unknown>(
 export function createCloudflareRouteModuleRenderer<Env = unknown>(
   options: CloudflareRouteModuleRendererOptions<Env>,
 ): NonNullable<CloudflareBuiltRequestHandlerOptions<Env>["renderRoute"]> {
-  return (request, context) => runWithRequestStateResponse(async () => {
-    const middlewareResult = await resolveCloudflareRouteModuleMiddleware(options.modules, request);
-    if (middlewareResult.type === "response") {
-      return middlewareResult.response;
-    }
-
-    if (middlewareResult.request !== request) {
-      // The route was matched against the pre-middleware URL, so a rewrite has
-      // to re-match: otherwise the rewritten path would still render the module
-      // the visitor asked for, which is the module a rewrite is often used to
-      // keep them away from. The built runtime re-matches the same way.
-      request = middlewareResult.request;
-      const rematched = matchCloudflareRoute(
-        sortedCloudflareRoutes(context.serverManifest),
-        new URL(request.url).pathname,
-      );
-
-      if (rematched === undefined) {
-        return new Response("Not Found", { status: 404 });
-      }
-
-      context = { ...context, params: rematched.params, route: rematched.route };
-    }
-
-    // Middleware apps skip the prerendered fast path in `handleCloudflareRequest`
-    // so that access gates run first, so the stored HTML is resolved here
-    // instead, against the post-middleware path.
-    const prerendered = prerenderedResponse(
-      context.serverManifest.prerenderedRoutes,
-      normalizeRoutePath(new URL(request.url).pathname),
-      request,
-      isCloudflareNavigationRequest(request),
-    );
-
-    if (prerendered !== undefined) {
-      return prerendered;
-    }
-
-    if (context.route.kind !== "server" && isCloudflareNavigationRequest(request)) {
-      return cloudflareDocumentReloadNavigationResponse();
-    }
-
-    const module = await loadCloudflareRouteModule(options.modules, context.route.file);
-
-    if (module === undefined) {
-      return new Response(`No Cloudflare route module registered for ${context.route.file}.`, {
-        headers: { "content-type": "text/plain; charset=utf-8" },
-        status: 500,
-      });
-    }
-
-    if (context.route.kind === "server") {
-      return withDefaultSecurityHeaders(
-        await dispatchCloudflareServerRoute(module as CloudflareServerRouteModule<Env>, request, {
-          ...context,
-          request,
-        }),
-        request,
-      );
-    }
-
-    if (context.route.kind === "metadata") {
-      return withDefaultSecurityHeaders(
-        await dispatchCloudflareMetadataRoute(module as CloudflareMetadataRouteModule, request, {
-          ...context,
-          request,
-        }),
-        request,
-      );
-    }
-
-    const pageModule = module as CloudflareRouteModule<unknown, Env>;
-    const component = selectCloudflarePageComponent(pageModule);
-    const queryClient = createQueryClient();
-
-    if (component === undefined) {
-      return new Response(
-        `No Cloudflare page component registered for ${context.route.file}. Module exports: ${describeCloudflareModuleExports(pageModule)}.`,
-        {
-          headers: { "content-type": "text/plain; charset=utf-8" },
-          status: 500,
-        },
-      );
-    }
-
-    const loaderContext = {
-      ...context,
-      queryClient,
-      request,
-    };
-    let data: unknown;
-
-    try {
-      data =
-        pageModule.loader === undefined
-          ? undefined
-          : await runWithCloudflareQueryClient(queryClient, () =>
-              pageModule.loader!(loaderContext),
-            );
-    } catch (error) {
-      if (error instanceof Response) {
-        return error;
-      }
-
-      if (isRedirectError(error)) {
-        return new Response(null, {
-          headers: { location: error.location },
-          status: error.status,
-        });
-      }
-
-      if (isNotFoundError(error)) {
-        return cloudflareNotFoundResponse(request);
-      }
-
-      throw error;
-    }
-
-    if (data instanceof Response) {
-      return data;
-    }
-
-    const props = {
-      ...context,
-      data,
-      queryClient,
-      request: routeLocationFromRequest(request),
-    };
-    let rendered: Awaited<ReturnType<typeof component>>;
-
-    try {
-      rendered = await runWithCloudflareQueryClient(queryClient, () => component(props, request));
-    } catch (error) {
-      if (isRedirectError(error)) {
-        return new Response(null, {
-          headers: { location: error.location },
-          status: error.status,
-        });
-      }
-
-      if (isNotFoundError(error)) {
-        return cloudflareNotFoundResponse(request);
-      }
-
-      throw error;
-    }
-
-    const metadata = await runWithCloudflareQueryClient(queryClient, () =>
-      resolveCloudflareRouteMetadata([pageModule], { ...props, request }),
-    );
-
-    if (rendered instanceof Response) {
-      if (
-        (
-          pageModule as CloudflareRouteModule<unknown, Env> & {
-            __mreactSecurityHeadersApplied?: boolean | undefined;
-          }
-        ).__mreactSecurityHeadersApplied === true
-      ) {
-        return rendered;
-      }
-
-      return withDefaultSecurityHeaders(rendered, request, metadata);
-    }
-
-    const modulePreload = cloudflareModulePreloadTag(context.clientManifest, context.route.path);
-    const body = withCloudflareHydrationMarkers({
-      data,
-      html: rendered,
-      manifest: context.clientManifest,
-      params: context.params,
-      request,
-      routePath: context.route.path,
-    });
-    const documented =
-      options.document === undefined
-        ? defaultCloudflareDocument(body, modulePreload, metadata)
-        : await runWithCloudflareQueryClient(queryClient, () =>
-            options.document!({
-              ...props,
-              body,
-              modulePreload,
-            }),
+  return (request, context) =>
+    runWithRequestStateResponse(async () => {
+      const cacheScope = beginCloudflareCacheScope();
+      try {
+        let policy: RouteCachePolicy | undefined;
+        let tracked: TrackedHeaderRequest | undefined;
+        let requestDependent = false;
+        const response = await (async () => {
+          const middlewareResult = await resolveCloudflareRouteModuleMiddleware(
+            options.modules,
+            request,
           );
-    const documentedWithQueryState = await injectCloudflareQueryState(
-      documented,
-      dehydrate(queryClient, options.dehydrateOptions),
-    );
+          requestDependent =
+            middlewareResult.ran === true &&
+            context.serverManifest.routeRequestInputs?.[cloudflareMiddlewareRouteModuleKey] !==
+              false;
+          if (middlewareResult.type === "response") {
+            return middlewareResult.response;
+          }
 
-    return withDefaultSecurityHeaders(
-      documentedWithQueryState instanceof Response
-        ? documentedWithQueryState
-        : new Response(documentedWithQueryState, {
-            headers: { "content-type": "text/html; charset=utf-8" },
-          }),
-      request,
-      metadata,
-    );
-  });
+          if (middlewareResult.request !== request) {
+            // The route was matched against the pre-middleware URL, so a rewrite has
+            // to re-match: otherwise the rewritten path would still render the module
+            // the visitor asked for, which is the module a rewrite is often used to
+            // keep them away from. The built runtime re-matches the same way.
+            request = middlewareResult.request;
+            const rematched = matchCloudflareRoute(
+              sortedCloudflareRoutes(context.serverManifest),
+              new URL(request.url).pathname,
+            );
+
+            if (rematched === undefined) {
+              return new Response("Not Found", { status: 404 });
+            }
+
+            context = { ...context, params: rematched.params, route: rematched.route };
+          }
+
+          policy = context.serverManifest.routeCachePolicies?.[context.route.file];
+          const analyzedRequestInput =
+            context.serverManifest.routeRequestInputs?.[context.route.file];
+          requestDependent ||= analyzedRequestInput === true;
+          // Generated wrappers read URL/header values for framework metadata and
+          // hydration. Their application closure is analyzed before compilation;
+          // direct module registries instead observe application request access.
+          if (
+            context.route.kind === "page" &&
+            analyzedRequestInput === undefined &&
+            policy?.revalidateSeconds !== 0
+          ) {
+            tracked = trackRequestHeaderReads(request);
+          }
+
+          // Middleware apps skip the prerendered fast path in `handleCloudflareRequest`
+          // so that access gates run first, so the stored HTML is resolved here
+          // instead, against the post-middleware path.
+          const prerendered = prerenderedResponse(
+            context.serverManifest.prerenderedRoutes,
+            normalizeRoutePath(new URL(request.url).pathname),
+            request,
+            isCloudflareNavigationRequest(request),
+          );
+
+          if (prerendered !== undefined) {
+            return prerendered;
+          }
+
+          if (context.route.kind !== "server" && isCloudflareNavigationRequest(request)) {
+            return cloudflareDocumentReloadNavigationResponse();
+          }
+
+          const module = await loadCloudflareRouteModule(options.modules, context.route.file);
+
+          if (module === undefined) {
+            return new Response(
+              `No Cloudflare route module registered for ${context.route.file}.`,
+              {
+                headers: { "content-type": "text/plain; charset=utf-8" },
+                status: 500,
+              },
+            );
+          }
+
+          if (context.route.kind === "server") {
+            return withDefaultSecurityHeaders(
+              await dispatchCloudflareServerRoute(
+                module as CloudflareServerRouteModule<Env>,
+                request,
+                {
+                  ...context,
+                  request,
+                },
+              ),
+              request,
+            );
+          }
+
+          if (context.route.kind === "metadata") {
+            return withDefaultSecurityHeaders(
+              await dispatchCloudflareMetadataRoute(
+                module as CloudflareMetadataRouteModule,
+                request,
+                {
+                  ...context,
+                  request,
+                },
+              ),
+              request,
+            );
+          }
+
+          const pageModule = module as CloudflareRouteModule<unknown, Env>;
+          const component = selectCloudflarePageComponent(pageModule);
+          const queryClient = createQueryClient();
+
+          if (component === undefined) {
+            return new Response(
+              `No Cloudflare page component registered for ${context.route.file}. Module exports: ${describeCloudflareModuleExports(pageModule)}.`,
+              {
+                headers: { "content-type": "text/plain; charset=utf-8" },
+                status: 500,
+              },
+            );
+          }
+
+          const loaderContext = {
+            ...context,
+            queryClient,
+            get request() {
+              // Observe the context access before native Request copying can
+              // escape header tracking, without cloning every loader request.
+              requestDependent = true;
+              return request;
+            },
+          };
+          let data: unknown;
+
+          try {
+            data =
+              pageModule.loader === undefined
+                ? undefined
+                : await runWithCloudflareQueryClient(queryClient, () =>
+                    pageModule.loader!(loaderContext),
+                  );
+          } catch (error) {
+            if (error instanceof Response) {
+              return error;
+            }
+
+            if (isRedirectError(error)) {
+              return new Response(null, {
+                headers: { location: error.location },
+                status: error.status,
+              });
+            }
+
+            if (isNotFoundError(error)) {
+              return cloudflareNotFoundResponse(request);
+            }
+
+            throw error;
+          }
+
+          if (data instanceof Response) {
+            return data;
+          }
+
+          const props = withTrackedRouteLocation(
+            {
+              ...context,
+              data,
+              queryClient,
+            },
+            request,
+            tracked,
+          );
+          let rendered: Awaited<ReturnType<typeof component>>;
+
+          try {
+            // The full second Request argument can escape through native
+            // copying, rest/default arguments, or a delayed streamed chunk.
+            // Only generated modules have a pre-compiler closure analysis.
+            if (analyzedRequestInput === undefined) requestDependent = true;
+            rendered = await runWithCloudflareQueryClient(queryClient, () =>
+              component(props, tracked?.request ?? request),
+            );
+          } catch (error) {
+            if (isRedirectError(error)) {
+              return new Response(null, {
+                headers: { location: error.location },
+                status: error.status,
+              });
+            }
+
+            if (isNotFoundError(error)) {
+              return cloudflareNotFoundResponse(request);
+            }
+
+            throw error;
+          }
+
+          const metadata = await runWithCloudflareQueryClient(queryClient, () =>
+            resolveCloudflareRouteMetadata(
+              [pageModule],
+              withTrackedRequest(
+                { ...context, data, queryClient },
+                tracked?.request ?? request,
+                tracked,
+              ),
+            ),
+          );
+
+          if (rendered instanceof Response) {
+            if (
+              (
+                pageModule as CloudflareRouteModule<unknown, Env> & {
+                  __mreactSecurityHeadersApplied?: boolean | undefined;
+                }
+              ).__mreactSecurityHeadersApplied === true
+            ) {
+              return rendered;
+            }
+
+            return withDefaultSecurityHeaders(rendered, request, metadata);
+          }
+
+          const modulePreload = cloudflareModulePreloadTag(
+            context.clientManifest,
+            context.route.path,
+          );
+          const body = withCloudflareHydrationMarkers({
+            data,
+            html: rendered,
+            manifest: context.clientManifest,
+            params: context.params,
+            request,
+            routePath: context.route.path,
+          });
+          const documented =
+            options.document === undefined
+              ? defaultCloudflareDocument(body, modulePreload, metadata)
+              : await runWithCloudflareQueryClient(queryClient, () =>
+                  options.document!(
+                    withTrackedRouteLocation(
+                      {
+                        ...context,
+                        data,
+                        queryClient,
+                        body,
+                        modulePreload,
+                      },
+                      request,
+                      tracked,
+                    ),
+                  ),
+                );
+          const documentedWithQueryState = await injectCloudflareQueryState(
+            documented,
+            dehydrate(queryClient, options.dehydrateOptions),
+          );
+
+          return withDefaultSecurityHeaders(
+            documentedWithQueryState instanceof Response
+              ? documentedWithQueryState
+              : new Response(documentedWithQueryState, {
+                  headers: { "content-type": "text/html; charset=utf-8" },
+                }),
+            request,
+            metadata,
+          );
+        })();
+        return applyCloudflareCachePolicy(
+          response,
+          request,
+          policy ?? currentCloudflareCachePolicy(),
+          requestDependent || tracked?.requestDependent() === true,
+        );
+      } finally {
+        if (cacheScope !== undefined) cacheScope.active = false;
+      }
+    });
 }
 
 async function resolveCloudflareRouteModuleMiddleware<Env>(
   modules: CloudflareRouteModuleRegistry<Env>,
   request: Request,
-): Promise<{ request: Request; type: "continue" } | { response: Response; type: "response" }> {
+): Promise<
+  | { request: Request; type: "continue"; ran?: boolean }
+  | { response: Response; type: "response"; ran?: boolean }
+> {
   const module = (await loadCloudflareRouteModule(modules, cloudflareMiddlewareRouteModuleKey)) as
     | MiddlewareModule
     | undefined;
@@ -702,7 +798,7 @@ async function resolveCloudflareRouteModuleMiddleware<Env>(
 
   const response = await middleware(request);
   if (!(response instanceof Response)) {
-    return { request, type: "continue" };
+    return { request, type: "continue", ran: true };
   }
 
   const location = rewriteLocation(response);
@@ -710,10 +806,11 @@ async function resolveCloudflareRouteModuleMiddleware<Env>(
     return {
       request: new Request(new URL(location, request.url), request),
       type: "continue",
+      ran: true,
     };
   }
 
-  return { response, type: "response" };
+  return { response, type: "response", ran: true };
 }
 
 async function injectCloudflareQueryState<T extends Response | string>(

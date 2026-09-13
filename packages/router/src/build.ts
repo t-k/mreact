@@ -358,6 +358,10 @@ export interface BuiltServerManifest {
   prerenderedRoutes?: Record<string, BuiltPrerenderedRoute>;
   publicAssetBaseUrl?: string;
   routeMatcher?: CompiledRouteMatcherArtifact;
+  /** Static route cache policies preserved for portable Cloudflare rendering. */
+  routeCachePolicies?: Record<string, RouteCachePolicy>;
+  /** Conservative request-input analysis for generated Cloudflare page closures. */
+  routeRequestInputs?: Record<string, boolean>;
   routesDir?: string;
   routeServerActionReferences?: Record<string, BuiltServerActionExpressionReference[]>;
   serverActionManifest?: BuiltServerActionReference[];
@@ -866,6 +870,38 @@ async function buildAppWithResolvedProject(
       : { dehydratePolicyModule: dehydratePolicyArtifact }),
     version: 1,
     routes: serverRoutes,
+    ...(shouldBuildCloudflare
+      ? {
+          routeCachePolicies: Object.fromEntries(
+            [...sourceAnalysis.byRouteFile].flatMap(([file, analysis]) =>
+              analysis.cachePolicy === undefined ? [] : [[file, analysis.cachePolicy]],
+            ),
+          ),
+          routeRequestInputs: {
+            ...Object.fromEntries(
+              [...sourceAnalysis.byRouteFile].map(([file, analysis]) => [
+                file,
+                analysis.usesRequestInput,
+              ]),
+            ),
+            [cloudflareMiddlewareRouteModuleKey]: (() => {
+              const middlewareFile = findCloudflareMiddlewareFile({
+                files,
+                projectRoot: project.projectRoot,
+                routesDir: project.routesDir,
+              });
+              if (middlewareFile === undefined) return false;
+              const file = relative(project.projectRoot, middlewareFile).split(sep).join("/");
+              return routeClosureMayUseRequestInput({
+                filename: file,
+                files,
+                projectRoot: project.projectRoot,
+                source: files[file]!,
+              });
+            })(),
+          },
+        }
+      : {}),
     routeMatcher: compileRouteMatcherArtifact(serverRoutes),
     routesDir: relative(project.projectRoot, project.routesDir),
     files,
@@ -1265,7 +1301,7 @@ function byteCostForPaths(
 }
 
 const incrementalBuildCacheFilename = "build-cache.json";
-const incrementalBuildCacheVersion = 3;
+const incrementalBuildCacheVersion = 4;
 
 async function createIncrementalBuildCacheFingerprint(options: {
   buildTargets: readonly AppRouterBuildTarget[];
@@ -6523,7 +6559,7 @@ function cloudflareWorkspaceRuntimePlugin(): RouterCompatPlugin {
       packageName,
       ...(sourceExtension === undefined ? {} : { sourceExtension }),
     });
-  const routerCachePath = packageFile("router", "@reckona/mreact-router", "cache");
+  const routerCachePath = packageFile("router", "@reckona/mreact-router", "cloudflare-cache");
   const routerCookiesPath = packageFile("router", "@reckona/mreact-router", "cookies");
   const routerCsrfPath = packageFile("router", "@reckona/mreact-router", "csrf");
   const routerDeferredPath = packageFile("router", "@reckona/mreact-router", "deferred");
