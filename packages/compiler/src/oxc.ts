@@ -1958,7 +1958,7 @@ function analyzeOxcFunctionLikeComponent(
     target === "server" && bodyStatementJsx === "server-string"
       ? allocateOxcServerRenderValuePlaceholder(code, functionLike)
       : undefined;
-  const bodyStatements = componentBodyStatements.map((bodyStatement) => {
+  const formatComponentBodyStatement = (bodyStatement: unknown): string => {
     const loweredDeclarators = new Map<unknown, string>();
     const loweredStatement = lowerOxcBodyStatementJsx(
       code,
@@ -1988,7 +1988,8 @@ function analyzeOxcFunctionLikeComponent(
           loweredStatement ??
           formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx))
       : (loweredStatement ?? formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx));
-  });
+  };
+  const bodyStatements = componentBodyStatements.map(formatComponentBodyStatement);
   const componentBodyBindings = collectOxcVariableInitializers(body);
   const componentConstBindings = new Set([
     ...[...moduleConstBindings].filter(
@@ -2020,7 +2021,13 @@ function analyzeOxcFunctionLikeComponent(
     nativeCellBindings,
   );
   const root =
-    analyzeOxcEarlyIfRootReturn(code, earlyIfRootReturn, childAnalysisContext, bodyStatementJsx) ??
+    analyzeOxcEarlyIfRootReturn(
+      code,
+      earlyIfRootReturn,
+      childAnalysisContext,
+      bodyStatementJsx,
+      formatComponentBodyStatement,
+    ) ??
     analyzeOxcSwitchRootReturn(code, rootStatement, childAnalysisContext, bodyStatementJsx) ??
     (compatCreateElementNames.size === 0
       ? undefined
@@ -2493,6 +2500,7 @@ function analyzeOxcEarlyIfRootReturn(
   earlyIfRootReturn: OxcEarlyIfRootReturn | undefined,
   context: OxcChildAnalysisContext,
   bodyStatementJsx: OxcBodyStatementJsxMode,
+  formatBodyStatement: (bodyStatement: unknown) => string,
 ): ComponentIr["root"] | undefined {
   if (earlyIfRootReturn === undefined) {
     return undefined;
@@ -2509,18 +2517,7 @@ function analyzeOxcEarlyIfRootReturn(
     fallback = [
       {
         kind: "fragment",
-        bodyStatements: earlyIfRootReturn.fallthroughBodyStatements.map(
-          (bodyStatement) =>
-            lowerOxcBodyStatementJsx(
-              code,
-              bodyStatement,
-              context.componentNames,
-              context.target,
-              context.diagnostics,
-              bodyStatementJsx,
-              context.bodyLowerers,
-            ) ?? formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx),
-        ),
+        bodyStatements: earlyIfRootReturn.fallthroughBodyStatements.map(formatBodyStatement),
         children: fallback,
       },
     ];

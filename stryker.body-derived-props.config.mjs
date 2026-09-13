@@ -18,6 +18,8 @@ export default createStrykerConfig({
     "packages/compiler/src/emit-client.ts:1995-1999",
     "packages/compiler/src/oxc.ts:1927-1931",
     "packages/compiler/src/oxc.ts:1986-1986",
+    "packages/compiler/src/oxc.ts:2024-2030",
+    "packages/compiler/src/oxc.ts:2503-2520",
   ],
   testFiles: ["packages/compiler/test/**/*.test.ts"],
 });

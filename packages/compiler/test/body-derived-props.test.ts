@@ -350,6 +350,57 @@ export function App() { return <main><button onClick={() => selected.set(2)}>cha
     }
   });
 
+  test("declares body-derived aliases after an early return", async () => {
+    const code = compile(
+      `import { cell } from "@reckona/mreact-reactive-core";
+const checklist = cell({ visible: false, completed: 0, total: 1 });
+let derivations = 0;
+function percentage(value) {
+  derivations++;
+  return Math.round((value.completed / Math.max(value.total, 1)) * 100);
+}
+function Card(props) {
+  const value = props.checklist;
+  if (!value.visible) return null;
+  const progress = percentage(value);
+  return <div style={\`width: \${progress}%\`}>{value.completed}</div>;
+}
+export function App() {
+  return <main><button id="show" onClick={() => checklist.set({ visible: true, completed: 1, total: 2 })}>show</button><button id="update" onClick={() => checklist.set({ visible: true, completed: 3, total: 4 })}>update</button><button id="count" onClick={(event) => event.currentTarget.textContent = String(derivations)}>count</button><Card checklist={checklist.get()} /></main>;
+}`,
+      branchInsertion,
+    );
+    const derivedNames = new Set(
+      [...code.matchAll(/\b(__mreactDerived_\d+\$*)\b/g)].map((match) => match[1]),
+    );
+    for (const name of derivedNames) {
+      expect(code).toContain(`${name} = deferredComputed`);
+    }
+    const host = document.createElement("div");
+    const dispose = createRoot(host, compileClientComponent(code));
+    try {
+      await flushEffects();
+      host.querySelector<HTMLButtonElement>("#count")!.click();
+      expect(host.querySelector("#count")?.textContent).toBe("0");
+
+      host.querySelector<HTMLButtonElement>("#show")!.click();
+      await flushEffects();
+      expect(host.querySelector("div")?.textContent).toBe("1");
+      expect(host.querySelector<HTMLDivElement>("div")?.style.width).toBe("50%");
+      host.querySelector<HTMLButtonElement>("#count")!.click();
+      expect(host.querySelector("#count")?.textContent).toBe("1");
+
+      host.querySelector<HTMLButtonElement>("#update")!.click();
+      await flushEffects();
+      expect(host.querySelector("div")?.textContent).toBe("3");
+      expect(host.querySelector<HTMLDivElement>("div")?.style.width).toBe("75%");
+      host.querySelector<HTMLButtonElement>("#count")!.click();
+      expect(host.querySelector("#count")?.textContent).toBe("2");
+    } finally {
+      dispose();
+    }
+  });
+
   test.each(["values.push(value)", 'values["push"](value)'])(
     "does not replay a mutating setup expression: %s",
     async (expression) => {
