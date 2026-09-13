@@ -188,6 +188,24 @@ scope.dispose();
 
 Disposing an observer removes that observer's subscriptions and browser listeners. `cancelQueries()` aborts matching in-flight requests, `removeQueries()` evicts matching cache entries, and client `inactiveGcTime` performs eventual cleanup for settled entries without active observers. These operations remain separate so disposing one observer does not cancel a request shared by another observer.
 
+### Resources that outlive a component evaluation
+
+`computed()`, effects, query observers, and the computeds inside virtual grids register with the cleanup owner active when they are constructed. A component evaluation can have a shorter lifetime than the component or a controller retained by your application: reevaluation can dispose that evaluation's resources. Keeping an object in a variable does not change its cleanup owner.
+
+Use `runDetached()` to construct a resource with an explicitly managed lifetime, including lazy construction from a component body:
+
+```ts
+import { effect, runDetached } from "@reckona/mreact-reactive-core";
+
+const dispose = runDetached(() => effect(() => console.log(count.get())));
+// The application owner must call this when the resource is no longer needed.
+dispose();
+```
+
+For a controller that owns a query and a virtual grid, create an independent `createCleanupScope()`, build both inside `runWithCleanupScope(controllerScope, ...)`, and expose `controllerScope.dispose()` as the controller's disposal method. This also disposes the virtual grid's internal computeds, which have no separate virtualizer disposal method. Creating a cleanup scope does not attach it to the surrounding component evaluation.
+
+`runDetached()` only removes the implicit cleanup owner during the synchronous callback. It restores the previous owner even if construction throws, preserves dependency tracking, and allows an explicit nested cleanup scope. It does not extend ownership across `await`, detach DOM nodes or bindings, or make state safe to share between SSR requests. Keep user-specific controllers inside their request or client lifetime; never retain them in server module globals.
+
 ## DOM bindings
 
 Application code usually uses JSX. The compiler and low-level DOM integrations use `@reckona/mreact-reactive-dom` bindings such as `createRoot()`, `bindText()`, `bindProp()`, and `bindEvent()` to connect cells to DOM nodes without rerendering an entire component tree.

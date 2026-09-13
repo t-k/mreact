@@ -282,7 +282,9 @@ function createComputed<T>(
 
   function recompute(): T {
     if (computation.disposed) {
-      throw new Error("Cannot read a disposed computed value");
+      throw new Error(
+        "Cannot read a disposed computed value: its cleanup scope has ended. For computeds that outlive a component evaluation, use an independent createCleanupScope() with runWithCleanupScope() and dispose that scope when the owner ends.",
+      );
     }
 
     if (!dirty && hasValue) {

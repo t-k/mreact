@@ -2,6 +2,12 @@
 
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { withCleanupScope } from "@reckona/mreact-reactive-core/internal";
+import {
+  createCleanupScope,
+  runDetached,
+  runWithCleanupScope,
+} from "@reckona/mreact-reactive-core";
+import { createVirtualGrid } from "@reckona/mreact-virtual";
 import { createInfiniteQuery, createQuery, createQueryClient } from "../src/index.js";
 
 afterEach(() => {
@@ -9,18 +15,80 @@ afterEach(() => {
 });
 
 describe("query cleanup scope ownership", () => {
+  test("keeps a detached query and grid controller live across render scope disposal", () => {
+    const renderScope = createCleanupScope();
+    const controllerScope = createCleanupScope();
+    const client = createQueryClient();
+    const { query, grid } = runWithCleanupScope(renderScope, () =>
+      runDetached(() =>
+        runWithCleanupScope(controllerScope, () => {
+          const query = createInfiniteQuery<number[], number>(client, {
+            autoFetch: false,
+            getNextPageParam: () => undefined,
+            initialPageParam: 0,
+            queryFn: async () => [1],
+            queryKey: ["detached-grid"],
+          });
+          const grid = createVirtualGrid({
+            estimateItemSize: () => 20,
+            getColumnCount: () => 2,
+            getKey: (item: number) => item,
+            items: () => query.result.get().pages.flat(),
+            overscan: 0,
+            scrollOffset: () => 0,
+            viewportSize: () => 40,
+          });
+          return { query, grid };
+        }),
+      ),
+    );
+    expect(grid.entries.get()).toEqual([]);
+    renderScope.dispose();
+    client.setQueryData(["detached-grid"], { pageParams: [0], pages: [[1, 2, 3]] });
+    expect(grid.entries.get().map((entry) => entry.key)).toEqual([1, 2, 3]);
+    expect(query.result.get().pages).toEqual([[1, 2, 3]]);
+    controllerScope.dispose();
+    expect(() => grid.entries.get()).toThrow("disposed computed");
+    client.setQueryData(["detached-grid"], { pageParams: [0], pages: [[4]] });
+    expect(query.result.get().pages).toEqual([[1, 2, 3]]);
+  });
+
+  test("keeps a detached query observer subscribed until manual disposal", () => {
+    const scope = createCleanupScope();
+    const client = createQueryClient();
+    const query = runWithCleanupScope(scope, () =>
+      runDetached(() =>
+        createQuery(client, {
+          autoFetch: false,
+          gcTime: 0,
+          queryKey: ["detached-query"],
+          queryFn: async () => 1,
+        }),
+      ),
+    );
+    scope.dispose();
+    client.setQueryData(["detached-query"], 2);
+    expect(query.result.get().data).toBe(2);
+    query.dispose();
+    client.setQueryData(["detached-query"], 3);
+    expect(query.result.get().data).toBe(2);
+  });
+
   test("disposes a query observer when its cleanup scope ends", () => {
     const disposers: Array<() => void> = [];
     const client = createQueryClient();
     let observer: ReturnType<typeof createQuery<number>> | undefined;
 
-    withCleanupScope((dispose) => disposers.push(dispose), () => {
-      observer = createQuery(client, {
-        autoFetch: false,
-        queryFn: async () => 1,
-        queryKey: ["scoped"],
-      });
-    });
+    withCleanupScope(
+      (dispose) => disposers.push(dispose),
+      () => {
+        observer = createQuery(client, {
+          autoFetch: false,
+          queryFn: async () => 1,
+          queryKey: ["scoped"],
+        });
+      },
+    );
 
     expect(disposers).toHaveLength(1);
     disposers[0]?.();
@@ -34,15 +102,18 @@ describe("query cleanup scope ownership", () => {
     const client = createQueryClient();
     let observer: ReturnType<typeof createInfiniteQuery<number, number>> | undefined;
 
-    withCleanupScope((dispose) => disposers.push(dispose), () => {
-      observer = createInfiniteQuery(client, {
-        autoFetch: false,
-        getNextPageParam: () => undefined,
-        initialPageParam: 0,
-        queryFn: async () => 1,
-        queryKey: ["scoped-infinite"],
-      });
-    });
+    withCleanupScope(
+      (dispose) => disposers.push(dispose),
+      () => {
+        observer = createInfiniteQuery(client, {
+          autoFetch: false,
+          getNextPageParam: () => undefined,
+          initialPageParam: 0,
+          queryFn: async () => 1,
+          queryKey: ["scoped-infinite"],
+        });
+      },
+    );
 
     disposers[0]?.();
     client.setQueryData(["scoped-infinite"], { pageParams: [0], pages: [2] });

@@ -1,7 +1,99 @@
 import { describe, expect, it } from "vitest";
-import { createCleanupScope, runWithCleanupScope } from "../src/index.js";
+import {
+  cell,
+  computed,
+  createCleanupScope,
+  effect,
+  runDetached,
+  runWithCleanupScope,
+} from "../src/index.js";
+import { flushEffects } from "../src/testing.js";
 
 describe("createCleanupScope", () => {
+  it("keeps detached computeds live after their construction scope ends", () => {
+    const parent = createCleanupScope();
+    const source = cell(1);
+    const value = runWithCleanupScope(parent, () =>
+      runDetached(() => computed(() => source.get() * 2)),
+    );
+
+    expect(value.get()).toBe(2);
+    parent.dispose();
+    source.set(3);
+    expect(value.get()).toBe(6);
+  });
+
+  it.each([false, true])(
+    "restores the ambient owner after detached construction throws=%s",
+    (throws) => {
+      const parent = createCleanupScope();
+      let value: ReturnType<typeof computed<number>> | undefined;
+      runWithCleanupScope(parent, () => {
+        const construct = () =>
+          runDetached(() => {
+            if (throws) throw new Error("construction failed");
+            return 42;
+          });
+        if (throws) expect(construct).toThrow("construction failed");
+        else expect(construct()).toBe(42);
+        value = computed(() => 1);
+      });
+      parent.dispose();
+      expect(() => value!.get()).toThrow("cleanup scope");
+    },
+  );
+
+  it("allows an explicit child scope inside nested detached construction", () => {
+    const parent = createCleanupScope();
+    const child = createCleanupScope();
+    const [owned, detached] = runWithCleanupScope(parent, () =>
+      runDetached(() => {
+        const owned = runWithCleanupScope(child, () => computed(() => 1));
+        runDetached(() => {});
+        return [owned, computed(() => 2)];
+      }),
+    );
+    parent.dispose();
+    expect(owned!.get()).toBe(1);
+    expect(detached!.get()).toBe(2);
+    child.dispose();
+    expect(() => owned!.get()).toThrow("disposed computed");
+    expect(detached!.get()).toBe(2);
+  });
+
+  it("preserves dependency tracking while detaching cleanup ownership", async () => {
+    const source = cell(1);
+    const seen: number[] = [];
+    const dispose = effect(() => {
+      seen.push(runDetached(() => source.get()));
+    });
+    source.set(2);
+    await flushEffects();
+    expect(seen).toEqual([1, 2]);
+    dispose();
+  });
+
+  it("keeps a detached effect live until its explicit disposer runs", async () => {
+    const scope = createCleanupScope();
+    const source = cell(0);
+    const seen: number[] = [];
+    const dispose = runWithCleanupScope(scope, () =>
+      runDetached(() =>
+        effect(() => {
+          seen.push(source.get());
+        }),
+      ),
+    );
+    scope.dispose();
+    source.set(1);
+    await flushEffects();
+    expect(seen).toEqual([0, 1]);
+    dispose();
+    source.set(2);
+    await flushEffects();
+    expect(seen).toEqual([0, 1]);
+  });
+
   it("disposes resources in LIFO order and ignores repeated disposal", () => {
     const scope = createCleanupScope();
     const events: string[] = [];

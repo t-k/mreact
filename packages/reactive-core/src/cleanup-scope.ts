@@ -104,8 +104,13 @@ export function runWithCleanupScope<T>(scope: CleanupScope, run: () => T): T {
   return withCleanupScope((dispose) => scope.register(dispose), run);
 }
 
+/** Runs a synchronous callback without an implicit cleanup owner; the caller owns resource disposal. */
+export function runDetached<T>(run: () => T): T {
+  return withCleanupScope(undefined, run);
+}
+
 /** Runs a callback with a cleanup owner that can collect disposers. */
-export function withCleanupScope<T>(owner: CleanupOwner, run: () => T): T {
+export function withCleanupScope<T>(owner: CleanupOwner | undefined, run: () => T): T {
   const previousOwner = runtimeState.cleanupOwner;
   runtimeState.cleanupOwner = owner;
 
