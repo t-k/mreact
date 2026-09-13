@@ -22,6 +22,8 @@ export { subscribeCell } from "./cell-subscription.js";
 export { getGlobalRuntimeState } from "./runtime-state.js";
 export { runtimeState } from "./state.js";
 export type { Source } from "./state.js";
+/** Deferred dependency collection for compiler-generated component setup calls. */
+export { runWithSetupTracking } from "./setup-tracking.js";
 
 /** Lazy invalidation for compiler-generated consuming computations. */
 export { deferredComputed } from "./computed.js";

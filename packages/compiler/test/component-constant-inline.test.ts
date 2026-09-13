@@ -64,7 +64,7 @@ export function App() {
     // The constant call site folds while the dynamic one keeps the shared
     // component and its live text binding.
     expect(code).toContain('<span class=\\"badge\\">alpha</span>');
-    expect(code).toContain("untrack(() => Badge(_componentProps)))({ get label()");
+    expect(code).toContain("runWithSetupTracking(Badge, { get label()");
     expect(code).toContain("bindText(");
   });
 
@@ -338,7 +338,7 @@ export function App() { return <main><Wrapper /></main>; }`,
     for (const [scenario, source] of unprovable) {
       // The call itself has to survive, so the assertion looks for the props
       // object rather than for the callee's declaration.
-      expect(compileClient(source), scenario).toMatch(/untrack\(\(\) => Badge\(_componentProps/);
+      expect(compileClient(source), scenario).toMatch(/runWithSetupTracking\(Badge,/);
     }
   });
 
@@ -368,14 +368,14 @@ export function App() { return <main><Badge label="a" /><Badge label="b" /></mai
 function Shell(props) { return <section>{props.children}</section>; }
 export function App() { return <main><Shell><Badge label="a" /></Shell></main>; }`);
 
-    expect(code).toMatch(/untrack\(\(\) => Shell\(_componentProps/);
-    expect(code).toMatch(/untrack\(\(\) => Badge\(_componentProps/);
+    expect(code).toMatch(/runWithSetupTracking\(Shell,/);
+    expect(code).toMatch(/runWithSetupTracking\(Badge,/);
   });
 
   test("leaves a module without an inlinable callee untouched", () => {
     const code = compileClient(`export function Badge(props) { return <span>{props.label}</span>; }
 export function App() { return <main><Badge label="a" /></main>; }`);
 
-    expect(code).toContain('untrack(() => Badge(_componentProps)))({ label: ("a") })');
+    expect(code).toContain('runWithSetupTracking(Badge, { label: ("a") })');
   });
 });

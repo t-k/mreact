@@ -22,7 +22,7 @@ export function App(props) {
 }`);
 
     expect(code).toContain(
-      "_children[0].replaceWith(((_componentProps) => untrack(() => Badge(_componentProps)))({ label: (props.title) }))",
+      "_children[0].replaceWith(runWithSetupTracking(Badge, { label: (props.title) }))",
     );
     expect(code).not.toContain('typeof _component === "boolean"');
   });
@@ -36,7 +36,9 @@ export function App() {
 }`);
 
     expect(code.match(/function Badge\(/g)).toHaveLength(1);
-    expect(code.match(/_children\[\d\]\.replaceWith\(\(\(_componentProps/g)).toHaveLength(3);
+    expect(code.match(/_children\[\d\]\.replaceWith\(runWithSetupTracking\(Badge,/g)).toHaveLength(
+      3,
+    );
     expect(code).not.toContain("const _component =");
   });
 
@@ -76,9 +78,7 @@ export function App() {
   return <main><Panel /><footer>end</footer></main>;
 }`);
 
-    expect(code).toContain(
-      "replaceWith(((_componentProps) => untrack(() => Panel(_componentProps)))({  }))",
-    );
+    expect(code).toContain("replaceWith(runWithSetupTracking(Panel, {  }))");
     const host = document.createElement("div");
     const dispose = createRoot(host, compileClientComponent(code));
 

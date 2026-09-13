@@ -10,13 +10,13 @@ import { describe, expect, test } from "vitest";
 import { build as viteBuild, type Rollup } from "vite";
 
 const packedCompatConsumerSizeBudgets = {
-  root: { gzipBytes: 13_400, rawBytes: 48_300 },
-  "jsx-runtime": { gzipBytes: 13_400, rawBytes: 48_400 },
-  "jsx-dev-runtime": { gzipBytes: 13_450, rawBytes: 48_500 },
-  native: { gzipBytes: 10_250, rawBytes: 37_700 },
+  root: { gzipBytes: 13_450, rawBytes: 48_600 },
+  "jsx-runtime": { gzipBytes: 13_450, rawBytes: 48_700 },
+  "jsx-dev-runtime": { gzipBytes: 13_500, rawBytes: 48_800 },
+  native: { gzipBytes: 10_300, rawBytes: 38_000 },
 } as const;
 
-const packedMemoConsumerSizeBudget = { gzipBytes: 4_200, rawBytes: 13_100 } as const;
+const packedMemoConsumerSizeBudget = { gzipBytes: 4_250, rawBytes: 13_100 } as const;
 
 describe("react-compat production bundle", () => {
   test.each([

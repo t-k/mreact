@@ -10,6 +10,12 @@ export function trackSource(source: Source): void {
     return;
   }
 
+  const setupTrackingFrame = runtimeState.setupTrackingFrame;
+  if (setupTrackingFrame !== undefined && setupTrackingFrame.owner === tracker) {
+    (setupTrackingFrame.reads ??= []).push(source);
+    return;
+  }
+
   if (tracker.trackingVersion !== undefined) {
     trackIncrementalSource(source, tracker);
     return;

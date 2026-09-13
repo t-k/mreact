@@ -2,13 +2,13 @@ import type { Cell } from "./types.js";
 import type { Source } from "./state.js";
 import { bumpSourceVersion, runtimeState } from "./state.js";
 import { notifySubscribers, sourceSubscriberCount, trackSource } from "./tracking.js";
+import { recordSetupWrite } from "./setup-tracking.js";
 import { recordCellWriter } from "./writer-diagnostics.js";
 
 declare const __MREACT_CLIENT_DEVTOOLS__: boolean | undefined;
 
 const clientDevtoolsDisabled =
-  typeof __MREACT_CLIENT_DEVTOOLS__ !== "undefined" &&
-  __MREACT_CLIENT_DEVTOOLS__ === false;
+  typeof __MREACT_CLIENT_DEVTOOLS__ !== "undefined" && __MREACT_CLIENT_DEVTOOLS__ === false;
 
 interface DevtoolsHook {
   emit?: ((event: Record<string, unknown>) => void) | undefined;
@@ -24,9 +24,7 @@ type GlobalWithDevtools = typeof globalThis & {
 // walk per write. A late attach is observed at the next batch or flush
 // boundary (see invalidateDevtoolsWriteCache callers); a detach or hook swap
 // is observed on the next write because the emit path revalidates identity.
-let cachedDevtoolsHook: DevtoolsHook | null | undefined = clientDevtoolsDisabled
-  ? null
-  : undefined;
+let cachedDevtoolsHook: DevtoolsHook | null | undefined = clientDevtoolsDisabled ? null : undefined;
 
 export function invalidateDevtoolsWriteCache(): void {
   if (!clientDevtoolsDisabled) {
@@ -93,8 +91,7 @@ export function getCellSource(value: unknown): Source | undefined {
 // optimizable function instead of a fresh fat closure per cell.
 function writeCellValue<T>(source: CellSource<T>, next: T | ((prev: T) => T)): void {
   const previous = source.value;
-  const resolved =
-    typeof next === "function" ? (next as (prev: T) => T)(previous) : next;
+  const resolved = typeof next === "function" ? (next as (prev: T) => T)(previous) : next;
 
   writeResolvedCellValue(source, resolved);
 }
@@ -107,6 +104,7 @@ function writeResolvedCellValue<T>(source: CellSource<T>, resolved: T): void {
   }
 
   source.value = resolved;
+  recordSetupWrite(source);
 
   const activeTracker = runtimeState.activeTracker;
   if (

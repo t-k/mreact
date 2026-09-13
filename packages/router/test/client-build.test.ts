@@ -237,7 +237,7 @@ export default function Page() {
     expect(
       gzipSync(withoutNav.code).length,
       "minimal opt-out interactive gzip bytes",
-    ).toBeLessThanOrEqual(7_900);
+    ).toBeLessThanOrEqual(8_000);
     expect(gzipSync(serverOnly.code).length, "server-only route gzip bytes").toBeLessThanOrEqual(
       3_600,
     );

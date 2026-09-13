@@ -1,7 +1,7 @@
 import { effect } from "./effect.js";
 import { notifySubscribers, trackSource } from "./tracking.js";
 import { untrack } from "./untrack.js";
-import type { Source } from "./state.js";
+import { runtimeState, type ReactiveComputation, type Source } from "./state.js";
 import type { ReadonlyCell } from "./types.js";
 
 /** Equality function used by selector keys. */
@@ -32,8 +32,10 @@ export function selector<TValue, TKey = TValue>(
   const equals = options?.equals ?? defaultSelectorEquality<TValue, TKey>;
   const sources = new Map<TKey, SelectorSource<TKey>>();
   let current = untrack(() => source.get());
+  let sourceComputation: ReactiveComputation | undefined;
 
   const disposeSourceEffect = effect(() => {
+    sourceComputation = runtimeState.activeTracker ?? undefined;
     const next = source.get();
 
     if (Object.is(current, next)) {
@@ -50,8 +52,7 @@ export function selector<TValue, TKey = TValue>(
     }
 
     for (const selectorSource of sources.values()) {
-      const nextSelected =
-        equals(next, selectorSource.key) === true;
+      const nextSelected = equals(next, selectorSource.key) === true;
 
       updateSelectorSource(selectorSource, nextSelected);
     }
@@ -66,6 +67,7 @@ export function selector<TValue, TKey = TValue>(
         onNoSubscribers: cleanupSelectorSource,
         owner: sources,
         selected: equals(current, key) === true,
+        setupDependencies: () => sourceComputation?.deps ?? [],
         subscribers: null,
         version: 0,
       };
@@ -135,10 +137,7 @@ function updateSelectorSource<TKey>(
   selectorSource: SelectorSource<TKey> | undefined,
   selected: boolean,
 ): void {
-  if (
-    selectorSource === undefined ||
-    selectorSource.selected === selected
-  ) {
+  if (selectorSource === undefined || selectorSource.selected === selected) {
     return;
   }
 

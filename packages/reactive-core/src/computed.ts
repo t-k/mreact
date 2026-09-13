@@ -120,6 +120,16 @@ function createComputed<T>(
     // subscriber while a sibling reader is still restoring the same graph.
     // Preserve the dormant transitive dependencies through that transition.
     onNoSubscribers: () => suspendIfUnobserved(true),
+    *setupDependencies() {
+      if (computation.deps.size > 0) {
+        yield* computation.deps;
+        return;
+      }
+      for (const dependency of untrackedDependencies) {
+        const resolved = dependency.ref.deref();
+        if (resolved !== undefined) yield resolved;
+      }
+    },
     subscribers: null,
     version: 0,
   };

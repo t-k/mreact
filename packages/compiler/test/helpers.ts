@@ -42,7 +42,7 @@ import {
 } from "@reckona/mreact-compat/jsx-runtime";
 import { jsxDEV } from "@reckona/mreact-compat/jsx-dev-runtime";
 import { bindSelectedKeyedSingleNodeList } from "@reckona/mreact-compat/internal";
-import { deferredComputed } from "@reckona/mreact-reactive-core/internal";
+import { deferredComputed, runWithSetupTracking } from "@reckona/mreact-reactive-core/internal";
 import { cell, computed, effect, untrack } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import {
@@ -521,39 +521,40 @@ function extractClientInternalRuntimeEntries(
           ? bindElementProperty
           : match.groups.importedName === "bindCellText"
             ? bindCellText
-          : match.groups.importedName === "insertBranch"
-            ? insertBranch
-          : match.groups.importedName === "bindSelectValue"
-            ? bindSelectValue
-          : match.groups.importedName === "bindListWithRenderArity"
-            ? bindListWithRenderArity
-          : match.groups.importedName === "createCompilerListBindingCache"
-            ? createCompilerListBindingCache
-            : match.groups.importedName === "createListWithRenderArity"
-              ? createListWithRenderArity
-              : match.groups.importedName === "createSvgTemplate"
-                ? createSvgTemplate
-                : match.groups.importedName === "createSvgTemplateElement"
-                  ? createSvgTemplateElement
-                  : match.groups.importedName === "insertMemo"
-                    ? insertMemo
-                    : match.groups.importedName === "insertMemoDynamic"
-                      ? insertMemoDynamic
-                      : match.groups.importedName === "installMemoRenderValueNormalizer"
-                        ? installMemoRenderValueNormalizer
-                        : match.groups.importedName === "createMemo"
-                          ? createMemo
-                          : match.groups.importedName === "markCompilerKeyedEventSlot"
-                            ? markCompilerKeyedEventSlot
-                            : match.groups.importedName === "trackCompilerKeyedItem"
-                              ? trackCompilerKeyedItem
-                              : match.groups.importedName === "bindCompilerKeyedCellText"
-                                ? bindCompilerKeyedCellText
-                                : match.groups.importedName === "bindCompilerKeyedPropertyText"
-                                  ? bindCompilerKeyedPropertyText
-                                  : match.groups.importedName === "bindCompilerKeyedText"
-                                    ? bindCompilerKeyedText
-                                    : bindCompilerKeyedSingleNodeList,
+            : match.groups.importedName === "insertBranch"
+              ? insertBranch
+              : match.groups.importedName === "bindSelectValue"
+                ? bindSelectValue
+                : match.groups.importedName === "bindListWithRenderArity"
+                  ? bindListWithRenderArity
+                  : match.groups.importedName === "createCompilerListBindingCache"
+                    ? createCompilerListBindingCache
+                    : match.groups.importedName === "createListWithRenderArity"
+                      ? createListWithRenderArity
+                      : match.groups.importedName === "createSvgTemplate"
+                        ? createSvgTemplate
+                        : match.groups.importedName === "createSvgTemplateElement"
+                          ? createSvgTemplateElement
+                          : match.groups.importedName === "insertMemo"
+                            ? insertMemo
+                            : match.groups.importedName === "insertMemoDynamic"
+                              ? insertMemoDynamic
+                              : match.groups.importedName === "installMemoRenderValueNormalizer"
+                                ? installMemoRenderValueNormalizer
+                                : match.groups.importedName === "createMemo"
+                                  ? createMemo
+                                  : match.groups.importedName === "markCompilerKeyedEventSlot"
+                                    ? markCompilerKeyedEventSlot
+                                    : match.groups.importedName === "trackCompilerKeyedItem"
+                                      ? trackCompilerKeyedItem
+                                      : match.groups.importedName === "bindCompilerKeyedCellText"
+                                        ? bindCompilerKeyedCellText
+                                        : match.groups.importedName ===
+                                            "bindCompilerKeyedPropertyText"
+                                          ? bindCompilerKeyedPropertyText
+                                          : match.groups.importedName === "bindCompilerKeyedText"
+                                            ? bindCompilerKeyedText
+                                            : bindCompilerKeyedSingleNodeList,
     };
   });
 }
@@ -603,7 +604,7 @@ function extractReactiveCoreRuntimeEntries(code: string): { localName: string; v
 
     return specifiers.split(", ").map((specifier) => {
       const match = specifier.match(
-        /^(?<importedName>cell|computed|deferredComputed|effect|untrack)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+        /^(?<importedName>cell|computed|deferredComputed|effect|runWithSetupTracking|untrack)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
       );
 
       if (match?.groups === undefined) {
@@ -620,6 +621,7 @@ function extractReactiveCoreRuntimeEntries(code: string): { localName: string; v
 
 function getReactiveCoreRuntimeValue(importedName: string): unknown {
   if (importedName === "deferredComputed") return deferredComputed;
+  if (importedName === "runWithSetupTracking") return runWithSetupTracking;
   if (importedName === "cell") {
     return cell;
   }

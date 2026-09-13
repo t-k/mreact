@@ -24,6 +24,8 @@ export interface Source {
   debugWriters?: Map<number, string> | undefined;
   /** The computed that publishes this source, so readers can flush its queued publish first. */
   publisher?: ReactiveComputation | undefined;
+  /** Returns current upstream sources for synchronous setup write filtering. */
+  setupDependencies?: (() => Iterable<Source>) | undefined;
   /**
    * The computed behind this source, publishing or not. Readers walk it to
    * find queued ancestors hidden behind a deferred computed without running
@@ -51,6 +53,13 @@ export interface ReactiveComputation {
   markDirty(): void;
   run(): void;
   dispose(): void;
+}
+
+export interface SetupTrackingFrame {
+  owner: ReactiveComputation;
+  parent: SetupTrackingFrame | undefined;
+  reads: Source[] | undefined;
+  writes: Set<Source> | undefined;
 }
 
 interface PullContext {
@@ -94,6 +103,7 @@ export const runtimeState: {
   // Lowest id queued in pendingComputed since it was last cleared. Deletes
   // leave it as is: a stale low bound only costs one extra merge in a flush.
   pendingComputedMinId: number;
+  setupTrackingFrame: SetupTrackingFrame | undefined;
 } = {
   attachmentCheckContext: undefined,
   activeTracker: null,
@@ -105,6 +115,7 @@ export const runtimeState: {
   notificationDepth: 0,
   pendingComputed: new Set(),
   pendingComputedMinId: Number.POSITIVE_INFINITY,
+  setupTrackingFrame: undefined,
 };
 
 export function sourceVersion(source: Source): number {

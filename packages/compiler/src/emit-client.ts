@@ -134,6 +134,7 @@ type RuntimeHelperName =
   | "bindCompilerKeyedPropertyText"
   | "bindCompilerKeyedText"
   | "markCompilerKeyedEventSlot"
+  | "runWithSetupTracking"
   | "trackCompilerKeyedItem"
   | "untrack";
 
@@ -184,6 +185,7 @@ function allocateRuntimeHelperNames(
     bindCompilerKeyedPropertyText: "bindCompilerKeyedPropertyText",
     bindCompilerKeyedText: "bindCompilerKeyedText",
     markCompilerKeyedEventSlot: "markCompilerKeyedEventSlot",
+    runWithSetupTracking: "runWithSetupTracking",
     trackCompilerKeyedItem: "trackCompilerKeyedItem",
     untrack: "untrack",
   };
@@ -227,6 +229,7 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
   const specifiers = new Set<string>(["createTemplate"]);
   const internalSpecifiers = new Set<string>();
   const reactiveCoreSpecifiers = new Set<string>();
+  const reactiveCoreInternalSpecifiers = new Set<string>();
 
   const inlineMemoComponentNames = new Set(
     ir.components
@@ -260,8 +263,10 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
     specifiers.add("bindDomRef");
   }
 
+  if (JSON.stringify(ir).includes(OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER)) {
+    reactiveCoreSpecifiers.add("untrack");
+  }
   if (
-    JSON.stringify(ir).includes(OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER) ||
     ir.components.some((component) => {
       let found = false;
       visit(component.root, (node) => {
@@ -270,7 +275,7 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
       return found;
     })
   ) {
-    reactiveCoreSpecifiers.add("untrack");
+    reactiveCoreInternalSpecifiers.add("runWithSetupTracking");
   }
 
   for (const component of ir.components) {
@@ -402,9 +407,12 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
     });
   }
   if (JSON.stringify(ir).includes(OXC_COMPUTED_REACTIVE_ALIAS_PLACEHOLDER)) {
+    reactiveCoreInternalSpecifiers.add("deferredComputed");
+  }
+  if (reactiveCoreInternalSpecifiers.size > 0) {
     imports.push({
       source: "@reckona/mreact-reactive-core/internal",
-      specifiers: ["deferredComputed"],
+      specifiers: Array.from(reactiveCoreInternalSpecifiers).sort(),
     });
   }
   return imports;
@@ -1987,16 +1995,10 @@ function emitComponentCall(
     return `${state.clientBoundaryHelperName}(${JSON.stringify(clientReference.name)}, ${emitPropsObject(props, children, state)})`;
   }
 
-  const propsCode = emitPropsObject(props, children, state);
-
-  // Evaluate props in the parent scope, but do not subscribe that scope to
-  // incidental reads made while the child's setup runs.
-  const propsName = state.allocateName("_componentProps");
   if (calleeCode !== undefined) {
-    const calleeName = state.allocateName("_componentType");
-    return `((${calleeName}, ${propsName}) => ${state.helperNames.untrack}(() => ${calleeName}(${propsName})))((${calleeCode}), ${propsCode})`;
+    return `${state.helperNames.runWithSetupTracking}((${calleeCode}), ${emitPropsObject(props, children, state)})`;
   }
-  return `((${propsName}) => ${state.helperNames.untrack}(() => ${name}(${propsName})))(${propsCode})`;
+  return `${state.helperNames.runWithSetupTracking}(${name}, ${emitPropsObject(props, children, state)})`;
 }
 
 function emitPropsObject(

@@ -5,6 +5,33 @@ import { cell, effect, selector } from "../src/index.js";
 import { flushEffects } from "../src/testing.js";
 
 describe("selector", () => {
+  test("reports the selected key from the initial source value", () => {
+    const selected = cell(2);
+    const selectedFor = selector(selected);
+
+    expect(selectedFor(2)).toBe(true);
+    expect(selectedFor(1)).toBe(false);
+    selectedFor.dispose();
+  });
+
+  test("updates keys selected by a custom equality function", async () => {
+    const selected = cell({ id: 1 });
+    const selectedFor = selector(selected, {
+      equals: (value, key: number) => value.id === key,
+    });
+    const observed: boolean[] = [];
+    const dispose = effect(() => {
+      observed.push(selectedFor(1));
+    });
+
+    selected.set({ id: 2 });
+    await flushEffects();
+
+    expect(observed).toEqual([true, false]);
+    dispose();
+    selectedFor.dispose();
+  });
+
   test("reruns only subscribers for the previous and next selected keys", async () => {
     const selected = cell<number | null>(null);
     const selectedFor = selector<number | null, number>(selected);
@@ -134,5 +161,4 @@ describe("selector", () => {
     disposeSecond();
     selectedFor.dispose();
   });
-
 });

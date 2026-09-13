@@ -9,13 +9,16 @@
         "source": "@reckona/mreact-reactive-dom",
         "specifiers": ["createTemplate", "insertRenderValue"]
       },
-      { "source": "@reckona/mreact-reactive-core", "specifiers": ["untrack"] }
+      {
+        "source": "@reckona/mreact-reactive-core/internal",
+        "specifiers": ["runWithSetupTracking"]
+      }
     ],
     "client": {
       "tagName": "SECTION",
       "textContent": "Hello Ada",
       "attributes": {}
     },
-    "codeContains": ["untrack(() => Child(_componentProps)))({ name: (\"Ada\") })"]
+    "codeContains": ["runWithSetupTracking(Child, { name: (\"Ada\") })"]
   }
 }
