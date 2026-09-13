@@ -302,8 +302,10 @@ export interface BuiltServerManifest {
     prerenderedRoutes?: Record<string, BuiltPrerenderedRoute>;
     // (undocumented)
     publicAssetBaseUrl?: string;
+    routeCachePolicies?: Record<string, RouteCachePolicy>;
     // (undocumented)
     routeMatcher?: CompiledRouteMatcherArtifact;
+    routeRequestInputs?: Record<string, boolean>;
     // (undocumented)
     routes: AppRoute[];
     // (undocumented)

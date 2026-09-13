@@ -73,6 +73,9 @@ export interface RequestStateStorage {
 }
 
 // @public
+export function runDetached<T>(run: () => T): T;
+
+// @public
 export function runWithCleanupScope<T>(scope: CleanupScope, run: () => T): T;
 
 // @public
