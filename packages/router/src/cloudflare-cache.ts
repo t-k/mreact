@@ -35,6 +35,11 @@ export function cacheControl(options: CacheControlOptions): void {
   usePolicy().policy = routeCachePolicyFromOptions(options);
 }
 
+// Register only when this adapter is loaded; Node request helpers stay independent of reactive-core.
+(
+  globalThis as { __mreactCloudflareCacheControl?: (options: CacheControlOptions) => void }
+).__mreactCloudflareCacheControl ??= cacheControl;
+
 export function currentCloudflareCachePolicy(): RouteCachePolicy | undefined {
   return getRequestStateStorage()?.getStore() === undefined ? undefined : usePolicy().policy;
 }

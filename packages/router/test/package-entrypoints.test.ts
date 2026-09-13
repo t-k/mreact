@@ -82,7 +82,13 @@ export async function load(url, context, nextLoad) {
 }
 `,
     );
-    writeFileSync(runner, 'await import("@reckona/mreact-router/request");\n');
+    writeFileSync(
+      runner,
+      `import assert from "node:assert/strict";
+const { cacheControl } = await import("@reckona/mreact-router/request");
+assert.throws(() => cacheControl({ maxAge: 60 }), /must be called during an app router request/);
+`,
+    );
 
     try {
       execFileSync(process.execPath, ["--import", bootstrap, runner], {
@@ -101,7 +107,9 @@ export async function load(url, context, nextLoad) {
         )
         .sort();
 
+      expect(evaluated.join("\n")).not.toContain("/packages/reactive-core/dist/");
       expect(routerModules).toEqual([
+        "cache-policy.js",
         "cache.js",
         "cookies.js",
         "csp.js",

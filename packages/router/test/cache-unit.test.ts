@@ -18,6 +18,12 @@ afterEach(() => {
 });
 
 describe("router cache helpers", () => {
+  test("cacheControl rejects calls outside an active router request", () => {
+    expect(() => cacheControl({ sMaxAge: 60 })).toThrow(
+      "cacheControl() must be called during an app router request.",
+    );
+  });
+
   test("cacheControl records Qwik-style directives in the active route cache context", async () => {
     const { cachePolicy } = await withRouteCacheContext(undefined, () => {
       cacheControl({

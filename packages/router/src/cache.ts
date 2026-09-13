@@ -6,7 +6,6 @@ import {
   type CacheControlOptions,
   type RouteCachePolicy,
 } from "./cache-policy.js";
-import { cacheControl as cloudflareCacheControl } from "./cloudflare-cache.js";
 export {
   routeCachePolicyFromOptions,
   type CacheControlOptions,
@@ -271,6 +270,12 @@ export function cacheControl(options: CacheControlOptions): void {
   const activeContext = activeRouteCacheContext();
 
   if (activeContext === undefined) {
+    const cloudflareCacheControl = (
+      globalThis as { __mreactCloudflareCacheControl?: (options: CacheControlOptions) => void }
+    ).__mreactCloudflareCacheControl;
+    if (cloudflareCacheControl === undefined) {
+      throw new Error("cacheControl() must be called during an app router request.");
+    }
     return cloudflareCacheControl(options);
   }
 
