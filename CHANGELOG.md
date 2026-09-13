@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.0.222 - 2026-09-13
+
+### Added
+
+- Added `runDetached()` for constructing reactive resources with an explicitly managed cleanup lifetime, including resources created lazily during component evaluation.
+
+### Changed
+
+- Changed request-scoped state to own initializer-created reactive resources and dispose them when the request or streamed response ends, fails, or is cancelled.
+- Changed Cloudflare route caching to honor static and runtime cache policies while conservatively excluding credentialed, request-dependent, cookie-bearing, and CSP nonce responses from shared caches.
+- Changed client navigation to share an in-flight no-store prefetch with the navigation that started it without retaining the completed response in the browser cache.
+
+### Fixed
+
+- Fixed detached resource ownership and request-state cleanup across nested scopes, re-evaluation, separate server artifacts, and Cloudflare requests.
+- Fixed Cloudflare cache fallback behavior so Node request imports do not trigger unsafe shared caching when generated request-input analysis is unavailable.
+
 ## 0.0.221 - 2026-09-13
 
 ### Added
