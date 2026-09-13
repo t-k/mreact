@@ -1,5 +1,5 @@
 {
-  "baselineCommit": "65250617cca8bbb843c6d3bae7b8680fb3cf2a10",
+  "baselineCommit": "23eaff151cd5e615c8eb8f8d418085d1fe66a018",
   "headroomRatio": 0.05,
   "fixtures": {
     "native-counter": {
@@ -13,11 +13,11 @@
       "sessionCumulativeGzipBytes": 17300
     },
     "native-counter-no-navigation": {
-      "initialBrotliBytes": 6300,
-      "initialGzipBytes": 7000,
+      "initialBrotliBytes": 6400,
+      "initialGzipBytes": 7100,
       "measuredBaseline": {
-        "initialBrotliBytes": 5943,
-        "initialGzipBytes": 6605
+        "initialBrotliBytes": 6361,
+        "initialGzipBytes": 7065
       }
     },
     "keyed-list": {
@@ -29,11 +29,11 @@
       }
     },
     "forms": {
-      "initialBrotliBytes": 11900,
-      "initialGzipBytes": 13200,
+      "initialBrotliBytes": 12600,
+      "initialGzipBytes": 14000,
       "measuredBaseline": {
-        "initialBrotliBytes": 11419,
-        "initialGzipBytes": 12658
+        "initialBrotliBytes": 11994,
+        "initialGzipBytes": 13318
       }
     },
     "query": {
@@ -45,11 +45,11 @@
       }
     },
     "react-compat": {
-      "initialBrotliBytes": 35300,
-      "initialGzipBytes": 40400,
+      "initialBrotliBytes": 37100,
+      "initialGzipBytes": 40500,
       "measuredBaseline": {
-        "initialBrotliBytes": 33606,
-        "initialGzipBytes": 38474
+        "initialBrotliBytes": 35259,
+        "initialGzipBytes": 40426
       }
     },
     "multi-route-session": {
