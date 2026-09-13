@@ -106,7 +106,7 @@ export function Navigation() {
 
 `prefetch="intent"` is the default behavior for likely user intent. `prefetch="viewport"` prepares links when they enter the viewport. `prefetch="none"` disables route prefetch for links where eager work would be wasteful or surprising.
 
-For client routes, intent prefetch warms both the route's navigation HTML and its entry script dependencies, so a click can reuse the in-flight or completed HTML request. Viewport prefetch keeps client-route work to script and modulepreload hints; it does not fetch HTML until intent is detected. Server-only routes retain HTML warming for viewport links. Prefetched navigation HTML is kept in a bounded browser cache for up to 30 seconds and is discarded after mutations or explicit revalidation.
+For client routes, intent prefetch warms both the route's navigation HTML and its entry script dependencies, so a click can reuse the in-flight or completed HTML request. Viewport prefetch keeps client-route work to script and modulepreload hints; it does not fetch HTML until intent is detected. Server-only routes retain HTML warming for viewport links. Cacheable prefetched navigation HTML is kept in a bounded browser cache for up to 30 seconds and is discarded after mutations or explicit revalidation. Responses with `Cache-Control: no-store` or `no-cache` are never saved in that cache, but a navigation can share an already pending prefetch while its request context remains unchanged. Once that prefetch finishes, a later navigation fetches fresh HTML.
 
 ## Scroll and document reloads
 

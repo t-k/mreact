@@ -4256,7 +4256,10 @@ async function __mreactResolveNavigationHtml(href) {
       continue;
     }
 
-    if (result.speculative === true && result.cacheable !== true) {
+    if (
+      result.speculative === true &&
+      (result.navigationReusable !== true || result.cacheContext !== __mreactNavigationCacheContext())
+    ) {
       forceReload = true;
       continue;
     }
@@ -4527,13 +4530,13 @@ function __mreactFetchNavigationHtml(href, options = {}, pendingRequest) {
     const responseDisallowsCache = /(?:^|,)\\s*(?:no-store|no-cache)(?:\\s*=|\\s*(?:,|$))/.test(
       cacheControl,
     );
-    const reusable =
+    const navigationReusable =
       !requiresDocumentReload &&
       responseIsSuccessful &&
-      !responseIsRedirected &&
-      !responseDisallowsCache;
+      !responseIsRedirected;
+    const reusable = navigationReusable && !responseDisallowsCache;
 
-    if (requiresDocumentReload || responseIsRedirected || speculative && !reusable) {
+    if (requiresDocumentReload || responseIsRedirected || speculative && !navigationReusable) {
       __mreactDiscardNavigationResponse(response);
       return { cacheable: false, html: undefined };
     }
@@ -4549,6 +4552,7 @@ function __mreactFetchNavigationHtml(href, options = {}, pendingRequest) {
         cacheContextMatches,
         cacheable: reusable && cacheContextMatches,
         html,
+        navigationReusable: navigationReusable && cacheContextMatches,
         reusable,
       };
     });
