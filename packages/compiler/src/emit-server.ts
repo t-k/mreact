@@ -255,18 +255,24 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
       );
       return component.serverRenderValuePlaceholder === undefined
         ? emitted
-        : emitted
-            .replaceAll(`${component.serverRenderValuePlaceholder}$escape`, escapeHelperName)
-            .replaceAll(component.serverRenderValuePlaceholder, markServerRenderValueHelperName);
+        : replaceServerRenderValuePlaceholders(
+            emitted,
+            component.serverRenderValuePlaceholder,
+            markServerRenderValueHelperName,
+            escapeHelperName,
+          );
     })
     .join("\n\n");
   const rawModuleStatements = emitModuleStatements(ir);
   const moduleStatements =
     ir.serverRenderValuePlaceholder === undefined
       ? rawModuleStatements
-      : rawModuleStatements
-          .replaceAll(`${ir.serverRenderValuePlaceholder}$escape`, escapeHelperName)
-          .replaceAll(ir.serverRenderValuePlaceholder, markServerRenderValueHelperName);
+      : replaceServerRenderValuePlaceholders(
+          rawModuleStatements,
+          ir.serverRenderValuePlaceholder,
+          markServerRenderValueHelperName,
+          escapeHelperName,
+        );
   const emittedServerCode = `${moduleStatements}\n${components}`;
   // Tree-shake the URL-safety helper when it is not referenced by any
   // component output. Same shape as the existing escapeImport check.
@@ -379,6 +385,17 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
           ]),
     ],
   };
+}
+
+function replaceServerRenderValuePlaceholders(
+  code: string,
+  placeholder: string,
+  registerValueName: string,
+  escapeHelperName: string,
+): string {
+  return code
+    .replaceAll(`${placeholder}$escape`, escapeHelperName)
+    .replaceAll(placeholder, registerValueName);
 }
 
 function emitContextImport(
@@ -2754,9 +2771,11 @@ function emitPropsObject(
       const code =
         prop.serverRenderValuePlaceholder === undefined
           ? prop.code
-          : prop.code.replaceAll(
+          : replaceServerRenderValuePlaceholders(
+              prop.code,
               prop.serverRenderValuePlaceholder,
               currentMarkServerRenderValueHelperName,
+              escapeHelperName,
             );
       return `...(${code})`;
     }
@@ -2767,9 +2786,11 @@ function emitPropsObject(
 
     const code =
       prop.serverRenderValuePlaceholder !== undefined
-        ? prop.code.replaceAll(
+        ? replaceServerRenderValuePlaceholders(
+            prop.code,
             prop.serverRenderValuePlaceholder,
             currentMarkServerRenderValueHelperName,
+            escapeHelperName,
           )
         : prop.code;
     return `${emitPropName(prop.name)}: (${code})`;

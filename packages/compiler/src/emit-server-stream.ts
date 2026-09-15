@@ -263,18 +263,19 @@ export function emitServerStream(
             : { selectionMultipleParameterName }),
         },
       );
-      const withRenderValueHelpers = component.serverRenderValuePlaceholder === undefined
-        ? emitted
-        : replaceServerRenderValuePlaceholders(
-            emitted,
-            component.serverRenderValuePlaceholder,
-            markServerRenderValueHelperName,
-            currentMarkServerRenderThunkHelperName,
-            renderServerValueHelperName,
-            asyncBoundaryHelperName,
-            compatRenderToStringHelperName,
-            escapeHelperName,
-          );
+      const withRenderValueHelpers =
+        component.serverRenderValuePlaceholder === undefined
+          ? emitted
+          : replaceServerRenderValuePlaceholders(
+              emitted,
+              component.serverRenderValuePlaceholder,
+              markServerRenderValueHelperName,
+              currentMarkServerRenderThunkHelperName,
+              renderServerValueHelperName,
+              asyncBoundaryHelperName,
+              compatRenderToStringHelperName,
+              escapeHelperName,
+            );
       return withRenderValueHelpers.replaceAll(
         oxcServerStringReactNodeRenderHelperPlaceholder,
         compatRenderToStringHelperName,
@@ -4128,9 +4129,15 @@ function emitPropsObject(
       const code =
         prop.serverRenderValuePlaceholder === undefined
           ? prop.code
-          : prop.code.replaceAll(
+          : replaceServerRenderValuePlaceholders(
+              prop.code,
               prop.serverRenderValuePlaceholder,
               currentMarkServerRenderValueHelperName,
+              currentMarkServerRenderThunkHelperName,
+              currentRenderServerValueHelperName,
+              currentAsyncBoundaryHelperName,
+              currentCompatRenderToStringHelperName,
+              escapeHelperName,
             );
       return `...(${code})`;
     }
@@ -4155,9 +4162,15 @@ function emitPropsObject(
 
     const code =
       prop.serverRenderValuePlaceholder !== undefined
-        ? prop.code.replaceAll(
+        ? replaceServerRenderValuePlaceholders(
+            prop.code,
             prop.serverRenderValuePlaceholder,
             currentMarkServerRenderValueHelperName,
+            currentMarkServerRenderThunkHelperName,
+            currentRenderServerValueHelperName,
+            currentAsyncBoundaryHelperName,
+            currentCompatRenderToStringHelperName,
+            escapeHelperName,
           )
         : prop.code;
     return `${emitPropName(prop.name)}: (${code})`;

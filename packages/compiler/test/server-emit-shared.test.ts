@@ -991,15 +991,11 @@ export function App(props) {
         fallback: "Read only",
       },
     );
-    await expectServerPairHtml(
-      source,
-      "<header><span>&lt;Read &amp; Only&gt;</span></header>",
-      {
-        canWrite: false,
-        primary: "New",
-        fallback: "<Read & Only>",
-      },
-    );
+    await expectServerPairHtml(source, "<header><span>&lt;Read &amp; Only&gt;</span></header>", {
+      canWrite: false,
+      primary: "New",
+      fallback: "<Read & Only>",
+    });
 
     await expectServerPairHtml(
       `function PageIntro(props) { return <header>{props.actions}</header>; }
