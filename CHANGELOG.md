@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Fixed inferred client components with self-contained named handlers so they retain SSR fallback markup when rendered inside list rows, while boundary reports now explain fallback eligibility and rejection reasons.
+- Fixed `Link` hydration so component, reactive, fragment, and array children use the reactive DOM insertion lifecycle instead of becoming `[object Object]` text.
+
 ## 0.0.223 - 2026-09-13
 
 ### Fixed
