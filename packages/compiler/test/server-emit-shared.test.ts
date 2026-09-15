@@ -971,6 +971,54 @@ export function App(props) {
     );
   });
 
+  test("string and stream render direct conditional named props with expression children", async () => {
+    const source = `function PageIntro(props) {
+  return <header>{props.actions}</header>;
+}
+function formatLabel(value) {
+  return value;
+}
+export function App(props) {
+  return <PageIntro actions={props.canWrite ? <button>{formatLabel(props.primary)}</button> : <span>{formatLabel(props.fallback)}</span>} />;
+}`;
+
+    await expectServerPairHtml(
+      source,
+      "<header><button>&lt;New &amp; Ready&gt;</button></header>",
+      {
+        canWrite: true,
+        primary: "<New & Ready>",
+        fallback: "Read only",
+      },
+    );
+    await expectServerPairHtml(
+      source,
+      "<header><span>&lt;Read &amp; Only&gt;</span></header>",
+      {
+        canWrite: false,
+        primary: "New",
+        fallback: "<Read & Only>",
+      },
+    );
+
+    await expectServerPairHtml(
+      `function PageIntro(props) { return <header>{props.actions}</header>; }
+export function App(props) {
+  return <PageIntro actions={<>{props.canWrite ? <button>{props.label}</button> : <span>Read only</span>}</>} />;
+}`,
+      "<header><button>&lt;Wrapped &amp; Safe&gt;</button></header>",
+      { canWrite: true, label: "<Wrapped & Safe>" },
+    );
+    await expectServerPairHtml(
+      `function PageIntro(props) { return <header>{props.actions}</header>; }
+export function App(props) {
+  return <PageIntro actions={props.canWrite ? <button>New</button> : <span>Read only</span>} />;
+}`,
+      "<header><button>New</button></header>",
+      { canWrite: true },
+    );
+  });
+
   test("forged server render-value brands remain escaped", async () => {
     const marker = Symbol.for("@reckona/mreact.server-render-value");
     const payload = "<script>globalThis.__injected = true</script>";
