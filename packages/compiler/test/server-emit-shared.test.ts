@@ -1040,9 +1040,19 @@ export function App(props) {
 
     const compiled = compileServerPair(source);
     for (const code of Object.values(compiled)) {
-      expect(code).not.toMatch(
-        /_registerServerRenderValue\$(?:escape|render|async|thunk|compat)/u,
-      );
+      expect(code).not.toMatch(/[A-Za-z_$][\w$]*\$(?:escape|render|async|thunk|compat)\b/u);
+    }
+  });
+
+  test("string and stream resolve conditional spread props for compat components", () => {
+    const compiled = compileServerPair(`import Widget from "./widget.mdx";
+export function App(props) {
+  return <Widget {...(props.ok ? { actions: <button>{props.value}</button> } : { actions: <span>{props.other}</span> })} />;
+}`);
+
+    for (const code of Object.values(compiled)) {
+      expect(code).not.toMatch(/[A-Za-z_$][\w$]*\$(?:escape|render|async|thunk|compat)\b/u);
+      expect(code).toContain("_escapeHtml(props.value)");
     }
   });
 
