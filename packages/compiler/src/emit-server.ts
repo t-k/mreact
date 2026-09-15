@@ -900,6 +900,7 @@ function collectHtmlStatements(
           `${reactNodeRenderHelperName}(${node.name}, ${emitCompatRuntimePropsObject(
             node.props,
             node.children,
+            escapeHelperName,
             currentSelectedValueCode,
             currentSelectedMultipleCode,
           )})`,
@@ -1620,6 +1621,7 @@ function collectHtmlParts(
         `${reactNodeRenderHelperName}(${node.name}, ${emitCompatRuntimePropsObject(
           node.props,
           node.children,
+          escapeHelperName,
           currentSelectedValueCode,
           currentSelectedMultipleCode,
         )})`,
@@ -2996,6 +2998,7 @@ function emitServerChildHelper(
 function emitCompatRuntimePropsObject(
   props: ComponentPropIr[],
   children: JsxNodeIr[] = [],
+  escapeHelperName: string,
   selectedValueCode?: string,
   selectedMultipleCode?: string,
 ): string {
@@ -3004,9 +3007,11 @@ function emitCompatRuntimePropsObject(
       const code =
         prop.serverRenderValuePlaceholder === undefined
           ? prop.code
-          : prop.code.replaceAll(
+          : replaceServerRenderValuePlaceholders(
+              prop.code,
               prop.serverRenderValuePlaceholder,
               currentMarkServerRenderValueHelperName,
+              escapeHelperName,
             );
       return `...(${code})`;
     }
