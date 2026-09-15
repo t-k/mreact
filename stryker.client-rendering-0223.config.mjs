@@ -10,8 +10,9 @@ export default createStrykerConfig({
     // The bare-handler acceptance decision and conservative uniqueness/reassignment gates.
     "packages/router/src/client.ts:2169-2175",
     "packages/router/src/client.ts:2177-2180",
-    "packages/router/src/client.ts:2230-2235",
-    "packages/router/src/client.ts:2237-2242",
+    "packages/router/src/client.ts:2195-2197",
+    "packages/router/src/client.ts:2234-2235",
+    "packages/router/src/client.ts:2238-2243",
     // Structured fallback reason reporting.
     "packages/router/src/boundaries.ts:413-418",
     // The render-value dispatch callback. Marker seed text and optional diagnostics are
