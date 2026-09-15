@@ -2114,6 +2114,46 @@ export default function Page() {
 }`,
     ],
     [
+      "a body-local typed function declaration",
+      `export function RowControl(props: { number: number }) {
+  const open = cell(false);
+  function toggle(): void {
+    open.set((value) => !value);
+  }
+  return <button type="button" data-probe={props.number} onClick={toggle}>probe-{props.number}-{open.get() ? "on" : "off"}</button>;
+}`,
+    ],
+    [
+      "a body-local typed arrow",
+      `export function RowControl() {
+  const opened = cell(false);
+  const toggle = (): void => opened.set((value) => !value);
+  return <button type="button" onClick={toggle}>{opened.get() ? "Open" : "Closed"}</button>;
+}`,
+    ],
+    [
+      "a whitespace-padded body-local typed handler",
+      `export function RowControl() {
+  const opened = cell(false);
+  function toggle(): void {
+    opened.set((value) => !value);
+  }
+  return <button type="button" onClick={ toggle }>{opened.get() ? "Open" : "Closed"}</button>;
+}`,
+    ],
+    [
+      "a body-local typed handler alongside an unrelated callback prop",
+      `export function RowControl(props: { onCommit?: () => void }) {
+  const onCommit = props.onCommit;
+  void onCommit;
+  const opened = cell(false);
+  function toggle(): void {
+    opened.set((value) => !value);
+  }
+  return <button type="button" onClick={toggle}>{opened.get() ? "Open" : "Closed"}</button>;
+}`,
+    ],
+    [
       "a module-scope function declaration",
       `const opened = cell(false);
 function open() {
@@ -2173,7 +2213,77 @@ export default function Page() {
     expect(result.clientBoundaryFallbackImports).toEqual([]);
   });
 
+  test("keeps an earlier callback prop handler ineligible when followed by a local typed handler", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-mixed-named-handlers-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "row-control.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function RowControl(props: { onCommit: () => void }) {
+  const opened = cell(false);
+  const onCommit = props.onCommit;
+  function toggle(): void {
+    opened.set((value) => !value);
+  }
+  return <button type="button" onMouseDown={onCommit} onClick={toggle}>{opened.get() ? "Open" : "Closed"}</button>;
+}`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { RowControl } from "./components/row-control";
+
+export default function Page() {
+  return <RowControl onCommit={() => undefined} />;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.clientBoundaryImports).toEqual(["./components/row-control"]);
+    expect(result.clientBoundaryFallbackImports).toEqual([]);
+  });
+
   test.each([
+    [
+      "a mutable arrow handler",
+      `let open = (): void => undefined;
+
+export function RowControl() {
+  const label = cell("Open").get();
+  return <button type="button" onClick={open}>{label}</button>;
+}`,
+    ],
+    [
+      "an aliased handler",
+      `import { open as importedOpen } from "./actions";
+const open = importedOpen;
+
+export function RowControl() {
+  const label = cell("Open").get();
+  return <button type="button" onClick={open}>{label}</button>;
+}`,
+    ],
+    [
+      "a named function expression handler",
+      `const open = function (): void {
+  return undefined;
+};
+
+export function RowControl() {
+  const label = cell("Open").get();
+  return <button type="button" onClick={open}>{label}</button>;
+}`,
+    ],
+    [
+      "an ambient const handler",
+      `declare const open: () => void;
+
+export function RowControl() {
+  const label = cell("Open").get();
+  return <button type="button" onClick={open}>{label}</button>;
+}`,
+    ],
     [
       "an imported handler",
       `import { open } from "./actions";

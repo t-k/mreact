@@ -6899,9 +6899,11 @@ export default function Page() {
       join(appDir, "RowControl.tsx"),
       `import { cell } from "@reckona/mreact-reactive-core";
 
-export function RowControl(props) {
+export function RowControl(props: { item: number }) {
   const count = cell(0);
-  const increment = () => count.set((value) => value + 1);
+  function increment(): void {
+    count.set((value) => value + 1);
+  }
   return <button type="button" data-item={props.item} onClick={increment}>count: {count.get()}</button>;
 }`,
     );

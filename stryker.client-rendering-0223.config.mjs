@@ -3,16 +3,23 @@ import { createStrykerConfig } from "./stryker.base.config.mjs";
 // Bounded mutation profile for the 2026-09-15 inferred-boundary and Link child regressions.
 // The ranges cover only the new decisions and their reporting paths so unrelated legacy
 // heuristics do not dilute the score.
-export default createStrykerConfig({
-  name: "client-rendering-0223-focused-v11",
+const config = createStrykerConfig({
+  name: "client-rendering-0223-focused-v16",
   breakThreshold: 100,
   mutate: [
-    // The bare-handler acceptance decision and conservative uniqueness/reassignment gates.
-    "packages/router/src/client.ts:2170-2175",
-    "packages/router/src/client.ts:2179-2180",
-    "packages/router/src/client.ts:2241-2242",
-    "packages/router/src/client.ts:2245-2246",
-    "packages/router/src/client.ts:2249-2250",
+    // The bare-handler acceptance decision, AST declaration lookup, and conservative gates.
+    "packages/router/src/client.ts:2191-2196",
+    "packages/router/src/client.ts:2200-2201",
+    "packages/router/src/client.ts:2204-2204",
+    "packages/router/src/client.ts:2224-2224",
+    "packages/router/src/client.ts:2229-2233",
+    "packages/router/src/client.ts:2242-2249",
+    "packages/router/src/client.ts:2252-2257",
+    "packages/router/src/client.ts:2323-2327",
+    "packages/router/src/client.ts:2349-2350",
+    "packages/router/src/client.ts:2360-2361",
+    "packages/router/src/client.ts:2368-2369",
+    "packages/router/src/client.ts:2376-2377",
     // Structured fallback reason reporting.
     "packages/router/src/boundaries.ts:413-418",
     // The render-value dispatch callback. Marker seed text and optional diagnostics are
@@ -39,3 +46,5 @@ export default createStrykerConfig({
     "packages/compiler/test/router-link-binding.test.ts",
   ],
 });
+
+export default { ...config, incremental: false };

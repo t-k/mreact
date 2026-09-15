@@ -1885,6 +1885,67 @@ export default function Page() {
     expect(tbody?.contains(row)).toBe(true);
   });
 
+  test("hydrates typed local-cell boundaries inside list rows without duplicating controls", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-list-row-local-cell-hydrate-"));
+    const file = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      join(appDir, "RowProbe.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function RowProbe(props: { number: number }) {
+  const open = cell(false);
+  function toggle(): void {
+    open.set((value) => !value);
+  }
+  return <button type="button" data-probe={props.number} onClick={toggle}>probe-{props.number}-{open.get() ? "on" : "off"}</button>;
+}`,
+    );
+    const code = `import { RowProbe } from "./RowProbe";
+
+export default function Page() {
+  return <table><tbody>{[1, 2].map((number) => <tr><td><RowProbe number={number} /></td></tr>)}</tbody></table>;
+}`;
+    await writeFile(file, code);
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html.match(/data-mreact-client-boundary="RowProbe"/gu)).toHaveLength(2);
+    expect(html.match(/data-probe=/gu)).toHaveLength(2);
+    expect(html).toContain("probe-1-off");
+    expect(html).toContain("probe-2-off");
+
+    setDocumentBodyFromHtml(html);
+    const references = await collectClientRouteReferences({ appDir, code, filename: file });
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#list-row-local-cell-hydrate`
+    );
+
+    const controls = document.querySelectorAll<HTMLButtonElement>("button[data-probe]");
+
+    expect(controls).toHaveLength(2);
+    expect(
+      document.querySelectorAll("template[data-mreact-client-boundary='RowProbe']"),
+    ).toHaveLength(0);
+    expect(controls[0]?.textContent).toBe("probe-1-off");
+    expect(controls[1]?.textContent).toBe("probe-2-off");
+
+    controls[0]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(controls[0]?.textContent).toBe("probe-1-on");
+    expect(controls[1]?.textContent).toBe("probe-2-off");
+  });
+
   test("hydrates route picture media without duplicating sources", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-picture-media-hydrate-"));
     const file = join(appDir, "page.mreact.tsx");

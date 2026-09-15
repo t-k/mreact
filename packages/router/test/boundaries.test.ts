@@ -402,8 +402,10 @@ export default function EditorPage() { return <main>Editor</main>; }`,
       `import { cell } from "@reckona/mreact-reactive-core";
 export function SafeRow() {
   const opened = cell(false);
-  const open = () => opened.set(true);
-  return <button onClick={open}>{opened.get() ? "Open" : "Closed"}</button>;
+  function toggle(): void {
+    opened.set((value) => !value);
+  }
+  return <button onClick={toggle}>{opened.get() ? "Open" : "Closed"}</button>;
 }`,
     );
     await writeFile(

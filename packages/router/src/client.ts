@@ -811,6 +811,7 @@ function collectClientRouteComponentsForModule(
     analysis: ClientRouteModuleAnalysis;
     code: string;
     filename: string;
+    moduleContext: CompilerModuleContext;
     root: boolean;
     routeEntry: boolean;
   },
@@ -835,7 +836,11 @@ function collectClientRouteComponentsForModule(
   const explicitClient = isExplicitClientRouteSource(options.analysis, options.filename);
   const inferredFallback =
     !explicitClient && options.analysis.clientRuntime
-      ? clientBoundaryFallbackEligibilityForSource(options.code, options.filename)
+      ? clientBoundaryFallbackEligibilityForSource(
+          options.code,
+          options.filename,
+          options.moduleContext,
+        )
       : undefined;
 
   for (const info of options.analysis.topLevelExportRenderInfo) {
@@ -1236,12 +1241,20 @@ async function inferClientRouteModuleSource(options: {
   seen: Set<string>;
   sourceTransform?: ClientRouteSourceTransform | undefined;
 }): Promise<ClientRouteModuleInferenceResult> {
-  const analysis = await clientRouteModuleAnalysisForSource(options);
+  const moduleContext =
+    options.moduleContext ??
+    (await compilerModuleContextForSource({
+      cache: options.cache,
+      code: options.code,
+      filename: options.filename,
+    }));
+  const analysis = await clientRouteModuleAnalysisForSource({ ...options, moduleContext });
   const usesNavigationLinkLocal = detectLinkComponentUsage(analysis);
   collectClientRouteComponentsForModule(options.componentCollector, {
     analysis,
     code: options.code,
     filename: options.filename,
+    moduleContext,
     root: options.root,
     routeEntry: options.routeEntry,
   });
@@ -1405,16 +1418,17 @@ async function inferClientRouteModuleSource(options: {
         filename: resolved,
         sourceTransform: options.sourceTransform,
       });
+      const importedModuleContext = await compilerModuleContextForSource({
+        cache: options.cache,
+        code: source,
+        filename: resolved,
+      });
       const imported = await inferClientRouteModuleSource({
         cache: options.cache,
         code: source,
         componentCollector: options.componentCollector,
         filename: resolved,
-        moduleContext: await compilerModuleContextForSource({
-          cache: options.cache,
-          code: source,
-          filename: resolved,
-        }),
+        moduleContext: importedModuleContext,
         root: false,
         routeEntry: false,
         seen: options.seen,
@@ -1521,7 +1535,8 @@ async function inferClientRouteModuleSource(options: {
         }
         if (
           !imported.clientBoundaryModule &&
-          clientBoundaryFallbackEligibilityForSource(source, resolved).eligible
+          clientBoundaryFallbackEligibilityForSource(source, resolved, importedModuleContext)
+            .eligible
         ) {
           clientBoundaryFallbackImports.push(reference.source);
         }
@@ -1842,7 +1857,8 @@ interface ClientBoundaryFallbackEligibility {
 
 function clientBoundaryFallbackEligibilityForSource(
   source: string,
-  filename?: string,
+  filename: string | undefined,
+  moduleContext: CompilerModuleContext,
 ): ClientBoundaryFallbackEligibility {
   if (hasClientBoundaryFallbackUnsafeBrowserGlobal(source, filename)) {
     return { eligible: false, reason: "browser-global" };
@@ -1965,6 +1981,8 @@ function clientBoundaryFallbackEligibilityForSource(
   sourceWithoutGuardedUndefinedCallbacks = removeSelfContainedIntrinsicHandlerAttributes(
     sourceWithoutGuardedUndefinedCallbacks,
     callbackPropNames,
+    source,
+    moduleContext,
   );
 
   if (/\bon[A-Z][A-Za-z0-9_$]*\s*=/u.test(sourceWithoutGuardedUndefinedCallbacks)) {
@@ -2153,8 +2171,11 @@ function removeSafeCallbackHandlerAttributes(
 function removeSelfContainedIntrinsicHandlerAttributes(
   source: string,
   callbackNames: ReadonlySet<string>,
+  originalSource: string,
+  moduleContext: CompilerModuleContext,
 ): string {
   const attributePattern = /\bon[A-Z][A-Za-z0-9_$]*\s*=\s*\{/gu;
+  const namedHandlerDeclarations = collectNamedHandlerDeclarations(moduleContext, originalSource);
   let result = "";
   let cursor = 0;
 
@@ -2170,7 +2191,7 @@ function removeSelfContainedIntrinsicHandlerAttributes(
     const expression = source.slice(expressionStart, end);
     const handlerSource = isInlineFunctionExpression(expression)
       ? expression
-      : namedSelfContainedHandlerSource(source, expression);
+      : namedSelfContainedHandlerSource(source, expression, namedHandlerDeclarations);
     if (
       handlerSource === undefined ||
       Array.from(callbackNames).some((name) =>
@@ -2187,11 +2208,29 @@ function removeSelfContainedIntrinsicHandlerAttributes(
   return cursor === 0 ? source : result + source.slice(cursor);
 }
 
-function namedSelfContainedHandlerSource(source: string, expression: string): string | undefined {
+interface NamedHandlerDeclaration {
+  arrow: boolean;
+  source: string;
+}
+
+type NamedHandlerDeclarationList = [NamedHandlerDeclaration, ...NamedHandlerDeclaration[]];
+type NamedHandlerDeclarations = ReadonlyMap<string, NamedHandlerDeclarationList>;
+
+function namedSelfContainedHandlerSource(
+  source: string,
+  expression: string,
+  declarationsByName: NamedHandlerDeclarations,
+): string | undefined {
   const name = expression.trim();
   if (!/^[A-Za-z_$][\w$]*$/u.test(name)) {
     return undefined;
   }
+
+  const declarations = declarationsByName.get(name);
+  if (declarations === undefined) {
+    return undefined;
+  }
+  const declaration = declarations[0];
 
   const scanned = scanModuleSource(source);
   if (scanned === undefined) {
@@ -2200,66 +2239,32 @@ function namedSelfContainedHandlerSource(source: string, expression: string): st
 
   const syntaxSource = scanned.withoutLiterals;
   const escapedName = escapeRegExp(name);
-  const declarations: string[] = [];
-  const functionPattern = new RegExp(
-    String.raw`\b(?:async\s+)?function\s+${escapedName}\s*\([^)]*\)\s*\{`,
-    "gu",
-  );
-
-  for (const match of syntaxSource.matchAll(functionPattern)) {
-    const openBrace = (match.index ?? 0) + match[0].lastIndexOf("{");
-    const closeBrace = matchingBraceEnd(syntaxSource, openBrace);
-    if (closeBrace !== undefined) {
-      declarations.push(source.slice(match.index, closeBrace + 1));
-    }
-  }
-
-  const arrowPattern = new RegExp(
-    String.raw`\bconst\s+${escapedName}\s*=\s*(?:async\s+)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>\s*`,
-    "gu",
-  );
-  for (const match of syntaxSource.matchAll(arrowPattern)) {
-    const valueStart = (match.index ?? 0) + match[0].length;
-    if (source[valueStart] === "{") {
-      const closeBrace = matchingBraceEnd(syntaxSource, valueStart);
-      if (closeBrace !== undefined) {
-        declarations.push(source.slice(match.index, closeBrace + 1));
-      }
-      continue;
-    }
-
-    const expressionEnd = syntaxSource.slice(valueStart).search(/[;\n]/u);
-    if (expressionEnd !== -1) {
-      declarations.push(source.slice(match.index, valueStart + expressionEnd));
-    }
-  }
-
-  if (declarations.length !== 1) {
-    return undefined;
-  }
-
-  if (hasPotentialHandlerBindingShadow(syntaxSource, name, functionPattern)) {
+  if (
+    hasPotentialHandlerBindingShadow(
+      syntaxSource,
+      name,
+      declarations.filter((declaration) => !declaration.arrow).length,
+    )
+  ) {
     return undefined;
   }
 
   const assignmentPattern = new RegExp(String.raw`\b${escapedName}\s*=(?!=|>)`, "gu");
   const assignmentCount = Array.from(syntaxSource.matchAll(assignmentPattern)).length;
-  const declarationIsArrow = (declarations[0] as string).match(/^\s*const\b/u) !== null;
 
-  if (assignmentCount !== (declarationIsArrow ? 1 : 0)) {
+  if (assignmentCount !== (declaration.arrow ? 1 : 0)) {
     return undefined;
   }
 
-  return declarations[0];
+  return declaration.source;
 }
 
 function hasPotentialHandlerBindingShadow(
   source: string,
   name: string,
-  functionPattern: RegExp,
+  functionBindings: number,
 ): boolean {
   const escapedName = escapeRegExp(name);
-  const functionBindings = Array.from(source.matchAll(functionPattern)).length;
   const simpleVariableBindings = Array.from(
     source.matchAll(new RegExp(String.raw`\b(?:const|let|var)\s+${escapedName}\b`, "gu")),
   ).length;
@@ -2285,6 +2290,132 @@ function hasPotentialHandlerBindingShadow(
       new RegExp(String.raw`\b${escapedName}\b`, "u").test(match[1] ?? match[2] ?? ""),
     ),
   );
+}
+
+function collectNamedHandlerDeclarations(
+  moduleContext: CompilerModuleContext,
+  source: string,
+): NamedHandlerDeclarations {
+  const declarations = new Map<string, NamedHandlerDeclarationList>();
+  if (moduleContext.code !== source || moduleContext.parseErrors.length > 0) {
+    return declarations;
+  }
+
+  const seen = new WeakSet<object>();
+  const visit = (value: unknown): void => {
+    if (value === null || typeof value !== "object") {
+      return;
+    }
+    if (seen.has(value)) {
+      return;
+    }
+    seen.add(value);
+
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        visit(entry);
+      }
+      return;
+    }
+
+    const node = value as Record<string, unknown>;
+    switch (node.type) {
+      case "FunctionDeclaration":
+        addFunctionHandlerDeclaration(declarations, source, node);
+        break;
+      case "VariableDeclaration":
+        addArrowHandlerDeclarations(declarations, source, node);
+        break;
+    }
+
+    for (const child of Object.values(node)) {
+      visit(child);
+    }
+  };
+
+  visit(moduleContext.program);
+  return declarations;
+}
+
+function addFunctionHandlerDeclaration(
+  declarations: Map<string, NamedHandlerDeclarationList>,
+  source: string,
+  node: Record<string, unknown>,
+): void {
+  const name = oxcIdentifierName(node.id);
+  const declarationSource = oxcNodeSource(source, node);
+  if (name !== undefined && declarationSource !== undefined) {
+    addNamedHandlerDeclaration(declarations, name, {
+      arrow: false,
+      source: declarationSource,
+    });
+  }
+}
+
+function addArrowHandlerDeclarations(
+  declarations: Map<string, NamedHandlerDeclarationList>,
+  source: string,
+  node: Record<string, unknown>,
+): void {
+  if (node.kind !== "const") {
+    return;
+  }
+
+  const declarators = Array.isArray(node.declarations) ? node.declarations : [];
+  for (const value of declarators) {
+    const declarator = oxcRecord(value);
+    const initializer = oxcRecord(declarator?.init);
+    if (initializer?.type !== "ArrowFunctionExpression") {
+      continue;
+    }
+
+    const name = oxcIdentifierName(declarator?.id);
+    const declarationSource = oxcNodeSource(source, initializer);
+    if (name !== undefined && declarationSource !== undefined) {
+      addNamedHandlerDeclaration(declarations, name, {
+        arrow: true,
+        source: declarationSource,
+      });
+    }
+  }
+}
+
+function addNamedHandlerDeclaration(
+  declarations: Map<string, NamedHandlerDeclarationList>,
+  name: string,
+  declaration: NamedHandlerDeclaration,
+): void {
+  const existing = declarations.get(name);
+  if (existing === undefined) {
+    declarations.set(name, [declaration]);
+  } else {
+    existing.push(declaration);
+  }
+}
+
+function oxcIdentifierName(value: unknown): string | undefined {
+  const identifier = oxcRecord(value);
+  return identifier?.type === "Identifier" && typeof identifier.name === "string"
+    ? identifier.name
+    : undefined;
+}
+
+function oxcRecord(value: unknown): Record<string, unknown> | undefined {
+  return value === null || typeof value !== "object"
+    ? undefined
+    : (value as Record<string, unknown>);
+}
+
+function oxcNodeSource(source: string, node: Record<string, unknown>): string | undefined {
+  const start = node.start;
+  const end = node.end;
+  return typeof start === "number" &&
+    typeof end === "number" &&
+    start >= 0 &&
+    end > start &&
+    end <= source.length
+    ? source.slice(start, end)
+    : undefined;
 }
 
 function isIntrinsicJsxAttribute(source: string, attributeStart: number): boolean {
