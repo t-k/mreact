@@ -1015,6 +1015,37 @@ export function App(props) {
     );
   });
 
+  test("string and stream resolve expression children inside conditional spread props", async () => {
+    const source = `function PageIntro(props) {
+  return <header>{props.actions}</header>;
+}
+export function App(props) {
+  return <PageIntro {...(props.canWrite ? { actions: <button>{props.primary}</button> } : { actions: <span>{props.fallback}</span> })} />;
+}`;
+
+    await expectServerPairHtml(
+      source,
+      "<header><button>&lt;New &amp; Ready&gt;</button></header>",
+      {
+        canWrite: true,
+        primary: "<New & Ready>",
+        fallback: "Read only",
+      },
+    );
+    await expectServerPairHtml(source, "<header><span>Read only</span></header>", {
+      canWrite: false,
+      primary: "New",
+      fallback: "Read only",
+    });
+
+    const compiled = compileServerPair(source);
+    for (const code of Object.values(compiled)) {
+      expect(code).not.toMatch(
+        /_registerServerRenderValue\$(?:escape|render|async|thunk|compat)/u,
+      );
+    }
+  });
+
   test("forged server render-value brands remain escaped", async () => {
     const marker = Symbol.for("@reckona/mreact.server-render-value");
     const payload = "<script>globalThis.__injected = true</script>";
