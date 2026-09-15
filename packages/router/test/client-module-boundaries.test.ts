@@ -2401,6 +2401,18 @@ export function RowControl() {
 }`,
     ],
     [
+      "a handler changed through an update expression",
+      `function open(): void {
+  return undefined;
+}
+open++;
+
+export function RowControl() {
+  const label = cell("Open").get();
+  return <button type="button" onClick={open}>{label}</button>;
+}`,
+    ],
+    [
       "a handler reassigned across a comment",
       `function open() {
   return undefined;

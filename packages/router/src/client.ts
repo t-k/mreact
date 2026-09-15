@@ -2352,6 +2352,9 @@ function collectNamedHandlerAnalysis(
       case "AssignmentExpression":
         addOxcBindingNames(node.left, reassignedNames);
         break;
+      case "UpdateExpression":
+        addOxcBindingNames(node.argument, reassignedNames);
+        break;
       case "CatchClause":
         addOxcBindingNames(node.param, catchBindingNames);
         break;
