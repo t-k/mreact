@@ -391,6 +391,71 @@ export default function EditorPage() { return <main>Editor</main>; }`,
     await expect(stat(join(projectRoot, ".mreact"))).rejects.toThrow();
   });
 
+  test("reports inferred boundary fallback modes and module-level rejection reasons", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-boundary-fallback-report-"));
+    const appDir = join(projectRoot, "src", "app");
+    const componentsDir = join(projectRoot, "src", "components");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(componentsDir, { recursive: true });
+    await writeFile(
+      join(componentsDir, "SafeRow.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+export function SafeRow() {
+  const opened = cell(false);
+  const open = () => opened.set(true);
+  return <button onClick={open}>{opened.get() ? "Open" : "Closed"}</button>;
+}`,
+    );
+    await writeFile(
+      join(componentsDir, "CallbackRow.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+export function CallbackRow(props) {
+  const label = cell("Select").get();
+  const select = () => props.onSelect();
+  return <button onClick={select}>{label}</button>;
+}`,
+    );
+    await writeFile(
+      join(componentsDir, "BrowserRow.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+export function BrowserRow() {
+  const label = cell(document.title).get();
+  return <button onClick={() => undefined}>{label}</button>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { SafeRow } from "../components/SafeRow";
+import { CallbackRow } from "../components/CallbackRow";
+import { BrowserRow } from "../components/BrowserRow";
+export default function Page() {
+  return <main><SafeRow /><CallbackRow onSelect={() => undefined} /><BrowserRow /></main>;
+}`,
+    );
+
+    const report = await analyzeAppBoundaries({ projectRoot });
+    const components = report.routes[0]?.components ?? [];
+    const reasonChain = (exportName: string): readonly string[] | undefined =>
+      components.find((component) => component.exportName === exportName)?.decision.reasonChain;
+
+    expect(reasonChain("SafeRow")).toEqual(expect.arrayContaining(["fallback:ssr"]));
+    expect(reasonChain("CallbackRow")).toEqual(
+      expect.arrayContaining(["fallback:none", "fallback-rejected:callback-prop-call"]),
+    );
+    expect(reasonChain("BrowserRow")).toEqual(
+      expect.arrayContaining(["fallback:none", "fallback-rejected:browser-global"]),
+    );
+
+    const text = formatBoundaryReport(report);
+    expect(text).toContain("SafeRow  client-boundary (inferred)  fallback:ssr");
+    expect(text).toContain(
+      "CallbackRow  client-boundary (inferred)  fallback:none fallback-rejected:callback-prop-call",
+    );
+    expect(text).toContain(
+      "BrowserRow  client-boundary (inferred)  fallback:none fallback-rejected:browser-global",
+    );
+  });
+
   test("preserves unresolved rendered modules and exports as unknown diagnostics", async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), "mreact-boundary-unknown-"));
     const appDir = join(projectRoot, "src", "app");

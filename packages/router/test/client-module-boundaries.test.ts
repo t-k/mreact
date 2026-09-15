@@ -100,6 +100,7 @@ export default function Page() {
       {
         classification: "client-boundary",
         exportName: "Counter",
+        fallback: { mode: "ssr" },
         file: counterFile,
         origin: "inferred-client-runtime",
       },
@@ -166,6 +167,7 @@ export default function Layout() { return <div><Toolbar /></div>; }`,
         {
           classification: "client-boundary",
           exportName: "Toolbar",
+          fallback: { mode: "none", reason: "explicit-client-boundary" },
           file: toolbarFile,
           origin: "client-filename",
         },
@@ -214,6 +216,7 @@ export default function Page() {
       {
         classification: "client-boundary",
         exportName: "Counter",
+        fallback: { mode: "ssr" },
         file: pageFile,
         origin: "inferred-client-runtime",
       },
@@ -519,12 +522,14 @@ export default function Template() {
         {
           classification: "client-boundary",
           exportName: "default",
+          fallback: { mode: "none", reason: "explicit-client-boundary" },
           file: layoutFile,
           origin: "use-client-directive",
         },
         {
           classification: "client-boundary",
           exportName: "default",
+          fallback: { mode: "ssr" },
           file: templateFile,
           origin: "inferred-client-runtime",
         },
@@ -2086,6 +2091,148 @@ export default function Page() {
 
     expect(result.clientBoundaryImports).toEqual(["./components/interactive-card"]);
     expect(result.clientBoundaryFallbackImports).toEqual(["./components/interactive-card"]);
+  });
+
+  test.each([
+    [
+      "a body-local arrow",
+      `export function RowControl() {
+  const opened = cell(false);
+  const open = () => opened.set(true);
+  return <button type="button" onClick={open}>{opened.get() ? "Open" : "Closed"}</button>;
+}`,
+    ],
+    [
+      "a body-local function declaration",
+      `export function RowControl() {
+  const opened = cell(false);
+  function open() {
+    opened.set(true);
+  }
+  return <button type="button" onClick={open}>{opened.get() ? "Open" : "Closed"}</button>;
+}`,
+    ],
+    [
+      "a module-scope function declaration",
+      `const opened = cell(false);
+function open() {
+  opened.set(true);
+}
+export function RowControl() {
+  return <button type="button" onClick={open}>{opened.get() ? "Open" : "Closed"}</button>;
+}`,
+    ],
+  ])("marks an inferred component using %s as SSR fallback eligible", async (_name, body) => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-named-dom-handler-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "row-control.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";\n\n${body}`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { RowControl } from "./components/row-control";
+
+export default function Page() {
+  return <table><tbody>{[1].map((item) => <tr><td><RowControl key={item} /></td></tr>)}</tbody></table>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.clientBoundaryImports).toEqual(["./components/row-control"]);
+    expect(result.clientBoundaryFallbackImports).toEqual(["./components/row-control"]);
+  });
+
+  test("keeps a named handler that calls a callback prop ineligible for SSR fallback", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-named-callback-handler-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "row-control.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function RowControl(props) {
+  const label = cell("Assign").get();
+  const choose = () => props.onSelect(props.item);
+  return <button type="button" onClick={choose}>{label}</button>;
+}`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { RowControl } from "./components/row-control";
+
+export default function Page() {
+  return <RowControl item={{ id: 1 }} onSelect={() => undefined} />;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.clientBoundaryImports).toEqual(["./components/row-control"]);
+    expect(result.clientBoundaryFallbackImports).toEqual([]);
+  });
+
+  test.each([
+    [
+      "an imported handler",
+      `import { open } from "./actions";
+
+export function RowControl() {
+  const label = cell("Open").get();
+  return <button type="button" onClick={open}>{label}</button>;
+}`,
+    ],
+    [
+      "a reassigned handler",
+      `function open() {
+  return undefined;
+}
+open = () => undefined;
+
+export function RowControl() {
+  const label = cell("Open").get();
+  return <button type="button" onClick={open}>{label}</button>;
+}`,
+    ],
+    [
+      "a shadowed handler",
+      `function open() {
+  return undefined;
+}
+
+export function RowControl() {
+  if (false) {
+    const open = () => undefined;
+    void open;
+  }
+  const label = cell("Open").get();
+  return <button type="button" onClick={open}>{label}</button>;
+}`,
+    ],
+  ])("keeps %s ineligible for SSR fallback", async (_name, body) => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-unsafe-named-handler-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "row-control.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";\n\n${body}`,
+    );
+    await writeFile(
+      join(appDir, "components", "actions.ts"),
+      "export const open = () => undefined;\n",
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { RowControl } from "./components/row-control";
+
+export default function Page() {
+  return <RowControl />;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.clientBoundaryImports).toEqual(["./components/row-control"]);
+    expect(result.clientBoundaryFallbackImports).toEqual([]);
   });
 
   test("keeps computed callback prop handlers ineligible for SSR fallback", async () => {

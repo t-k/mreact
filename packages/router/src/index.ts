@@ -345,6 +345,8 @@ export type {
 export { matchRoute, scanAppRoutes } from "./routes.js";
 export type {
   CachedClientRouteSource,
+  ClientBoundaryFallbackDecision,
+  ClientBoundaryFallbackRejectionReason,
   ClientRouteComponent,
   ClientRouteComponentClassification,
   ClientRouteComponentOrigin,

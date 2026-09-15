@@ -14,6 +14,8 @@ export {
   resolveNavigationRuntime,
   routeToClientManifestEntry,
   type ClientReferenceImport,
+  type ClientBoundaryFallbackDecision,
+  type ClientBoundaryFallbackRejectionReason,
   type ClientRouteComponent,
   type ClientRouteComponentClassification,
   type ClientRouteComponentOrigin,

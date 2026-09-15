@@ -233,7 +233,7 @@ export function formatBoundaryReport(report: BoundaryReport): string {
 
     for (const component of route.components) {
       lines.push(
-        `    ${component.file}#${component.exportName}  ${component.classification}${formatComponentOrigin(component.origin)}`,
+        `    ${component.file}#${component.exportName}  ${component.classification}${formatComponentOrigin(component.origin)}${formatComponentFallback(component)}`,
       );
     }
 
@@ -410,6 +410,13 @@ function reasonChainForComponent(
     reasons.push("unresolved-reference");
   }
 
+  if (component.fallback !== undefined) {
+    reasons.push(`fallback:${component.fallback.mode}`);
+    if (component.fallback.reason !== undefined) {
+      reasons.push(`fallback-rejected:${component.fallback.reason}`);
+    }
+  }
+
   if (projectRelativePath(projectRoot, component.file) !== entry) {
     reasons.push(`reachable-from:${entry}`);
   }
@@ -498,6 +505,17 @@ function formatComponentOrigin(origin: ClientRouteComponentOrigin): string {
   if (origin === "server-only-import") return " (server-only import)";
   if (origin === "unresolved-reference") return " (unresolved)";
   return "";
+}
+
+function formatComponentFallback(component: BoundaryReportComponent): string {
+  const reasons = component.decision.reasonChain.filter((reason) => reason.startsWith("fallback:"));
+  const rejection = component.decision.reasonChain.find((reason) =>
+    reason.startsWith("fallback-rejected:"),
+  );
+
+  return reasons.length === 0
+    ? ""
+    : `  ${[...reasons, ...(rejection === undefined ? [] : [rejection])].join(" ")}`;
 }
 
 function plural(count: number, singular: string): string {

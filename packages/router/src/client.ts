@@ -166,9 +166,22 @@ export type ClientRouteComponentOrigin =
   | "use-client-directive"
   | "use-server-directive";
 
+export type ClientBoundaryFallbackRejectionReason =
+  | "browser-global"
+  | "callback-prop-call"
+  | "explicit-client-boundary"
+  | "global-this"
+  | "unsupported-handler";
+
+export interface ClientBoundaryFallbackDecision {
+  mode: "none" | "ssr";
+  reason?: ClientBoundaryFallbackRejectionReason | undefined;
+}
+
 export interface ClientRouteComponent {
   classification: ClientRouteComponentClassification;
   exportName: string;
+  fallback?: ClientBoundaryFallbackDecision | undefined;
   file: string;
   origin: ClientRouteComponentOrigin;
 }
@@ -456,7 +469,10 @@ function mergeClientRouteInference(
     clientBoundaryImports: Array.from(
       new Set([...left.clientBoundaryImports, ...right.clientBoundaryImports]),
     ),
-    clientBoundaryCompatImports: [...(left.clientBoundaryCompatImports ?? []), ...(right.clientBoundaryCompatImports ?? [])],
+    clientBoundaryCompatImports: [
+      ...(left.clientBoundaryCompatImports ?? []),
+      ...(right.clientBoundaryCompatImports ?? []),
+    ],
     clientBoundaryFallbackImports: Array.from(
       new Set([...left.clientBoundaryFallbackImports, ...right.clientBoundaryFallbackImports]),
     ),
@@ -787,6 +803,7 @@ function collectClientRouteComponentsForModule(
   collector: ClientRouteComponentCollector | undefined,
   options: {
     analysis: ClientRouteModuleAnalysis;
+    code: string;
     filename: string;
     root: boolean;
     routeEntry: boolean;
@@ -810,24 +827,46 @@ function collectClientRouteComponentsForModule(
   const serverOnly =
     options.analysis.hasUseServerDirective || hasServerOnlyImports(options.analysis);
   const explicitClient = isExplicitClientRouteSource(options.analysis, options.filename);
+  const inferredFallback =
+    !explicitClient && options.analysis.clientRuntime
+      ? clientBoundaryFallbackEligibilityForSource(options.code, options.filename)
+      : undefined;
 
   for (const info of options.analysis.topLevelExportRenderInfo) {
+    const classification = serverOnly
+      ? "server-only"
+      : explicitClient || info.clientRuntime
+        ? options.routeEntry && info.name === "default"
+          ? "client-route"
+          : "client-boundary"
+        : "server-render";
+    const origin = clientRouteComponentOrigin({
+      analysis: options.analysis,
+      filename: options.filename,
+      info,
+      serverOnly,
+    });
     const component = {
-      classification: serverOnly
-        ? "server-only"
-        : explicitClient || info.clientRuntime
-          ? options.routeEntry && info.name === "default"
-            ? "client-route"
-            : "client-boundary"
-          : "server-render",
+      classification,
       exportName: info.name,
+      ...(classification !== "client-boundary"
+        ? {}
+        : origin === "inferred-client-runtime" && inferredFallback !== undefined
+          ? {
+              fallback: inferredFallback.eligible
+                ? ({ mode: "ssr" } as const)
+                : ({ mode: "none", reason: inferredFallback.reason } as const),
+            }
+          : origin === "use-client-directive" || origin === "client-filename"
+            ? {
+                fallback: {
+                  mode: "none",
+                  reason: "explicit-client-boundary" as const,
+                },
+              }
+            : {}),
       file: options.filename,
-      origin: clientRouteComponentOrigin({
-        analysis: options.analysis,
-        filename: options.filename,
-        info,
-        serverOnly,
-      }),
+      origin,
     } satisfies ClientRouteComponent;
     collector.components.set(
       clientRouteComponentKey(component.file, component.exportName),
@@ -1195,6 +1234,7 @@ async function inferClientRouteModuleSource(options: {
   const usesNavigationLinkLocal = detectLinkComponentUsage(analysis);
   collectClientRouteComponentsForModule(options.componentCollector, {
     analysis,
+    code: options.code,
     filename: options.filename,
     root: options.root,
     routeEntry: options.routeEntry,
@@ -1452,9 +1492,13 @@ async function inferClientRouteModuleSource(options: {
 
         clientBoundaryImports.push(reference.source);
         if (isCompatSsrFilename(resolved)) {
-          const eligibility = options.sourceTransform === undefined
-            ? await analyzeCompatSsrEligibility(resolved)
-            : { eligible: false, reason: "Custom source transforms require a client-only compat boundary." };
+          const eligibility =
+            options.sourceTransform === undefined
+              ? await analyzeCompatSsrEligibility(resolved)
+              : {
+                  eligible: false,
+                  reason: "Custom source transforms require a client-only compat boundary.",
+                };
           if (eligibility.eligible) {
             clientBoundaryCompatImports.push(reference.source);
             clientBoundaryFallbackImports.push(reference.source);
@@ -1471,7 +1515,7 @@ async function inferClientRouteModuleSource(options: {
         }
         if (
           !imported.clientBoundaryModule &&
-          isClientBoundaryFallbackEligibleSource(source, resolved)
+          clientBoundaryFallbackEligibilityForSource(source, resolved).eligible
         ) {
           clientBoundaryFallbackImports.push(reference.source);
         }
@@ -1785,9 +1829,17 @@ function isStyleModuleSpecifier(source: string): boolean {
 
 const styleModuleExtensions = new Set([".css", ".less", ".sass", ".scss", ".styl", ".stylus"]);
 
-function isClientBoundaryFallbackEligibleSource(source: string, filename?: string): boolean {
+interface ClientBoundaryFallbackEligibility {
+  eligible: boolean;
+  reason?: ClientBoundaryFallbackRejectionReason | undefined;
+}
+
+function clientBoundaryFallbackEligibilityForSource(
+  source: string,
+  filename?: string,
+): ClientBoundaryFallbackEligibility {
   if (hasClientBoundaryFallbackUnsafeBrowserGlobal(source, filename)) {
-    return false;
+    return { eligible: false, reason: "browser-global" };
   }
 
   const destructuredCallbackPropNames = destructuredPropsCallbackNames(source);
@@ -1900,7 +1952,7 @@ function isClientBoundaryFallbackEligibleSource(source: string, filename?: strin
         sourceWithoutGuardedUndefinedCallbacks,
       )
     ) {
-      return false;
+      return { eligible: false, reason: "callback-prop-call" };
     }
   }
 
@@ -1909,10 +1961,15 @@ function isClientBoundaryFallbackEligibleSource(source: string, filename?: strin
     callbackPropNames,
   );
 
-  return (
-    !/\bon[A-Z][A-Za-z0-9_$]*\s*=/u.test(sourceWithoutGuardedUndefinedCallbacks) &&
-    !/\bglobalThis\b/u.test(source)
-  );
+  if (/\bon[A-Z][A-Za-z0-9_$]*\s*=/u.test(sourceWithoutGuardedUndefinedCallbacks)) {
+    return { eligible: false, reason: "unsupported-handler" };
+  }
+
+  if (/\bglobalThis\b/u.test(source)) {
+    return { eligible: false, reason: "global-this" };
+  }
+
+  return { eligible: true };
 }
 
 function hasClientBoundaryFallbackUnsafeBrowserGlobal(source: string, filename?: string): boolean {
@@ -2105,10 +2162,13 @@ function removeSelfContainedIntrinsicHandlerAttributes(
     }
 
     const expression = source.slice(expressionStart, end);
+    const handlerSource = isInlineFunctionExpression(expression)
+      ? expression
+      : namedSelfContainedHandlerSource(source, expression);
     if (
-      !isInlineFunctionExpression(expression) ||
+      handlerSource === undefined ||
       Array.from(callbackNames).some((name) =>
-        new RegExp(String.raw`\b${escapeRegExp(name)}\b`, "u").test(expression),
+        new RegExp(String.raw`\b${escapeRegExp(name)}\b`, "u").test(handlerSource),
       )
     ) {
       continue;
@@ -2119,6 +2179,62 @@ function removeSelfContainedIntrinsicHandlerAttributes(
   }
 
   return cursor === 0 ? source : result + source.slice(cursor);
+}
+
+function namedSelfContainedHandlerSource(source: string, expression: string): string | undefined {
+  const name = expression.trim();
+  if (!/^[A-Za-z_$][\w$]*$/u.test(name)) {
+    return undefined;
+  }
+
+  const escapedName = escapeRegExp(name);
+  const declarations: string[] = [];
+  const functionPattern = new RegExp(
+    String.raw`\b(?:async\s+)?function\s+${escapedName}\s*\([^)]*\)\s*\{`,
+    "gu",
+  );
+
+  for (const match of source.matchAll(functionPattern)) {
+    const openBrace = (match.index ?? 0) + match[0].lastIndexOf("{");
+    const closeBrace = matchingBraceEnd(source, openBrace);
+    if (closeBrace !== undefined) {
+      declarations.push(source.slice(match.index, closeBrace + 1));
+    }
+  }
+
+  const arrowPattern = new RegExp(
+    String.raw`\bconst\s+${escapedName}\s*=\s*(?:async\s+)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>\s*`,
+    "gu",
+  );
+  for (const match of source.matchAll(arrowPattern)) {
+    const valueStart = (match.index ?? 0) + match[0].length;
+    if (source[valueStart] === "{") {
+      const closeBrace = matchingBraceEnd(source, valueStart);
+      if (closeBrace !== undefined) {
+        declarations.push(source.slice(match.index, closeBrace + 1));
+      }
+      continue;
+    }
+
+    const expressionEnd = source.slice(valueStart).search(/[;\n]/u);
+    if (expressionEnd !== -1) {
+      declarations.push(source.slice(match.index, valueStart + expressionEnd));
+    }
+  }
+
+  if (declarations.length !== 1) {
+    return undefined;
+  }
+
+  const assignmentPattern = new RegExp(String.raw`\b${escapedName}\s*=(?!=|>)`, "gu");
+  const assignmentCount = Array.from(source.matchAll(assignmentPattern)).length;
+  const declarationIsArrow = declarations[0]?.match(/^\s*const\b/u) !== null;
+
+  if (assignmentCount !== (declarationIsArrow ? 1 : 0)) {
+    return undefined;
+  }
+
+  return declarations[0];
 }
 
 function isIntrinsicJsxAttribute(source: string, attributeStart: number): boolean {
@@ -2845,7 +2961,8 @@ export async function buildNavigationRuntimeBundle(
       __MREACT_CLIENT_DEVTOOLS__: "false",
     },
     filename,
-    dropConsoleFunctions: options.dropConsoleFunctions ?? resolveClientConsolePureFunctions(undefined),
+    dropConsoleFunctions:
+      options.dropConsoleFunctions ?? resolveClientConsolePureFunctions(undefined),
     minify: options.minify === true,
     platform: "browser",
     preserveExports: true,
@@ -2879,9 +2996,9 @@ export interface BuildNavigationEntrySourceOptions {
  *
  * Navigation used to be emitted as a pseudo route that carried the full route hydration entry: props parsing, client reference registry, reactive DOM metadata imports, and an initial hydrate call that never found a marker. The dedicated entry keeps only what the navigation runtime references: the resume walk with cleanup-only binding synchronisers, the hydration mark/report helpers navigation replays for the next route module, and the shared navigation state.
  */
-export function buildNavigationEntrySource(
-  options: BuildNavigationEntrySourceOptions = {},
-): { code: string } {
+export function buildNavigationEntrySource(options: BuildNavigationEntrySourceOptions = {}): {
+  code: string;
+} {
   const shareHydrationRuntime = options.shareHydrationRuntime === true;
   const routeId = routeIdForPath(options.routePath ?? "/__mreact_navigation_runtime");
   const historyCacheImport = `import { rememberNavigationHistorySnapshot as __mreactRememberHistorySnapshot } from ${JSON.stringify(workspacePackageFile({ currentFileUrl: import.meta.url, monorepoDir: "router", packageName: "@reckona/mreact-router", entry: "navigation-history-cache" }))};\n`;
@@ -3047,8 +3164,7 @@ export async function buildClientRouteBatchOutput(options: {
       name: routeIdForPath(route.routePath),
       // Navigation invokes the hydration export again when a cached route module is revisited.
       // Routes that cannot navigate only need their entry's initial side effect.
-      preserveExports:
-        route.clientNavigation ?? detectClientNavigationHint(route.code),
+      preserveExports: route.clientNavigation ?? detectClientNavigationHint(route.code),
       routePath: route.routePath,
       source: await buildClientRouteEntrySource({
         ...route,
@@ -6115,9 +6231,7 @@ function detectRouteCellStateHint(code: string): boolean {
 function detectRouteImportedCellCallHint(code: string): boolean {
   const callExpression = routeCellCallExpressionSource(code);
 
-  return (
-    callExpression !== undefined && new RegExp(`(?:${callExpression})\\s*\\(`).test(code)
-  );
+  return callExpression !== undefined && new RegExp(`(?:${callExpression})\\s*\\(`).test(code);
 }
 
 function detectRouteReactiveEffectHint(code: string): boolean {
