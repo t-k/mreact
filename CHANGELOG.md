@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.225 - 2026-09-15
+
+### Fixed
+
+- Fixed compiler-generated SSR helpers for conditional and spread props so compat boundaries preserve fallback markup across string and streaming rendering.
+- Fixed compat client-boundary analysis for typed local handlers, conditional prop access, and updated fallback handlers so eligible components retain SSR while unsupported cases remain on the safe client-only path.
+
 ## 0.0.224 - 2026-09-15
 
 ### Fixed
