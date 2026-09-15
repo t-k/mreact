@@ -1416,6 +1416,45 @@ export default function Page() {
     await expect(server.close()).resolves.toBeUndefined();
     await expect(upgrade).resolves.toBe("");
   });
+
+  test("serves direct conditional element props with expression children", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-dev-conditional-element-prop-"));
+    const routesDir = join(projectRoot, "src", "app");
+    const componentsDir = join(projectRoot, "src", "components");
+    await mkdir(routesDir, { recursive: true });
+    await mkdir(componentsDir, { recursive: true });
+    await writeFile(
+      join(componentsDir, "PageIntro.tsx"),
+      `export function PageIntro(props) {
+  return <header>{props.actions}</header>;
+}`,
+    );
+    await writeFile(
+      join(routesDir, "page.tsx"),
+      `import { PageIntro } from "../components/PageIntro";
+
+function formatLabel() {
+  return "<New & Ready>";
+}
+
+export default function Page() {
+  return <PageIntro actions={true ? <button>{formatLabel()}</button> : <span>Read only</span>} />;
+}`,
+    );
+    await writeViteConfig(projectRoot, {
+      allowedSourceDirs: ["src"],
+      publicDir: "public",
+      routesDir: "src/app",
+    });
+    const server = await startTrackedDevServer({ projectRoot, port: 0 });
+
+    const response = await fetch(server.url);
+    const html = await response.text();
+
+    expect(response.status, html).toBe(200);
+    expect(html).toContain("<header><button>&lt;New &amp; Ready&gt;</button></header>");
+    expect(html).not.toContain("<New & Ready>");
+  });
 });
 
 async function startTrackedDevServer(options: StartDevServerOptions) {

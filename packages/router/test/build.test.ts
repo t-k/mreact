@@ -9975,6 +9975,50 @@ export default function Page(props) {
     expect(store.calls.filter((call) => call === "lock:/")).toHaveLength(1);
     expect(store.calls.filter((call) => call === "set:/")).toHaveLength(2);
   });
+
+  test("built routes render direct conditional element props with expression children", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-build-conditional-element-prop-"));
+    const routesDir = join(projectRoot, "src", "app");
+    const componentsDir = join(projectRoot, "src", "components");
+    const outDir = join(projectRoot, ".mreact");
+    await mkdir(routesDir, { recursive: true });
+    await mkdir(componentsDir, { recursive: true });
+    await writeFile(
+      join(componentsDir, "PageIntro.tsx"),
+      `export function PageIntro(props) {
+  return <header>{props.actions}</header>;
+}`,
+    );
+    await writeFile(
+      join(routesDir, "page.tsx"),
+      `import { PageIntro } from "../components/PageIntro";
+
+function formatLabel() {
+  return "<New & Ready>";
+}
+
+export default function Page() {
+  return <PageIntro actions={true ? <button>{formatLabel()}</button> : <span>Read only</span>} />;
+}`,
+    );
+
+    await buildApp({
+      allowedSourceDirs: ["src"],
+      outDir,
+      projectRoot,
+      routesDir: "src/app",
+      targets: ["node"],
+    });
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status, html).toBe(200);
+    expect(html).toContain("<header><button>&lt;New &amp; Ready&gt;</button></header>");
+    expect(html).not.toContain("<New & Ready>");
+  });
 });
 
 function createRecordingPrerenderStore() {
