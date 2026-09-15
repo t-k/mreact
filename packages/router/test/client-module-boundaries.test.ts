@@ -2300,6 +2300,28 @@ export function RowControl() {
 }`,
     ],
     [
+      "a typed computed callback-prop alias called by a typed handler",
+      `export function RowControl(props: { onCommit: () => void }) {
+  const label = cell("Open").get();
+  const commit: () => void = props["onCommit"];
+  function toggle(): void {
+    commit();
+  }
+  return <button type="button" onClick={toggle}>{label}</button>;
+}`,
+    ],
+    [
+      "a typed destructured callback-prop alias called by a typed handler",
+      `export function RowControl(props: { onCommit: () => void }) {
+  const label = cell("Open").get();
+  const { onCommit: commit }: { onCommit: () => void } = props;
+  function toggle(): void {
+    commit();
+  }
+  return <button type="button" onClick={toggle}>{label}</button>;
+}`,
+    ],
+    [
       "an ambient const handler",
       `declare const open: () => void;
 

@@ -4,25 +4,25 @@ import { createStrykerConfig } from "./stryker.base.config.mjs";
 // The ranges cover only the new decisions and their reporting paths so unrelated legacy
 // heuristics do not dilute the score.
 const config = createStrykerConfig({
-  name: "client-rendering-0223-focused-v18",
+  name: "client-rendering-0223-focused-v21",
   breakThreshold: 100,
   mutate: [
     // The bare-handler acceptance decision, AST declaration lookup, and conservative gates.
+    "packages/router/src/client.ts:2097-2102",
     "packages/router/src/client.ts:2202-2215",
     "packages/router/src/client.ts:2248-2248",
     "packages/router/src/client.ts:2253-2261",
     "packages/router/src/client.ts:2269-2277",
-    "packages/router/src/client.ts:2347-2355",
-    "packages/router/src/client.ts:2360-2362",
-    "packages/router/src/client.ts:2389-2389",
-    "packages/router/src/client.ts:2401-2401",
-    "packages/router/src/client.ts:2429-2432",
-    "packages/router/src/client.ts:2436-2436",
-    "packages/router/src/client.ts:2438-2441",
-    "packages/router/src/client.ts:2472-2473",
-    "packages/router/src/client.ts:2483-2484",
-    "packages/router/src/client.ts:2491-2492",
-    "packages/router/src/client.ts:2499-2500",
+    "packages/router/src/client.ts:2345-2357",
+    "packages/router/src/client.ts:2383-2383",
+    "packages/router/src/client.ts:2394-2394",
+    "packages/router/src/client.ts:2403-2403",
+    "packages/router/src/client.ts:2427-2427",
+    "packages/router/src/client.ts:2443-2445",
+    "packages/router/src/client.ts:2489-2490",
+    "packages/router/src/client.ts:2500-2501",
+    "packages/router/src/client.ts:2508-2509",
+    "packages/router/src/client.ts:2516-2517",
     // Structured fallback reason reporting.
     "packages/router/src/boundaries.ts:413-418",
     // The render-value dispatch callback. Marker seed text and optional diagnostics are
@@ -50,4 +50,8 @@ const config = createStrykerConfig({
   ],
 });
 
-export default { ...config, incremental: false };
+export default {
+  ...config,
+  ignorePatterns: ["benchmarks/results/**"],
+  incremental: false,
+};

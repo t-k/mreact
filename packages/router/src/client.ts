@@ -2094,9 +2094,9 @@ function propsCallbackAliasNames(
 
   for (const candidate of astCandidates) {
     const callbackAlias =
-      candidate.memberName !== undefined
+      "memberName" in candidate
         ? isCallbackPropName(candidate.memberName) || isCallbackPropName(candidate.localName)
-        : candidate.sourceName !== undefined && names.has(candidate.sourceName);
+        : names.has(candidate.sourceName);
     if (callbackAlias) {
       names.add(candidate.localName);
     }
@@ -2227,11 +2227,9 @@ interface NamedHandlerDeclaration {
 type NamedHandlerDeclarationList = [NamedHandlerDeclaration, ...NamedHandlerDeclaration[]];
 type NamedHandlerDeclarations = ReadonlyMap<string, NamedHandlerDeclarationList>;
 
-interface CallbackAliasCandidate {
-  localName: string;
-  memberName?: string | undefined;
-  sourceName?: string | undefined;
-}
+type CallbackAliasCandidate =
+  | { localName: string; memberName: string | undefined }
+  | { localName: string; sourceName: string };
 
 interface NamedHandlerAnalysis {
   callbackAliasCandidates: readonly CallbackAliasCandidate[];
@@ -2354,9 +2352,6 @@ function collectNamedHandlerAnalysis(
       case "AssignmentExpression":
         addOxcBindingNames(node.left, reassignedNames);
         break;
-      case "UpdateExpression":
-        addOxcBindingNames(node.argument, reassignedNames);
-        break;
       case "CatchClause":
         addOxcBindingNames(node.param, catchBindingNames);
         break;
@@ -2378,9 +2373,19 @@ function addCallbackAliasCandidates(
   const declarators = Array.isArray(node.declarations) ? node.declarations : [];
   for (const value of declarators) {
     const declarator = oxcRecord(value);
-    const localName = oxcIdentifierName(declarator?.id);
+    const binding = oxcRecord(declarator?.id);
     const initializer = unwrapOxcExpression(declarator?.init);
-    if (localName === undefined || initializer === undefined) {
+    if (binding === undefined || initializer === undefined) {
+      continue;
+    }
+
+    if (binding.type === "ObjectPattern" && oxcIdentifierName(initializer) === "props") {
+      addObjectPatternCallbackAliasCandidates(candidates, binding);
+      continue;
+    }
+
+    const localName = oxcIdentifierName(binding);
+    if (localName === undefined) {
       continue;
     }
 
@@ -2394,12 +2399,32 @@ function addCallbackAliasCandidates(
       const property = oxcRecord(initializer.property);
       const memberName =
         oxcIdentifierName(property) ??
-        (property?.type === "StringLiteral" && typeof property.value === "string"
-          ? property.value
-          : undefined);
-      if (memberName !== undefined) {
-        candidates.push({ localName, memberName });
-      }
+        (typeof property?.value === "string" ? property.value : undefined);
+      candidates.push({ localName, memberName });
+    }
+  }
+}
+
+function addObjectPatternCallbackAliasCandidates(
+  candidates: CallbackAliasCandidate[],
+  pattern: Record<string, unknown>,
+): void {
+  const properties = Array.isArray(pattern.properties) ? pattern.properties : [];
+  for (const value of properties) {
+    const property = oxcRecord(value);
+    if (property?.type !== "Property") {
+      continue;
+    }
+
+    const member = oxcRecord(property.key);
+    const binding = oxcRecord(property.value);
+    const memberName =
+      oxcIdentifierName(member) ?? (typeof member?.value === "string" ? member.value : undefined);
+    const localName =
+      oxcIdentifierName(binding) ??
+      (binding?.type === "AssignmentPattern" ? oxcIdentifierName(binding.left) : undefined);
+    if (localName !== undefined) {
+      candidates.push({ localName, memberName });
     }
   }
 }
