@@ -1371,64 +1371,68 @@ export default function Page() {
   // Integration coverage for the production cap. The fixture materializes a
   // thousand package manifests, so it carries its own timeout instead of
   // sharing the default with the fast unit tests above.
-  test("warns when optional runtime package manifest scanning reaches the production cap", { timeout: 60_000 }, async () => {
-    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-runtime-optional-cap-"));
-    const appDir = join(rootDir, "app");
-    const outDir = join(rootDir, ".mreact");
-    const optionalDependencies = Object.fromEntries(
-      Array.from({ length: 1_001 }, (_, index) => [`optional-runtime-${index}`, "1.0.0"]),
-    );
-    await mkdir(appDir, { recursive: true });
-    await writeFakePackageWithJson(
-      rootDir,
-      "db-client",
-      {
-        exports: "./index.js",
-        name: "db-client",
-        optionalDependencies,
-        type: "module",
-      },
-      `export default "db";`,
-    );
-    for (const packageName of Object.keys(optionalDependencies)) {
+  test(
+    "warns when optional runtime package manifest scanning reaches the production cap",
+    { timeout: 60_000 },
+    async () => {
+      const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-runtime-optional-cap-"));
+      const appDir = join(rootDir, "app");
+      const outDir = join(rootDir, ".mreact");
+      const optionalDependencies = Object.fromEntries(
+        Array.from({ length: 1_001 }, (_, index) => [`optional-runtime-${index}`, "1.0.0"]),
+      );
+      await mkdir(appDir, { recursive: true });
       await writeFakePackageWithJson(
         rootDir,
-        packageName,
+        "db-client",
         {
           exports: "./index.js",
-          name: packageName,
+          name: "db-client",
+          optionalDependencies,
           type: "module",
         },
-        `export default ${JSON.stringify(packageName)};`,
+        `export default "db";`,
       );
-    }
-    await writeFile(
-      join(appDir, "page.tsx"),
-      `import db from "db-client";
+      for (const packageName of Object.keys(optionalDependencies)) {
+        await writeFakePackageWithJson(
+          rootDir,
+          packageName,
+          {
+            exports: "./index.js",
+            name: packageName,
+            type: "module",
+          },
+          `export default ${JSON.stringify(packageName)};`,
+        );
+      }
+      await writeFile(
+        join(appDir, "page.tsx"),
+        `import db from "db-client";
 
 export default function Page() {
   return <main>{db}</main>;
 }`,
-    );
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
-    try {
-      await buildApp({
-        allowedSourceDirs: ["app"],
-        outDir,
-        projectRoot: rootDir,
-        routesDir: "app",
-        targets: ["node"],
-      });
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining("MR_RUNTIME_PACKAGE_MANIFEST_SCAN_LIMIT"),
       );
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("1000"));
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("db-client"));
-    } finally {
-      warnSpy.mockRestore();
-    }
-  });
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      try {
+        await buildApp({
+          allowedSourceDirs: ["app"],
+          outDir,
+          projectRoot: rootDir,
+          routesDir: "app",
+          targets: ["node"],
+        });
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining("MR_RUNTIME_PACKAGE_MANIFEST_SCAN_LIMIT"),
+        );
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("1000"));
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("db-client"));
+      } finally {
+        warnSpy.mockRestore();
+      }
+    },
+  );
 
   test("accepts valid TypeScript async generic arrows while collecting import policies", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-ts-generic-arrow-"));
@@ -3859,24 +3863,27 @@ export default function MDXContent() {
   // A full MDX build plus prerender takes over a second on a quiet machine
   // and shares the CI runner with the rest of the verify parallel group, so
   // it carries its own timeout instead of the 5s default.
-  test("prerenders MDX routes that import frontmatter named exports", { timeout: 30_000 }, async () => {
-    const rootDir = await mkdtemp(join(tmpdir(), "mreact-build-mdx-frontmatter-prerender-"));
-    const appDir = join(rootDir, "src", "app", "$...slug");
-    const outDir = join(rootDir, ".mreact");
-    await mkdir(appDir, { recursive: true });
-    await mkdir(join(rootDir, "src", "content", "evaluate"), { recursive: true });
-    await mkdir(join(rootDir, "src", "content", "build"), { recursive: true });
-    await writeFile(
-      join(rootDir, "src", "content", "evaluate", "why.mdx"),
-      "---\ntitle: Frontmatter MDX\ndescription: Named export metadata\n---\n\n# Hello Frontmatter",
-    );
-    await writeFile(
-      join(rootDir, "src", "content", "build", "getting-started.mdx"),
-      "---\ntitle: Getting Started\ndescription: Build metadata\n---\n\n# Build Frontmatter",
-    );
-    await writeFile(
-      join(appDir, "page.tsx"),
-      `import { notFound, type LoaderContext, type RouteMetadata } from "@reckona/mreact-router";
+  test(
+    "prerenders MDX routes that import frontmatter named exports",
+    { timeout: 30_000 },
+    async () => {
+      const rootDir = await mkdtemp(join(tmpdir(), "mreact-build-mdx-frontmatter-prerender-"));
+      const appDir = join(rootDir, "src", "app", "$...slug");
+      const outDir = join(rootDir, ".mreact");
+      await mkdir(appDir, { recursive: true });
+      await mkdir(join(rootDir, "src", "content", "evaluate"), { recursive: true });
+      await mkdir(join(rootDir, "src", "content", "build"), { recursive: true });
+      await writeFile(
+        join(rootDir, "src", "content", "evaluate", "why.mdx"),
+        "---\ntitle: Frontmatter MDX\ndescription: Named export metadata\n---\n\n# Hello Frontmatter",
+      );
+      await writeFile(
+        join(rootDir, "src", "content", "build", "getting-started.mdx"),
+        "---\ntitle: Getting Started\ndescription: Build metadata\n---\n\n# Build Frontmatter",
+      );
+      await writeFile(
+        join(appDir, "page.tsx"),
+        `import { notFound, type LoaderContext, type RouteMetadata } from "@reckona/mreact-router";
 import Why, { frontmatter as whyFm } from "../../content/evaluate/why.mdx";
 import GettingStarted, { frontmatter as gettingStartedFm } from "../../content/build/getting-started.mdx";
 
@@ -3932,45 +3939,46 @@ export default function Page(props: { data: PageData }) {
   );
 }
 `,
-    );
+      );
 
-    await buildApp({
-      outDir,
-      projectRoot: rootDir,
-      routesDir: "src/app",
-      targets: ["node", "cloudflare"],
-      viteConfig: {
-        plugins: [
-          mdx({
-            jsxImportSource: "@reckona/mreact",
-            jsxRuntime: "automatic",
-            rehypePlugins: [rehypeSlug],
-            remarkPlugins: [remarkFrontmatter, remarkMdxFrontmatter],
-          }),
-        ],
-      },
-    });
+      await buildApp({
+        outDir,
+        projectRoot: rootDir,
+        routesDir: "src/app",
+        targets: ["node", "cloudflare"],
+        viteConfig: {
+          plugins: [
+            mdx({
+              jsxImportSource: "@reckona/mreact",
+              jsxRuntime: "automatic",
+              rehypePlugins: [rehypeSlug],
+              remarkPlugins: [remarkFrontmatter, remarkMdxFrontmatter],
+            }),
+          ],
+        },
+      });
 
-    const manifest = JSON.parse(
-      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
-    ) as { prerenderedRoutes?: Record<string, { html?: string; status?: number }> };
-    expect(manifest.prerenderedRoutes?.["/evaluate/why"]?.status).toBe(200);
-    expect(manifest.prerenderedRoutes?.["/evaluate/why"]?.html).toContain(
-      "<h1>Frontmatter MDX</h1>",
-    );
-    expect(manifest.prerenderedRoutes?.["/evaluate/why"]?.html).toContain(
-      '<h1 id="hello-frontmatter">',
-    );
-    expect(manifest.prerenderedRoutes?.["/build/getting-started"]?.status).toBe(200);
+      const manifest = JSON.parse(
+        await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+      ) as { prerenderedRoutes?: Record<string, { html?: string; status?: number }> };
+      expect(manifest.prerenderedRoutes?.["/evaluate/why"]?.status).toBe(200);
+      expect(manifest.prerenderedRoutes?.["/evaluate/why"]?.html).toContain(
+        "<h1>Frontmatter MDX</h1>",
+      );
+      expect(manifest.prerenderedRoutes?.["/evaluate/why"]?.html).toContain(
+        '<h1 id="hello-frontmatter">',
+      );
+      expect(manifest.prerenderedRoutes?.["/build/getting-started"]?.status).toBe(200);
 
-    const exportDir = join(rootDir, "dist");
-    await expect(exportStaticApp({ exportDir, outDir })).resolves.toEqual({
-      routes: ["/build/getting-started", "/evaluate/why"],
-    });
-    await expect(
-      readFile(join(exportDir, "evaluate", "why", "index.html"), "utf8"),
-    ).resolves.toContain('<h1 id="hello-frontmatter">');
-  });
+      const exportDir = join(rootDir, "dist");
+      await expect(exportStaticApp({ exportDir, outDir })).resolves.toEqual({
+        routes: ["/build/getting-started", "/evaluate/why"],
+      });
+      await expect(
+        readFile(join(exportDir, "evaluate", "why", "index.html"), "utf8"),
+      ).resolves.toContain('<h1 id="hello-frontmatter">');
+    },
+  );
 
   test("prerenders MDX imports with frontmatter and TSX code fences", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-build-mdx-glob-code-fence-"));
@@ -6579,7 +6587,9 @@ export default function Page() {
     ).text();
 
     expect(home).toMatchObject({ navigation: true });
-    expect(home?.navigationScript).toMatch(/^assets\/routes\/__mreact_navigation_runtime\.[a-f0-9]{8}\.js$/);
+    expect(home?.navigationScript).toMatch(
+      /^assets\/routes\/__mreact_navigation_runtime\.[a-f0-9]{8}\.js$/,
+    );
     expect(html).toContain('<script type="application/json" id="mreact-navigation-runtime">');
     expect(html).toContain(`"/_mreact/client/${home?.navigationScript}"`);
     expect(html).not.toContain(
@@ -6880,26 +6890,27 @@ export default function Page() {
     expect(clientManifest.routes[0]?.script).toBeUndefined();
   });
 
-  test("preserves inferred client boundary fallback imports in production server artifacts", async () => {
+  test("preserves inferred list-row boundary fallback imports in production server artifacts", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-inferred-boundary-"));
     const appDir = join(rootDir, "app");
     const outDir = join(rootDir, ".mreact");
     await mkdir(appDir, { recursive: true });
     await writeFile(
-      join(appDir, "Counter.tsx"),
+      join(appDir, "RowControl.tsx"),
       `import { cell } from "@reckona/mreact-reactive-core";
 
-export function Counter() {
+export function RowControl(props) {
   const count = cell(0);
-  return <button type="button" onClick={() => count.set((value) => value + 1)}>count: {count.get()}</button>;
+  const increment = () => count.set((value) => value + 1);
+  return <button type="button" data-item={props.item} onClick={increment}>count: {count.get()}</button>;
 }`,
     );
     await writeFile(
       join(appDir, "page.tsx"),
-      `import { Counter } from "./Counter";
+      `import { RowControl } from "./RowControl";
 
 export default function Page() {
-  return <Counter />;
+  return <table><tbody>{[1, 2].map((item) => <tr><td><RowControl item={item} /></td></tr>)}</tbody></table>;
 }`,
     );
 
@@ -6919,21 +6930,20 @@ export default function Page() {
     });
     const html = await response.text();
 
-    expect(pageArtifact?.analysis?.clientBoundaryFallbackImports).toEqual(["./Counter"]);
-    expect(artifactCode).toContain('import { Counter } from "./Counter";');
+    expect(pageArtifact?.analysis?.clientBoundaryFallbackImports).toEqual(["./RowControl"]);
+    expect(artifactCode).toContain('import { RowControl } from "./RowControl";');
     expect(artifactCode).toContain("data-mreact-client-boundary=");
-    expect(artifactCode).toContain('_renderClientBoundary("Counter",');
-    expect(artifactCode).toContain("Counter(");
-    expect(html).toContain(
-      '<template data-mreact-client-boundary="Counter" data-mreact-client-boundary-fallback="component"></template>',
-    );
-    expect(html).toContain('<button type="button">count: <!-- -->0</button>');
+    expect(artifactCode).toContain('_renderClientBoundary("RowControl",');
+    expect(artifactCode).toContain("RowControl(");
+    expect(html.match(/data-mreact-client-boundary="RowControl"/gu)).toHaveLength(2);
+    expect(html).toContain('<button type="button" data-item="1">count: <!-- -->0</button>');
+    expect(html).toContain('<button type="button" data-item="2">count: <!-- -->0</button>');
     expect(html).not.toContain("onclick");
     expect(metadata?.clientReferenceManifest).toEqual([
       {
-        name: "Counter",
-        moduleId: "./Counter",
-        exportName: "Counter",
+        name: "RowControl",
+        moduleId: "./RowControl",
+        exportName: "RowControl",
       },
     ]);
   });

@@ -1684,6 +1684,50 @@ export function App(props) {
     }
   });
 
+  test.each(["string", "stream"] as const)(
+    "%s emitter renders client boundary fallbacks inside list rows",
+    async (serverOutput) => {
+      const modules: Record<string, unknown> = {};
+      const compile = serverOutput === "string" ? compileServerModule : compileServerStreamModule;
+      const rowControl = transform({
+        code: `export function RowControl(props) {
+  return <button type="button" data-item={props.item}>Assign {props.item}</button>;
+}`,
+        filename: "RowControl.tsx",
+        target: "server",
+        serverOutput,
+        dev: true,
+      });
+      const app = transform({
+        code: `import { RowControl } from "./RowControl";
+export function App() {
+  return <table><tbody>{[1, 2].map((item) => <tr><td><RowControl item={item} /></td></tr>)}</tbody></table>;
+}`,
+        filename: "App.tsx",
+        target: "server",
+        serverOutput,
+        dev: true,
+        clientBoundaryImports: ["./RowControl"],
+        clientBoundaryFallbackImports: ["./RowControl"],
+      });
+
+      expect(rowControl.diagnostics).toEqual([]);
+      expect(app.diagnostics).toEqual([]);
+      Object.assign(modules, compile(rowControl.code, modules));
+      Object.assign(modules, compile(app.code, modules));
+
+      const App = modules.App as (...args: unknown[]) => unknown;
+      const sink = createStringSink();
+      const result = serverOutput === "string" ? await App({}) : await App(sink, {});
+      await sink.drain();
+      const html = serverOutput === "string" ? String(result) : sink.toString();
+
+      expect(html.match(/data-mreact-client-boundary="RowControl"/gu)).toHaveLength(2);
+      expect(html).toContain('<button type="button" data-item="1">Assign <!-- -->1</button>');
+      expect(html).toContain('<button type="button" data-item="2">Assign <!-- -->2</button>');
+    },
+  );
+
   test("string and stream emitters carry select value through an option component", async () => {
     await expectServerPairHtml(
       `function StatusOption(props) {
