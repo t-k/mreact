@@ -747,12 +747,22 @@ export interface CachedClientRouteSource {
     source: string;
 }
 
+// @public
+export interface ClientBoundaryFallbackDecision {
+    mode: "none" | "ssr";
+    reason?: ClientBoundaryFallbackRejectionReason | undefined;
+}
+
+// @public
+export type ClientBoundaryFallbackRejectionReason = "browser-global" | "callback-prop-call" | "explicit-client-boundary" | "global-this" | "unsupported-handler";
+
 // @public (undocumented)
 export interface ClientRouteComponent {
     // (undocumented)
     classification: ClientRouteComponentClassification;
     // (undocumented)
     exportName: string;
+    fallback?: ClientBoundaryFallbackDecision | undefined;
     // (undocumented)
     file: string;
     // (undocumented)

@@ -1,7 +1,8 @@
 import { escapeHtmlAttribute, escapeHtmlText } from "@reckona/mreact-shared/html-escape";
 import type { HtmlSink } from "@reckona/mreact-shared/compiler-contract";
 import type { ReactCompatElement, ReactCompatNode } from "@reckona/mreact-compat";
-import { bindProp, insertRenderValue, type RenderValue } from "@reckona/mreact-reactive-dom";
+import { bindProp, insertRenderValue } from "@reckona/mreact-reactive-dom";
+import type { RenderValue } from "@reckona/mreact-reactive-dom";
 import { safeUrlAttributeValue } from "@reckona/mreact-shared/url-safety";
 import type { AppRouteLinkHref } from "./typed-routes.js";
 /** Re-exports typed route href helper types used by Link. */
@@ -35,7 +36,7 @@ export type TrustedLinkHtml = { readonly [TRUSTED_LINK_HTML]: string };
 /**
  * Represents children accepted by the app-router Link renderer.
  */
-export type LinkChild = ReactCompatNode | RenderValue | TrustedLinkHtml | readonly LinkChild[];
+export type LinkChild = ReactCompatNode | Node | TrustedLinkHtml | readonly LinkChild[];
 /**
  * Allows applications to augment statically registered app route paths through `@reckona/mreact-router/link`.
  */

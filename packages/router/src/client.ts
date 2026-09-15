@@ -166,6 +166,7 @@ export type ClientRouteComponentOrigin =
   | "use-client-directive"
   | "use-server-directive";
 
+/** Names the first construct that prevented an inferred client boundary from keeping SSR fallback markup. */
 export type ClientBoundaryFallbackRejectionReason =
   | "browser-global"
   | "callback-prop-call"
@@ -173,14 +174,18 @@ export type ClientBoundaryFallbackRejectionReason =
   | "global-this"
   | "unsupported-handler";
 
+/** Describes whether a client boundary keeps SSR fallback markup and why it may be disabled. */
 export interface ClientBoundaryFallbackDecision {
+  /** Selects placeholder-only rendering or an SSR fallback followed by hydration. */
   mode: "none" | "ssr";
+  /** Identifies the first conservative fallback-eligibility rejection when `mode` is `"none"`. */
   reason?: ClientBoundaryFallbackRejectionReason | undefined;
 }
 
 export interface ClientRouteComponent {
   classification: ClientRouteComponentClassification;
   exportName: string;
+  /** Reports the SSR fallback decision for a client boundary when the router can determine it. */
   fallback?: ClientBoundaryFallbackDecision | undefined;
   file: string;
   origin: ClientRouteComponentOrigin;
