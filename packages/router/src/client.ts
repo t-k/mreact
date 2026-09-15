@@ -2192,6 +2192,10 @@ function namedSelfContainedHandlerSource(source: string, expression: string): st
     return undefined;
   }
 
+  if (isImportedBindingName(source, name)) {
+    return undefined;
+  }
+
   const escapedName = escapeRegExp(name);
   const declarations: string[] = [];
   const functionPattern = new RegExp(
@@ -2240,6 +2244,39 @@ function namedSelfContainedHandlerSource(source: string, expression: string): st
   }
 
   return declarations[0];
+}
+
+function isImportedBindingName(source: string, name: string): boolean {
+  for (const match of source.matchAll(/\bimport\s+([\s\S]*?)\s+from\s+["'][^"']+["']/gu)) {
+    const clause = match[1]?.trim();
+    if (clause === undefined) {
+      continue;
+    }
+
+    const defaultBinding = clause.match(/^(?:type\s+)?([A-Za-z_$][\w$]*)\b/u)?.[1];
+    if (defaultBinding === name) {
+      return true;
+    }
+
+    const namespaceBinding = clause.match(/\*\s+as\s+([A-Za-z_$][\w$]*)\b/u)?.[1];
+    if (namespaceBinding === name) {
+      return true;
+    }
+
+    const namedBindings = clause.match(/\{([\s\S]*?)\}/u)?.[1];
+    if (namedBindings === undefined) {
+      continue;
+    }
+
+    for (const specifier of namedBindings.split(",")) {
+      const bindings = specifier.trim().replace(/^type\s+/u, "").split(/\s+as\s+/u);
+      if (bindings.at(-1) === name) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 function isIntrinsicJsxAttribute(source: string, attributeStart: number): boolean {

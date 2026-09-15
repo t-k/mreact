@@ -2176,6 +2176,7 @@ export default function Page() {
     [
       "an imported handler",
       `import { open } from "./actions";
+// const open = () => undefined;
 
 export function RowControl() {
   const label = cell("Open").get();
