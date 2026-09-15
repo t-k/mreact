@@ -4,7 +4,7 @@ import { createStrykerConfig } from "./stryker.base.config.mjs";
 // The ranges cover only the new decisions and their reporting paths so unrelated legacy
 // heuristics do not dilute the score.
 export default createStrykerConfig({
-  name: "client-rendering-0223-focused-v2",
+  name: "client-rendering-0223-focused-v3",
   breakThreshold: 100,
   mutate: [
     // The bare-handler acceptance decision and conservative uniqueness/reassignment gates.
@@ -12,7 +12,8 @@ export default createStrykerConfig({
     "packages/router/src/client.ts:2177-2180",
     "packages/router/src/client.ts:2195-2197",
     "packages/router/src/client.ts:2234-2235",
-    "packages/router/src/client.ts:2238-2243",
+    "packages/router/src/client.ts:2238-2239",
+    "packages/router/src/client.ts:2242-2243",
     // Structured fallback reason reporting.
     "packages/router/src/boundaries.ts:413-418",
     // The render-value dispatch callback. Marker seed text and optional diagnostics are

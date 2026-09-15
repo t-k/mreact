@@ -2237,7 +2237,7 @@ function namedSelfContainedHandlerSource(source: string, expression: string): st
 
   const assignmentPattern = new RegExp(String.raw`\b${escapedName}\s*=(?!=|>)`, "gu");
   const assignmentCount = Array.from(source.matchAll(assignmentPattern)).length;
-  const declarationIsArrow = declarations[0]?.match(/^\s*const\b/u) !== null;
+  const declarationIsArrow = (declarations[0] as string).match(/^\s*const\b/u) !== null;
 
   if (assignmentCount !== (declarationIsArrow ? 1 : 0)) {
     return undefined;
