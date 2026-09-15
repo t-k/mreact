@@ -2,8 +2,13 @@
 
 import { describe, expect, test, vi } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
+import { registerCleanup } from "@reckona/mreact-reactive-core/internal";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
-import { createRoot } from "@reckona/mreact-reactive-dom";
+import { bindText, createRoot } from "@reckona/mreact-reactive-dom";
+import {
+  createMemo,
+  installMemoRenderValueNormalizer,
+} from "@reckona/mreact-reactive-dom/internal";
 import { Link, type LinkProps } from "../src/link.js";
 
 describe("Link client rendering", () => {
@@ -119,6 +124,129 @@ describe("Link client rendering", () => {
 
 const renderLinkElement = (props: Record<string, unknown>): HTMLAnchorElement =>
   Link(props as unknown as LinkProps<string>) as unknown as HTMLAnchorElement;
+
+describe("Link render-value children", () => {
+  test("renders component memo children without stringifying them", () => {
+    installMemoRenderValueNormalizer();
+    const icon = createMemo(
+      "HomeIcon",
+      {},
+      () => {
+        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("data-icon", "home");
+        return svg;
+      },
+      () => false,
+    );
+
+    const anchor = renderLinkElement({ children: icon, href: "/home" });
+
+    expect(anchor.querySelector('svg[data-icon="home"]')).not.toBeNull();
+    expect(anchor.textContent).not.toContain("[object Object]");
+  });
+
+  test("renders arrays that mix nodes, component memos, and strings", () => {
+    installMemoRenderValueNormalizer();
+    const prefix = document.createElement("strong");
+    prefix.textContent = "Go ";
+    const icon = createMemo(
+      "ArrowIcon",
+      {},
+      () => {
+        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("data-icon", "arrow");
+        return svg;
+      },
+      () => false,
+    );
+
+    const anchor = renderLinkElement({ children: [prefix, icon, " Home"], href: "/home" });
+
+    expect(anchor.innerHTML).toContain("<strong>Go </strong>");
+    expect(anchor.querySelector('svg[data-icon="arrow"]')).not.toBeNull();
+    expect(anchor.textContent).toBe("Go  Home");
+    expect(anchor.textContent).not.toContain("[object Object]");
+  });
+
+  test("updates reactive component children and disposes their scope with the Link owner", async () => {
+    installMemoRenderValueNormalizer();
+    const label = cell("Home");
+    const cleanupEvents: string[] = [];
+    const container = document.createElement("div");
+    document.body.append(container);
+
+    const dispose = createRoot(container, () => {
+      const child = createMemo(
+        "ReactiveLabel",
+        {},
+        () => {
+          registerCleanup(() => cleanupEvents.push("disposed"));
+          const span = document.createElement("span");
+          const text = document.createTextNode("");
+          span.append(text);
+          bindText(text, () => label.get());
+          return span;
+        },
+        () => false,
+      );
+      return renderLinkElement({ children: child, href: "/home" });
+    });
+
+    expect(container.textContent).toBe("Home");
+
+    label.set("Dashboard");
+    await flushEffects();
+    expect(container.textContent).toBe("Dashboard");
+
+    dispose();
+    expect(cleanupEvents).toEqual(["disposed"]);
+    expect(container.textContent).toBe("");
+
+    label.set("After dispose");
+    await flushEffects();
+    expect(container.textContent).toBe("");
+    container.remove();
+  });
+
+  test("warns once per unsupported object child component in development", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const UnsupportedCard = function UnsupportedCard() {};
+
+    try {
+      renderLinkElement({ children: { type: UnsupportedCard }, href: "/one" });
+      renderLinkElement({ children: { type: UnsupportedCard }, href: "/two" });
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("UnsupportedCard"));
+    } finally {
+      warn.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  test("does not warn for unsupported object children in production", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const ProductionOnlyCard = function ProductionOnlyCard() {};
+
+    try {
+      renderLinkElement({ children: { type: ProductionOnlyCard }, href: "/production" });
+
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  test("keeps HTML-looking string children as text", () => {
+    const anchor = renderLinkElement({ children: "<b>safe</b>", href: "/safe" });
+
+    expect(anchor.innerHTML).toBe("&lt;b&gt;safe&lt;/b&gt;");
+    expect(anchor.querySelector("b")).toBeNull();
+  });
+});
 
 describe("Link reactive href", () => {
   test("follows a reactive href on the same anchor and skips same-value updates", async () => {

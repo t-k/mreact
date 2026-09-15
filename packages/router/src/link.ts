@@ -1,7 +1,7 @@
 import { escapeHtmlAttribute, escapeHtmlText } from "@reckona/mreact-shared/html-escape";
 import type { HtmlSink } from "@reckona/mreact-shared/compiler-contract";
 import type { ReactCompatElement, ReactCompatNode } from "@reckona/mreact-compat";
-import { bindProp } from "@reckona/mreact-reactive-dom";
+import { bindProp, insertRenderValue, type RenderValue } from "@reckona/mreact-reactive-dom";
 import { safeUrlAttributeValue } from "@reckona/mreact-shared/url-safety";
 import type { AppRouteLinkHref } from "./typed-routes.js";
 /** Re-exports typed route href helper types used by Link. */
@@ -35,7 +35,7 @@ export type TrustedLinkHtml = { readonly [TRUSTED_LINK_HTML]: string };
 /**
  * Represents children accepted by the app-router Link renderer.
  */
-export type LinkChild = ReactCompatNode | Node | TrustedLinkHtml | readonly LinkChild[];
+export type LinkChild = ReactCompatNode | RenderValue | TrustedLinkHtml | readonly LinkChild[];
 /**
  * Allows applications to augment statically registered app route paths through `@reckona/mreact-router/link`.
  */
@@ -292,7 +292,7 @@ function createAnchorElement(props: Record<string, unknown>): HTMLAnchorElement 
   return anchor;
 }
 
-function appendLinkChild(parent: Node, child: LinkChild): void {
+function appendLinkChild(parent: Node & ParentNode, child: LinkChild): void {
   if (child === null || child === undefined || typeof child === "boolean") {
     return;
   }
@@ -309,7 +309,68 @@ function appendLinkChild(parent: Node, child: LinkChild): void {
     return;
   }
 
-  parent.appendChild(document.createTextNode(String(child)));
+  if (typeof child === "string" || typeof child === "number" || typeof child === "bigint") {
+    parent.appendChild(document.createTextNode(String(child)));
+    return;
+  }
+
+  reportUnsupportedBrowserChild(child);
+  const marker = document.createTextNode("");
+  parent.appendChild(marker);
+  insertRenderValue(parent, marker, () => child as RenderValue, {
+    debugLabel: "Link.children",
+  });
+}
+
+const reportedUnsupportedBrowserChildren = new Set<string>();
+
+function reportUnsupportedBrowserChild(child: unknown): void {
+  if (
+    child === null ||
+    typeof child !== "object" ||
+    isKnownBrowserRenderValue(child) ||
+    currentNodeEnv() === "production"
+  ) {
+    return;
+  }
+
+  const name = browserRenderValueName(child);
+  if (reportedUnsupportedBrowserChildren.has(name)) {
+    return;
+  }
+  reportedUnsupportedBrowserChildren.add(name);
+  console.warn(
+    `[MR_LINK_UNSUPPORTED_CHILD] Link received an unsupported object child from ${name}; the value will use the generic render-value fallback.`,
+  );
+}
+
+function isKnownBrowserRenderValue(child: object): boolean {
+  const value = child as Record<PropertyKey, unknown>;
+  return (
+    value[Symbol.for("mreact.memo-render-value")] === true ||
+    value[Symbol.for("mreact.list-render-value")] === true ||
+    typeof value.$$typeof === "symbol" ||
+    typeof value[Symbol.iterator] === "function"
+  );
+}
+
+function browserRenderValueName(child: object): string {
+  const type = (child as { type?: unknown }).type;
+  if (typeof type === "function" && type.name !== "") {
+    return type.name;
+  }
+  if (typeof type === "string" && type !== "") {
+    return type;
+  }
+  return child.constructor?.name || "Object";
+}
+
+function currentNodeEnv(): string | undefined {
+  return (
+    globalThis as typeof globalThis & {
+      process?: { env?: { NODE_ENV?: string | undefined } | undefined } | undefined;
+    }
+  ).process?.env?.NODE_ENV;
 }
 
 function renderAnchorString(props: Record<string, unknown>): string {

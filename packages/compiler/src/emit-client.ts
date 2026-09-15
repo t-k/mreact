@@ -1389,7 +1389,7 @@ function emitComponentRenderValueNode(node: JsxNodeIr, state: EmitSetupState): s
 
 function shouldDeferComponentRenderValue(node: JsxNodeIr): boolean {
   if (node.kind === "expr") {
-    return node.deferRenderValue === true;
+    return node.deferRenderValue === true || readsReactiveSourceCode(node.code);
   }
 
   if (node.kind === "conditional") {

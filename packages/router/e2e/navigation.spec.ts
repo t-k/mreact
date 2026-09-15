@@ -2315,7 +2315,7 @@ export default function Page() {
   }
 });
 
-test("reactive Link href follows a cell update and navigates to the updated url", async ({
+test("hydrates inferred list rows and reactive Link children without duplicate or stringified markup", async ({
   page,
 }) => {
   const { close, url } = await startWorkspaceFixtureServer({
@@ -2328,19 +2328,29 @@ function ticketHref(id) {
   return "/tickets/" + id;
 }
 
+function TicketIcon() {
+  return <svg data-testid="ticket-icon"><title>Ticket {ticket.get() ?? 1}</title></svg>;
+}
+
 export function TicketLink(props) {
   return (
     <Link data-testid="ticket-link" href={ticketHref(ticket.get() ?? props.number)}>
-      Open detail page
+      <TicketIcon /> Open ticket {ticket.get() ?? props.number}
     </Link>
   );
+}`,
+    "row-control.tsx": `import { cell } from "@reckona/mreact-reactive-core";
+
+export function RowControl(props) {
+  const count = cell(0);
+  const increment = () => count.set((value) => value + 1);
+  return <button type="button" data-testid={"row-" + props.item} onClick={increment}>row {props.item}: {count.get()}</button>;
 }`,
     "ticket-state.ts": `import { cell } from "@reckona/mreact-reactive-core";
 
 export const ticket = cell(null);`,
-    "page.tsx": `"use client";
-
-import { TicketLink } from "./ticket-link";
+    "page.tsx": `import { TicketLink } from "./ticket-link";
+import { RowControl } from "./row-control";
 import { ticket } from "./ticket-state";
 
 export default function Page() {
@@ -2349,6 +2359,7 @@ export default function Page() {
       <h1>Home</h1>
       <TicketLink number={1} />
       <button type="button" data-testid="next" onClick={() => ticket.set(2)}>next</button>
+      <table><tbody>{[1, 2].map((item) => <tr><td><RowControl item={item} /></td></tr>)}</tbody></table>
     </main>
   );
 }`,
@@ -2358,9 +2369,23 @@ export default function Page() {
   });
 
   try {
+    const serverHtml = await (await page.request.get(url)).text();
+    expect(serverHtml).toContain('data-mreact-client-boundary="RowControl"');
+    expect(serverHtml).toContain('data-testid="row-1"');
+    expect(serverHtml).toContain('data-testid="row-2"');
+
     await page.goto(url);
+    await expect(page.locator("html")).toHaveAttribute("data-mreact-hydrated", "true");
     await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
     await expect(page.getByTestId("ticket-link")).toHaveAttribute("href", "/tickets/1");
+    await expect(page.getByTestId("ticket-icon")).toHaveCount(1);
+    await expect(page.getByTestId("ticket-link")).toContainText("Open ticket 1");
+    await expect(page.getByTestId("row-1")).toHaveCount(1);
+    await expect(page.getByTestId("row-2")).toHaveCount(1);
+    await expect(page.locator("body")).not.toContainText("[object Object]");
+
+    await page.getByTestId("row-1").click();
+    await expect(page.getByTestId("row-1")).toHaveText("row 1: 1");
 
     const anchorBefore = await page.evaluateHandle(() =>
       document.querySelector('[data-testid="ticket-link"]'),
@@ -2368,6 +2393,9 @@ export default function Page() {
 
     await page.getByTestId("next").click();
     await expect(page.getByTestId("ticket-link")).toHaveAttribute("href", "/tickets/2");
+    await expect(page.getByTestId("ticket-icon")).toHaveCount(1);
+    await expect(page.getByTestId("ticket-link")).toContainText("Open ticket 2");
+    await expect(page.locator("body")).not.toContainText("[object Object]");
 
     await expect(
       page.evaluate(

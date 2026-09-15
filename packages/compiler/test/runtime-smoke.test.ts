@@ -3977,6 +3977,45 @@ export function App() {
     expect(node.querySelectorAll("a")[0]).toBe(linkAnchor);
   });
 
+  test("router Link preserves component and reactive children after client rendering", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+import { Link } from "@reckona/mreact-router/link";
+
+const label = cell("Home");
+
+function Icon() {
+  return <svg data-icon="home"><title>{label.get()}</title></svg>;
+}
+
+export function App() {
+  return <nav>
+    <button type="button" onClick={() => label.set("Dashboard")}>Rename</button>
+    <Link href="/home"><Icon /> {label.get()}</Link>
+  </nav>;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("createMemo");
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const anchor = node.querySelector("a");
+
+    expect(anchor?.querySelector('svg[data-icon="home"]')).not.toBeNull();
+    expect(anchor?.textContent).toBe("Home Home");
+    expect(anchor?.innerHTML).not.toContain("[object Object]");
+
+    node.querySelector("button")?.click();
+    await flushEffects();
+
+    expect(anchor?.querySelector('svg[data-icon="home"]')).not.toBeNull();
+    expect(anchor?.textContent).toBe("Dashboard Dashboard");
+    expect(anchor?.innerHTML).not.toContain("[object Object]");
+  });
+
   test("router Link href follows a reactive read through a wrapper component and an import alias", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";
