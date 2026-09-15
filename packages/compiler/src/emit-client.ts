@@ -78,6 +78,7 @@ function emitClientModule(ir: ModuleIr, options: { dev?: boolean; filename?: str
       )
       .map((component) => component.name),
   );
+  const routerLinkComponentNames = new Set(ir.routerLinkComponentNames ?? []);
   const components = ir.components
     .map((component) =>
       emitComponent(
@@ -87,6 +88,7 @@ function emitClientModule(ir: ModuleIr, options: { dev?: boolean; filename?: str
         clientBoundaryHelperName,
         inlineMemoComponents,
         nonNullishComponents,
+        routerLinkComponentNames,
         options,
       ),
     )
@@ -230,6 +232,7 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
   const internalSpecifiers = new Set<string>();
   const reactiveCoreSpecifiers = new Set<string>();
   const reactiveCoreInternalSpecifiers = new Set<string>();
+  const routerLinkComponentNames = new Set(ir.routerLinkComponentNames ?? []);
 
   const inlineMemoComponentNames = new Set(
     ir.components
@@ -254,7 +257,11 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
     internalSpecifiers.add("insertMemoDynamic");
   }
 
-  if (ir.components.some((component) => treeUsesDeferredComponentRenderValues(component.root))) {
+  if (
+    ir.components.some((component) =>
+      treeUsesDeferredComponentRenderValues(component.root, routerLinkComponentNames),
+    )
+  ) {
     internalSpecifiers.add("createMemo");
     internalSpecifiers.add("installMemoRenderValueNormalizer");
   }
@@ -544,6 +551,7 @@ function emitComponent(
   clientBoundaryHelperName: string | undefined,
   inlineMemoComponents: ReadonlyMap<string, CompatInlineMemo>,
   nonNullishComponents: ReadonlySet<string>,
+  routerLinkComponentNames: ReadonlySet<string>,
   options: { dev?: boolean; filename?: string },
 ): string {
   const templateName = moduleAllocator("_tmpl_" + component.name, component.bindingNames);
@@ -553,7 +561,7 @@ function emitComponent(
   // unreachable. The runtime installer is idempotent, so repeated renders do no
   // redundant setup.
   const body = [
-    ...(treeUsesDeferredComponentRenderValues(component.root)
+    ...(treeUsesDeferredComponentRenderValues(component.root, routerLinkComponentNames)
       ? [`  ${helperNames.installMemoRenderValueNormalizer}();`]
       : []),
     ...component.bodyStatements.map((statement) => `  ${statement}`),
@@ -573,6 +581,7 @@ function emitComponent(
       clientBoundaryHelperName,
       inlineMemoComponents,
       nonNullishComponents,
+      routerLinkComponentNames,
       debugLabel,
       ownerDeclarations: [],
       listBindingCaches: new Map(),
@@ -604,6 +613,7 @@ function emitComponent(
       clientBoundaryHelperName,
       inlineMemoComponents,
       nonNullishComponents,
+      routerLinkComponentNames,
       debugLabel,
       ownerDeclarations: [],
       listBindingCaches: new Map(),
@@ -635,6 +645,7 @@ function emitComponent(
     clientBoundaryHelperName,
     inlineMemoComponents,
     nonNullishComponents,
+    routerLinkComponentNames,
     debugLabel,
     ownerDeclarations: [],
     listBindingCaches: new Map(),
@@ -784,6 +795,7 @@ interface EmitSetupState {
   clientBoundaryHelperName?: string | undefined;
   inlineMemoComponents: ReadonlyMap<string, CompatInlineMemo>;
   nonNullishComponents: ReadonlySet<string>;
+  routerLinkComponentNames: ReadonlySet<string>;
   debugLabel?: string | undefined;
   compilerKeyedEventSlotKeys?: ReadonlyMap<string, string> | undefined;
   compilerKeyedElementPath?: string | undefined;
@@ -1352,25 +1364,42 @@ function emitRenderValueExpression(
  * so the subscription, the DOM range, and the branch cleanup scope all live
  * with the branch instead of with the caller.
  */
-function emitComponentRenderValueExpression(children: JsxNodeIr[], state: EmitSetupState): string {
-  const parts = children.map((child) => emitComponentRenderValueNode(child, state));
+function emitComponentRenderValueExpression(
+  children: JsxNodeIr[],
+  state: EmitSetupState,
+  deferRouterLinkChildren = false,
+): string {
+  const parts = children.map((child) =>
+    emitComponentRenderValueNode(child, state, deferRouterLinkChildren),
+  );
 
   return parts.length === 1 ? (parts[0] as string) : `[${parts.join(", ")}]`;
 }
 
-function emitComponentRenderValueNode(node: JsxNodeIr, state: EmitSetupState): string {
+function emitComponentRenderValueNode(
+  node: JsxNodeIr,
+  state: EmitSetupState,
+  deferRouterLinkChildren: boolean,
+): string {
   if (needsDeferredComponentRenderValue(node)) {
     const expression = emitNodeRenderValueExpression(node, state);
     return `${state.helperNames.createMemo}(null, null, () => ${expression}, () => false)`;
   }
 
-  if (shouldDeferComponentRenderValue(node)) {
+  if (
+    shouldDeferComponentRenderValue(node) ||
+    (deferRouterLinkChildren && shouldDeferRouterLinkRenderValue(node))
+  ) {
     const expression = emitNodeRenderValueExpression(node, state);
     return `${state.helperNames.createMemo}(null, null, () => ${expression}, () => false)`;
   }
 
   if (node.kind === "fragment") {
-    const valueExpression = emitComponentRenderValueExpression(node.children, state);
+    const valueExpression = emitComponentRenderValueExpression(
+      node.children,
+      state,
+      deferRouterLinkChildren,
+    );
 
     if (node.bodyStatements !== undefined && node.bodyStatements.length > 0) {
       return [
@@ -1389,7 +1418,7 @@ function emitComponentRenderValueNode(node: JsxNodeIr, state: EmitSetupState): s
 
 function shouldDeferComponentRenderValue(node: JsxNodeIr): boolean {
   if (node.kind === "expr") {
-    return node.deferRenderValue === true || node.facts?.value.kind === "native-cell-read";
+    return node.deferRenderValue === true;
   }
 
   if (node.kind === "conditional") {
@@ -1411,6 +1440,25 @@ function shouldDeferComponentRenderValue(node: JsxNodeIr): boolean {
 
   if (node.kind === "fragment") {
     return node.children.some(shouldDeferComponentRenderValue);
+  }
+
+  return false;
+}
+
+function shouldDeferRouterLinkRenderValue(node: JsxNodeIr): boolean {
+  if (node.kind === "expr") {
+    return node.renderMode !== "dynamic" && readsReactiveSourceCode(node.code);
+  }
+
+  if (node.kind === "conditional") {
+    return (
+      readsReactiveSourceCode(node.conditionCode) ||
+      [...node.whenTrue, ...node.whenFalse].some(shouldDeferRouterLinkRenderValue)
+    );
+  }
+
+  if (node.kind === "element" || node.kind === "fragment") {
+    return node.children.some(shouldDeferRouterLinkRenderValue);
   }
 
   return false;
@@ -1457,10 +1505,17 @@ function readsReactiveSourceCode(code: string): boolean {
   return /\.\s*get\s*\(/.test(code);
 }
 
-function treeUsesDeferredComponentRenderValues(node: JsxNodeIr): boolean {
+function treeUsesDeferredComponentRenderValues(
+  node: JsxNodeIr,
+  routerLinkComponentNames: ReadonlySet<string>,
+): boolean {
   if (node.kind === "component") {
+    const childNeedsDeferral = routerLinkComponentNames.has(node.name)
+      ? (child: JsxNodeIr) =>
+          shouldDeferComponentRenderValue(child) || shouldDeferRouterLinkRenderValue(child)
+      : shouldDeferComponentRenderValue;
     if (
-      node.children.some(shouldDeferComponentRenderValue) ||
+      node.children.some(childNeedsDeferral) ||
       node.props.some(
         (prop) =>
           prop.kind === "render-prop" && prop.children.some(shouldDeferComponentRenderValue),
@@ -1470,24 +1525,35 @@ function treeUsesDeferredComponentRenderValues(node: JsxNodeIr): boolean {
     }
 
     return (
-      node.children.some(treeUsesDeferredComponentRenderValues) ||
+      node.children.some((child) =>
+        treeUsesDeferredComponentRenderValues(child, routerLinkComponentNames),
+      ) ||
       node.props.some(
         (prop) =>
-          prop.kind === "render-prop" && prop.children.some(treeUsesDeferredComponentRenderValues),
+          prop.kind === "render-prop" &&
+          prop.children.some((child) =>
+            treeUsesDeferredComponentRenderValues(child, routerLinkComponentNames),
+          ),
       )
     );
   }
 
   if (node.kind === "conditional") {
-    return [...node.whenTrue, ...node.whenFalse].some(treeUsesDeferredComponentRenderValues);
+    return [...node.whenTrue, ...node.whenFalse].some((child) =>
+      treeUsesDeferredComponentRenderValues(child, routerLinkComponentNames),
+    );
   }
 
   if (node.kind === "list") {
-    return node.children.some(treeUsesDeferredComponentRenderValues);
+    return node.children.some((child) =>
+      treeUsesDeferredComponentRenderValues(child, routerLinkComponentNames),
+    );
   }
 
   if (node.kind === "element" || node.kind === "fragment") {
-    return node.children.some(treeUsesDeferredComponentRenderValues);
+    return node.children.some((child) =>
+      treeUsesDeferredComponentRenderValues(child, routerLinkComponentNames),
+    );
   }
 
   return false;
@@ -1987,18 +2053,19 @@ function emitComponentCall(
   clientReference?: { moduleId: string; name: string } | undefined,
   calleeCode?: string,
 ): string {
+  const deferRouterLinkChildren = state.routerLinkComponentNames.has(name);
   if (
     clientReference !== undefined &&
     state.clientBoundaryHelperName !== undefined &&
     isCompatClientReferenceModuleId(clientReference.moduleId)
   ) {
-    return `${state.clientBoundaryHelperName}(${JSON.stringify(clientReference.name)}, ${emitPropsObject(props, children, state)})`;
+    return `${state.clientBoundaryHelperName}(${JSON.stringify(clientReference.name)}, ${emitPropsObject(props, children, state, true, deferRouterLinkChildren)})`;
   }
 
   if (calleeCode !== undefined) {
-    return `${state.helperNames.runWithSetupTracking}((${calleeCode}), ${emitPropsObject(props, children, state)})`;
+    return `${state.helperNames.runWithSetupTracking}((${calleeCode}), ${emitPropsObject(props, children, state, true, deferRouterLinkChildren)})`;
   }
-  return `${state.helperNames.runWithSetupTracking}(${name}, ${emitPropsObject(props, children, state)})`;
+  return `${state.helperNames.runWithSetupTracking}(${name}, ${emitPropsObject(props, children, state, true, deferRouterLinkChildren)})`;
 }
 
 function emitPropsObject(
@@ -2006,6 +2073,7 @@ function emitPropsObject(
   children: JsxNodeIr[],
   state: EmitSetupState,
   reactiveGetters = true,
+  deferRouterLinkChildren = false,
 ): string {
   const entries = props.map((prop) => {
     if (prop.kind === "spread-prop") {
@@ -2033,7 +2101,9 @@ function emitPropsObject(
   });
 
   if (children.length > 0) {
-    entries.push(`children: ${emitComponentRenderValueExpression(children, state)}`);
+    entries.push(
+      `children: ${emitComponentRenderValueExpression(children, state, deferRouterLinkChildren)}`,
+    );
   }
 
   return `{ ${entries.join(", ")} }`;

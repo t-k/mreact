@@ -2097,6 +2097,7 @@ export default function Page() {
     [
       "a body-local arrow",
       `export function RowControl() {
+  // import { open } from "./actions";
   const opened = cell(false);
   const open = () => opened.set(true);
   return <button type="button" onClick={open}>{opened.get() ? "Open" : "Closed"}</button>;
@@ -2191,6 +2192,29 @@ export function RowControl() {
 open = () => undefined;
 
 export function RowControl() {
+  const label = cell("Open").get();
+  return <button type="button" onClick={open}>{label}</button>;
+}`,
+    ],
+    [
+      "a handler reassigned across a comment",
+      `function open() {
+  return undefined;
+}
+open /* reassigned */ = () => undefined;
+
+export function RowControl() {
+  const label = cell("Open").get();
+  return <button type="button" onClick={open}>{label}</button>;
+}`,
+    ],
+    [
+      "a parameter-shadowed handler",
+      `function open() {
+  return undefined;
+}
+
+export function RowControl({ open }) {
   const label = cell("Open").get();
   return <button type="button" onClick={open}>{label}</button>;
 }`,

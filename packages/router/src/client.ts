@@ -30,6 +30,7 @@ import { assetPath } from "./assets.js";
 import { reactiveDevtoolsStubSource } from "./reactive-devtools-stub.js";
 import {
   collectClientRouteCapabilityFacts,
+  scanModuleSource,
   type ClientCapabilityFact,
   type ClientRouteCapabilityFacts,
 } from "./route-client-capabilities.js";
@@ -2192,10 +2193,12 @@ function namedSelfContainedHandlerSource(source: string, expression: string): st
     return undefined;
   }
 
-  if (isImportedBindingName(source, name)) {
+  const scanned = scanModuleSource(source);
+  if (scanned === undefined) {
     return undefined;
   }
 
+  const syntaxSource = scanned.withoutLiterals;
   const escapedName = escapeRegExp(name);
   const declarations: string[] = [];
   const functionPattern = new RegExp(
@@ -2203,9 +2206,9 @@ function namedSelfContainedHandlerSource(source: string, expression: string): st
     "gu",
   );
 
-  for (const match of source.matchAll(functionPattern)) {
+  for (const match of syntaxSource.matchAll(functionPattern)) {
     const openBrace = (match.index ?? 0) + match[0].lastIndexOf("{");
-    const closeBrace = matchingBraceEnd(source, openBrace);
+    const closeBrace = matchingBraceEnd(syntaxSource, openBrace);
     if (closeBrace !== undefined) {
       declarations.push(source.slice(match.index, closeBrace + 1));
     }
@@ -2215,17 +2218,17 @@ function namedSelfContainedHandlerSource(source: string, expression: string): st
     String.raw`\bconst\s+${escapedName}\s*=\s*(?:async\s+)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>\s*`,
     "gu",
   );
-  for (const match of source.matchAll(arrowPattern)) {
+  for (const match of syntaxSource.matchAll(arrowPattern)) {
     const valueStart = (match.index ?? 0) + match[0].length;
     if (source[valueStart] === "{") {
-      const closeBrace = matchingBraceEnd(source, valueStart);
+      const closeBrace = matchingBraceEnd(syntaxSource, valueStart);
       if (closeBrace !== undefined) {
         declarations.push(source.slice(match.index, closeBrace + 1));
       }
       continue;
     }
 
-    const expressionEnd = source.slice(valueStart).search(/[;\n]/u);
+    const expressionEnd = syntaxSource.slice(valueStart).search(/[;\n]/u);
     if (expressionEnd !== -1) {
       declarations.push(source.slice(match.index, valueStart + expressionEnd));
     }
@@ -2235,8 +2238,12 @@ function namedSelfContainedHandlerSource(source: string, expression: string): st
     return undefined;
   }
 
+  if (hasPotentialHandlerBindingShadow(syntaxSource, name, functionPattern)) {
+    return undefined;
+  }
+
   const assignmentPattern = new RegExp(String.raw`\b${escapedName}\s*=(?!=|>)`, "gu");
-  const assignmentCount = Array.from(source.matchAll(assignmentPattern)).length;
+  const assignmentCount = Array.from(syntaxSource.matchAll(assignmentPattern)).length;
   const declarationIsArrow = (declarations[0] as string).match(/^\s*const\b/u) !== null;
 
   if (assignmentCount !== (declarationIsArrow ? 1 : 0)) {
@@ -2246,37 +2253,38 @@ function namedSelfContainedHandlerSource(source: string, expression: string): st
   return declarations[0];
 }
 
-function isImportedBindingName(source: string, name: string): boolean {
-  for (const match of source.matchAll(/\bimport\s+([\s\S]*?)\s+from\s+["'][^"']+["']/gu)) {
-    const clause = match[1]?.trim();
-    if (clause === undefined) {
-      continue;
-    }
+function hasPotentialHandlerBindingShadow(
+  source: string,
+  name: string,
+  functionPattern: RegExp,
+): boolean {
+  const escapedName = escapeRegExp(name);
+  const functionBindings = Array.from(source.matchAll(functionPattern)).length;
+  const simpleVariableBindings = Array.from(
+    source.matchAll(new RegExp(String.raw`\b(?:const|let|var)\s+${escapedName}\b`, "gu")),
+  ).length;
+  const destructuredVariableBindings = Array.from(
+    source.matchAll(
+      new RegExp(
+        String.raw`\b(?:const|let|var)\s+(?:\{[^};\n]*\b${escapedName}\b[^};\n]*\}|\[[^\];\n]*\b${escapedName}\b[^\];\n]*\])`,
+        "gu",
+      ),
+    ),
+  ).length;
 
-    const defaultBinding = clause.match(/^(?:type\s+)?([A-Za-z_$][\w$]*)\b/u)?.[1];
-    if (defaultBinding === name) {
-      return true;
-    }
-
-    const namespaceBinding = clause.match(/\*\s+as\s+([A-Za-z_$][\w$]*)\b/u)?.[1];
-    if (namespaceBinding === name) {
-      return true;
-    }
-
-    const namedBindings = clause.match(/\{([\s\S]*?)\}/u)?.[1];
-    if (namedBindings === undefined) {
-      continue;
-    }
-
-    for (const specifier of namedBindings.split(",")) {
-      const bindings = specifier.trim().replace(/^type\s+/u, "").split(/\s+as\s+/u);
-      if (bindings.at(-1) === name) {
-        return true;
-      }
-    }
+  if (functionBindings + simpleVariableBindings + destructuredVariableBindings !== 1) {
+    return true;
   }
 
-  return false;
+  const parameterPatterns = [
+    /\b(?:async\s+)?function(?:\s+[A-Za-z_$][\w$]*)?\s*\(([^)]*)\)/gu,
+    /(?:\(([^)]*)\)|([A-Za-z_$][\w$]*))\s*=>/gu,
+  ];
+  return parameterPatterns.some((pattern) =>
+    Array.from(source.matchAll(pattern)).some((match) =>
+      new RegExp(String.raw`\b${escapedName}\b`, "u").test(match[1] ?? match[2] ?? ""),
+    ),
+  );
 }
 
 function isIntrinsicJsxAttribute(source: string, attributeStart: number): boolean {

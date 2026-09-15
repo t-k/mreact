@@ -3982,7 +3982,7 @@ export function App() {
       code: `import { cell } from "@reckona/mreact-reactive-core";
 import { Link } from "@reckona/mreact-router/link";
 
-const label = cell("Home");
+const label = cell<string | null>("Home");
 
 function Icon() {
   return <svg data-icon="home"><title>{label.get()}</title></svg>;
@@ -3991,7 +3991,7 @@ function Icon() {
 export function App() {
   return <nav>
     <button type="button" onClick={() => label.set("Dashboard")}>Rename</button>
-    <Link href="/home"><Icon /> {label.get()}</Link>
+    <Link href="/home"><Icon /> {label.get() ?? "Fallback"}</Link>
   </nav>;
 }`,
       filename: "App.tsx",
@@ -4014,6 +4014,70 @@ export function App() {
     expect(anchor?.querySelector('svg[data-icon="home"]')).not.toBeNull();
     expect(anchor?.textContent).toBe("Dashboard Dashboard");
     expect(anchor?.innerHTML).not.toContain("[object Object]");
+  });
+
+  test("generic components still receive primitive children instead of render-value wrappers", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const visible = cell(false);
+
+function Inspect(props) {
+  return <section data-value={String(props.children)}>{props.children ? <b data-visible>Visible</b> : null}</section>;
+}
+
+export function App() {
+  return <Inspect>{visible.get()}</Inspect>;
+}`,
+      filename: "generic-primitive-children.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+
+    expect(node.getAttribute("data-value")).toBe("false");
+    expect(node.querySelector("[data-visible]")).toBeNull();
+    expect(node.textContent).not.toContain("[object Object]");
+  });
+
+  test("router Link does not re-evaluate stateful dynamic child calls as reactive expressions", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+import { Link } from "@reckona/mreact-router/link";
+
+const label = cell("Home");
+
+function formatLabel(value) {
+  globalThis.__linkFormatCalls = (globalThis.__linkFormatCalls ?? 0) + 1;
+  return value;
+}
+
+export function App() {
+  return <nav>
+    <button type="button" onClick={() => label.set("Dashboard")}>Rename</button>
+    <Link href="/home">{formatLabel(label.get())}</Link>
+  </nav>;
+}`,
+      filename: "link-dynamic-call-children.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const calls = globalThis as typeof globalThis & { __linkFormatCalls?: number };
+
+    expect(node.querySelector("a")?.textContent).toBe("Home");
+    expect(calls.__linkFormatCalls).toBe(1);
+
+    node.querySelector("button")?.click();
+    await flushEffects();
+
+    expect(node.querySelector("a")?.textContent).toBe("Home");
+    expect(calls.__linkFormatCalls).toBe(1);
+    delete calls.__linkFormatCalls;
   });
 
   test("router Link href follows a reactive read through a wrapper component and an import alias", async () => {
