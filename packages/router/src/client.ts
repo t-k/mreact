@@ -1864,10 +1864,11 @@ function clientBoundaryFallbackEligibilityForSource(
     return { eligible: false, reason: "browser-global" };
   }
 
+  const namedHandlerAnalysis = collectNamedHandlerAnalysis(moduleContext, source);
   const destructuredCallbackPropNames = destructuredPropsCallbackNames(source);
   const callbackPropNames = new Set([
     ...destructuredCallbackPropNames,
-    ...propsCallbackAliasNames(source),
+    ...propsCallbackAliasNames(source, namedHandlerAnalysis.callbackAliasCandidates),
     ...memberCallbackNames(source),
   ]);
   const sourceWithoutComponentCallbackProps = source.replaceAll(
@@ -1981,8 +1982,7 @@ function clientBoundaryFallbackEligibilityForSource(
   sourceWithoutGuardedUndefinedCallbacks = removeSelfContainedIntrinsicHandlerAttributes(
     sourceWithoutGuardedUndefinedCallbacks,
     callbackPropNames,
-    source,
-    moduleContext,
+    namedHandlerAnalysis,
   );
 
   if (/\bon[A-Z][A-Za-z0-9_$]*\s*=/u.test(sourceWithoutGuardedUndefinedCallbacks)) {
@@ -2016,7 +2016,10 @@ function hasClientBoundaryFallbackUnsafeBrowserGlobal(source: string, filename?:
   }
 }
 
-function propsCallbackAliasNames(source: string): Set<string> {
+function propsCallbackAliasNames(
+  source: string,
+  astCandidates: readonly CallbackAliasCandidate[],
+): Set<string> {
   const names = new Set<string>();
 
   for (const match of source.matchAll(
@@ -2086,6 +2089,16 @@ function propsCallbackAliasNames(source: string): Set<string> {
       (isCallbackPropName(propName) || isCallbackPropName(localName))
     ) {
       names.add(localName);
+    }
+  }
+
+  for (const candidate of astCandidates) {
+    const callbackAlias =
+      candidate.memberName !== undefined
+        ? isCallbackPropName(candidate.memberName) || isCallbackPropName(candidate.localName)
+        : candidate.sourceName !== undefined && names.has(candidate.sourceName);
+    if (callbackAlias) {
+      names.add(candidate.localName);
     }
   }
 
@@ -2171,11 +2184,9 @@ function removeSafeCallbackHandlerAttributes(
 function removeSelfContainedIntrinsicHandlerAttributes(
   source: string,
   callbackNames: ReadonlySet<string>,
-  originalSource: string,
-  moduleContext: CompilerModuleContext,
+  namedHandlerAnalysis: NamedHandlerAnalysis,
 ): string {
   const attributePattern = /\bon[A-Z][A-Za-z0-9_$]*\s*=\s*\{/gu;
-  const namedHandlerDeclarations = collectNamedHandlerDeclarations(moduleContext, originalSource);
   let result = "";
   let cursor = 0;
 
@@ -2191,11 +2202,11 @@ function removeSelfContainedIntrinsicHandlerAttributes(
     const expression = source.slice(expressionStart, end);
     const handlerSource = isInlineFunctionExpression(expression)
       ? expression
-      : namedSelfContainedHandlerSource(source, expression, namedHandlerDeclarations);
+      : namedSelfContainedHandlerSource(source, expression, namedHandlerAnalysis);
     if (
       handlerSource === undefined ||
       Array.from(callbackNames).some((name) =>
-        new RegExp(String.raw`\b${escapeRegExp(name)}\b`, "u").test(handlerSource),
+        new RegExp(String.raw`\b${escapeRegExp(name)}\b`).test(handlerSource),
       )
     ) {
       continue;
@@ -2216,21 +2227,38 @@ interface NamedHandlerDeclaration {
 type NamedHandlerDeclarationList = [NamedHandlerDeclaration, ...NamedHandlerDeclaration[]];
 type NamedHandlerDeclarations = ReadonlyMap<string, NamedHandlerDeclarationList>;
 
+interface CallbackAliasCandidate {
+  localName: string;
+  memberName?: string | undefined;
+  sourceName?: string | undefined;
+}
+
+interface NamedHandlerAnalysis {
+  callbackAliasCandidates: readonly CallbackAliasCandidate[];
+  catchBindingNames: ReadonlySet<string>;
+  declarations: NamedHandlerDeclarations;
+  reassignedNames: ReadonlySet<string>;
+}
+
 function namedSelfContainedHandlerSource(
   source: string,
   expression: string,
-  declarationsByName: NamedHandlerDeclarations,
+  analysis: NamedHandlerAnalysis,
 ): string | undefined {
   const name = expression.trim();
   if (!/^[A-Za-z_$][\w$]*$/u.test(name)) {
     return undefined;
   }
 
-  const declarations = declarationsByName.get(name);
+  const declarations = analysis.declarations.get(name);
   if (declarations === undefined) {
     return undefined;
   }
   const declaration = declarations[0];
+
+  if (analysis.reassignedNames.has(name) || analysis.catchBindingNames.has(name)) {
+    return undefined;
+  }
 
   const scanned = scanModuleSource(source);
   if (scanned === undefined) {
@@ -2238,7 +2266,6 @@ function namedSelfContainedHandlerSource(
   }
 
   const syntaxSource = scanned.withoutLiterals;
-  const escapedName = escapeRegExp(name);
   if (
     hasPotentialHandlerBindingShadow(
       syntaxSource,
@@ -2246,13 +2273,6 @@ function namedSelfContainedHandlerSource(
       declarations.filter((declaration) => !declaration.arrow).length,
     )
   ) {
-    return undefined;
-  }
-
-  const assignmentPattern = new RegExp(String.raw`\b${escapedName}\s*=(?!=|>)`, "gu");
-  const assignmentCount = Array.from(syntaxSource.matchAll(assignmentPattern)).length;
-
-  if (assignmentCount !== (declaration.arrow ? 1 : 0)) {
     return undefined;
   }
 
@@ -2292,13 +2312,17 @@ function hasPotentialHandlerBindingShadow(
   );
 }
 
-function collectNamedHandlerDeclarations(
+function collectNamedHandlerAnalysis(
   moduleContext: CompilerModuleContext,
   source: string,
-): NamedHandlerDeclarations {
+): NamedHandlerAnalysis {
+  const callbackAliasCandidates: CallbackAliasCandidate[] = [];
+  const catchBindingNames = new Set<string>();
   const declarations = new Map<string, NamedHandlerDeclarationList>();
+  const reassignedNames = new Set<string>();
+  const result = { callbackAliasCandidates, catchBindingNames, declarations, reassignedNames };
   if (moduleContext.code !== source || moduleContext.parseErrors.length > 0) {
-    return declarations;
+    return result;
   }
 
   const seen = new WeakSet<object>();
@@ -2325,6 +2349,16 @@ function collectNamedHandlerDeclarations(
         break;
       case "VariableDeclaration":
         addArrowHandlerDeclarations(declarations, source, node);
+        addCallbackAliasCandidates(callbackAliasCandidates, node);
+        break;
+      case "AssignmentExpression":
+        addOxcBindingNames(node.left, reassignedNames);
+        break;
+      case "UpdateExpression":
+        addOxcBindingNames(node.argument, reassignedNames);
+        break;
+      case "CatchClause":
+        addOxcBindingNames(node.param, catchBindingNames);
         break;
     }
 
@@ -2334,7 +2368,96 @@ function collectNamedHandlerDeclarations(
   };
 
   visit(moduleContext.program);
-  return declarations;
+  return result;
+}
+
+function addCallbackAliasCandidates(
+  candidates: CallbackAliasCandidate[],
+  node: Record<string, unknown>,
+): void {
+  const declarators = Array.isArray(node.declarations) ? node.declarations : [];
+  for (const value of declarators) {
+    const declarator = oxcRecord(value);
+    const localName = oxcIdentifierName(declarator?.id);
+    const initializer = unwrapOxcExpression(declarator?.init);
+    if (localName === undefined || initializer === undefined) {
+      continue;
+    }
+
+    const sourceName = oxcIdentifierName(initializer);
+    if (sourceName !== undefined) {
+      candidates.push({ localName, sourceName });
+      continue;
+    }
+
+    if (initializer.type === "MemberExpression") {
+      const property = oxcRecord(initializer.property);
+      const memberName =
+        oxcIdentifierName(property) ??
+        (property?.type === "StringLiteral" && typeof property.value === "string"
+          ? property.value
+          : undefined);
+      if (memberName !== undefined) {
+        candidates.push({ localName, memberName });
+      }
+    }
+  }
+}
+
+function unwrapOxcExpression(value: unknown): Record<string, unknown> | undefined {
+  let expression = oxcRecord(value);
+  while (
+    expression !== undefined &&
+    (expression.type === "ParenthesizedExpression" ||
+      expression.type === "TSAsExpression" ||
+      expression.type === "TSSatisfiesExpression" ||
+      expression.type === "TSTypeAssertion" ||
+      expression.type === "TSNonNullExpression" ||
+      expression.type === "ChainExpression")
+  ) {
+    expression = oxcRecord(expression.expression);
+  }
+  return expression;
+}
+
+function addOxcBindingNames(value: unknown, names: Set<string>): void {
+  const node = oxcRecord(value);
+  if (node === undefined) {
+    return;
+  }
+
+  const identifierName = oxcIdentifierName(node);
+  if (identifierName !== undefined) {
+    names.add(identifierName);
+    return;
+  }
+
+  switch (node.type) {
+    case "ArrayPattern":
+      if (Array.isArray(node.elements)) {
+        for (const element of node.elements) {
+          addOxcBindingNames(element, names);
+        }
+      }
+      break;
+    case "ObjectPattern":
+      if (Array.isArray(node.properties)) {
+        for (const propertyValue of node.properties) {
+          const property = oxcRecord(propertyValue);
+          addOxcBindingNames(
+            property?.type === "Property" ? property.value : property?.argument,
+            names,
+          );
+        }
+      }
+      break;
+    case "AssignmentPattern":
+      addOxcBindingNames(node.left, names);
+      break;
+    case "RestElement":
+      addOxcBindingNames(node.argument, names);
+      break;
+  }
 }
 
 function addFunctionHandlerDeclaration(

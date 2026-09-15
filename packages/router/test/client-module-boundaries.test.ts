@@ -2154,6 +2154,18 @@ export default function Page() {
 }`,
     ],
     [
+      "a body-local typed handler referencing a typed non-callback prop alias",
+      `export function RowControl(props: { label: string }) {
+  const label: string = props.label;
+  const opened = cell(false);
+  function toggle(): void {
+    void label;
+    opened.set((value) => !value);
+  }
+  return <button type="button" onClick={toggle}>{opened.get() ? label : "Closed"}</button>;
+}`,
+    ],
+    [
       "a module-scope function declaration",
       `const opened = cell(false);
 function open() {
@@ -2276,6 +2288,18 @@ export function RowControl() {
 }`,
     ],
     [
+      "a typed callback-prop alias called by a typed handler",
+      `export function RowControl(props: { onCommit: () => void }) {
+  const label = cell("Open").get();
+  const commit: () => void = props.onCommit;
+  const run: () => void = commit;
+  function toggle(): void {
+    run();
+  }
+  return <button type="button" onClick={toggle}>{label}</button>;
+}`,
+    ],
+    [
       "an ambient const handler",
       `declare const open: () => void;
 
@@ -2300,6 +2324,54 @@ export function RowControl() {
   return undefined;
 }
 open = () => undefined;
+
+export function RowControl() {
+  const label = cell("Open").get();
+  return <button type="button" onClick={open}>{label}</button>;
+}`,
+    ],
+    [
+      "a handler reassigned with logical AND assignment",
+      `function open(): void {
+  return undefined;
+}
+open &&= () => undefined;
+
+export function RowControl() {
+  const label = cell("Open").get();
+  return <button type="button" onClick={open}>{label}</button>;
+}`,
+    ],
+    [
+      "a handler reassigned with logical OR assignment",
+      `function open(): void {
+  return undefined;
+}
+open ||= () => undefined;
+
+export function RowControl() {
+  const label = cell("Open").get();
+  return <button type="button" onClick={open}>{label}</button>;
+}`,
+    ],
+    [
+      "a handler reassigned with nullish assignment",
+      `function open(): void {
+  return undefined;
+}
+open ??= () => undefined;
+
+export function RowControl() {
+  const label = cell("Open").get();
+  return <button type="button" onClick={open}>{label}</button>;
+}`,
+    ],
+    [
+      "a handler reassigned through an array pattern",
+      `function open(): void {
+  return undefined;
+}
+[open] = [() => undefined];
 
 export function RowControl() {
   const label = cell("Open").get();
@@ -2344,6 +2416,21 @@ export function RowControl() {
   }
   const label = cell("Open").get();
   return <button type="button" onClick={open}>{label}</button>;
+}`,
+    ],
+    [
+      "a catch-binding-shadowed handler",
+      `function open(): void {
+  return undefined;
+}
+
+export function RowControl() {
+  const label = cell("Open").get();
+  try {
+    throw (() => undefined);
+  } catch (open) {
+    return <button type="button" onClick={open}>{label}</button>;
+  }
 }`,
     ],
   ])("keeps %s ineligible for SSR fallback", async (_name, body) => {

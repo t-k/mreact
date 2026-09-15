@@ -4,22 +4,25 @@ import { createStrykerConfig } from "./stryker.base.config.mjs";
 // The ranges cover only the new decisions and their reporting paths so unrelated legacy
 // heuristics do not dilute the score.
 const config = createStrykerConfig({
-  name: "client-rendering-0223-focused-v16",
+  name: "client-rendering-0223-focused-v18",
   breakThreshold: 100,
   mutate: [
     // The bare-handler acceptance decision, AST declaration lookup, and conservative gates.
-    "packages/router/src/client.ts:2191-2196",
-    "packages/router/src/client.ts:2200-2201",
-    "packages/router/src/client.ts:2204-2204",
-    "packages/router/src/client.ts:2224-2224",
-    "packages/router/src/client.ts:2229-2233",
-    "packages/router/src/client.ts:2242-2249",
-    "packages/router/src/client.ts:2252-2257",
-    "packages/router/src/client.ts:2323-2327",
-    "packages/router/src/client.ts:2349-2350",
-    "packages/router/src/client.ts:2360-2361",
-    "packages/router/src/client.ts:2368-2369",
-    "packages/router/src/client.ts:2376-2377",
+    "packages/router/src/client.ts:2202-2215",
+    "packages/router/src/client.ts:2248-2248",
+    "packages/router/src/client.ts:2253-2261",
+    "packages/router/src/client.ts:2269-2277",
+    "packages/router/src/client.ts:2347-2355",
+    "packages/router/src/client.ts:2360-2362",
+    "packages/router/src/client.ts:2389-2389",
+    "packages/router/src/client.ts:2401-2401",
+    "packages/router/src/client.ts:2429-2432",
+    "packages/router/src/client.ts:2436-2436",
+    "packages/router/src/client.ts:2438-2441",
+    "packages/router/src/client.ts:2472-2473",
+    "packages/router/src/client.ts:2483-2484",
+    "packages/router/src/client.ts:2491-2492",
+    "packages/router/src/client.ts:2499-2500",
     // Structured fallback reason reporting.
     "packages/router/src/boundaries.ts:413-418",
     // The render-value dispatch callback. Marker seed text and optional diagnostics are
