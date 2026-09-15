@@ -80,18 +80,22 @@ function emitClientModule(ir: ModuleIr, options: { dev?: boolean; filename?: str
   );
   const routerLinkComponentNames = new Set(ir.routerLinkComponentNames ?? []);
   const components = ir.components
-    .map((component) =>
-      emitComponent(
+    .map((component) => {
+      const componentRouterLinkComponentNames = routerLinkNamesVisibleInComponent(
+        routerLinkComponentNames,
+        component,
+      );
+      return emitComponent(
         component,
         moduleAllocator,
         helperNames,
         clientBoundaryHelperName,
         inlineMemoComponents,
         nonNullishComponents,
-        routerLinkComponentNames,
+        componentRouterLinkComponentNames,
         options,
-      ),
-    )
+      );
+    })
     .join("\n\n")
     .replaceAll(OXC_BIND_DOM_REF_PLACEHOLDER, helperNames.bindDomRef)
     .replaceAll(OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER, helperNames.untrack)
@@ -259,7 +263,10 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
 
   if (
     ir.components.some((component) =>
-      treeUsesDeferredComponentRenderValues(component.root, routerLinkComponentNames),
+      treeUsesDeferredComponentRenderValues(
+        component.root,
+        routerLinkNamesVisibleInComponent(routerLinkComponentNames, component),
+      ),
     )
   ) {
     internalSpecifiers.add("createMemo");
@@ -1464,6 +1471,14 @@ function shouldDeferRouterLinkRenderValue(node: JsxNodeIr): boolean {
   return false;
 }
 
+function shouldDeferRouterLinkChildrenProp(prop: ComponentPropIr): boolean {
+  return (
+    prop.kind === "prop" &&
+    prop.name === "children" &&
+    prop.facts?.value.kind === "native-cell-read"
+  );
+}
+
 function needsDeferredComponentRenderValue(node: JsxNodeIr): boolean {
   return (
     node.kind === "conditional" &&
@@ -1510,7 +1525,8 @@ function treeUsesDeferredComponentRenderValues(
   routerLinkComponentNames: ReadonlySet<string>,
 ): boolean {
   if (node.kind === "component") {
-    const childNeedsDeferral = routerLinkComponentNames.has(node.name)
+    const isRouterLink = routerLinkComponentNames.has(node.name);
+    const childNeedsDeferral = isRouterLink
       ? (child: JsxNodeIr) =>
           shouldDeferComponentRenderValue(child) || shouldDeferRouterLinkRenderValue(child)
       : shouldDeferComponentRenderValue;
@@ -1518,7 +1534,8 @@ function treeUsesDeferredComponentRenderValues(
       node.children.some(childNeedsDeferral) ||
       node.props.some(
         (prop) =>
-          prop.kind === "render-prop" && prop.children.some(shouldDeferComponentRenderValue),
+          (isRouterLink && shouldDeferRouterLinkChildrenProp(prop)) ||
+          (prop.kind === "render-prop" && prop.children.some(shouldDeferComponentRenderValue)),
       )
     ) {
       return true;
@@ -1552,6 +1569,16 @@ function treeUsesDeferredComponentRenderValues(
 
   if (node.kind === "element" || node.kind === "fragment") {
     return node.children.some((child) =>
+      treeUsesDeferredComponentRenderValues(child, routerLinkComponentNames),
+    );
+  }
+
+  if (node.kind === "async-boundary") {
+    return [
+      ...node.children,
+      ...(node.placeholderChildren ?? []),
+      ...(node.catchChildren ?? []),
+    ].some((child) =>
       treeUsesDeferredComponentRenderValues(child, routerLinkComponentNames),
     );
   }
@@ -2093,6 +2120,10 @@ function emitPropsObject(
         : `${emitPropName(prop.name)}: ${renderValue}`;
     }
 
+    if (deferRouterLinkChildren && shouldDeferRouterLinkChildrenProp(prop)) {
+      return `${emitPropName(prop.name)}: ${state.helperNames.createMemo}(null, null, () => (${prop.code}), () => false)`;
+    }
+
     if (reactiveGetters && shouldEmitReactiveComponentPropGetter(prop.code)) {
       return `get ${emitGetterPropName(prop.name)}() { return (${prop.code}); }`;
     }
@@ -2107,6 +2138,18 @@ function emitPropsObject(
   }
 
   return `{ ${entries.join(", ")} }`;
+}
+
+function routerLinkNamesVisibleInComponent(
+  routerLinkComponentNames: ReadonlySet<string>,
+  component: ComponentIr,
+): ReadonlySet<string> {
+  return new Set(
+    [...routerLinkComponentNames].filter((name) => {
+      const rootName = name.split(".")[0] ?? name;
+      return component.name !== rootName && !component.bindingNames.includes(rootName);
+    }),
+  );
 }
 
 function emitPropName(name: string): string {

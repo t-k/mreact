@@ -632,19 +632,10 @@ function analyzeOxcToIr(
     }
   }
 
-  // A local binding of the same name shadows the import inside its own scope, and
-  // the emitters read a bare tag name, so a shadowed name drops out of the set
-  // rather than being resolved per scope. That costs the router `Link` its fast
-  // paths in a module that shadows it and never puts a local component on them.
-  const routerLinkComponentNames = new Set(
-    [...collectOxcRouterLinkComponentNames(program)].filter((name) => {
-      const rootName = name.split(".")[0] ?? name;
-
-      return !components.some(
-        (component) => component.name === rootName || component.bindingNames.includes(rootName),
-      );
-    }),
-  );
+  // Keep the imported names at module scope. Each emitter resolves component-local
+  // shadows before it walks that component, so an unrelated sibling binding does
+  // not disable the router `Link` path for the whole module.
+  const routerLinkComponentNames = collectOxcRouterLinkComponentNames(program);
   const escapedComponentNames = collectOxcEscapedComponentNames(program, componentNames);
 
   inlineConstantComponentCalls(components, escapedComponentNames);

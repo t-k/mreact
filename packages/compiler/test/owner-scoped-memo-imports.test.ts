@@ -99,6 +99,33 @@ describe("owner-scoped memo helper imports", () => {
     );
   });
 
+  test("imports deferred Link child helpers used inside every Await branch", () => {
+    const branches = [
+      `<Await value={Promise.resolve(undefined)}>{() => <Link href="/home">{label.get()}</Link>}</Await>`,
+      `<Await value={Promise.resolve(undefined)} placeholder={<Link href="/home">{label.get()}</Link>}>{() => <span>Loaded</span>}</Await>`,
+      `<Await value={Promise.reject(new Error("failed"))} catch={() => <Link href="/home">{label.get()}</Link>}>{() => <span>Loaded</span>}</Await>`,
+    ];
+
+    for (const root of branches) {
+      const output = transform({
+        code: `import { cell } from "@reckona/mreact-reactive-core";
+import { Link } from "@reckona/mreact-router/link";
+const label = cell("Home");
+export function App() { return <main>${root}</main>; }`,
+        filename: "await-link.tsx",
+        target: "client",
+        dev: false,
+      });
+      const internalImport = output.metadata.imports.find(
+        (runtimeImport) => runtimeImport.source === "@reckona/mreact-reactive-dom/internal",
+      );
+
+      expect(output.diagnostics).toEqual([]);
+      expect(internalImport?.specifiers).toContain("createMemo");
+      expect(internalImport?.specifiers).toContain("installMemoRenderValueNormalizer");
+    }
+  });
+
   test("keeps nested memo helper imports and calls collision-free", () => {
     const conditional = ownerScopedConditional("list-capable");
     const output = transform({

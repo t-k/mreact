@@ -225,6 +225,10 @@ export function emitServerStream(
   ].join("\n");
   const components = ir.components
     .map((component) => {
+      currentRouterLinkComponentNames = routerLinkNamesVisibleInComponent(
+        new Set(ir.routerLinkComponentNames ?? []),
+        component,
+      );
       const emitted = emitComponent(
         component,
         escapeHelperName,
@@ -4298,6 +4302,18 @@ function emitCompatRuntimePropsObject(
 
 function emitPropName(name: string): string {
   return /^[A-Za-z_$][\w$]*$/.test(name) ? name : JSON.stringify(name);
+}
+
+function routerLinkNamesVisibleInComponent(
+  routerLinkComponentNames: ReadonlySet<string>,
+  component: ComponentIr,
+): ReadonlySet<string> {
+  return new Set(
+    [...routerLinkComponentNames].filter((name) => {
+      const rootName = name.split(".")[0] ?? name;
+      return component.name !== rootName && !component.bindingNames.includes(rootName);
+    }),
+  );
 }
 
 function isClientBoundaryPlaceholder(

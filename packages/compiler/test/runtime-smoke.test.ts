@@ -4016,6 +4016,74 @@ export function App() {
     expect(anchor?.innerHTML).not.toContain("[object Object]");
   });
 
+  test("router Link keeps an explicit reactive children prop live", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+import { Link } from "@reckona/mreact-router/link";
+
+const label = cell("Home");
+
+export function App() {
+  return <nav>
+    <button type="button" onClick={() => label.set("Dashboard")}>Rename</button>
+    <Link href="/home" children={label.get()} />
+  </nav>;
+}`,
+      filename: "link-explicit-children.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const anchor = node.querySelector("a");
+
+    expect(anchor?.textContent).toBe("Home");
+
+    node.querySelector("button")?.click();
+    await flushEffects();
+
+    expect(anchor?.textContent).toBe("Dashboard");
+    expect(node.querySelector("a")).toBe(anchor);
+  });
+
+  test("router Link keeps its reactive child when a sibling component shadows the import", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+import { Link } from "@reckona/mreact-router/link";
+
+const label = cell("Home");
+
+function LocalLink(Link) {
+  return <b>Local</b>;
+}
+
+export function App() {
+  return <nav>
+    <button type="button" onClick={() => label.set("Dashboard")}>Rename</button>
+    <Link href="/home">{label.get()}</Link>
+    <LocalLink />
+  </nav>;
+}`,
+      filename: "link-sibling-shadow.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const anchor = node.querySelector("a");
+
+    expect(anchor?.textContent).toBe("Home");
+    expect(node.querySelector("b")?.textContent).toBe("Local");
+
+    node.querySelector("button")?.click();
+    await flushEffects();
+
+    expect(anchor?.textContent).toBe("Dashboard");
+    expect(node.querySelector("a")).toBe(anchor);
+  });
+
   test("generic components still receive primitive children instead of render-value wrappers", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";
