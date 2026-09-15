@@ -3963,6 +3963,7 @@ export function App() {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain("get href()");
+    expect(output.code).not.toContain("createMemo");
     const node = (await runClientComponent(output.code)) as HTMLElement;
     const [linkAnchor, plainAnchor] = Array.from(node.querySelectorAll("a"));
 
@@ -4047,6 +4048,54 @@ export function App() {
     expect(node.querySelector("a")).toBe(anchor);
   });
 
+  test("router Link keeps static explicit children and direct reactive href values primitive", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+import { Link } from "@reckona/mreact-router/link";
+
+const href = cell("/home");
+
+export function App() {
+  return <nav>
+    <button type="button" onClick={() => href.set("/dashboard")}>Move</button>
+    <Link href={href.get()} children={"Home"} />
+  </nav>;
+}`,
+      filename: "link-explicit-static-children.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("get href()");
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const anchor = node.querySelector("a");
+
+    expect(anchor?.textContent).toBe("Home");
+    expect(anchor?.getAttribute("href")).toBe("/home");
+
+    node.querySelector("button")?.click();
+    await flushEffects();
+
+    expect(anchor?.textContent).toBe("Home");
+    expect(anchor?.getAttribute("href")).toBe("/dashboard");
+  });
+
+  test("router Link keeps an explicit component-prop child outside the cell memo path", () => {
+    const output = transform({
+      code: `import { Link } from "@reckona/mreact-router/link";
+export function App(props) {
+  return <Link href="/home" children={props.label} />;
+}`,
+      filename: "link-explicit-prop-children.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("createMemo");
+  });
+
   test("router Link keeps its reactive child when a sibling component shadows the import", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";
@@ -4084,6 +4133,37 @@ export function App() {
     expect(node.querySelector("a")).toBe(anchor);
   });
 
+  test("router namespace Link stays scoped when a sibling parameter shadows the namespace", () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+import * as Router from "@reckona/mreact-router/link";
+
+const label = cell("Home");
+
+function LocalAnchor(props) {
+  return <b>{props.children}</b>;
+}
+
+function LocalLink(Router) {
+  return <Router.Link>{label.get()}</Router.Link>;
+}
+
+export function App() {
+  return <nav>
+    <button type="button" onClick={() => label.set("Dashboard")}>Rename</button>
+    <Router.Link href="/home">{label.get()}</Router.Link>
+    <LocalLink Link={LocalAnchor} />
+  </nav>;
+}`,
+      filename: "link-namespace-sibling-shadow.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code.match(/createMemo\(null/g)).toHaveLength(1);
+  });
+
   test("generic components still receive primitive children instead of render-value wrappers", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";
@@ -4108,6 +4188,31 @@ export function App() {
     expect(node.getAttribute("data-value")).toBe("false");
     expect(node.querySelector("[data-visible]")).toBeNull();
     expect(node.textContent).not.toContain("[object Object]");
+  });
+
+  test("generic explicit children props stay outside the router Link memo path", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const visible = cell(false);
+
+function Inspect(props) {
+  return <section data-value={String(props.children)} />;
+}
+
+export function App() {
+  return <Inspect children={visible.get()} />;
+}`,
+      filename: "generic-explicit-children.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("installMemoRenderValueNormalizer");
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+
+    expect(node.getAttribute("data-value")).toBe("false");
   });
 
   test("router Link does not re-evaluate stateful dynamic child calls as reactive expressions", async () => {

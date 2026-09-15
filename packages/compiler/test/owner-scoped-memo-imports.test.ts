@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
+import { emitClient } from "../src/emit-client.js";
 import { transform } from "../src/index.js";
+import type { ModuleIr } from "../src/ir.js";
 
 type InsertionMode = "lightweight" | "list-capable";
 
@@ -124,6 +126,44 @@ export function App() { return <main>${root}</main>; }`,
       expect(internalImport?.specifiers).toContain("createMemo");
       expect(internalImport?.specifiers).toContain("installMemoRenderValueNormalizer");
     }
+  });
+
+  test("does not defer a Link children prop proven to be a primitive", () => {
+    const ir: ModuleIr = {
+      userImports: ['import { Link } from "@reckona/mreact-router/link";'],
+      moduleStatements: [],
+      moduleBindingNames: ["Link"],
+      routerLinkComponentNames: ["Link"],
+      components: [
+        {
+          name: "App",
+          exportName: "App",
+          parameters: [],
+          bodyStatements: [],
+          bindingNames: [],
+          root: {
+            kind: "component",
+            name: "Link",
+            props: [
+              {
+                kind: "prop",
+                name: "children",
+                code: '"Home"',
+                facts: {
+                  value: { kind: "renderable-primitive" },
+                  dependencies: [],
+                  effectFree: "proven",
+                  escape: "contained",
+                },
+              },
+            ],
+            children: [],
+          },
+        },
+      ],
+    };
+
+    expect(emitClient(ir).code).not.toContain("createMemo");
   });
 
   test("keeps nested memo helper imports and calls collision-free", () => {

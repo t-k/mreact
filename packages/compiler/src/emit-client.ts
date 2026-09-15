@@ -1472,11 +1472,11 @@ function shouldDeferRouterLinkRenderValue(node: JsxNodeIr): boolean {
 }
 
 function shouldDeferRouterLinkChildrenProp(prop: ComponentPropIr): boolean {
-  return (
-    prop.kind === "prop" &&
-    prop.name === "children" &&
-    prop.facts?.value.kind === "native-cell-read"
-  );
+  if (prop.kind !== "prop" || prop.name !== "children" || prop.facts === undefined) {
+    return false;
+  }
+
+  return prop.facts.value.kind === "native-cell-read";
 }
 
 function needsDeferredComponentRenderValue(node: JsxNodeIr): boolean {
@@ -2147,7 +2147,7 @@ function routerLinkNamesVisibleInComponent(
   return new Set(
     [...routerLinkComponentNames].filter((name) => {
       const rootName = name.split(".")[0] ?? name;
-      return component.name !== rootName && !component.bindingNames.includes(rootName);
+      return !component.bindingNames.includes(rootName);
     }),
   );
 }

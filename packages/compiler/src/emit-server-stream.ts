@@ -4311,7 +4311,7 @@ function routerLinkNamesVisibleInComponent(
   return new Set(
     [...routerLinkComponentNames].filter((name) => {
       const rootName = name.split(".")[0] ?? name;
-      return component.name !== rootName && !component.bindingNames.includes(rootName);
+      return !component.bindingNames.includes(rootName);
     }),
   );
 }

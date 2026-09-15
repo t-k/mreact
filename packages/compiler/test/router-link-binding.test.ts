@@ -180,16 +180,28 @@ export function App(props) {
   });
 
   test("keeps an imported Link on its path when only a sibling component shadows it", () => {
-    const source = `import { Link } from "@reckona/mreact-router";
+    const sources = [
+      `import { Link } from "@reckona/mreact-router";
 function LocalLink() {
   const Link = (props) => <b>{props.children}</b>;
   return <Link>Local</Link>;
 }
 export function App(props) {
   return <nav><Link href={props.href}>{props.label}</Link><LocalLink /></nav>;
-}`;
+}`,
+      `import * as Router from "@reckona/mreact-router";
+function LocalLink() {
+  const Router = { Link: (props) => <b>{props.children}</b> };
+  return <Router.Link>Local</Router.Link>;
+}
+export function App(props) {
+  return <nav><Router.Link href={props.href}>{props.label}</Router.Link><LocalLink /></nav>;
+}`,
+    ];
 
-    expect(compileServer(source, "string")).toContain("Link.trustedHtml(");
-    expect(compileServer(source, "stream")).toContain("Link.trustedHtml(");
+    for (const source of sources) {
+      expect(compileServer(source, "string")).toContain(".trustedHtml(");
+      expect(compileServer(source, "stream")).toContain(".trustedHtml(");
+    }
   });
 });
