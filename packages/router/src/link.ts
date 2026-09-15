@@ -317,9 +317,7 @@ function appendLinkChild(parent: Node & ParentNode, child: LinkChild): void {
   reportUnsupportedBrowserChild(child);
   const marker = document.createTextNode("");
   parent.appendChild(marker);
-  insertRenderValue(parent, marker, () => child as RenderValue, {
-    debugLabel: "Link.children",
-  });
+  insertRenderValue(parent, marker, () => child as RenderValue);
 }
 
 const reportedUnsupportedBrowserChildren = new Set<string>();

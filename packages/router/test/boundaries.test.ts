@@ -439,6 +439,7 @@ export default function Page() {
       components.find((component) => component.exportName === exportName)?.decision.reasonChain;
 
     expect(reasonChain("SafeRow")).toEqual(expect.arrayContaining(["fallback:ssr"]));
+    expect(reasonChain("SafeRow")).not.toContain("fallback-rejected:undefined");
     expect(reasonChain("CallbackRow")).toEqual(
       expect.arrayContaining(["fallback:none", "fallback-rejected:callback-prop-call"]),
     );

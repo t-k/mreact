@@ -2202,7 +2202,9 @@ export function RowControl() {
 
 export function RowControl() {
   if (false) {
-    const open = () => undefined;
+    function open() {
+      return undefined;
+    }
     void open;
   }
   const label = cell("Open").get();
