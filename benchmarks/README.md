@@ -7,6 +7,7 @@ This directory contains fair, repeatable benchmark fixtures for mreact and peer 
 - `primitive`: framework primitive comparison without routers. Current adapters: Marko, Vue, Svelte, Angular, Qwik, React, Solid, and mreact.
 - `primitive-browser`: real Chromium comparison of hand-written primitive APIs and framework adapters. It mirrors the create/update/select/clear shape used by the Node+happy-dom suite; its mreact rows do not measure generated JSX.
 - `js-framework-benchmark`: the canonical compiled JSX comparison for mreact, its React compatibility variants, and peer frameworks. The keyed/mreact fixture uses ordinary cell-backed JSX through the public compiler path. Keep its results separate from primitive-browser rows.
+- `compiled-jsx-endurance`: a natural-GC repeated-operation track using the production build of the canonical keyed/mreact fixture in one persistent Chromium page. It records DOM verification time and heap/node trends without treating either as paint, INP, or retained allocation.
 - `non-router`: package-level regression microbenchmarks for virtual, forms,
   query, store, auth, and other non-router packages.
 - `router`: production router/app framework comparison across Marko Run, Nuxt, SvelteKit, Qwik City, SolidStart, TanStack Start, Next.js App Router, and mreact app router.
@@ -46,6 +47,7 @@ The Analog production fixture serializes Vite's client and SSR environment build
 pnpm bench:primitive
 pnpm bench:primitive-browser
 pnpm bench:js-framework
+pnpm bench:js-framework:endurance
 pnpm bench:html-escape
 pnpm bench:request-fastpaths
 pnpm bench:non-router

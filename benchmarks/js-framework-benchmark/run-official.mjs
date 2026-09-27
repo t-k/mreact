@@ -2,9 +2,10 @@
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { syncMreactFixtureDirectories } from "./sync-mreact-fixtures.mjs";
+import { runCompiledEndurance } from "./run-endurance.mjs";
 
 const repoRoot = resolve(new URL("../..", import.meta.url).pathname);
 const fixtureRoot = join(repoRoot, "benchmarks", "js-framework-benchmark", "frameworks", "keyed");
@@ -279,6 +280,7 @@ const selectedFrameworks = rotateFrameworks(defaultSelectedFrameworks, framework
 const diffAnchorFramework = process.env.MREACT_JS_FRAMEWORK_DIFF_ANCHOR ?? "react-hooks";
 
 const selectedBenchmarks = parseFrameworks(process.env.MREACT_JS_FRAMEWORK_BENCHMARKS, []);
+const enduranceCycles = parseIntegerEnv(process.env.MREACT_JS_FRAMEWORK_ENDURANCE_CYCLES, 0);
 const chromeBinaryPath = parseChromeBinaryPath(process.env.MREACT_JS_FRAMEWORK_CHROME_BINARY);
 
 await main();
@@ -300,6 +302,26 @@ async function main() {
     await waitForServer();
     await rebuildSelectedFrameworks();
     await runOfficialChecks();
+    if (enduranceCycles > 0) {
+      if (selectedFrameworks.length !== 1 || selectedFrameworks[0] !== "keyed/mreact") {
+        throw new Error("Compiled JSX endurance requires MREACT_JS_FRAMEWORKS=keyed/mreact");
+      }
+      const endurance = await runCompiledEndurance({
+        url: "http://localhost:8080/frameworks/keyed/mreact/",
+        cycles: enduranceCycles,
+        warmupCycles: 1,
+      });
+      const runDir = join(resultDir, "compiled-endurance", new Date().toISOString().replaceAll(":", "-"));
+      await mkdir(runDir, { recursive: true });
+      await writeFile(join(runDir, "compiled-endurance.json"), `${JSON.stringify({
+        ...endurance,
+        gitCommit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: repoRoot, encoding: "utf8" }).trim(),
+        gitDirty: execFileSync("git", ["status", "--porcelain"], { cwd: repoRoot, encoding: "utf8" }).trim() !== "",
+        nodeVersion: process.version,
+      }, null, 2)}\n`);
+      console.log(`Compiled JSX endurance result: ${runDir}`);
+      return;
+    }
     await resetOfficialRunOutput();
     await run(
       "npm",

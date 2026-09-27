@@ -19,6 +19,7 @@
     "bench:primitive-browser": "NODE_ENV=production pnpm build && NODE_ENV=production tsx benchmarks/primitive-browser/run.ts",
     "bench:primitive-browser:build": "NODE_ENV=production pnpm build && NODE_ENV=production tsx benchmarks/primitive-browser/build.ts",
     "bench:js-framework": "node benchmarks/js-framework-benchmark/run-official.mjs",
+    "bench:js-framework:endurance": "MREACT_JS_FRAMEWORKS=keyed/mreact MREACT_JS_FRAMEWORK_ENDURANCE_CYCLES=20 node benchmarks/js-framework-benchmark/run-official.mjs",
     "bench:js-framework:generate-compat": "tsx benchmarks/js-framework-benchmark/generate-compat-fixture.mts",
     "bench:html-escape": "NODE_ENV=production pnpm build && NODE_ENV=production tsx benchmarks/primitive/html-escape.ts",
     "bench:request-fastpaths": "NODE_ENV=production pnpm build && NODE_ENV=production tsx benchmarks/primitive/request-fastpaths.ts",
