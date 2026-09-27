@@ -1,7 +1,9 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
+import { fileURLToPath } from "node:url";
 import { buildApp } from "../../packages/router/src/build.js";
 import type { BuildAppPhaseTiming } from "../../packages/router/src/build.js";
 import { collectBenchmarkEnvironment } from "../shared/env.js";
@@ -35,15 +37,38 @@ interface RouterBuildPhaseTimingRow {
   samplesMs: number[];
 }
 
+interface FreshProcessBuildSample {
+  elapsedMs: number;
+  importMs: number;
+  buildMs: number;
+  peakRssBytes: number;
+  cpuUserMs: number;
+  cpuSystemMs: number;
+  phaseTimings: BuildAppPhaseTiming[];
+}
+
 const routeCount = readNumberEnv("MREACT_ROUTER_BUILD_BENCH_ROUTES", 40);
 const repeatCount = readNumberEnv("MREACT_ROUTER_BUILD_BENCH_REPEATS", 5);
 const collectPhaseTimings = process.env.MREACT_BUILD_TIMINGS === "1";
+const processModel = process.env.MREACT_ROUTER_BUILD_BENCH_PROCESS_MODEL === "fresh-process"
+  ? "fresh-process"
+  : "same-process-rebuild";
 const rootDir = await mkdtemp(join(tmpdir(), "mreact-router-build-time-"));
 const appDir = join(rootDir, "app");
 const outDir = join(rootDir, ".mreact");
 
 try {
   await writeFixtureApp(appDir, routeCount);
+  if (processModel === "fresh-process") {
+    await runFreshProcessBenchmark(appDir, outDir);
+  } else {
+    await runSameProcessBenchmark(appDir, outDir);
+  }
+} finally {
+  await rm(rootDir, { force: true, recursive: true });
+}
+
+async function runSameProcessBenchmark(appDir: string, outDir: string): Promise<void> {
   const samplesMs: number[] = [];
   const rssDeltaBytesSamples: number[] = [];
   const phaseSamples = new Map<string, number[]>();
@@ -149,8 +174,72 @@ try {
   await writeTextFile(join(dir, "router-build-time.md"), markdown);
 
   console.log(markdown);
-} finally {
-  await rm(rootDir, { force: true, recursive: true });
+}
+
+async function runFreshProcessBenchmark(appDir: string, outDir: string): Promise<void> {
+  const samples: FreshProcessBuildSample[] = [];
+  for (let index = 0; index < repeatCount; index += 1) {
+    await rm(outDir, { force: true, recursive: true });
+    samples.push(await runFreshProcessBuild(appDir, outDir));
+  }
+
+  const env = await collectBenchmarkEnvironment(["@reckona/mreact-router"]);
+  const dir = await createDatedResultsDir();
+  const elapsed = samples.map((sample) => sample.elapsedMs);
+  const summary = {
+    methodologyVersion: 3,
+    caseName: "fresh process app build with rendered-export client inference",
+    processModel: "fresh-process",
+    osCache: "retained",
+    routeCount,
+    repeatCount,
+    medianMs: percentile(elapsed, 50),
+    maxMs: percentile(elapsed, 100),
+    samples,
+    environment: env,
+  };
+  const markdown = [
+    "# Router Fresh Process Build Benchmark",
+    "",
+    `Date: ${env.date}; Git commit: ${env.gitCommit}; Node: ${env.nodeVersion}; platform: ${env.platform} ${env.arch}.`,
+    "",
+    "Each trial launches a new Node process and deletes generated output. OS filesystem caches remain warm. Elapsed time includes process startup, module loading, and the build; phase timings and CPU time come from the child process. Peak RSS is the child process high-water mark, not the process tree or system peak. With five samples, p99 equals the maximum, so use the median and raw samples for comparisons.",
+    "",
+    "| routes | median elapsed ms | max elapsed ms | raw elapsed ms | import ms | build ms | peak RSS bytes | CPU user ms | CPU system ms |",
+    "| ---: | ---: | ---: | --- | --- | --- | --- | --- | --- |",
+    `| ${routeCount} | ${summary.medianMs} | ${summary.maxMs} | ${samples.map((sample) => sample.elapsedMs).join(", ")} | ${samples.map((sample) => sample.importMs).join(", ")} | ${samples.map((sample) => sample.buildMs).join(", ")} | ${samples.map((sample) => sample.peakRssBytes).join(", ")} | ${samples.map((sample) => sample.cpuUserMs).join(", ")} | ${samples.map((sample) => sample.cpuSystemMs).join(", ")} |`,
+  ].join("\n");
+  await writeJsonFile(join(dir, "router-build-time-fresh.summary.json"), summary);
+  await writeTextFile(join(dir, "router-build-time-fresh.md"), markdown);
+  console.log(markdown);
+}
+
+async function runFreshProcessBuild(appDir: string, outDir: string): Promise<FreshProcessBuildSample> {
+  const startedAt = performance.now();
+  const worker = new URL("./build-time-worker.mjs", import.meta.url);
+  const child = spawn(process.execPath, [fileURLToPath(worker), appDir, outDir, collectPhaseTimings ? "1" : "0"], {
+    cwd: process.cwd(),
+    env: process.env,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let stdout = "";
+  let stderr = "";
+  child.stdout.setEncoding("utf8").on("data", (chunk: string) => { stdout += chunk; });
+  child.stderr.setEncoding("utf8").on("data", (chunk: string) => { stderr += chunk; });
+  const exitCode = await new Promise<number>((resolve, reject) => {
+    child.once("error", reject);
+    child.once("close", (code) => resolve(code ?? -1));
+  });
+  const elapsedMs = round(performance.now() - startedAt);
+  if (exitCode !== 0) {
+    throw new Error(`Fresh process build exited ${exitCode}: ${stderr || stdout}`);
+  }
+  const marker = "MREACT_BUILD_SAMPLE:";
+  const line = stdout.split("\n").find((value) => value.startsWith(marker));
+  if (line === undefined) {
+    throw new Error(`Fresh process build returned no sample: ${stdout}\n${stderr}`);
+  }
+  return { elapsedMs, ...JSON.parse(line.slice(marker.length)) as Omit<FreshProcessBuildSample, "elapsedMs"> };
 }
 
 async function writeFixtureApp(directory: string, routes: number): Promise<void> {

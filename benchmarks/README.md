@@ -18,6 +18,8 @@ This directory contains fair, repeatable benchmark fixtures for mreact and peer 
   Lambda handler and records request/render timing phases for cold health
   checks, first redirects, and warm redirects.
 - `lambda-generated-handler-latency`: packaged generated AWS Lambda handler import/initialization, first redirect, first rendered route, and warm-hit latency across supported preload policies.
+- `router-build`: repeated app builds in one Node process after deleting generated output. The report keeps signed RSS deltas and raw samples; it is not a cold-process build.
+- `router-build:fresh`: a new Node process for each app build, with generated output deleted but OS caches retained. It records wall time including process startup, child module import and build time, child CPU time, and peak child RSS.
 - `scheduler`: React-compatible scheduler queue scaling for ready callbacks, delayed timer promotion, and cancellation-heavy callback bursts.
 - `scenarios`: reserved for user-centric scenario reports.
 
@@ -59,6 +61,8 @@ pnpm bench:non-router
 pnpm bench:router
 pnpm bench:lambda-routes
 pnpm bench:lambda-generated-handler
+pnpm bench:router-build
+pnpm bench:router-build:fresh
 pnpm bench:scheduler
 pnpm bench:all
 ```
