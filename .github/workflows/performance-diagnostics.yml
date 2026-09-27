@@ -108,5 +108,6 @@ jobs:
           path: |
             ${{ runner.temp }}/performance/${{ matrix.track }}
             size/reports
+            test-results
           if-no-files-found: warn
           retention-days: 90
