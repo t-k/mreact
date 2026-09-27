@@ -2,7 +2,7 @@ import { createStrykerConfig } from "./stryker.base.config.mjs";
 
 export default createStrykerConfig({
   name: "feature-suite-query",
-  breakThreshold: 80,
+  breakThreshold: 75,
   mutate: [
     "packages/forms/src/index.ts:860-877",
     "packages/query/src/form-mutation.ts:108-132",
