@@ -3860,6 +3860,8 @@ function __mreactInstallNavigation() {
     return;
   }
 
+  __mreactGlobal.__mreactNavigate = __mreactNavigate;
+
   const load = () => {
     void __mreactLoadNavigationRuntime();
   };
@@ -4347,7 +4349,19 @@ function inlineNavigationRuntimeSource(): string {
     return false;
   }
 
-  __mreactPushHistoryState(url);
+  const committed = options.type === "replace"
+    ? __mreactReplaceHistoryState(url)
+    : __mreactPushHistoryState(url);
+  if (!committed) {
+    try {
+      if (options.type === "replace") location.replace(url);
+      else location.assign(url);
+    } catch {
+      // A caller can use the false result to perform a document navigation.
+    }
+    return false;
+  }
+  __mreactDispatchUrlCommit();
   if (options.scroll !== "preserve") {
     __mreactScrollTo(0, 0);
   }
@@ -5193,6 +5207,7 @@ function __mreactFinishHistoryTraversal(state, restored) {
 
   __mreactNavigationState.historyEntryId = state.__mreactEntryId ?? __mreactNewHistoryEntryId();
   __mreactSaveCurrentHistoryState();
+  __mreactDispatchUrlCommit();
 }
 
 function __mreactTraverseHistory(state) {
@@ -5464,7 +5479,7 @@ function __mreactCurrentDocumentRouteHtml() {
 
 function __mreactPushHistoryState(url) {
   if (typeof history === "undefined" || url === undefined) {
-    return;
+    return false;
   }
 
   try {
@@ -5472,8 +5487,32 @@ function __mreactPushHistoryState(url) {
     history.pushState(__mreactCurrentHistoryState(url, entryId), "", url);
     __mreactNavigationState.historyEntryId = entryId;
     __mreactNavigationState.historyEntryUrl = location.href;
+    return true;
   } catch {
-    // Ignore invalid URLs in non-browser test environments.
+    return false;
+  }
+}
+
+function __mreactReplaceHistoryState(url) {
+  if (typeof history === "undefined" || url === undefined) {
+    return false;
+  }
+
+  try {
+    const entryId = __mreactNavigationState.historyEntryId ?? __mreactNewHistoryEntryId();
+    history.replaceState(__mreactCurrentHistoryState(url, entryId), "", url);
+    __mreactNavigationState.historyEntryId = entryId;
+    __mreactNavigationState.historyEntryUrl = location.href;
+    __mreactNavigationState.historySnapshots?.delete(entryId);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function __mreactDispatchUrlCommit() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("mreact:url-commit"));
   }
 }
 
@@ -5752,6 +5791,7 @@ function __mreactInstallNavigation() {
   }
 
   __mreactNavigationState.installed = true;
+  __mreactGlobal.__mreactNavigate = __mreactNavigate;
   __mreactInstallNavigationFetchRevalidation();
   __mreactEnableManualScrollRestoration();
   const pending = __mreactGlobal.__mreactPendingHistoryTraversal;

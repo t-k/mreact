@@ -86,6 +86,24 @@ export function UserLink(props: { user: { id: string; name: string } }) {
 
 Importing `href()` into a client route includes the URL-building helper in that route's client bundle. For ordinary links with already-constructed strings, prefer `Link href` directly.
 
+## Validated URL search state
+
+`defineSearchState()` gives each search field a typed codec and default. `parse()` can validate a server request URL, while `get()` reads the current browser URL. Invalid or duplicate values fall back to the field default and appear in `invalid`. Unknown keys are also reported. `format()` omits defaults.
+
+```ts
+import { defineSearchState, searchParam } from "@reckona/mreact-router";
+
+const projects = defineSearchState({
+  status: searchParam.oneOf(["open", "closed"] as const, "open"),
+  page: searchParam.integer(1, { min: 1 }),
+});
+
+const { value, invalid } = projects.parse(new URL(request.url).search);
+// value.page is a number; invalid contains malformed keys.
+```
+
+In browser code, `projects.set({ page: 3 }, { history: "replace" })` navigates through the app router so loaders and route HTML still update. It resolves to `false` when client navigation is unavailable. `projects.subscribe("page", callback)` runs only after a committed navigation changes the parsed page value; dispose the returned listener with the component. The state helper is opt-in client code and contributes to that route's JavaScript budget.
+
 ## Prefetch, not preload
 
 The API is named `prefetch`, not `preload`. It controls navigation preparation, not server runtime module preloading or HTML asset preload links.

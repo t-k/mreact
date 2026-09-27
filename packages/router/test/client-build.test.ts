@@ -6596,6 +6596,42 @@ export default function Page() {
     expect(document.getElementById("mreact-props-about")).not.toBeNull();
   });
 
+  test("replaces the current entry for typed URL updates and emits a committed URL event", async () => {
+    const { routeModule } = await importRouteRuntime("typed-url-replace");
+    const beforeId = history.state?.__mreactEntryId;
+    const push = vi.spyOn(history, "pushState");
+    const replace = vi.spyOn(history, "replaceState");
+    const committed = vi.fn();
+    window.addEventListener("mreact:url-commit", committed);
+    const html = '<div data-mreact-route-id="index"><main>Projects</main></div><script type="application/json" id="mreact-props-index">{}</script>';
+
+    expect(routeModule.__mreactNavigateToHtml(html, "/projects?page=3", { type: "replace" })).toBe(true);
+    expect(location.pathname + location.search).toBe("/projects?page=3");
+    expect(push).not.toHaveBeenCalled();
+    expect(replace).toHaveBeenCalled();
+    expect(history.state?.__mreactEntryId).toBe(beforeId);
+    expect(committed).toHaveBeenCalledOnce();
+
+    expect(routeModule.__mreactNavigateToHtml(html, "/projects?page=4", { type: "push" })).toBe(true);
+    expect(push).toHaveBeenCalledOnce();
+    expect(committed).toHaveBeenCalledTimes(2);
+    window.removeEventListener("mreact:url-commit", committed);
+  });
+
+  test("does not report a URL commit when history replacement fails", async () => {
+    const { routeModule } = await importRouteRuntime("typed-url-replace-failure");
+    const committed = vi.fn();
+    window.addEventListener("mreact:url-commit", committed);
+    vi.spyOn(history, "replaceState").mockImplementation(() => {
+      throw new Error("history unavailable");
+    });
+    const html = '<div data-mreact-route-id="index"><main>Projects</main></div><script type="application/json" id="mreact-props-index">{}</script>';
+
+    expect(routeModule.__mreactNavigateToHtml(html, "/projects?page=3", { type: "replace" })).toBe(false);
+    expect(committed).not.toHaveBeenCalled();
+    window.removeEventListener("mreact:url-commit", committed);
+  });
+
   test("disposes route-scope reactive effects on SPA navigation", async () => {
     const code = `import { effect } from "@reckona/mreact-reactive-core";
 
@@ -9195,7 +9231,7 @@ async function importRouteRuntime(
   routeModule: {
     __mreactInvalidateNavigationCache: (path: string) => void;
     __mreactNavigate: (url: string) => Promise<boolean>;
-    __mreactNavigateToHtml: (html: string, url: string) => boolean;
+    __mreactNavigateToHtml: (html: string, url: string, options?: { type?: "push" | "replace" }) => boolean;
     __mreactPrefetch: (url: string) => Promise<boolean>;
     __mreactGetNavigationState: () => {
       from: string | null;

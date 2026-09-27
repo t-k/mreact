@@ -32,6 +32,8 @@ export { definePage } from "./types.js";
 export { Link, linkProps } from "./link.js";
 export type { LinkSerializableAttribute, LinkSinkChild, LinkSinkProps } from "./link.js";
 export { href } from "./typed-routes.js";
+export { defineSearchState, searchParam } from "./search-state.js";
+export type { DefinedSearchState, ParsedSearchState, SearchParam } from "./search-state.js";
 export { parseMultipartStream } from "./multipart.js";
 export type {
   MultipartFixedLengthStream,
