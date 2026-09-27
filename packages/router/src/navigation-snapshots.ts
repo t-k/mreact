@@ -20,7 +20,7 @@ interface SnapshotEntry {
   values: Map<string, string>;
 }
 
-/** Creates a bounded snapshot store for router-managed back/forward navigation within one document. */
+/** Creates a bounded snapshot store for router-managed back/forward navigation within one document. Direct History API writes are outside this contract. */
 export function createNavigationSnapshotStore(
   options: NavigationSnapshotStoreOptions = {},
 ): NavigationSnapshotStore {
