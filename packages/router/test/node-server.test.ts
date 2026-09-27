@@ -1,8 +1,6 @@
+import { request as httpRequest } from "node:http";
 import { describe, expect, test } from "vitest";
-import {
-  resolveNodeRequestProtocol,
-  startNodeRequestServer,
-} from "../src/node-server.js";
+import { resolveNodeRequestProtocol, startNodeRequestServer } from "../src/node-server.js";
 
 describe("Node request server helper", () => {
   test.each([
@@ -53,6 +51,63 @@ describe("Node request server helper", () => {
       await fetch(server.url, { headers: { "x-forwarded-proto": "https" } });
       expect(observed).toEqual([server.url.replace("http:", "https:") + "/"]);
     } finally {
+      await server.close();
+    }
+  });
+
+  test("starts processing a POST body before its remaining bytes arrive", async () => {
+    let firstChunkSeen!: (chunk: string) => void;
+    const firstChunk = new Promise<string>((resolve) => {
+      firstChunkSeen = resolve;
+    });
+    const server = await startNodeRequestServer({
+      port: 0,
+      async render(request) {
+        const reader = request.body?.getReader();
+        if (reader === undefined) throw new Error("Missing request body");
+        const first = await reader.read();
+        if (first.done) throw new Error("Missing first request chunk");
+        firstChunkSeen(new TextDecoder().decode(first.value));
+        const second = await reader.read();
+        return new Response(second.done ? "missing tail" : new TextDecoder().decode(second.value));
+      },
+    });
+    const client = httpRequest(`${server.url}/upload`, {
+      method: "POST",
+      headers: { "content-length": "11" },
+    });
+    const response = new Promise<{ body: string; status: number | undefined }>(
+      (resolve, reject) => {
+        client.on("response", (incoming) => {
+          let body = "";
+          incoming.setEncoding("utf8");
+          incoming.on("data", (chunk: string) => {
+            body += chunk;
+          });
+          incoming.on("end", () => resolve({ body, status: incoming.statusCode }));
+          incoming.on("error", reject);
+        });
+        client.on("error", reject);
+      },
+    );
+    void response.catch(() => {});
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+
+    try {
+      client.write("prefix");
+      expect(
+        await Promise.race([
+          firstChunk,
+          new Promise<never>((_, reject) => {
+            timeout = setTimeout(() => reject(new Error("POST prefix was buffered")), 1000);
+          }),
+        ]),
+      ).toBe("prefix");
+      client.end("after");
+      await expect(response).resolves.toEqual({ body: "after", status: 200 });
+    } finally {
+      clearTimeout(timeout);
+      client.destroy();
       await server.close();
     }
   });

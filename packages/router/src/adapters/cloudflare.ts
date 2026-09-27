@@ -42,6 +42,7 @@ import {
 import { middlewareMatches, type MiddlewareModule } from "../middleware.js";
 import { normalizeRoutePath } from "../route-path.js";
 import type { AppRoute } from "../routes.js";
+import { partitionStaticRoutes } from "../static-route-lookup.js";
 import {
   trackRequestHeaderReads,
   withTrackedRequest,
@@ -465,12 +466,12 @@ export function createCloudflareRequestHandler<Env = unknown>(
 export function createCloudflareBuiltRequestHandler<Env = unknown>(
   options: CloudflareBuiltRequestHandlerOptions<Env>,
 ): CloudflareRequestHandler<Env> {
-  const sortedRoutes = [...options.serverManifest.routes].sort(compareCloudflareRoutes);
+  const routeIndex = createCloudflareRouteIndex(options.serverManifest);
 
   return createCloudflareRequestHandler({
     ...options,
     render(request, context) {
-      const matched = matchCloudflareRoute(sortedRoutes, new URL(request.url).pathname);
+      const matched = matchCloudflareRoute(routeIndex, new URL(request.url).pathname);
 
       if (matched === undefined || options.renderRoute === undefined) {
         return new Response("Not Found", { status: 404 });
@@ -520,7 +521,7 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
             // keep them away from. The built runtime re-matches the same way.
             request = middlewareResult.request;
             const rematched = matchCloudflareRoute(
-              sortedCloudflareRoutes(context.serverManifest),
+              indexedCloudflareRoutes(context.serverManifest),
               new URL(request.url).pathname,
             );
 
@@ -1573,31 +1574,46 @@ function normalizeCloudflareRouteModulePath(path: string): string {
   return withoutPrefix.replace(/\.(?:mjs|js|ts|tsx)$/, "");
 }
 
-// The manifest is the same object across requests, so a rewrite-heavy app pays
-// for the specificity sort once rather than on every rewritten request.
-const sortedRoutesByManifest = new WeakMap<BuiltServerManifest, readonly AppRoute[]>();
+// The manifest is the same object across requests, so sorting and static
+// indexing run once even when middleware rewrites a request.
+interface CloudflareRouteIndex {
+  exact: ReadonlyMap<string, AppRoute>;
+  other: readonly AppRoute[];
+}
 
-function sortedCloudflareRoutes(manifest: BuiltServerManifest): readonly AppRoute[] {
-  const cached = sortedRoutesByManifest.get(manifest);
+const routeIndexByManifest = new WeakMap<BuiltServerManifest, CloudflareRouteIndex>();
+
+function indexedCloudflareRoutes(manifest: BuiltServerManifest): CloudflareRouteIndex {
+  const cached = routeIndexByManifest.get(manifest);
 
   if (cached !== undefined) {
     return cached;
   }
 
-  const sorted = [...manifest.routes].sort(compareCloudflareRoutes);
-  sortedRoutesByManifest.set(manifest, sorted);
+  const index = createCloudflareRouteIndex(manifest);
+  routeIndexByManifest.set(manifest, index);
 
-  return sorted;
+  return index;
+}
+
+function createCloudflareRouteIndex(manifest: BuiltServerManifest): CloudflareRouteIndex {
+  const sorted = [...manifest.routes].sort(compareCloudflareRoutes);
+  return partitionStaticRoutes(sorted, (route) => route.segments);
 }
 
 function matchCloudflareRoute(
-  routes: readonly AppRoute[],
+  index: CloudflareRouteIndex,
   pathname: string,
 ): { params: Record<string, readonly string[] | string>; route: AppRoute } | undefined {
   const normalizedPath = normalizeRoutePath(pathname);
+  const exactRoute = index.exact.get(normalizedPath);
+  if (exactRoute !== undefined) {
+    return { params: {}, route: exactRoute };
+  }
+
   const pathSegments = normalizedPath === "/" ? [] : normalizedPath.slice(1).split("/");
 
-  for (const route of routes) {
+  for (const route of index.other) {
     const params: Record<string, readonly string[] | string> = {};
     const catchAllIndex = route.segments.findIndex((segment) => segment.kind === "catch-all");
 

@@ -1,10 +1,8 @@
 import { readdir } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { createNativeRouteMatcher } from "./native-route-matcher.js";
-import {
-  appFileConventionForRootFilename,
-  type AppFileConvention,
-} from "./file-conventions.js";
+import { partitionStaticRoutes } from "./static-route-lookup.js";
+import { appFileConventionForRootFilename, type AppFileConvention } from "./file-conventions.js";
 
 /**
  * Configures app route discovery from a routes directory.
@@ -112,9 +110,7 @@ let nextMatchRouteFingerprintId = 1;
 /**
  * Scans an app directory and returns sorted app-router route definitions.
  */
-export async function scanAppRoutes(
-  options: ScanAppRoutesOptions,
-): Promise<AppRoute[]> {
+export async function scanAppRoutes(options: ScanAppRoutesOptions): Promise<AppRoute[]> {
   const files = await collectRouteFiles(options.appDir);
 
   return files
@@ -191,9 +187,22 @@ export function createRouteMatcher(
   artifact?: CompiledRouteMatcherArtifact | undefined,
 ): RouteMatcher {
   if (artifact?.version === 1) {
+    const partition = partitionStaticRoutes(artifact.routes, (entry) => entry.segments);
+
     return {
       match(pathname) {
-        return matchCompiledRoutes(routes, artifact, pathname);
+        const normalized = normalizePath(pathname);
+        const exactEntry = partition.exact.get(normalized);
+        const exactRoute = exactEntry === undefined ? undefined : routes[exactEntry.routeIndex];
+        if (exactRoute !== undefined) {
+          return { route: exactRoute, params: {} };
+        }
+
+        return matchCompiledRoutes(
+          routes,
+          exactEntry === undefined ? partition.other : artifact.routes,
+          normalized,
+        );
       },
     };
   }
@@ -205,17 +214,20 @@ export function createRouteMatcher(
     return nativeMatcher;
   }
 
+  const partition = partitionStaticRoutes(sortedRoutes, (route) => route.segments);
+
   return {
     match(pathname) {
-      return matchSortedRoutes(sortedRoutes, pathname);
+      const normalized = normalizePath(pathname);
+      const exactRoute = partition.exact.get(normalized);
+      return exactRoute === undefined
+        ? matchSortedRoutes(partition.other, normalized)
+        : { route: exactRoute, params: {} };
     },
   };
 }
 
-function compileRouteMatcherEntry(
-  route: AppRoute,
-  routeIndex: number,
-): CompiledRouteMatcherEntry {
+function compileRouteMatcherEntry(route: AppRoute, routeIndex: number): CompiledRouteMatcherEntry {
   const catchAllIndex = route.segments.findIndex((segment) => segment.kind === "catch-all");
   const shared = {
     catchAllIndex,
@@ -275,13 +287,12 @@ function routeMatcherRouteFingerprintId(route: AppRoute): number {
 
 function matchCompiledRoutes(
   routes: readonly AppRoute[],
-  artifact: CompiledRouteMatcherArtifact,
-  pathname: string,
+  compiledRoutes: readonly CompiledRouteMatcherEntry[],
+  normalized: string,
 ): MatchedRoute | undefined {
-  const normalized = normalizePath(pathname);
   const pathnameSegments = normalized === "/" ? [] : normalized.slice(1).split("/");
 
-  for (const compiledRoute of artifact.routes) {
+  for (const compiledRoute of compiledRoutes) {
     const route = routes[compiledRoute.routeIndex];
     if (route === undefined) {
       continue;
@@ -389,15 +400,12 @@ function matchCompiledRoutes(
 
 function matchSortedRoutes(
   routes: readonly AppRoute[],
-  pathname: string,
+  normalized: string,
 ): MatchedRoute | undefined {
-  const normalized = normalizePath(pathname);
   const pathnameSegments = normalized === "/" ? [] : normalized.slice(1).split("/");
 
   for (const route of routes) {
-    const catchAllIndex = route.segments.findIndex(
-      (segment) => segment.kind === "catch-all",
-    );
+    const catchAllIndex = route.segments.findIndex((segment) => segment.kind === "catch-all");
 
     if (catchAllIndex === -1 && route.segments.length !== pathnameSegments.length) {
       continue;
@@ -622,12 +630,13 @@ function isRouteGroup(part: string): boolean {
 function compareRoutes(a: AppRoute, b: AppRoute): number {
   const scoreDelta = routeScore(b) - routeScore(a);
 
-  return scoreDelta === 0 ? a.path.localeCompare(b.path) || a.kind.localeCompare(b.kind) : scoreDelta;
+  return scoreDelta === 0
+    ? a.path.localeCompare(b.path) || a.kind.localeCompare(b.kind)
+    : scoreDelta;
 }
 
 function compareRouteListEntries(a: AppRoute, b: AppRoute): number {
-  return routeListKey(a.path).localeCompare(routeListKey(b.path)) ||
-    a.kind.localeCompare(b.kind);
+  return routeListKey(a.path).localeCompare(routeListKey(b.path)) || a.kind.localeCompare(b.kind);
 }
 
 function routeListKey(path: string): string {
