@@ -25,6 +25,10 @@ jobs:
             command: pnpm bench:js-framework:endurance
             browser: true
             hosted-chrome: true
+          - track: compiled-jsx-allocations
+            command: pnpm bench:js-framework:allocations
+            browser: true
+            hosted-chrome: true
           - track: compiler-specializations
             command: pnpm bench:compiler-specializations
             browser: true
@@ -38,6 +42,10 @@ jobs:
             command: MREACT_BUILD_TIMINGS=1 pnpm bench:router-build
           - track: router-build-fresh
             command: MREACT_BUILD_TIMINGS=1 pnpm bench:router-build:fresh
+          - track: router-build-leaf-change
+            command: MREACT_BUILD_TIMINGS=1 pnpm bench:router-build:incremental
+          - track: router-build-layout-change
+            command: MREACT_BUILD_TIMINGS=1 MREACT_ROUTER_BUILD_BENCH_CHANGE_KIND=shared-layout pnpm bench:router-build:incremental
           - track: scheduler
             command: pnpm bench:scheduler
           - track: lambda-generated-handler

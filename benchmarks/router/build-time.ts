@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -50,9 +50,7 @@ interface FreshProcessBuildSample {
 const routeCount = readNumberEnv("MREACT_ROUTER_BUILD_BENCH_ROUTES", 40);
 const repeatCount = readNumberEnv("MREACT_ROUTER_BUILD_BENCH_REPEATS", 5);
 const collectPhaseTimings = process.env.MREACT_BUILD_TIMINGS === "1";
-const processModel = process.env.MREACT_ROUTER_BUILD_BENCH_PROCESS_MODEL === "fresh-process"
-  ? "fresh-process"
-  : "same-process-rebuild";
+const processModel = process.env.MREACT_ROUTER_BUILD_BENCH_PROCESS_MODEL ?? "same-process-rebuild";
 const rootDir = await mkdtemp(join(tmpdir(), "mreact-router-build-time-"));
 const appDir = join(rootDir, "app");
 const outDir = join(rootDir, ".mreact");
@@ -61,8 +59,12 @@ try {
   await writeFixtureApp(appDir, routeCount);
   if (processModel === "fresh-process") {
     await runFreshProcessBenchmark(appDir, outDir);
-  } else {
+  } else if (processModel === "incremental-source-change") {
+    await runIncrementalSourceChangeBenchmark(appDir, outDir);
+  } else if (processModel === "same-process-rebuild") {
     await runSameProcessBenchmark(appDir, outDir);
+  } else {
+    throw new Error(`Unsupported router build benchmark process model: ${processModel}`);
   }
 } finally {
   await rm(rootDir, { force: true, recursive: true });
@@ -242,14 +244,88 @@ async function runFreshProcessBuild(appDir: string, outDir: string): Promise<Fre
   return { elapsedMs, ...JSON.parse(line.slice(marker.length)) as Omit<FreshProcessBuildSample, "elapsedMs"> };
 }
 
+async function runIncrementalSourceChangeBenchmark(appDir: string, outDir: string): Promise<void> {
+  if (routeCount < 4) throw new Error("Incremental source-change benchmark requires at least four routes");
+  const changeKind = process.env.MREACT_ROUTER_BUILD_BENCH_CHANGE_KIND ?? "leaf";
+  if (changeKind !== "leaf" && changeKind !== "shared-layout") {
+    throw new Error(`Unsupported router build change kind: ${changeKind}`);
+  }
+  await buildApp({ appDir, outDir });
+  let previousFingerprint = await readBuildFingerprint(outDir);
+  const samples = [];
+  for (let revision = 1; revision <= repeatCount; revision++) {
+    if (changeKind === "leaf") {
+      await writeFile(join(appDir, "route-3", "page.tsx"), routeSource(3, revision));
+    } else {
+      await writeFile(join(appDir, "layout.tsx"), layoutSource(revision));
+    }
+    const phaseTimings: BuildAppPhaseTiming[] = [];
+    const beforeRss = process.memoryUsage().rss;
+    const beforeCpu = process.cpuUsage();
+    const startedAt = performance.now();
+    await buildApp({
+      appDir,
+      outDir,
+      ...(collectPhaseTimings ? { onBuildPhaseTiming(timing: BuildAppPhaseTiming) { phaseTimings.push(timing); } } : {}),
+    });
+    const elapsedMs = round(performance.now() - startedAt);
+    const cpu = process.cpuUsage(beforeCpu);
+    const fingerprint = await readBuildFingerprint(outDir);
+    if (fingerprint === previousFingerprint) throw new Error(`Build fingerprint did not change for ${changeKind} revision ${revision}`);
+    previousFingerprint = fingerprint;
+    samples.push({
+      revision,
+      elapsedMs,
+      cpuUserMs: round(cpu.user / 1_000),
+      cpuSystemMs: round(cpu.system / 1_000),
+      rssDeltaBytes: process.memoryUsage().rss - beforeRss,
+      phaseTimings,
+      fingerprint,
+    });
+  }
+  const elapsed = samples.map((sample) => sample.elapsedMs);
+  const env = await collectBenchmarkEnvironment(["@reckona/mreact-router"]);
+  const dir = await createDatedResultsDir();
+  const result = {
+    methodologyVersion: 3,
+    caseName: `incremental ${changeKind} source change`,
+    processModel: "incremental-source-change",
+    changeKind,
+    routeCount,
+    repeatCount,
+    osCache: "retained",
+    medianMs: percentile(elapsed, 50),
+    maxMs: percentile(elapsed, 100),
+    samples,
+    environment: env,
+  };
+  const markdown = [
+    "# Router Incremental Source Change Benchmark",
+    "",
+    `Date: ${env.date}; Git commit: ${env.gitCommit}; Node: ${env.nodeVersion}; platform: ${env.platform} ${env.arch}.`,
+    "",
+    "An unmeasured initial build creates the output cache. Each measured trial changes rendered source, retains the output directory and Node process, and verifies that the build fingerprint changes. The build may still regenerate all outputs; this track measures that cost rather than asserting partial recompilation. OS caches remain warm. RSS deltas are signed and do not measure peak or process-tree memory.",
+    "",
+    "| change | routes | median ms | max ms | raw elapsed ms | CPU user ms | CPU system ms | RSS delta bytes |",
+    "| --- | ---: | ---: | ---: | --- | --- | --- | --- |",
+    `| ${changeKind} | ${routeCount} | ${result.medianMs} | ${result.maxMs} | ${samples.map((sample) => sample.elapsedMs).join(", ")} | ${samples.map((sample) => sample.cpuUserMs).join(", ")} | ${samples.map((sample) => sample.cpuSystemMs).join(", ")} | ${samples.map((sample) => sample.rssDeltaBytes).join(", ")} |`,
+  ].join("\n");
+  await writeJsonFile(join(dir, `router-build-time-${changeKind}.summary.json`), result);
+  await writeTextFile(join(dir, `router-build-time-${changeKind}.md`), markdown);
+  console.log(markdown);
+}
+
+async function readBuildFingerprint(outDir: string): Promise<string> {
+  const raw = JSON.parse(await readFile(join(outDir, "build-cache.json"), "utf8")) as { fingerprint?: unknown };
+  if (typeof raw.fingerprint !== "string") throw new Error("Router build cache fingerprint is unavailable");
+  return raw.fingerprint;
+}
+
 async function writeFixtureApp(directory: string, routes: number): Promise<void> {
   await mkdir(join(directory, "components"), { recursive: true });
   await writeFile(
     join(directory, "layout.tsx"),
-    `export default function Layout() {
-  return <html lang="en"><body><Slot /></body></html>;
-}
-`,
+    layoutSource(0),
   );
   await writeFile(
     join(directory, "components", "Counter.tsx"),
@@ -276,7 +352,14 @@ export function Counter() {
   }
 }
 
-function routeSource(index: number): string {
+function layoutSource(revision: number): string {
+  return `export default function Layout() {
+  return <html lang="en"><body${revision === 0 ? "" : ` data-revision="${revision}"`}><Slot /></body></html>;
+}
+`;
+}
+
+function routeSource(index: number, revision = 0): string {
   if (index % 4 === 0) {
     return `import { Counter } from "../components/Counter";
 
@@ -314,7 +397,7 @@ export default function Page() {
   }
 
   return `export default function Page() {
-  return <main><h1>Route ${index}</h1></main>;
+  return <main><h1>Route ${index}${revision === 0 ? "" : ` revision ${revision}`}</h1></main>;
 }
 `;
 }

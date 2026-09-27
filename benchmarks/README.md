@@ -22,6 +22,7 @@ This directory contains fair, repeatable benchmark fixtures for mreact and peer 
 - `lambda-generated-handler-latency`: packaged generated AWS Lambda handler import/initialization, first redirect, first rendered route, and warm-hit latency across supported preload policies.
 - `router-build`: repeated app builds in one Node process after deleting generated output. The report keeps signed RSS deltas and raw samples; it is not a cold-process build.
 - `router-build:fresh`: a new Node process for each app build, with generated output deleted but OS caches retained. It records wall time including process startup, child module import and build time, child CPU time, and peak child RSS.
+- `router-build:incremental`: a same-process build after an unmeasured initial build, changing one rendered leaf page or the shared layout for every measured trial while retaining the output directory. The changed build fingerprint is checked; this track measures rebuild cost without assuming partial recompilation.
 - `scheduler`: React-compatible scheduler queue scaling for ready callbacks, delayed timer promotion, and cancellation-heavy callback bursts.
 - `scenarios`: reserved for user-centric scenario reports.
 
@@ -43,8 +44,9 @@ The Analog production fixture serializes Vite's client and SSR environment build
 - Store raw samples, percentile summaries, and markdown reports under `benchmarks/results/<date>/<run>/`, where `<run>` is a same-day sequence such as `001` or `002`.
 - Primitive-browser methodology v2 builds one entry per supported framework, starts a fresh Chromium process for every scored trial, and rotates framework order by round. Each browser performs its configured warmups, then one measured operation with explicit GC before and after; `primitive-browser.trials.json` records the round, position, browser version, and outcome. This is an isolated primitive track, not a natural-GC endurance test. Its numbers cannot be compared directly with mixed-entry methodology v1 or the official compiled JSX harness.
 - The list-rotation probe builds the same runtime-only source against the current workspace and, when `MREACT_ROTATION_BASELINE_WORKSPACE` names another built checkout, alternates baseline/candidate/candidate/baseline fresh Chromium trials. Each trial warms five rotations and records 20 rotations without forced GC. Use its move count as a direct check; the short operation times are browser-specific, and its gzip comparison includes every difference between the two workspaces.
+- `bench:js-framework:allocations` rebuilds the canonical compiled keyed JSX fixture and runs its operation sequence with Chromium's sampling heap profiler in a separate browser/process from scored endurance. The profile includes objects collected by minor and major GC when supported by that Chromium version, records an estimated sampled byte count and top allocation sites, and retains the full CDP profile. Sampling changes execution cost, so its operation times are for verification only. The ordinary endurance track does not enable profiling.
 - The Benchmarks GitHub Actions workflow commits changed result directories back to the selected branch; do not rely on Actions artifacts for long-term access. A single workflow dispatch writes all selected public benchmark reports into the same run directory, so `all` produces `primitive.md`, `primitive-browser.md`, `non-router.md`, and `router.md` side by side. Microbenchmarks such as `html-escape` and `request-fastpaths` are local investigation tools and are not published by the workflow.
-- The Performance Diagnostics workflow runs the compiled JSX endurance, compiler flag ablations, event lifecycle, list rotation, router build, scheduler, generated Lambda handler, lifecycle, and client delivery size tracks weekly or by manual dispatch. Its per-track raw artifacts expire after 90 days; results from shared GitHub runners are diagnostics, not fixed-machine regression gates. Keep commit-to-commit performance claims on one controlled machine.
+- The Performance Diagnostics workflow runs the compiled JSX endurance and separate allocation profile, compiler flag ablations, event lifecycle, list rotation, router build modes including leaf/layout changes, scheduler, generated Lambda handler, lifecycle, and client delivery size tracks weekly or by manual dispatch. Its per-track raw artifacts expire after 90 days; results from shared GitHub runners are diagnostics, not fixed-machine regression gates. Keep commit-to-commit performance claims on one controlled machine.
 - Router `app HTTP v2` cases separate the orchestrator, HTTP load generator and production server into different processes. One trial supplies throughput, p50/p95/p99 and a single server PID's RSS before/after delta. Burst uses 200 requests with at most 100 in flight and a fresh keep-alive pool, repeated in three rotated rounds. Steady load uses a two-second warmup at the configured concurrency and three consecutive five-second windows with the same pool. Requests already in flight drain within the request deadline, and actual elapsed time includes that drain. This is not a cold-server test. JSON `router.http-trials.json` stores each raw trial once; summary-row `httpTrials` entries link to it with `latencySamplesRef` and retain workload configuration, trial/series IDs, execution order, process IDs, warmup measurements, per-window connection-open/reuse counts and explicit worker totals, and RSS snapshots. RSS is neither peak memory nor a process-tree total; negative deltas are retained but excluded from RSS rankings. `samples` carries metric-specific units rather than storing bytes or ops/sec in `samplesMs`. Route/cache semantics remain unchanged and may differ across frameworks: mreact targets `/static-page` with its existing memory route cache; other adapters keep their existing `/` fixtures. Methodology v2 is not directly comparable to the legacy concurrent probes, and topology changes are not runtime speedups.
 - The primitive Vue, Svelte, and Angular adapters use framework-runtime fixtures: Vue mounts `createApp` components, Svelte mounts compiler-generated components, and Angular mounts JIT standalone components with signals. Source-primitive rows remain unsupported unless the framework has a directly comparable fine-grained source primitive.
 - Treat benchmark numbers as same-machine comparisons, not absolute truth.
@@ -58,6 +60,7 @@ pnpm bench:primitive-browser:list-rotation
 pnpm bench:primitive-browser:event-lifecycle
 pnpm bench:js-framework
 pnpm bench:js-framework:endurance
+pnpm bench:js-framework:allocations
 pnpm report:compiler-specializations
 pnpm bench:compiler-specializations
 pnpm bench:html-escape
@@ -68,6 +71,7 @@ pnpm bench:lambda-routes
 pnpm bench:lambda-generated-handler
 pnpm bench:router-build
 pnpm bench:router-build:fresh
+pnpm bench:router-build:incremental
 pnpm bench:scheduler
 pnpm bench:all
 ```

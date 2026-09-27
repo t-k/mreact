@@ -67,6 +67,69 @@ export async function runCompiledEndurance({ url, cycles, warmupCycles = 1 }) {
   }
 }
 
+export async function runCompiledAllocationProfile({ url, cycles, warmupCycles = 1, samplingIntervalBytes = 32_768 }) {
+  if (!Number.isSafeInteger(cycles) || cycles < 1) throw new Error("cycles must be a positive integer");
+  if (!Number.isSafeInteger(warmupCycles) || warmupCycles < 0) throw new Error("warmupCycles must be a non-negative integer");
+  if (!Number.isSafeInteger(samplingIntervalBytes) || samplingIntervalBytes < 1) throw new Error("samplingIntervalBytes must be a positive integer");
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const session = await context.newCDPSession(page);
+    await page.goto(url, { waitUntil: "domcontentloaded" });
+    await page.locator("#runlots").waitFor();
+    for (let index = 0; index < warmupCycles; index += 1) await runCycle(page);
+    await session.send("HeapProfiler.enable");
+    await session.send("HeapProfiler.startSampling", {
+      samplingInterval: samplingIntervalBytes,
+      includeObjectsCollectedByMajorGC: true,
+      includeObjectsCollectedByMinorGC: true,
+    });
+    const operations = [];
+    for (let index = 0; index < cycles; index += 1) operations.push(await runCycle(page));
+    const { profile } = await session.send("HeapProfiler.stopSampling");
+    await context.close();
+    const sites = new Map();
+    let estimatedSampledBytes = 0;
+    function visit(node) {
+      estimatedSampledBytes += node.selfSize;
+      if (node.selfSize > 0) {
+        const { functionName, url: sourceUrl, lineNumber, columnNumber } = node.callFrame;
+        const key = JSON.stringify([functionName, sourceUrl, lineNumber, columnNumber]);
+        const site = sites.get(key) ?? { functionName, url: sourceUrl, lineNumber, columnNumber, estimatedSampledBytes: 0 };
+        site.estimatedSampledBytes += node.selfSize;
+        sites.set(key, site);
+      }
+      for (const child of node.children) visit(child);
+    }
+    visit(profile.head);
+    return {
+      methodologyVersion: 1,
+      track: "compiled-jsx-allocation-profile",
+      gcMode: "natural",
+      browserVersion: browser.version(),
+      url,
+      warmupCycles,
+      cycles,
+      samplingIntervalBytes,
+      includeCollectedByMajorGC: true,
+      includeCollectedByMinorGC: true,
+      operations,
+      estimatedSampledBytes,
+      sampleCount: profile.samples.length,
+      topAllocationSites: [...sites.values()].sort((a, b) => b.estimatedSampledBytes - a.estimatedSampledBytes).slice(0, 25),
+      profile,
+      limitations: [
+        "Sampling estimates allocations and changes execution cost; this run is for attribution, not operation-time scoring.",
+        "The profiler includes objects collected by major and minor GC if supported by the reported Chromium version; it does not count every allocation exactly.",
+        "The canonical keyed fixture has no filter or arbitrary-sort action.",
+      ],
+    };
+  } finally {
+    await browser.close();
+  }
+}
+
 async function readMetrics(session) {
   const response = await session.send("Performance.getMetrics");
   const metrics = Object.fromEntries(response.metrics.map(({ name, value }) => [name, value]));

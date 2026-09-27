@@ -5,7 +5,7 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 import { execFileSync, spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { syncMreactFixtureDirectories } from "./sync-mreact-fixtures.mjs";
-import { runCompiledEndurance } from "./run-endurance.mjs";
+import { runCompiledAllocationProfile, runCompiledEndurance } from "./run-endurance.mjs";
 
 const repoRoot = resolve(new URL("../..", import.meta.url).pathname);
 const fixtureRoot = join(repoRoot, "benchmarks", "js-framework-benchmark", "frameworks", "keyed");
@@ -281,11 +281,15 @@ const diffAnchorFramework = process.env.MREACT_JS_FRAMEWORK_DIFF_ANCHOR ?? "reac
 
 const selectedBenchmarks = parseFrameworks(process.env.MREACT_JS_FRAMEWORK_BENCHMARKS, []);
 const enduranceCycles = parseIntegerEnv(process.env.MREACT_JS_FRAMEWORK_ENDURANCE_CYCLES, 0);
+const allocationProfileCycles = parseIntegerEnv(process.env.MREACT_JS_FRAMEWORK_ALLOCATION_PROFILE_CYCLES, 0);
 const chromeBinaryPath = parseChromeBinaryPath(process.env.MREACT_JS_FRAMEWORK_CHROME_BINARY);
 
 await main();
 
 async function main() {
+  if (enduranceCycles > 0 && allocationProfileCycles > 0) {
+    throw new Error("Run compiled JSX endurance and allocation profiling in separate processes");
+  }
   await prepareCheckout();
   await copyMreactFixtures();
   if (useLocalPackages) {
@@ -320,6 +324,26 @@ async function main() {
         nodeVersion: process.version,
       }, null, 2)}\n`);
       console.log(`Compiled JSX endurance result: ${runDir}`);
+      return;
+    }
+    if (allocationProfileCycles > 0) {
+      if (selectedFrameworks.length !== 1 || selectedFrameworks[0] !== "keyed/mreact") {
+        throw new Error("Compiled JSX allocation profiling requires MREACT_JS_FRAMEWORKS=keyed/mreact");
+      }
+      const profile = await runCompiledAllocationProfile({
+        url: "http://localhost:8080/frameworks/keyed/mreact/",
+        cycles: allocationProfileCycles,
+        warmupCycles: 1,
+      });
+      const runDir = join(resultDir, "compiled-allocations", new Date().toISOString().replaceAll(":", "-"));
+      await mkdir(runDir, { recursive: true });
+      await writeFile(join(runDir, "compiled-allocations.json"), `${JSON.stringify({
+        ...profile,
+        gitCommit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: repoRoot, encoding: "utf8" }).trim(),
+        gitDirty: execFileSync("git", ["status", "--porcelain"], { cwd: repoRoot, encoding: "utf8" }).trim() !== "",
+        nodeVersion: process.version,
+      }, null, 2)}\n`);
+      console.log(`Compiled JSX allocation profile: ${runDir}`);
       return;
     }
     await resetOfficialRunOutput();

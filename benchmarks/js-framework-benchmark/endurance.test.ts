@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { runCompiledEndurance } from "./run-endurance.mjs";
+import { runCompiledAllocationProfile, runCompiledEndurance } from "./run-endurance.mjs";
 
 const fixture = `<!doctype html><body>
 <button id="runlots">Create</button><button id="update">Update</button><button id="swaprows">Swap</button>
@@ -38,6 +38,9 @@ describe("compiled JSX endurance harness", () => {
     expect(runner).toContain("await runCompiledEndurance(");
     expect(runner).toContain("MREACT_JS_FRAMEWORK_ENDURANCE_CYCLES");
     expect(packageJson.scripts["bench:js-framework:endurance"]).toContain("run-official.mjs");
+    expect(runner).toContain("await runCompiledAllocationProfile(");
+    expect(runner).toContain("MREACT_JS_FRAMEWORK_ALLOCATION_PROFILE_CYCLES");
+    expect(packageJson.scripts["bench:js-framework:allocations"]).toContain("run-official.mjs");
   });
 
   test("records a complete repeated operation sequence without forcing GC", async () => {
@@ -64,6 +67,24 @@ describe("compiled JSX endurance harness", () => {
       expect(cycle.jsHeapUsedBytes).toBeGreaterThan(0);
       expect(cycle.domNodes).toBeGreaterThan(0);
     }
+  });
+
+  test("profiles temporary allocations in a separate Chromium run", async () => {
+    const result = await runCompiledAllocationProfile({
+      url: `data:text/html,${encodeURIComponent(fixture)}`,
+      cycles: 2,
+      warmupCycles: 0,
+      samplingIntervalBytes: 1024,
+    });
+
+    expect(result.track).toBe("compiled-jsx-allocation-profile");
+    expect(result.gcMode).toBe("natural");
+    expect(result.includeCollectedByMajorGC).toBe(true);
+    expect(result.includeCollectedByMinorGC).toBe(true);
+    expect(result.operations).toHaveLength(2);
+    expect(result.estimatedSampledBytes).toBeGreaterThan(0);
+    expect(result.topAllocationSites.length).toBeGreaterThan(0);
+    expect(result.profile.head.selfSize).toBeGreaterThanOrEqual(0);
   });
 });
 import { readFile } from "node:fs/promises";

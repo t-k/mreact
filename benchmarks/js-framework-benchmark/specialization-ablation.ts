@@ -61,7 +61,14 @@ try {
     filename,
     rounds,
     environment: await collectBenchmarkEnvironment(["@reckona/mreact-compiler", "@reckona/mreact-reactive-dom"]),
-    variants: Object.fromEntries([...variants.entries()].map(([name, { bundle, ...metadata }]) => [name, metadata])),
+    variants: Object.fromEntries([...variants.entries()].map(([name, value]) => [name, {
+      decisions: value.decisions,
+      runtimeImports: value.runtimeImports,
+      generatedRawBytes: value.generatedRawBytes,
+      generatedGzipBytes: value.generatedGzipBytes,
+      bundleRawBytes: value.bundleRawBytes,
+      bundleGzipBytes: value.bundleGzipBytes,
+    }])),
     results,
     limitations: [
       "This ordinary JSX fixture exercises four existing compiler flags; the canonical keyed benchmark has no candidates for these four flags.",
