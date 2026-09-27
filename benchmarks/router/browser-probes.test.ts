@@ -1,7 +1,11 @@
 import { createServer } from "node:http";
 import { gzipSync } from "node:zlib";
 import { afterEach, describe, expect, it } from "vitest";
-import { measureHydrationIslands, measureRouteJavaScriptGzipBytePhases } from "./browser-probes.js";
+import {
+  measureBackForwardRestore,
+  measureHydrationIslands,
+  measureRouteJavaScriptGzipBytePhases,
+} from "./browser-probes.js";
 
 const servers: Array<{ close: () => Promise<void> }> = [];
 
@@ -10,6 +14,44 @@ afterEach(async () => {
 });
 
 describe("router browser probes", () => {
+  it.each([
+    {
+      mode: "compat remount",
+      counterPrefix: "compat count: ",
+      restoredCount: 0 as const,
+      options: { counterPrefix: "compat count: ", expectedCountAfterBack: 0 as const },
+    },
+    {
+      mode: "native state restore",
+      counterPrefix: "count: ",
+      restoredCount: 1 as const,
+      options: undefined,
+    },
+    {
+      mode: "custom-prefix permissive restore",
+      counterPrefix: "compat count: ",
+      restoredCount: 0 as const,
+      options: { counterPrefix: "compat count: ", expectStateRestore: false },
+    },
+  ])(
+    "checks $mode after back-forward navigation",
+    async ({ counterPrefix, restoredCount, options }) => {
+      const url = await startHistoryCounterFixture(counterPrefix, restoredCount);
+
+      expect(await measureBackForwardRestore(url, options)).toBeGreaterThan(0);
+    },
+    20_000,
+  );
+
+  it("rejects a full document navigation in the back-forward probe", async () => {
+    const url = await startScriptFixture({
+      "/": `<!doctype html><button type="button" onclick="this.textContent='count: 1'">count: 0</button><a href="/details">Details</a>`,
+      "/details": "<!doctype html><h1>Navigation target</h1>",
+    });
+
+    await expect(measureBackForwardRestore(url)).rejects.toThrow("full document reload");
+  }, 20_000);
+
   it.each(["last-only", "shared"])("rejects %s island interactions", async (mode) => {
     const buttons = Array.from({ length: 3 }, (_, i) => `<button>island ${i}: 0</button>`).join("");
     const script =
@@ -127,4 +169,34 @@ async function startScriptFixture(routes: Record<string, string>): Promise<strin
   }
 
   return `http://127.0.0.1:${address.port}`;
+}
+
+async function startHistoryCounterFixture(
+  counterPrefix: string,
+  restoredCount: 0 | 1,
+): Promise<string> {
+  return startScriptFixture({
+    "/": `<!doctype html><main id="app"></main><script>
+const app = document.getElementById("app");
+const prefix = ${JSON.stringify(counterPrefix)};
+const restoredCount = ${restoredCount};
+let homeVisits = 0;
+function showHome() {
+  const count = homeVisits++ === 0 ? 0 : restoredCount;
+  const decoys = homeVisits > 1 ? (restoredCount === 0 ? '<button type="button">' + prefix + count + ' stale</button>' : '') + '<button type="button">Other action</button>' : '';
+  app.innerHTML = decoys + '<button id="counter" type="button">' + prefix + count + '</button><a href="/details">Details</a>';
+  app.querySelector("#counter").addEventListener("click", (event) => {
+    event.currentTarget.textContent = prefix + (count + 1);
+  });
+  app.querySelector("a").addEventListener("click", (event) => {
+    event.preventDefault();
+    history.pushState({}, "", "/details");
+    showDetails();
+  });
+}
+function showDetails() { app.innerHTML = '<h1>Navigation target</h1>'; }
+addEventListener("popstate", () => location.pathname === "/details" ? showDetails() : showHome());
+showHome();
+</script>`,
+  });
 }

@@ -214,31 +214,57 @@ export async function measureLoaderClientNavigation(url: string): Promise<number
 
 export async function measureBackForwardRestore(
   url: string,
-  options: { expectStateRestore?: boolean } = {},
+  options: {
+    expectStateRestore?: boolean;
+    counterPrefix?: string;
+    expectedCountAfterBack?: 0 | 1;
+  } = {},
 ): Promise<number> {
   const expectStateRestore = options.expectStateRestore ?? true;
+  const counterPrefix = options.counterPrefix ?? "count: ";
+  const escapedCounterPrefix = counterPrefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
     const diagnostics = collectDiagnostics(page);
     await page.goto(url, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: DEFAULT_TIMEOUT_MS }).catch(() => {});
-    await page.getByRole("button", { name: "count: 0" }).click();
-    await page.getByRole("button", { name: "count: 1" }).waitFor({
+    await page.getByRole("button", { name: `${counterPrefix}0` }).click();
+    await page.getByRole("button", { name: `${counterPrefix}1` }).waitFor({
       state: "visible",
       timeout: DEFAULT_TIMEOUT_MS,
     });
+    const documentToken = String(Math.random());
+    await page.evaluate((token) => {
+      (globalThis as { __mreactBenchDocumentToken?: string }).__mreactBenchDocumentToken = token;
+    }, documentToken);
+    const assertSameDocument = async (): Promise<void> => {
+      const retainedToken = await page.evaluate(
+        () => (globalThis as { __mreactBenchDocumentToken?: string }).__mreactBenchDocumentToken,
+      );
+      if (retainedToken !== documentToken) {
+        throw new Error("back-forward navigation caused a full document reload");
+      }
+    };
     await page.getByRole("link", { name: "Details" }).click();
     await page.getByRole("heading", { name: "Navigation target" }).waitFor({
       state: "visible",
       timeout: DEFAULT_TIMEOUT_MS,
     });
+    await assertSameDocument();
 
     const start = await page.evaluate(() => performance.now());
     await page.goBack({ waitUntil: "domcontentloaded" });
-    const restoredButton = expectStateRestore
-      ? page.getByRole("button", { name: "count: 1" })
-      : page.getByRole("button", { name: /^count: [01]$/ });
+    await assertSameDocument();
+    const restoredButton =
+      options.expectedCountAfterBack !== undefined
+        ? page.getByRole("button", {
+            name: `${counterPrefix}${options.expectedCountAfterBack}`,
+            exact: true,
+          })
+        : expectStateRestore
+          ? page.getByRole("button", { name: `${counterPrefix}1` })
+          : page.getByRole("button", { name: new RegExp(`^${escapedCounterPrefix}[01]$`) });
     await restoredButton
       .waitFor({
         state: "visible",
@@ -257,6 +283,7 @@ export async function measureBackForwardRestore(
       .catch((error: unknown) => {
         throw appendDiagnostics(error, diagnostics);
       });
+    await assertSameDocument();
     const end = await page.evaluate(() => performance.now());
     return end - start;
   } finally {
