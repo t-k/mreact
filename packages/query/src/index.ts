@@ -13,6 +13,15 @@ import {
 } from "./query-lifecycle.js";
 
 export { hashQueryKey } from "./query-lifecycle.js";
+export {
+  createFormMutationFlow,
+  type FormMutationFlow,
+  type FormMutationFlowOptions,
+  type FormMutationFlowResult,
+  type MutationFlowForm,
+  type MutationFlowServerErrors,
+  type MutationFlowServerResult,
+} from "./form-mutation.js";
 export { syncQueryClientAcrossTabs, type CrossTabQuerySyncOptions };
 
 /** Represents the structured key used to identify cached query data. */
