@@ -6377,6 +6377,41 @@ export default function Page() {
     expect(resumedButton?.textContent).toBe("count: 2");
   });
 
+  test("rehydrates a closed direct-cell route without duplicating handlers or losing state", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-static-cell-runtime-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+export const clientNavigation = false;
+export default function Page() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>count: {count.get()}</button>;
+}`;
+    await writeFile(file, code);
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><button type="button">count: 0</button></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({ code, filename: file, routePath: "/" });
+    const routeModule = (await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#static-cell-state`
+    )) as { __mreactHydrateRoute: () => void };
+    const button = document.querySelector<HTMLButtonElement>("button");
+    const text = button?.lastChild;
+
+    button?.click();
+    await Promise.resolve();
+    expect(button?.textContent).toBe("count: 1");
+    expect(button?.lastChild).toBe(text);
+
+    routeModule.__mreactHydrateRoute();
+    expect(document.querySelector("button")).toBe(button);
+    expect(button?.textContent).toBe("count: 1");
+    button?.click();
+    await Promise.resolve();
+    expect(button?.textContent).toBe("count: 2");
+  });
+
   test("preserves route cell state written through setValue and update", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cell-write-apis-"));
     const file = join(appDir, "page.mreact.tsx");
@@ -6604,16 +6639,21 @@ export default function Page() {
     const replace = vi.spyOn(history, "replaceState");
     const committed = vi.fn();
     window.addEventListener("mreact:url-commit", committed);
-    const html = '<div data-mreact-route-id="index"><main>Projects</main></div><script type="application/json" id="mreact-props-index">{}</script>';
+    const html =
+      '<div data-mreact-route-id="index"><main>Projects</main></div><script type="application/json" id="mreact-props-index">{}</script>';
 
-    expect(routeModule.__mreactNavigateToHtml(html, "/projects?page=3", { type: "replace" })).toBe(true);
+    expect(routeModule.__mreactNavigateToHtml(html, "/projects?page=3", { type: "replace" })).toBe(
+      true,
+    );
     expect(location.pathname + location.search).toBe("/projects?page=3");
     expect(push).not.toHaveBeenCalled();
     expect(replace).toHaveBeenCalled();
     expect(history.state?.__mreactEntryId).toBe(beforeId);
     expect(committed).toHaveBeenCalledOnce();
 
-    expect(routeModule.__mreactNavigateToHtml(html, "/projects?page=4", { type: "push" })).toBe(true);
+    expect(routeModule.__mreactNavigateToHtml(html, "/projects?page=4", { type: "push" })).toBe(
+      true,
+    );
     expect(push).toHaveBeenCalledOnce();
     expect(committed).toHaveBeenCalledTimes(2);
     window.removeEventListener("mreact:url-commit", committed);
@@ -6625,7 +6665,8 @@ export default function Page() {
     const listState = history.state;
     const { routeModule } = await importRouteRuntime("view-snapshot-id");
     expect(history.state.__mreactEntryId).toBe(listState.__mreactEntryId);
-    const detail = '<div data-mreact-route-id="detail"><main>Detail</main></div><script type="application/json" id="mreact-props-detail">{}</script>';
+    const detail =
+      '<div data-mreact-route-id="detail"><main>Detail</main></div><script type="application/json" id="mreact-props-detail">{}</script>';
     expect(routeModule.__mreactNavigateToHtml(detail, "/projects/p3")).toBe(true);
     expect(snapshots.load("selection")).toBeUndefined();
     history.replaceState(listState, "", "/");
@@ -6639,9 +6680,12 @@ export default function Page() {
     vi.spyOn(history, "replaceState").mockImplementation(() => {
       throw new Error("history unavailable");
     });
-    const html = '<div data-mreact-route-id="index"><main>Projects</main></div><script type="application/json" id="mreact-props-index">{}</script>';
+    const html =
+      '<div data-mreact-route-id="index"><main>Projects</main></div><script type="application/json" id="mreact-props-index">{}</script>';
 
-    expect(routeModule.__mreactNavigateToHtml(html, "/projects?page=3", { type: "replace" })).toBe(false);
+    expect(routeModule.__mreactNavigateToHtml(html, "/projects?page=3", { type: "replace" })).toBe(
+      false,
+    );
     expect(committed).not.toHaveBeenCalled();
     window.removeEventListener("mreact:url-commit", committed);
   });
@@ -8663,7 +8707,10 @@ export default function Page(props) {
     expect(replacedStates[0]).toMatchObject({ __mreact: true, url: expect.stringContaining("/") });
     expect((replacedStates[0] as { html?: string }).html).toBeUndefined();
     // A navigated entry keeps the response that produced it, hydration markup and head included.
-    expect(replacedStates[1]).toMatchObject({ __mreact: true, url: expect.stringContaining("/about") });
+    expect(replacedStates[1]).toMatchObject({
+      __mreact: true,
+      url: expect.stringContaining("/about"),
+    });
     expect((replacedStates[1] as { html?: string }).html).toBe(aboutHtml);
   });
 
@@ -8688,7 +8735,14 @@ export default function Page(props) {
     const originalLocation = globalThis.location;
     Object.defineProperty(globalThis, "location", {
       configurable: true,
-      value: { ...originalLocation, href: originalLocation.href, origin: originalLocation.origin, reload: () => { reloads += 1; } },
+      value: {
+        ...originalLocation,
+        href: originalLocation.href,
+        origin: originalLocation.origin,
+        reload: () => {
+          reloads += 1;
+        },
+      },
     });
     try {
       routeModule.__mreactNavigateToHtml(
@@ -8705,7 +8759,9 @@ export default function Page(props) {
         }),
       );
       await vi.waitFor(() => {
-        expect(document.querySelector("[data-mreact-route-id='index']")?.textContent).toBe("Home again");
+        expect(document.querySelector("[data-mreact-route-id='index']")?.textContent).toBe(
+          "Home again",
+        );
       });
 
       // Route modules imported by earlier tests keep their own popstate listeners on this shared
@@ -8715,7 +8771,10 @@ export default function Page(props) {
       expect(reloads).toBe(0);
       expect(scrollCalls.at(-1)).toEqual([0, 25]);
     } finally {
-      Object.defineProperty(globalThis, "location", { configurable: true, value: originalLocation });
+      Object.defineProperty(globalThis, "location", {
+        configurable: true,
+        value: originalLocation,
+      });
     }
   });
 
@@ -9245,7 +9304,11 @@ async function importRouteRuntime(
   routeModule: {
     __mreactInvalidateNavigationCache: (path: string) => void;
     __mreactNavigate: (url: string) => Promise<boolean>;
-    __mreactNavigateToHtml: (html: string, url: string, options?: { type?: "push" | "replace" }) => boolean;
+    __mreactNavigateToHtml: (
+      html: string,
+      url: string,
+      options?: { type?: "push" | "replace" },
+    ) => boolean;
     __mreactPrefetch: (url: string) => Promise<boolean>;
     __mreactGetNavigationState: () => {
       from: string | null;

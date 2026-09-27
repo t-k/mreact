@@ -7,7 +7,7 @@ const nodeBuiltinSpecifiers = new Set(builtinModules.flatMap((name) => [name, `n
  * What is known about one client capability across a route's reachable module graph.
  *
  * `known-used` and `known-unused` are facts: some analysable module in the graph does or does not
- * use the capability. `unknown` means the graph could not be resolved - a dynamic import, an opaque
+ * use the capability. `unknown` means the graph could not be resolved - an unresolved dynamic import, an opaque
  * package, an unresolvable specifier or a graph larger than the budget - and the caller must keep
  * whatever conservative emission it used before.
  */
@@ -70,7 +70,7 @@ const requestReadPattern = /(?:^|[^.\w$])request\s*\.\s*(?:hash|pathname|search|
 // closes with markup or text, and reading a local of that name is not a route location read.
 const requestDestructurePattern = /\{[^{}]*\brequest\b[^{}]*\}\s*[),:=]/u;
 
-/** Collects capability facts by walking the route's reachable static import graph. */
+/** Collects capability facts by walking the route's reachable import graph. */
 export async function collectClientRouteCapabilityFacts(
   options: CollectClientRouteCapabilityFactsOptions,
 ): Promise<ClientRouteCapabilityFacts> {

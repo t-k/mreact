@@ -17,8 +17,10 @@ import {
 } from "@reckona/mreact-compiler";
 import type { ClientReferenceMetadata } from "@reckona/mreact-shared/compiler-contract";
 import {
+  analyzeCompilerModuleContextToIr,
   collectClientRouteModuleAnalysisFromContext,
   createCompilerModuleContext,
+  hasClosedDirectCellTextRoute,
   hasUnguardedBrowserGlobalReference,
   readTopLevelBooleanExport,
   readTopLevelBooleanExportFromContext,
@@ -3697,6 +3699,29 @@ export async function buildClientRouteEntrySource(
     fact: capabilityFacts.domRefs,
   });
   const routeUsesCleanupScope = routeUsesCells || routeUsesReactiveEffect || routeUsesDomRefs;
+  const staticCellTextRoute =
+    routeUsesCells &&
+    !routeUsesReactiveEffect &&
+    !routeUsesDomRefs &&
+    !clientNavigation &&
+    clientReferenceManifest.length === 0 &&
+    compiled.metadata.imports.some(
+      (entry) =>
+        entry.source === "@reckona/mreact-reactive-dom/internal" &&
+        entry.specifiers.includes("bindCellText"),
+    ) &&
+    (() => {
+      const analyzed = analyzeCompilerModuleContextToIr(moduleContext, {
+        target: "client",
+        options: {
+          topLevelJsx: "diagnostic",
+          bodyStatementJsx: "dom-node",
+          awaitCompatComponents: "diagnostic",
+          clientBoundaryImports: options.clientBoundaryImports ?? [],
+        },
+      });
+      return analyzed.diagnostics.length === 0 && hasClosedDirectCellTextRoute(analyzed.ir);
+    })();
   const routeExplicitlyRequiresHydration = isExplicitClientRouteSource(
     routeSourceAnalysis,
     options.filename,
@@ -3722,9 +3747,10 @@ export async function buildClientRouteEntrySource(
     ? "undefined"
     : routeComponentExpression;
   const routeStateSignature = routeUsesCells ? routeStateSignatureForSource(compiled.code) : "";
-  const routeCellEffectImport = routeUsesCells
-    ? `import { effect as __mreactRouteEffect } from "@reckona/mreact-reactive-core";\n`
-    : "";
+  const routeCellEffectImport =
+    routeUsesCells && !staticCellTextRoute
+      ? `import { effect as __mreactRouteEffect } from "@reckona/mreact-reactive-core";\n`
+      : "";
   const routeCleanupScopeImport = routeUsesCleanupScope
     ? `import { withCleanupScope as __mreactWithCleanupScope } from "@reckona/mreact-reactive-core/internal";\n`
     : "";
@@ -3992,10 +4018,22 @@ __mreactGlobal.__mreactRouteCell = (nativeCell, initial) => {
   __mreactRouteStates.set(__mreactRouteId, __mreactState);
   __mreactState.dispose?.();
 
-  __mreactState.dispose = __mreactRouteEffect(() => {
+${staticCellTextRoute ? "  {" : "  __mreactState.dispose = __mreactRouteEffect(() => {"}
     const __mreactRouteEffectDisposers = new Set();
     __mreactActiveCellRecords = __mreactState.cells;
     __mreactActiveCellIndex = 0;
+${
+  staticCellTextRoute
+    ? `    __mreactState.dispose = () => {
+      __mreactRunLifecycleTasks(
+        Array.from(__mreactRouteEffectDisposers),
+        (__mreactDispose) => __mreactDispose(),
+      );
+      __mreactRouteEffectDisposers.clear();
+    };
+`
+    : ""
+}
     __mreactRouteDisposers.set(__mreactRouteId, () => __mreactState.dispose?.());
 
     try {
@@ -4006,14 +4044,18 @@ __mreactGlobal.__mreactRouteCell = (nativeCell, initial) => {
       __mreactActiveCellRecords = undefined;
       __mreactActiveCellIndex = 0;
     }
-    return () => {
+${
+  staticCellTextRoute
+    ? "  }"
+    : `    return () => {
       __mreactRunLifecycleTasks(
         Array.from(__mreactRouteEffectDisposers),
         (__mreactDispose) => __mreactDispose(),
       );
       __mreactRouteEffectDisposers.clear();
     };
-  });
+  });`
+}
 `
     : "";
   const routeCellHydrationIndent = routeUsesCells ? "      " : "  ";
