@@ -20,11 +20,14 @@ async function setup() {
   const marker = document.createComment("rows");
   parent.append(marker);
   const rows = cell(Array.from({ length: 10000 }, (_, index) => ({ id: index + 1, label: String(index + 1) })));
+  let keyEvaluations = 0;
+  let created = 0;
   bindCompilerKeyedSingleNodeList(parent, marker, () => rows.get(), (context) => {
+    created++;
     const row = document.createElement("div");
     row.textContent = context.item.label;
     return row;
-  }, { key: (item) => item.id });
+  }, { key: (item) => { keyEvaluations++; return item.id; } });
   await flushEffects();
   let moves = 0;
   const insertBefore = parent.insertBefore;
@@ -35,11 +38,13 @@ async function setup() {
       const before = rows.get();
       const next = [before[before.length - 1], ...before.slice(0, -1)];
       moves = 0;
+      keyEvaluations = 0;
+      created = 0;
       const start = performance.now();
       rows.set(next);
       await flushEffects();
       if (parent.firstChild?.textContent !== next[0].label) throw new Error("wrong first row");
-      if (index >= 5) samples.push({ durationMs: performance.now() - start, moves });
+      if (index >= 5) samples.push({ durationMs: performance.now() - start, moves, keyEvaluations, created });
     }
     return samples;
   };
@@ -102,7 +107,7 @@ try {
   });
   console.log(JSON.stringify({ outputDir, summary: results.map((run) => {
     const times = run.samples.map((sample: { durationMs: number }) => sample.durationMs).sort((a: number, b: number) => a - b);
-    return { variant: run.variant, medianMs: (times[9] + times[10]) / 2, moves: [...new Set(run.samples.map((sample: { moves: number }) => sample.moves))], emittedJavaScriptGzipBytes: run.emittedJavaScriptGzipBytes };
+    return { variant: run.variant, medianMs: (times[9] + times[10]) / 2, moves: [...new Set(run.samples.map((sample: { moves: number }) => sample.moves))], keyEvaluations: [...new Set(run.samples.map((sample: { keyEvaluations: number }) => sample.keyEvaluations))], created: [...new Set(run.samples.map((sample: { created: number }) => sample.created))], emittedJavaScriptGzipBytes: run.emittedJavaScriptGzipBytes };
   }) }, null, 2));
 } finally {
   process.chdir(previousCwd);

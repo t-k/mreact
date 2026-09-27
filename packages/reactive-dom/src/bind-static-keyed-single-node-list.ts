@@ -444,7 +444,7 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
     }
 
     removeStaleSingleNodeRecords(records, nextRecords, selectedClassState, deferEventPromotion);
-    if (!ownsCurrentParent || !moveLastSingleNodeRecordToFront(insertionParent, records, orderedRecords)) {
+    if (!ownsCurrentParent || !moveLastSingleNodeRecordToFront(insertionParent, marker, records, orderedRecords)) {
       reconcileSingleNodeRecordOrder(insertionParent, marker, orderedRecords);
     }
     if (deferEventPromotion) {
@@ -1724,6 +1724,7 @@ function reconcileSingleNodeRecordOrder(
 
 function moveLastSingleNodeRecordToFront(
   parent: ParentNode,
+  marker: ChildNode,
   records: Map<unknown, SingleNodeRecord>,
   orderedRecords: readonly SingleNodeRecord[],
 ): boolean {
@@ -1745,7 +1746,10 @@ function moveLastSingleNodeRecordToFront(
     previous = next;
   }
 
-  // Equal counts and sibling continuity prove the old chain ends at the marker.
+  if (previous.node.nextSibling !== marker) {
+    return false;
+  }
+
   parent.insertBefore(previous.node, first.node);
   return true;
 }

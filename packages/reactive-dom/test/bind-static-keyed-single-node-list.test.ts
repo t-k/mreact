@@ -80,6 +80,36 @@ describe("bindStaticKeyedSingleNodeList", () => {
     dispose();
   });
 
+  test("recovers when external code moves the intact row chain to another parent", async () => {
+    const items = cell([1, 2, 3, 4]);
+    const parent = document.createElement("ul");
+    const external = document.createElement("ul");
+    const marker = document.createComment("rows");
+    parent.append(marker);
+    const dispose = bindStaticKeyedSingleNodeList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const row = document.createElement("li");
+        row.textContent = String(item);
+        return row;
+      },
+      { key: (item) => item },
+    );
+    await flushEffects();
+    const original = Array.from(parent.children);
+    external.append(...original);
+    parent.prepend(...original.map(() => document.createElement("li")));
+
+    items.set([4, 1, 2, 3]);
+    await flushEffects();
+
+    expect(Array.from(parent.children).slice(-4)).toEqual([original[3], original[0], original[1], original[2]]);
+    expect(external.children).toHaveLength(0);
+    dispose();
+  });
+
   test("keeps every four-row permutation in key order without recreating rows", async () => {
     const permutations = (values: readonly number[]): number[][] =>
       values.length === 0
