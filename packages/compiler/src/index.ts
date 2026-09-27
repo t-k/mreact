@@ -47,6 +47,12 @@ export type {
 } from "./boundary-graph.js";
 export { formatDiagnostic } from "./diagnostics.js";
 export { transform } from "./transform.js";
+export { explainTransform } from "./compiler-explorer.js";
+export type {
+  CompilerDecision,
+  CompilerDecisionReport,
+  CompilerReportDiagnostic,
+} from "./compiler-explorer.js";
 export type {
   CompileTarget,
   CompilerFrontend,
