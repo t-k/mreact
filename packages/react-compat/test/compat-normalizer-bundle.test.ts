@@ -9,14 +9,15 @@ import { gzipSync } from "node:zlib";
 import { describe, expect, test } from "vitest";
 import { build as viteBuild, type Rollup } from "vite";
 
+// Demoting a Set to one subscriber adds 59 raw bytes to packed native and memo consumers while reducing retained source memory; keep the gzip limits unchanged.
 const packedCompatConsumerSizeBudgets = {
   root: { gzipBytes: 13_450, rawBytes: 48_600 },
   "jsx-runtime": { gzipBytes: 13_450, rawBytes: 48_700 },
   "jsx-dev-runtime": { gzipBytes: 13_500, rawBytes: 48_800 },
-  native: { gzipBytes: 10_300, rawBytes: 38_000 },
+  native: { gzipBytes: 10_300, rawBytes: 38_050 },
 } as const;
 
-const packedMemoConsumerSizeBudget = { gzipBytes: 4_250, rawBytes: 13_100 } as const;
+const packedMemoConsumerSizeBudget = { gzipBytes: 4_250, rawBytes: 13_150 } as const;
 
 describe("react-compat production bundle", () => {
   test.each([
