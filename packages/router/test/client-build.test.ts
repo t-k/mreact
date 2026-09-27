@@ -16,6 +16,7 @@ import {
 } from "../src/client.js";
 import { renderAppRequest } from "../src/render.js";
 import { Link } from "../src/link.js";
+import { createNavigationSnapshotStore } from "../src/navigation-snapshots.js";
 import { stripRouteClientOnlyExports } from "../src/route-source.js";
 import { renderAppRouterClientAsset } from "../src/vite.js";
 import { measureBrowserDelivery, type BrowserDeliveryManifest } from "../../../size/delivery.js";
@@ -6616,6 +6617,19 @@ export default function Page() {
     expect(push).toHaveBeenCalledOnce();
     expect(committed).toHaveBeenCalledTimes(2);
     window.removeEventListener("mreact:url-commit", committed);
+  });
+
+  test("preserves a view snapshot entry ID when the navigation runtime installs", async () => {
+    const snapshots = createNavigationSnapshotStore();
+    expect(snapshots.save("selection", "p3")).toBe(true);
+    const listState = history.state;
+    const { routeModule } = await importRouteRuntime("view-snapshot-id");
+    expect(history.state.__mreactEntryId).toBe(listState.__mreactEntryId);
+    const detail = '<div data-mreact-route-id="detail"><main>Detail</main></div><script type="application/json" id="mreact-props-detail">{}</script>';
+    expect(routeModule.__mreactNavigateToHtml(detail, "/projects/p3")).toBe(true);
+    expect(snapshots.load("selection")).toBeUndefined();
+    history.replaceState(listState, "", "/");
+    expect(snapshots.load("selection")).toBe("p3");
   });
 
   test("does not report a URL commit when history replacement fails", async () => {

@@ -42,6 +42,8 @@ export type {
   MultipartStreamPart,
 } from "./multipart.js";
 export { getNavigationState, subscribeNavigationState } from "./navigation-state.js";
+export { createNavigationSnapshotStore } from "./navigation-snapshots.js";
+export type { NavigationSnapshotStore, NavigationSnapshotStoreOptions } from "./navigation-snapshots.js";
 export { getRouterRuntimeCacheStats } from "./runtime-cache.js";
 export { validateHttpUpgradeOrigin } from "./upgrade.js";
 export type {

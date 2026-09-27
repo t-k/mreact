@@ -104,6 +104,20 @@ const { value, invalid } = projects.parse(new URL(request.url).search);
 
 In browser code, `projects.set({ page: 3 }, { history: "replace" })` navigates through the app router so loaders and route HTML still update. It resolves to `false` when client navigation is unavailable. `projects.subscribe("page", callback)` runs only after a committed navigation changes the parsed page value; dispose the returned listener with the component. The state helper is opt-in client code and contributes to that route's JavaScript budget.
 
+## Restore view state on back and forward
+
+Use `createNavigationSnapshotStore()` at module scope to save JSON values for the current history entry. A list page can save its selected row, expanded keys, virtual list offset, or draft fields before opening a detail page, then load them when the user returns. This store keeps values in memory within the current document; a full reload starts fresh. It does not retain DOM nodes or keep hidden components running.
+
+```ts
+import { createNavigationSnapshotStore } from "@reckona/mreact-router";
+
+const snapshots = createNavigationSnapshotStore({ maxEntries: 20, ttlMs: 30 * 60_000 });
+snapshots.save("projects", { selectedId: "p3", scrollOffset: 420 });
+const restored = snapshots.load<{ selectedId: string; scrollOffset: number }>("projects");
+```
+
+Values are limited to 32 KiB each by default, and `save()` returns `false` for unsupported or oversized values. Call `snapshots.clear()` on logout or tenant changes. Validate restored values before using them as trusted application data.
+
 ## Prefetch, not preload
 
 The API is named `prefetch`, not `preload`. It controls navigation preparation, not server runtime module preloading or HTML asset preload links.
