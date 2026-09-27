@@ -79,6 +79,7 @@
     "test:mutation:forms": "stryker run stryker.forms.config.mjs",
     "test:mutation:compiler-issues": "stryker run stryker.compiler-issues.config.mjs",
     "test:mutation:route-hydration-runtime": "stryker run stryker.route-hydration-runtime.config.mjs",
+    "test:mutation:router-history-dom": "stryker run stryker.router-history-dom.config.mjs",
     "test:mutation:all": "pnpm test:mutation:security && pnpm test:mutation:core && pnpm test:mutation:compiler",
     "test:mutation:all:force": "stryker run stryker.security.config.mjs --force && stryker run stryker.core.config.mjs --force && stryker run stryker.compiler.config.mjs --force",
     "test:mutation:dry": "pnpm test:mutation:security --dryRunOnly && pnpm test:mutation:core --dryRunOnly && pnpm test:mutation:compiler --dryRunOnly",

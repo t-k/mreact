@@ -122,6 +122,36 @@ describe("router benchmark report", () => {
     expect(markdown).toContain("- Runner label: ubuntu-latest");
   });
 
+  it("distinguishes browser DOM restoration from Playwright wall time and paint", () => {
+    const rows: RouterBenchmarkRow[] = [
+      completedRow(
+        "mreact-app-router",
+        "app client navigation back-forward first visible DOM",
+        "duration",
+        "ms",
+        2,
+      ),
+    ];
+
+    const markdown = formatRouterBenchmarkMarkdown(testEnvironment, rows);
+
+    expect(markdown).toContain("popstate-to-first-visible-route-DOM");
+    expect(markdown).toContain("later state updates are excluded");
+    expect(markdown).toContain("not paint or INP");
+    expect(markdown).toContain("not directly comparable to the Playwright wall-time case");
+  });
+
+  it("labels DOM restoration rankings when only mreact variants complete", () => {
+    const rows: RouterBenchmarkRow[] = [
+      completedRow("mreact-app-router", "app client navigation back-forward first visible DOM", "duration", "ms", 2),
+      completedRow("mreact-app-router+mreact react-compat", "app client navigation back-forward first visible DOM", "duration", "ms", 3),
+    ];
+
+    expect(formatRouterBenchmarkMarkdown(testEnvironment, rows)).toContain(
+      "This section currently compares mreact app-router variants only; it is not a cross-framework ranking.",
+    );
+  });
+
   it("falls back when benchmark provenance is missing from older result files", () => {
     const markdown = formatRouterBenchmarkMarkdown(testEnvironment, []);
 

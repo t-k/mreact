@@ -46,6 +46,7 @@ export type AppFrameworkCaseName =
   | "app nested layouts depth 5"
   | "app loader client navigation route-to-route"
   | "app client navigation back-forward restore"
+  | "app client navigation back-forward first visible DOM"
   | "app Cloudflare Worker request latency"
   | "app client navigation route-to-route"
   | "app initial page load JS before interaction"
