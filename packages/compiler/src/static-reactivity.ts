@@ -97,3 +97,127 @@ function isArrowEventHandler(code: string): boolean {
   const initializer = unwrapOxcParentheses(readObject(readObject(declaration).init));
   return initializer.type === "ArrowFunctionExpression";
 }
+
+const parserStableTags = new Set([
+  "article",
+  "button",
+  "div",
+  "em",
+  "h1",
+  "h2",
+  "h3",
+  "label",
+  "main",
+  "output",
+  "p",
+  "section",
+  "span",
+  "strong",
+]);
+const parserStableContainers = new Set(["article", "div", "main", "section"]);
+
+interface AttachTarget {
+  path: number[];
+  tagName?: string;
+  text?: true;
+  events?: Array<{ name: string; code: string }>;
+}
+
+/** Emits the narrow attach entry for a fixed, parser-stable HTML route. */
+export function emitClosedDirectCellAttachRoute(ir: ModuleIr): string | undefined {
+  if (!hasClosedDirectCellTextRoute(ir)) {
+    return undefined;
+  }
+
+  if (
+    ir.userImports.length !== 1 ||
+    ir.userImports[0] !== 'import { cell } from "@reckona/mreact-reactive-core";' ||
+    ir.moduleStatements.some(
+      (statement) =>
+        statement !== "export const clientNavigation = false;" &&
+        statement !== "const clientNavigation = false;",
+    )
+  ) {
+    return undefined;
+  }
+
+  const component = ir.components[0]!;
+  const cellName = component.bindingNames[0]!;
+  const targets: AttachTarget[] = [];
+  if (!collectAttachTargets(component.root, [], targets)) {
+    return undefined;
+  }
+
+  const validation = targets.map((target, index) => {
+    const path = target.path.map((childIndex) => `?.childNodes[${childIndex}]`).join("");
+    const name = `_target${index}`;
+    const expected =
+      target.text === true
+        ? `${name}?.nodeType !== 3`
+        : `${name}?.nodeType !== 1 || ${name}.localName !== ${JSON.stringify(target.tagName)}`;
+    return `  const ${name} = marker.firstChild${path};\n  if (${expected}) return false;`;
+  });
+  const bindings = targets.flatMap((target, index) => [
+    ...(target.text === true ? [`  bindCellText(_target${index}, ${cellName});`] : []),
+    ...(target.events ?? []).map(
+      (event) => `  bindEvent(_target${index}, ${JSON.stringify(event.name)}, ${event.code});`,
+    ),
+  ]);
+  const needsEvent = targets.some((target) => (target.events?.length ?? 0) > 0);
+  return [
+    ir.userImports[0],
+    'import { bindCellText } from "@reckona/mreact-reactive-dom/internal";',
+    ...(needsEvent ? ['import { bindEvent } from "@reckona/mreact-reactive-dom";'] : []),
+    "function __mreactAttachRoute(marker) {",
+    ...validation,
+    `  ${component.bodyStatements[0]}`,
+    ...bindings,
+    "  return true;",
+    "}",
+  ].join("\n");
+}
+
+function collectAttachTargets(node: JsxNodeIr, path: number[], targets: AttachTarget[]): boolean {
+  if (
+    node.kind !== "element" ||
+    node.namespace === "svg" ||
+    !parserStableTags.has(node.tagName) ||
+    node.keyCode !== undefined ||
+    (!parserStableContainers.has(node.tagName) &&
+      node.children.some((child) => child.kind === "element"))
+  ) {
+    return false;
+  }
+
+  const events = node.attributes.flatMap((attribute) => {
+    if (attribute.kind !== "event") return [];
+    if (attribute.code.includes("<") || attribute.compilerKeyedSlot !== undefined) return [];
+    return [{ name: attribute.eventName, code: attribute.code }];
+  });
+  if (events.length !== node.attributes.filter((attribute) => attribute.kind === "event").length) {
+    return false;
+  }
+  const targetStart = targets.length;
+
+  if (node.children.some((child) => child.kind !== "element") && node.children.length !== 1) {
+    return false;
+  }
+
+  for (const [index, child] of node.children.entries()) {
+    if (child.kind === "expr") {
+      targets.push({ path: [...path, index], text: true });
+    } else if (child.kind === "element") {
+      if (!collectAttachTargets(child, [...path, index], targets)) return false;
+    } else if (child.kind !== "text") {
+      return false;
+    }
+  }
+  if (events.length > 0 || targets.length > targetStart) {
+    targets.splice(targetStart, 0, {
+      path,
+      tagName: node.tagName,
+      ...(events.length === 0 ? {} : { events }),
+    });
+  }
+  return true;
+}

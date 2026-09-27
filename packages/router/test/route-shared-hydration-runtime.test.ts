@@ -12,6 +12,7 @@ import {
   buildClientRouteEntrySource,
 } from "../src/client.js";
 import { routeHydrationRuntimeSource } from "../src/route-hydration-runtime.js";
+import { stripRouteClientSource } from "../src/route-source.js";
 
 /** A DOM fragment marker that only the shared resume runtime emits. */
 const resumeRuntimeMarker = "data-mreact-layout-boundary";
@@ -38,7 +39,7 @@ export const clientNavigation = false;
 
 export default function Page() {
   const count = cell(0);
-  return <button type="button" onClick={() => count.set(value => value + 1)}>{count.get()}</button>;
+  return <button type="button" onClick={() => count.set(value => value + 1)}>count: {count.get()}</button>;
 }`;
 
 describe("shared route hydration runtime", () => {
@@ -53,6 +54,44 @@ describe("shared route hydration runtime", () => {
     delete (globalThis as { __mreactRouteDisposers?: unknown }).__mreactRouteDisposers;
     delete (globalThis as { __mreactRouteCell?: unknown }).__mreactRouteCell;
     delete (globalThis as Record<string, unknown>)[duplicateCopyStateKey];
+  });
+
+  test("keeps fixed-route static HTML and resume code outside the initial JS closure", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-fixed-route-attach-"));
+    const staticCopy = "An extensive server-rendered description that the browser never creates";
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+export const clientNavigation = false;
+export default function Page() {
+  const count = cell(0);
+  return <main><p>${staticCopy}</p><button type="button" onClick={() => count.set(value => value + 1)}>{count.get()}</button></main>;
+}`;
+    const filename = await writeRoute(appDir, "index", code);
+    const clientCode = stripRouteClientSource({ code, filename });
+    const output = await buildClientRouteBatchOutput({
+      minify: true,
+      projectRoot: appDir,
+      routes: [
+        { code: clientCode, clientNavigation: false, filename, minify: true, routePath: "/" },
+      ],
+    });
+    const entry = output.routes[0]!.chunk;
+    expect(output.routes[0]?.attach).toBe(true);
+    const chunksByName = new Map(output.chunks.map((chunk) => [chunk.fileName, chunk]));
+    const initial = new Set<string>();
+    const visit = (fileName: string) => {
+      if (initial.has(fileName)) return;
+      initial.add(fileName);
+      for (const imported of chunksByName.get(fileName)?.imports ?? []) visit(imported);
+    };
+    visit(entry.fileName);
+    const initialCode = [...initial]
+      .map((fileName) => chunksByName.get(fileName)?.code ?? "")
+      .join("\n");
+
+    expect(initialCode).not.toContain(staticCopy);
+    expect(initialCode).not.toContain(resumeRuntimeMarker);
+    expect(entry.dynamicImports.length).toBeGreaterThan(0);
+    expect(output.chunks.some((chunk) => chunk.code.includes(staticCopy))).toBe(true);
   });
 
   test("route entries import the resume runtime instead of inlining its helpers", async () => {
@@ -148,7 +187,9 @@ export default function Page() {
 
     const entry = await buildClientRouteEntrySource({
       clientBoundaryImports: ["./Counter"],
-      clientReferenceImports: [{ name: "Counter", importSource: "./Counter", exportName: "Counter" }],
+      clientReferenceImports: [
+        { name: "Counter", importSource: "./Counter", exportName: "Counter" },
+      ],
       clientReferenceManifest: [
         { name: "Counter", moduleId: "./Counter.js", exportName: "Counter" },
       ],
@@ -188,7 +229,13 @@ export default function Page() {
       minify: true,
       projectRoot: appDir,
       routes: [
-        { code: interactiveRouteCode, clientNavigation: false, filename, minify: true, routePath: "/" },
+        {
+          code: interactiveRouteCode,
+          clientNavigation: false,
+          filename,
+          minify: true,
+          routePath: "/",
+        },
       ],
     });
 
@@ -218,7 +265,9 @@ export default function Page() {
     const filename = await writeRoute(appDir, "index", code);
     const boundaryOnlyOptions = {
       clientBoundaryImports: ["./Counter"],
-      clientReferenceImports: [{ name: "Counter", importSource: "./Counter", exportName: "Counter" }],
+      clientReferenceImports: [
+        { name: "Counter", importSource: "./Counter", exportName: "Counter" },
+      ],
       clientReferenceManifest: [
         { name: "Counter", moduleId: "./Counter.js", exportName: "Counter" },
       ],
@@ -239,13 +288,15 @@ export default function Page() {
     expect(shared.code).not.toContain("mreact-route-hydration-runtime/resume");
     expect(shared.code).not.toContain("__mreactResumeRoute");
     expect(inline.code).toContain("__mreactHydrateClientBoundaries");
-    expect(shared.code.startsWith(
-      [
-        'import { __mreactRunLifecycleTasks } from "mreact-route-hydration-runtime/lifecycle";',
-        'import { __mreactCreateClientBoundaryRuntime } from "mreact-route-hydration-runtime/boundaries";',
-        "",
-      ].join("\n"),
-    )).toBe(true);
+    expect(
+      shared.code.startsWith(
+        [
+          'import { __mreactRunLifecycleTasks } from "mreact-route-hydration-runtime/lifecycle";',
+          'import { __mreactCreateClientBoundaryRuntime } from "mreact-route-hydration-runtime/boundaries";',
+          "",
+        ].join("\n"),
+      ),
+    ).toBe(true);
     // A group the route does not reach must leave nothing behind, not a fragment of source.
     expect(entryParseErrors(inline.code)).toHaveLength(0);
     expect(entryParseErrors(shared.code)).toHaveLength(0);
@@ -315,9 +366,7 @@ export default function Page() {
 
   test("the shared resume module indents the helper bodies it wraps", async () => {
     const source = routeHydrationRuntimeSource("resume");
-    const bodyLines = source
-      .split("\n")
-      .filter((line) => line.startsWith("  function __mreact"));
+    const bodyLines = source.split("\n").filter((line) => line.startsWith("  function __mreact"));
 
     expect(bodyLines).not.toHaveLength(0);
     expect(source).toContain("  function __mreactResumeChildren(current, next) {");
@@ -331,7 +380,9 @@ export default function Page() {
     expect(source).toContain(
       "export function __mreactCreateClientBoundaryRuntime(__mreactCompatCreateRoot, __mreactCompatCreateElement, __mreactCompatHydrateRoot) {",
     );
-    expect(source).toContain("  function __mreactHydrateClientBoundaries(marker, references, components) {");
+    expect(source).toContain(
+      "  function __mreactHydrateClientBoundaries(marker, references, components) {",
+    );
     expect(source).toContain("    hydrateClientBoundaries: __mreactHydrateClientBoundaries,");
     expect(source.split("\n").some((line) => line.trim() === "" && line !== "")).toBe(false);
   });
@@ -369,13 +420,15 @@ export default function Page() {
       shareHydrationRuntime: true,
     });
 
-    expect(plain.code.startsWith(
-      [
-        'import { __mreactRunLifecycleTasks } from "mreact-route-hydration-runtime/lifecycle";',
-        'import { __mreactCreateRouteResumeRuntime } from "mreact-route-hydration-runtime/resume";',
-        "",
-      ].join("\n"),
-    )).toBe(true);
+    expect(
+      plain.code.startsWith(
+        [
+          'import { __mreactRunLifecycleTasks } from "mreact-route-hydration-runtime/lifecycle";',
+          'import { __mreactCreateRouteResumeRuntime } from "mreact-route-hydration-runtime/resume";',
+          "",
+        ].join("\n"),
+      ),
+    ).toBe(true);
     // A navigating entry leads with the history cache and route data imports, so the runtime
     // block is checked as one contiguous group instead of the file prefix.
     expect(navigating.code).toContain(
@@ -420,7 +473,9 @@ export default function Page() {
 
     const entry = await buildClientRouteEntrySource({
       clientBoundaryImports: ["./Counter"],
-      clientReferenceImports: [{ name: "Counter", importSource: "./Counter", exportName: "Counter" }],
+      clientReferenceImports: [
+        { name: "Counter", importSource: "./Counter", exportName: "Counter" },
+      ],
       clientReferenceManifest: [
         { name: "Counter", moduleId: "./Counter.js", exportName: "Counter" },
       ],
@@ -496,7 +551,9 @@ export default function Page() {
 
     const entry = await buildClientRouteEntrySource({
       clientBoundaryImports: ["./Counter"],
-      clientReferenceImports: [{ name: "Counter", importSource: "./Counter", exportName: "Counter" }],
+      clientReferenceImports: [
+        { name: "Counter", importSource: "./Counter", exportName: "Counter" },
+      ],
       clientReferenceManifest: [
         { name: "Counter", moduleId: "./Counter.js", exportName: "Counter" },
       ],
@@ -507,7 +564,9 @@ export default function Page() {
       routePath: "/",
     });
 
-    expect(entry.code).toContain("function __mreactHydrateClientBoundaries(marker, references, components) {");
+    expect(entry.code).toContain(
+      "function __mreactHydrateClientBoundaries(marker, references, components) {",
+    );
     expect(entry.code).toContain("function __mreactApplyOutOfOrderFragments(root) {");
     expect(entry.code).toContain(clientBoundaryRuntimeMarker);
     expect(entry.code).toContain(fragmentRuntimeMarker);

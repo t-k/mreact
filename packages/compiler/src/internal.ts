@@ -5,7 +5,10 @@ import {
   type CompilerModuleContext,
 } from "./compiler-module-context.js";
 export { transformCompilerModuleContext } from "./transform.js";
-export { hasClosedDirectCellTextRoute } from "./static-reactivity.js";
+export {
+  emitClosedDirectCellAttachRoute,
+  hasClosedDirectCellTextRoute,
+} from "./static-reactivity.js";
 export { stripTypeScriptWithOxc } from "./oxc-transform.js";
 export type { CompilerModuleContext } from "./compiler-module-context.js";
 import type { AnalyzeModuleOptions, CompileTarget, Diagnostic } from "./types.js";

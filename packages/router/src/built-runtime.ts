@@ -20,6 +20,7 @@ export interface BuiltRuntime extends BuiltServerModuleArtifactRuntime {
   assetBaseUrl?: string | undefined;
   clientAssetPaths: ReadonlySet<string>;
   clientScripts: ReadonlyMap<string, string>;
+  clientAttachScripts: ReadonlyMap<string, string>;
   clientScriptPreloads: ReadonlyMap<string, readonly string[]>;
   clientStylesByFile: ReadonlyMap<string, readonly string[]>;
   clientStyles: ReadonlyMap<string, readonly string[]>;
@@ -131,6 +132,11 @@ export async function materializeBuiltRuntime(options: {
       route.client && route.script !== undefined ? [[route.path, route.script]] : [],
     ),
   );
+  const clientAttachScripts = new Map(
+    clientManifest.routes.flatMap((route) =>
+      route.client && route.attachScript !== undefined ? [[route.path, route.attachScript]] : [],
+    ),
+  );
   const clientScriptPreloads = new Map(
     clientManifest.routes.flatMap((route) =>
       route.client && route.script !== undefined && route.modulePreloads !== undefined
@@ -194,6 +200,7 @@ export async function materializeBuiltRuntime(options: {
       : { assetBaseUrl: serverManifest.assetBaseUrl }),
     clientAssetPaths: builtClientAssetPaths(clientManifest),
     clientScripts,
+    clientAttachScripts,
     clientScriptPreloads,
     clientStylesByFile,
     clientStyles,

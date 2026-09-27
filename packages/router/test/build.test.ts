@@ -6800,6 +6800,34 @@ export default function Page() { return <main>Prerendered server route</main>; }
     );
   });
 
+  test("prerendered attach routes retain the build marker in saved HTML", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-prerender-attach-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+export const prerender = true;
+export const clientNavigation = false;
+export default function Page() { const count = cell(0); return <main><button onClick={() => count.set(value => value + 1)}>{count.get()}</button></main>; }`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ attachScript?: string; path: string }> };
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as { prerenderedRoutes?: Record<string, { html?: string }> };
+    const attachScript = clientManifest.routes.find((route) => route.path === "/")?.attachScript;
+
+    expect(attachScript).toMatch(/^assets\/routes\//u);
+    expect(serverManifest.prerenderedRoutes?.["/"]?.html).toContain(
+      `data-mreact-attach-script="${attachScript}"`,
+    );
+  });
+
   test("auto-injects navigation runtime when Link is rendered via a custom component", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-navigation-transitive-"));
     const appDir = join(rootDir, "app");

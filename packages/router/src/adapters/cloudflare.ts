@@ -1788,7 +1788,7 @@ function cloudflareHydrationMarkerParts(options: {
       : escapeScriptJson(JSON.stringify(route.clientReferenceManifest));
 
   return {
-    prefix: `<div data-mreact-route-id="${escapedRouteId}">`,
+    prefix: `<div data-mreact-route-id="${escapedRouteId}"${route.attachScript === undefined ? "" : ` data-mreact-attach-script="${escapeHtmlAttribute(route.attachScript)}"`}>`,
     suffix: [
       "</div>",
       `<script type="application/json" id="mreact-props-${escapedRouteId}">${propsJson}</script>`,
