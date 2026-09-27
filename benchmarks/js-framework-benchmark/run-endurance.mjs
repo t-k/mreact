@@ -28,8 +28,12 @@ export async function runCompiledEndurance({ url, cycles, warmupCycles = 1 }) {
       });
       previousMetrics = metrics;
     }
+    await session.send("HeapProfiler.collectGarbage");
+    const postClearGc = await readMetrics(session);
     await page.goto("about:blank");
     const postNavigation = await readMetrics(session);
+    await session.send("HeapProfiler.collectGarbage");
+    const postNavigationGc = await readMetrics(session);
     await context.close();
     return {
       methodologyVersion: 1,
@@ -40,13 +44,21 @@ export async function runCompiledEndurance({ url, cycles, warmupCycles = 1 }) {
       warmupCycles,
       cycles: results,
       operationSummary: summarizeOperations(results),
+      postClearGc: {
+        jsHeapUsedBytes: postClearGc.JSHeapUsedSize,
+        domNodes: postClearGc.Nodes,
+      },
       postNavigation: {
         jsHeapUsedBytes: postNavigation.JSHeapUsedSize,
         domNodes: postNavigation.Nodes,
       },
+      postNavigationGc: {
+        jsHeapUsedBytes: postNavigationGc.JSHeapUsedSize,
+        domNodes: postNavigationGc.Nodes,
+      },
       limitations: [
         "Operation times end at verified DOM state, not paint or INP.",
-        "CDP heap and node counts are snapshots under natural GC, not retained-size or allocation measurements.",
+        "Per-cycle CDP heap and node counts are snapshots under natural GC, not retained-size or allocation measurements; terminal GC snapshots are separate from timed cycles.",
         "The canonical keyed fixture has create, update, select, swap, append, remove, and clear actions; it has no filter or arbitrary-sort action.",
       ],
     };

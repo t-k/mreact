@@ -54,6 +54,8 @@ describe("compiled JSX endurance harness", () => {
     expect(result.operationSummary["create-10k"].maxDomVerifiedMs).toBeGreaterThanOrEqual(
       result.operationSummary["create-10k"].medianDomVerifiedMs,
     );
+    expect(result.postClearGc.domNodes).toBeGreaterThan(0);
+    expect(result.postNavigationGc.domNodes).toBeGreaterThan(0);
     for (const cycle of result.cycles) {
       expect(cycle.operations.map((operation) => operation.name)).toEqual([
         "create-10k", "update-10th", "select", "swap", "append-1k", "remove", "clear",
