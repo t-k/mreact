@@ -142,6 +142,7 @@ const mreactVariantOnlyRankingCaseNames = new Set<RouterBenchmarkCaseName>([
   "app nested layouts depth 5",
   "app loader client navigation route-to-route",
   "app client navigation back-forward restore",
+  "app client navigation back-forward first visible DOM",
   "app Cloudflare Worker request latency",
 ]);
 
@@ -162,6 +163,12 @@ function rankingCaveat(caseName: RouterBenchmarkCaseName): string | undefined {
   }
   if (caseName === "app 100 islands verified interaction E2E") {
     return "Includes navigation and sequential Playwright interactions with every island, checking independent state after each click. This is functional end-to-end duration, not hydration time.";
+  }
+  if (caseName === "app client navigation back-forward restore") {
+    return "Includes Playwright navigation commands and locator waits around both traversals. The result includes automation scheduling and is not a direct measure of browser DOM work.";
+  }
+  if (caseName === "app client navigation back-forward first visible DOM") {
+    return "The sum of back and forward popstate-to-first-visible-route-DOM intervals measured by MutationObserver inside the browser. The same first-visible count 0 or 1 rule applies to every adapter; later state updates are excluded. It includes asynchronous route fetching after popstate but excludes Playwright command and locator waits; it is not paint or INP and is not directly comparable to the Playwright wall-time case.";
   }
   if (caseName.startsWith("app HTTP v2 ")) {
     return "Methodology v2 uses separate orchestrator, load generator and production server processes. All five metrics share the same trials. RSS is a single server PID's before/after delta, not a peak or process-tree total; negative samples remain in JSON but are excluded from RSS rankings. Route/cache conditions still differ across adapters (mreact uses /static-page with its route cache); consult httpTrials before comparing frameworks. These measurements are not directly comparable to legacy concurrent probes. Steady windows share one warmed connection pool; burst trials start fresh pools, not cold servers.";

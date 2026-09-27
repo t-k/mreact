@@ -541,7 +541,10 @@ function createMreactAppRouterAdapter(options: {
     },
     async measureBackForwardRestoreMs(): Promise<number> {
       const url = await ensureBrowserFixture(logEnabled, reactCompat);
-      return measureBackForwardRestore(url);
+      return measureBackForwardRestore(
+        url,
+        reactCompat ? { counterPrefix: "compat count: ", expectedCountAfterBack: 0 } : undefined,
+      );
     },
     async getBrowserTarget() {
       return {

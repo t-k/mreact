@@ -152,6 +152,9 @@ export default function Page() { return <main style="min-height:1800px;padding-t
       };
       await page.goBack();
       await expect(page.getByRole("heading", { name: "Third", exact: true })).toBeVisible();
+      if (mode === "compat") {
+        await expect(page.getByRole("button", { name: "count: 0", exact: true })).toBeVisible();
+      }
       await clickCounter();
       await checkpoint("back");
       await page.goForward();

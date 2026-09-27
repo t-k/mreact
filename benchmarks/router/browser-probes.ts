@@ -214,31 +214,57 @@ export async function measureLoaderClientNavigation(url: string): Promise<number
 
 export async function measureBackForwardRestore(
   url: string,
-  options: { expectStateRestore?: boolean } = {},
+  options: {
+    expectStateRestore?: boolean;
+    counterPrefix?: string;
+    expectedCountAfterBack?: 0 | 1;
+  } = {},
 ): Promise<number> {
   const expectStateRestore = options.expectStateRestore ?? true;
+  const counterPrefix = options.counterPrefix ?? "count: ";
+  const escapedCounterPrefix = counterPrefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
     const diagnostics = collectDiagnostics(page);
     await page.goto(url, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle", { timeout: DEFAULT_TIMEOUT_MS }).catch(() => {});
-    await page.getByRole("button", { name: "count: 0" }).click();
-    await page.getByRole("button", { name: "count: 1" }).waitFor({
+    await page.getByRole("button", { name: `${counterPrefix}0` }).click();
+    await page.getByRole("button", { name: `${counterPrefix}1` }).waitFor({
       state: "visible",
       timeout: DEFAULT_TIMEOUT_MS,
     });
+    const documentToken = String(Math.random());
+    await page.evaluate((token) => {
+      (globalThis as { __mreactBenchDocumentToken?: string }).__mreactBenchDocumentToken = token;
+    }, documentToken);
+    const assertSameDocument = async (): Promise<void> => {
+      const retainedToken = await page.evaluate(
+        () => (globalThis as { __mreactBenchDocumentToken?: string }).__mreactBenchDocumentToken,
+      );
+      if (retainedToken !== documentToken) {
+        throw new Error("back-forward navigation caused a full document reload");
+      }
+    };
     await page.getByRole("link", { name: "Details" }).click();
     await page.getByRole("heading", { name: "Navigation target" }).waitFor({
       state: "visible",
       timeout: DEFAULT_TIMEOUT_MS,
     });
+    await assertSameDocument();
 
     const start = await page.evaluate(() => performance.now());
     await page.goBack({ waitUntil: "domcontentloaded" });
-    const restoredButton = expectStateRestore
-      ? page.getByRole("button", { name: "count: 1" })
-      : page.getByRole("button", { name: /^count: [01]$/ });
+    await assertSameDocument();
+    const restoredButton =
+      options.expectedCountAfterBack !== undefined
+        ? page.getByRole("button", {
+            name: `${counterPrefix}${options.expectedCountAfterBack}`,
+            exact: true,
+          })
+        : expectStateRestore
+          ? page.getByRole("button", { name: `${counterPrefix}1` })
+          : page.getByRole("button", { name: new RegExp(`^${escapedCounterPrefix}[01]$`) });
     await restoredButton
       .waitFor({
         state: "visible",
@@ -257,8 +283,105 @@ export async function measureBackForwardRestore(
       .catch((error: unknown) => {
         throw appendDiagnostics(error, diagnostics);
       });
+    await assertSameDocument();
     const end = await page.evaluate(() => performance.now());
     return end - start;
+  } finally {
+    await browser.close();
+  }
+}
+
+export async function measureBackForwardDomRestore(
+  url: string,
+  options: { counterPrefix?: string } = {},
+): Promise<number> {
+  const counterPrefix = options.counterPrefix ?? "count: ";
+  const escapedCounterPrefix = counterPrefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    const diagnostics = collectDiagnostics(page);
+    const installDomTiming = (prefix: string) => {
+      const results: number[] = [];
+      let phase = 0;
+      let start: number | undefined;
+      const isVisible = (element: Element) =>
+        element.getClientRects().length > 0 &&
+        getComputedStyle(element).visibility !== "hidden" &&
+        element.closest('[aria-hidden="true"], [inert]') === null;
+      const matches = () => {
+        if (phase === 1) {
+          return Array.from(document.querySelectorAll("button")).some((button) =>
+            isVisible(button) && (
+              button.textContent?.trim() === `${prefix}0` || button.textContent?.trim() === `${prefix}1`
+            ),
+          );
+        }
+        if (phase === 2) {
+          return Array.from(document.querySelectorAll("h1")).some(
+            (heading) => isVisible(heading) && heading.textContent === "Navigation target",
+          );
+        }
+        return false;
+      };
+      const recordIfReady = () => {
+        if (start === undefined || !matches()) return;
+        results.push(performance.now() - start);
+        start = undefined;
+      };
+      const observer = new MutationObserver(recordIfReady);
+      observer.observe(document, { subtree: true, childList: true, characterData: true, attributes: true });
+      addEventListener("popstate", () => {
+        phase += 1;
+        start = performance.now();
+        recordIfReady();
+      }, { capture: true });
+      (globalThis as { __mreactBackForwardDomTimings?: number[] }).__mreactBackForwardDomTimings = results;
+    };
+    await page.addInitScript({
+      content: `((__name) => (${installDomTiming.toString()})(${JSON.stringify(counterPrefix)}))((target) => target)`,
+    });
+    await page.goto(url, { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle", { timeout: DEFAULT_TIMEOUT_MS }).catch(() => {});
+    await page.getByRole("button", { name: `${counterPrefix}0` }).click();
+    await page.getByRole("button", { name: `${counterPrefix}1` }).waitFor({
+      state: "visible",
+      timeout: DEFAULT_TIMEOUT_MS,
+    });
+    const documentToken = String(Math.random());
+    await page.evaluate((token) => {
+      (globalThis as { __mreactBenchDocumentToken?: string }).__mreactBenchDocumentToken = token;
+    }, documentToken);
+    await page.getByRole("link", { name: "Details" }).click();
+    await page.getByRole("heading", { name: "Navigation target" }).waitFor({
+      state: "visible",
+      timeout: DEFAULT_TIMEOUT_MS,
+    });
+    const assertSameDocument = async () => {
+      const retainedToken = await page.evaluate(
+        () => (globalThis as { __mreactBenchDocumentToken?: string }).__mreactBenchDocumentToken,
+      );
+      if (retainedToken !== documentToken) {
+        throw new Error("back-forward navigation caused a full document reload");
+      }
+    };
+    await page.goBack({ waitUntil: "domcontentloaded" });
+    await assertSameDocument();
+    await page.getByRole("button", { name: new RegExp(`^${escapedCounterPrefix}[01]$`) })
+      .waitFor({ state: "visible", timeout: DEFAULT_TIMEOUT_MS })
+      .catch((error: unknown) => { throw appendDiagnostics(error, diagnostics); });
+    await page.goForward({ waitUntil: "domcontentloaded" });
+    await page.getByRole("heading", { name: "Navigation target" })
+      .waitFor({ state: "visible", timeout: DEFAULT_TIMEOUT_MS })
+      .catch((error: unknown) => { throw appendDiagnostics(error, diagnostics); });
+    await assertSameDocument();
+    const timings = await page.evaluate(
+      () => (globalThis as { __mreactBackForwardDomTimings?: number[] }).__mreactBackForwardDomTimings,
+    );
+    if (timings?.length !== 2) {
+      throw new Error(`back-forward DOM timing was not captured for both traversals: ${JSON.stringify(timings)}`);
+    }
+    return timings[0]! + timings[1]!;
   } finally {
     await browser.close();
   }

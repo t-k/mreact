@@ -1,4 +1,5 @@
 import { Bench } from "tinybench";
+import { measureBackForwardDomRestore } from "./browser-probes.js";
 import { collectHttpRows, httpBenchmarkCases } from "./runner-http.js";
 import { collectBrowserRows, browserBenchmarkCases } from "./runner-browser.js";
 import type {
@@ -201,6 +202,21 @@ const valueRouterBenchmarkCases: ValueRouterBenchmarkCase[] = [
     metric: "duration",
     unit: "ms",
     invoke: (adapter) => adapter.measureBackForwardRestoreMs?.(),
+  },
+  {
+    name: "app client navigation back-forward first visible DOM",
+    description:
+      "Measures popstate-to-first-visible-route-DOM for back and forward inside the browser; excludes Playwright command and locator waits, later state updates, and paint.",
+    metric: "duration",
+    unit: "ms",
+    invoke: (adapter) => {
+      if (adapter.measureBackForwardRestoreMs === undefined || adapter.getBrowserTarget === undefined) {
+        return undefined;
+      }
+      return adapter.getBrowserTarget().then((target) =>
+        measureBackForwardDomRestore(target.url, { counterPrefix: target.counterPrefix }),
+      );
+    },
   },
   {
     name: "app Cloudflare Worker request latency",
