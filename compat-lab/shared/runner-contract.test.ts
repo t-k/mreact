@@ -14,10 +14,13 @@ describe("compat lab runner fail-closed wiring", () => {
     test(`${runnerPath} persists results before enforcing success`, async () => {
       const source = await readFile(join(process.cwd(), runnerPath), "utf8");
       const writeIndex = source.indexOf("await writeRunSummary({ outputDir, runId, results });");
+      const doctorIndex = source.indexOf("await writeCompatDoctorReport({");
       const assertIndex = source.indexOf("assertCompatLabPassed({");
 
       expect(writeIndex).toBeGreaterThan(-1);
-      expect(assertIndex).toBeGreaterThan(writeIndex);
+      expect(doctorIndex).toBeGreaterThan(writeIndex);
+      expect(assertIndex).toBeGreaterThan(doctorIndex);
+      expect(source).toContain("browserVersion: browser.version(),");
       expect(source).toContain("main().catch((error: unknown) => {");
       expect(source).toContain("process.exitCode = 1;");
     });
