@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.0.226 - 2026-09-27
+
+### Added
+
+- Added `@reckona/mreact-collection` for keyed rows with independently reactive values, order, and count.
+- Added keyed `createResource()` leases for latest-value subscriptions and `createEventResource()` for bounded event streams with dropped-event reporting.
+- Added `createFormMutationFlow()` to connect validated form submission, server field errors, optimistic query updates, and invalidation.
+- Added typed, validated URL search state through `defineSearchState()` and `searchParam`, plus bounded view snapshots across router-managed history entries through `createNavigationSnapshotStore()`.
+- Added compiler transform decision reports, value-free devtools diagnostic exports, and production client-JavaScript delivery limits for routes.
+
+### Changed
+
+- Reduced initial client code for eligible fixed native cell routes by attaching updates to server-rendered DOM and omitting provably unused effects and server-only imports while retaining a recovery path for mismatched markup.
+
+### Fixed
+
+- Preserved edits made before React-compatible boundary hydration to text inputs, checkboxes, textareas, and selects when server and first client props agree.
+
 ## 0.0.225 - 2026-09-15
 
 ### Fixed
