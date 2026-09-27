@@ -195,6 +195,267 @@ describe("react-compat deep hydration", () => {
     expect(recoveries).toEqual([]);
   });
 
+  test("preserves prehydration edits to controlled form fields matching the server baseline", () => {
+    const container = document.createElement("div");
+    container.innerHTML =
+      '<form><input name="user" value="server"><input type="checkbox" checked><textarea>server bio</textarea><select><option value="admin" selected>Admin</option><option value="user">User</option></select></form>';
+    document.body.appendChild(container);
+    const input = container.querySelector<HTMLInputElement>('input[name="user"]')!;
+    const checkbox = container.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")!;
+    const select = container.querySelector<HTMLSelectElement>("select")!;
+    const recoveries: string[] = [];
+
+    try {
+      input.value = "USER TYPED";
+      input.focus();
+      input.setSelectionRange(2, 6);
+      checkbox.checked = false;
+      textarea.value = "USER BIO";
+      select.value = "user";
+
+      hydrateRoot(
+        container,
+        createElement(
+          "form",
+          null,
+          createElement("input", { name: "user", value: "server" }),
+          createElement("input", { type: "checkbox", checked: true }),
+          createElement("textarea", { value: "server bio" }),
+          createElement(
+            "select",
+            { value: "admin" },
+            createElement("option", { value: "admin" }, "Admin"),
+            createElement("option", { value: "user" }, "User"),
+          ),
+        ),
+        {
+          onRecoverableError(error) {
+            recoveries.push(error.message);
+          },
+        },
+      );
+
+      expect(container.querySelector('input[name="user"]')).toBe(input);
+      expect(input.value).toBe("USER TYPED");
+      expect(input.getAttribute("value")).toBe("server");
+      expect(document.activeElement).toBe(input);
+      expect([input.selectionStart, input.selectionEnd]).toEqual([2, 6]);
+      expect(checkbox.checked).toBe(false);
+      expect(checkbox.hasAttribute("checked")).toBe(true);
+      expect(textarea.value).toBe("USER BIO");
+      expect(textarea.textContent).toBe("server bio");
+      expect(select.value).toBe("user");
+      expect(select.querySelector('option[value="admin"]')?.hasAttribute("selected")).toBe(true);
+      expect(recoveries).toEqual([]);
+    } finally {
+      container.remove();
+    }
+  });
+
+  test("replays an early input event with the edited value after hydration", () => {
+    const container = document.createElement("div");
+    container.innerHTML = '<input value="server">';
+    const input = container.querySelector("input")!;
+    const observed: string[] = [];
+
+    function Field() {
+      const [value, setValue] = useState("server");
+      return createElement("input", {
+        value,
+        onInput(event: Event) {
+          const nextValue = (event.target as HTMLInputElement).value;
+          observed.push(nextValue);
+          setValue(nextValue);
+        },
+      });
+    }
+
+    input.value = "draft";
+    queueHydrationEvent(container, new InputEvent("input", { bubbles: true }), input);
+    hydrateRoot(container, createElement(Field));
+
+    expect(container.querySelector("input")).toBe(input);
+    expect(observed).toEqual(["draft"]);
+    expect(input.value).toBe("draft");
+  });
+
+  test("applies a later controlled update after preserving a prehydration edit", () => {
+    const container = document.createElement("div");
+    container.innerHTML = '<input value="server">';
+    const input = container.querySelector("input")!;
+    input.value = "draft";
+
+    const root = hydrateRoot(container, createElement("input", { value: "server" }));
+    expect(input.value).toBe("draft");
+
+    root.render(createElement("input", { value: "saved" }));
+    expect(input.value).toBe("saved");
+  });
+
+  test("preserves an edited input inside a compat resume boundary", () => {
+    const container = document.createElement("div");
+    container.innerHTML = '<!--mreact-h:start:lazy--><input value="server"><!--mreact-h:end:lazy-->';
+    const input = container.querySelector("input")!;
+    input.value = "draft";
+
+    hydrateRoot(container, createElement("input", { value: "server" }), { resumeId: "lazy" });
+
+    expect(container.querySelector("input")).toBe(input);
+    expect(input.value).toBe("draft");
+  });
+
+  test("keeps textarea focus and selection when an early edit survives hydration", () => {
+    const container = document.createElement("div");
+    container.innerHTML = "<textarea>server bio</textarea>";
+    document.body.appendChild(container);
+    const textarea = container.querySelector("textarea")!;
+
+    try {
+      textarea.value = "draft bio";
+      textarea.focus();
+      textarea.setSelectionRange(1, 5);
+
+      hydrateRoot(container, createElement("textarea", { value: "server bio" }));
+
+      expect(textarea.value).toBe("draft bio");
+      expect(textarea.defaultValue).toBe("server bio");
+      expect(document.activeElement).toBe(textarea);
+      expect([textarea.selectionStart, textarea.selectionEnd]).toEqual([1, 5]);
+    } finally {
+      container.remove();
+    }
+  });
+
+  test("preserves a newly checked box and a selection changed from the implicit first option", () => {
+    const container = document.createElement("div");
+    container.innerHTML = '<form><input type="checkbox"><select><option value="first">First</option><option value="second">Second</option></select></form>';
+    const checkbox = container.querySelector("input")!;
+    const select = container.querySelector("select")!;
+    checkbox.checked = true;
+    select.value = "second";
+
+    hydrateRoot(
+      container,
+      createElement(
+        "form",
+        null,
+        createElement("input", { type: "checkbox", checked: false }),
+        createElement(
+          "select",
+          { value: "first" },
+          createElement("option", { value: "first" }, "First"),
+          createElement("option", { value: "second" }, "Second"),
+        ),
+      ),
+    );
+
+    expect(checkbox.checked).toBe(true);
+    expect(checkbox.hasAttribute("checked")).toBe(false);
+    expect(select.value).toBe("second");
+  });
+
+  test("preserves edited selections in a controlled multiple select", () => {
+    const container = document.createElement("div");
+    container.innerHTML = '<select multiple><option value="a" selected>A</option><option value="b">B</option></select>';
+    const select = container.querySelector("select")!;
+    select.options[1]!.selected = true;
+
+    hydrateRoot(
+      container,
+      createElement(
+        "select",
+        { multiple: true, value: ["a"] },
+        createElement("option", { value: "a" }, "A"),
+        createElement("option", { value: "b" }, "B"),
+      ),
+    );
+
+    expect(Array.from(select.selectedOptions, (option) => option.value)).toEqual(["a", "b"]);
+    expect(select.options[0]?.hasAttribute("selected")).toBe(true);
+    expect(select.options[1]?.hasAttribute("selected")).toBe(false);
+  });
+
+  test("preserves an early selection when the first option is disabled", () => {
+    const container = document.createElement("div");
+    container.innerHTML = '<select><option value="x" disabled>X</option><option value="y">Y</option><option value="z">Z</option></select>';
+    const select = container.querySelector("select")!;
+    expect(select.value).toBe("y");
+    select.value = "z";
+
+    hydrateRoot(
+      container,
+      createElement(
+        "select",
+        { value: "y" },
+        createElement("option", { value: "x", disabled: true }, "X"),
+        createElement("option", { value: "y" }, "Y"),
+        createElement("option", { value: "z" }, "Z"),
+      ),
+    );
+
+    expect(select.value).toBe("z");
+  });
+
+  test("uses the last explicitly selected option as the server baseline", () => {
+    const container = document.createElement("div");
+    container.innerHTML = '<select><option value="a" selected>A</option><option value="b" selected>B</option><option value="c">C</option></select>';
+    const select = container.querySelector("select")!;
+    expect(select.value).toBe("b");
+    select.value = "c";
+
+    hydrateRoot(
+      container,
+      createElement(
+        "select",
+        { value: "b" },
+        createElement("option", { value: "a" }, "A"),
+        createElement("option", { value: "b" }, "B"),
+        createElement("option", { value: "c" }, "C"),
+      ),
+    );
+
+    expect(select.value).toBe("c");
+  });
+
+  test("applies the controlled value when a size-two select has no prehydration selection", () => {
+    const container = document.createElement("div");
+    container.innerHTML = '<select size="2"><option value="a">A</option><option value="b">B</option></select>';
+    const select = container.querySelector("select")!;
+    expect(select.selectedIndex).toBe(-1);
+
+    hydrateRoot(
+      container,
+      createElement(
+        "select",
+        { size: 2, value: "a" },
+        createElement("option", { value: "a" }, "A"),
+        createElement("option", { value: "b" }, "B"),
+      ),
+    );
+
+    expect(select.value).toBe("a");
+  });
+
+  test("preserves an early selection in a size-two select with an empty server baseline", () => {
+    const container = document.createElement("div");
+    container.innerHTML = '<select size="2"><option value="a">A</option><option value="b">B</option></select>';
+    const select = container.querySelector("select")!;
+    select.value = "b";
+
+    hydrateRoot(
+      container,
+      createElement(
+        "select",
+        { size: 2, value: "" },
+        createElement("option", { value: "a" }, "A"),
+        createElement("option", { value: "b" }, "B"),
+      ),
+    );
+
+    expect(select.value).toBe("b");
+  });
+
   test("applies controlled form state during hydration", () => {
     const container = document.createElement("div");
     container.innerHTML =

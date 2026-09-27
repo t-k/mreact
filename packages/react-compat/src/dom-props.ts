@@ -27,6 +27,13 @@ import {
 } from "@reckona/mreact-shared";
 import { setDomAttribute } from "@reckona/mreact-reactive-dom/internal";
 import { applySelectValue } from "./form-state.js";
+import {
+  capturePrehydrationFormState,
+  preservesPrehydrationChecked,
+  preservesPrehydrationSelection,
+  preservesPrehydrationValue,
+  restorePrehydrationFormState,
+} from "./prehydration-form-state.js";
 
 export function applyProps(
   element: HostElement,
@@ -37,6 +44,10 @@ export function applyProps(
   const preserveHydrationAttributes = options.preserveHydrationAttributes === true;
   const previous = getAppliedProps(element);
   const nextProps = sanitizeMetaRefreshElementProps(element, props);
+
+  if (preserveHydrationAttributes && isPostChildFormElement(element)) {
+    capturePrehydrationFormState(element, nextProps);
+  }
 
   if (previous === undefined && !preserveHydrationAttributes) {
     applyInitialProps(element, nextProps, path, options);
@@ -327,7 +338,7 @@ export function applyPostChildFormProps(
   }
 
   if (element instanceof HTMLInputElement) {
-    if (hasOwnProp(props, "checked")) {
+    if (hasOwnProp(props, "checked") && !(preserveHydrationState && preservesPrehydrationChecked(element))) {
       const checked =
         props.checked !== null && props.checked !== undefined && props.checked !== false;
       element.checked = checked;
@@ -340,33 +351,36 @@ export function applyPostChildFormProps(
     }
 
     const value = postChildFormValue(props, previousProps, preserveHydrationState);
-    if (value !== undefined) {
+    if (value !== undefined && !(preserveHydrationState && preservesPrehydrationValue(element))) {
       element.value = value;
       element.setAttribute("value", value);
     }
+    if (preserveHydrationState) restorePrehydrationFormState(element);
     return;
   }
 
   if (element instanceof HTMLSelectElement) {
     const value = postChildSelectValue(props, previousProps, preserveHydrationState);
-    if (value !== noPostChildFormValue) {
+    if (value !== noPostChildFormValue && !(preserveHydrationState && preservesPrehydrationSelection(element))) {
       applySelectValue(element, value);
     }
+    if (preserveHydrationState) restorePrehydrationFormState(element);
     return;
   }
 
   const value = postChildFormValue(props, previousProps, preserveHydrationState);
 
-  if (value === undefined) {
+  if (value === undefined || (preserveHydrationState && preservesPrehydrationValue(element))) {
+    if (preserveHydrationState) restorePrehydrationFormState(element);
     return;
   }
 
   if (element instanceof HTMLTextAreaElement) {
     element.value = value;
     element.textContent = value;
-    return;
   }
 
+  if (preserveHydrationState) restorePrehydrationFormState(element);
 }
 
 function isPostChildFormElement(
@@ -574,6 +588,10 @@ function applyFormValueProp(
   if (element instanceof HTMLInputElement && (name === "value" || name === "defaultValue")) {
     const nextValue = value === null || value === undefined ? "" : String(value);
 
+    if (name === "value" && options.preserveHydrationAttributes === true && preservesPrehydrationValue(element)) {
+      return true;
+    }
+
     if (name === "defaultValue" && options.preserveHydrationAttributes === true) {
       element.defaultValue = nextValue;
       return true;
@@ -594,6 +612,10 @@ function applyFormValueProp(
 
   if (element instanceof HTMLInputElement && (name === "checked" || name === "defaultChecked")) {
     const nextChecked = value !== null && value !== undefined && value !== false;
+
+    if (name === "checked" && options.preserveHydrationAttributes === true && preservesPrehydrationChecked(element)) {
+      return true;
+    }
 
     if (name === "defaultChecked" && options.preserveHydrationAttributes === true) {
       element.defaultChecked = nextChecked;
@@ -622,6 +644,10 @@ function applyFormValueProp(
   if (element instanceof HTMLTextAreaElement && (name === "value" || name === "defaultValue")) {
     const nextValue = value === null || value === undefined ? "" : String(value);
 
+    if (name === "value" && options.preserveHydrationAttributes === true && preservesPrehydrationValue(element)) {
+      return true;
+    }
+
     if (name === "defaultValue" && options.preserveHydrationAttributes === true) {
       element.defaultValue = nextValue;
       return true;
@@ -641,6 +667,9 @@ function applyFormValueProp(
   }
 
   if (element instanceof HTMLSelectElement && (name === "value" || name === "defaultValue")) {
+    if (name === "value" && options.preserveHydrationAttributes === true && preservesPrehydrationSelection(element)) {
+      return true;
+    }
     if (name === "defaultValue" && options.preserveHydrationAttributes === true) {
       return true;
     }
