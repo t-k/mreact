@@ -191,4 +191,41 @@ describe("createResource", () => {
     expect(attempts).toBe(2);
     lease.dispose();
   });
+
+  it("lets a reentrant observer retry when the first subscription fails", () => {
+    let attempts = 0;
+    let joined!: ReturnType<ReturnType<typeof createResource<string, number>>["observe"]>;
+    let emit!: (value: number) => void;
+    const resource = createResource<string, number>((key, next) => {
+      attempts += 1;
+      if (attempts === 1) {
+        joined = resource.observe(key);
+        throw new Error("offline");
+      }
+      emit = next;
+      return () => {};
+    });
+
+    expect(() => resource.observe("a")).toThrow("offline");
+    expect(joined.state.get()).toEqual({ status: "pending" });
+    joined.setKey("a");
+    emit(4);
+    expect(attempts).toBe(2);
+    expect(joined.state.get()).toEqual({ status: "ready", value: 4 });
+    joined.dispose();
+  });
+
+  it("clears the old value if disconnect throws during a key change", () => {
+    const resource = createResource<string, number>((key, emit) => {
+      if (key === "a") emit(1);
+      return () => {
+        if (key === "a") throw new Error("cleanup failed");
+      };
+    });
+    const lease = resource.observe("a");
+    expect(() => lease.setKey("b")).toThrow("cleanup failed");
+    expect(lease.state.get()).toEqual({ status: "pending" });
+    lease.setKey("b");
+    lease.dispose();
+  });
 });

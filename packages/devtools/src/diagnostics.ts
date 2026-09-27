@@ -47,8 +47,8 @@ export function exportDevtoolsDiagnostics(devtools: Devtools): DevtoolsDiagnosti
       .events()
       .filter((event) => typeof event?.package === "string" && typeof event.type === "string")
       .map((event) => ({
-        package: event.package,
-        type: event.type,
+        package: diagnosticEventPackage(event.package),
+        type: diagnosticEventType(event.package, event.type),
         timestamp: Number.isFinite(event.timestamp) ? event.timestamp! : null,
       })),
     resources: {
@@ -58,6 +58,32 @@ export function exportDevtoolsDiagnostics(devtools: Devtools): DevtoolsDiagnosti
       retainedMetadata: census.retainedMetadata,
     },
   };
+}
+
+function diagnosticEventPackage(value: string): string {
+  switch (value) {
+    case "@reckona/mreact-query":
+    case "@reckona/mreact-reactive-core":
+    case "@reckona/mreact-store":
+      return value;
+    default:
+      return "other";
+  }
+}
+
+function diagnosticEventType(packageName: string, value: string): string {
+  switch (packageName) {
+    case "@reckona/mreact-query":
+      return value === "query:update" ? value : "other";
+    case "@reckona/mreact-reactive-core":
+      return value === "reactive:cell:set" || value === "reactive:effect:run" ? value : "other";
+    case "@reckona/mreact-store":
+      return value === "store:replace" || value === "store:set" || value === "store:transaction"
+        ? value
+        : "other";
+    default:
+      return "other";
+  }
 }
 
 function diagnosticResourceKind(kind: string): string {

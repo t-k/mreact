@@ -47,6 +47,9 @@ export interface ComputedOptions<T> {
 export function createCleanupScope(): CleanupScope;
 
 // @public
+export function createResource<TKey, TValue>(subscribe: (key: TKey, emit: (value: TValue) => void) => () => void): Resource<TKey, TValue>;
+
+// @public
 export function effect(fn: () => void | (() => void)): () => void;
 
 // @public
@@ -71,6 +74,30 @@ export interface RequestStateStorage {
     // (undocumented)
     run<T>(scope: RequestStateScope, callback: () => T): T;
 }
+
+// @public
+export interface Resource<TKey, TValue> {
+    // (undocumented)
+    observe(key: TKey): ResourceLease<TKey, TValue>;
+}
+
+// @public
+export interface ResourceLease<TKey, TValue> {
+    // (undocumented)
+    dispose(): void;
+    // (undocumented)
+    setKey(key: TKey): void;
+    // (undocumented)
+    readonly state: ReadonlyCell<ResourceState<TValue>>;
+}
+
+// @public
+export type ResourceState<T> = {
+    readonly status: "pending";
+} | {
+    readonly status: "ready";
+    readonly value: T;
+};
 
 // @public
 export function runDetached<T>(run: () => T): T;

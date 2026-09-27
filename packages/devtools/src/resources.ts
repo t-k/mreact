@@ -127,7 +127,7 @@ export function createDevtoolsResourceInspector(
 
   return {
     census(options = {}) {
-      const byKind: Record<string, { created: number; disposed: number; live: number }> = {};
+      const byKind: Record<string, { created: number; disposed: number; live: number }> = Object.create(null);
       for (const [kind, counter] of counters) {
         if (options.ownerId !== undefined) {
           const ownedRecords = [...records.values()].filter(

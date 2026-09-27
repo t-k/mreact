@@ -46,6 +46,22 @@ Keep instrumentation payloads structured and small. If a log line needs request 
 
 Custom integrations that call `renderAppRequest()` directly can pass `onRenderError(error)` to observe a route render failure before Mreact renders the matching error boundary response. Use it for structured error reporting, and keep the captured payload free of request headers, cookies, form bodies, and raw URLs unless your application has already scrubbed them.
 
+## Value-free DevTools export
+
+`exportDevtoolsDiagnostics()` returns a versioned JSON object from the retained DevTools event history and resource census. It includes event package, type, and timestamp plus aggregate resource counts. Event values, query results, resource labels, locations, and owner IDs are omitted.
+
+```ts
+import { exportDevtoolsDiagnostics, getInstalledDevtools } from "@reckona/mreact-devtools";
+
+const devtools = getInstalledDevtools();
+if (devtools !== undefined) {
+  const report = exportDevtoolsDiagnostics(devtools);
+  console.log(JSON.stringify(report));
+}
+```
+
+The export describes only retained events and resource counts; it does not replay a browser session. Application code can emit custom package and event type strings, so inspect those identifiers before sharing a report outside your team.
+
 ## AWS Lambda timings
 
 For AWS Lambda latency work, enable adapter timings temporarily and inspect request conversion, runtime materialization, middleware, loader, render, and response conversion phases. AWS Lambda cold starts are sensitive to route preload choices, so compare the same route and the same memory size before and after changing preload.

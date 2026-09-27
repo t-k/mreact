@@ -16,7 +16,7 @@ describe("devtools diagnostics export", () => {
     payload.self = payload;
     devtools.emit({
       package: "@reckona/mreact-query",
-      type: "query:resolved",
+      type: "query:update",
       timestamp: 42,
       payload,
       value: BigInt(1),
@@ -27,7 +27,7 @@ describe("devtools diagnostics export", () => {
 
     expect(report).toEqual({
       schemaVersion: 1,
-      events: [{ package: "@reckona/mreact-query", type: "query:resolved", timestamp: 42 }],
+      events: [{ package: "@reckona/mreact-query", type: "query:update", timestamp: 42 }],
       resources: {
         byKind: [
           { kind: "other", created: 1, disposed: 0, live: 1 },
@@ -52,8 +52,8 @@ describe("devtools diagnostics export", () => {
 
     expect(exportDevtoolsDiagnostics(devtools)).toMatchObject({
       events: [
-        { package: "test", type: "second", timestamp: null },
-        { package: "test", type: "third", timestamp: null },
+        { package: "other", type: "other", timestamp: null },
+        { package: "other", type: "other", timestamp: null },
       ],
     });
     devtools.dispose();
@@ -69,7 +69,7 @@ describe("devtools diagnostics export", () => {
     devtools.emit({ package: "test", type: "valid" });
 
     expect(exportDevtoolsDiagnostics(devtools).events).toEqual([
-      { package: "test", type: "valid", timestamp: null },
+      { package: "other", type: "other", timestamp: null },
     ]);
     devtools.dispose();
   });
@@ -132,5 +132,31 @@ describe("devtools diagnostics export", () => {
         retainedMetadata: 0,
       },
     });
+  });
+
+  test("redacts application values placed in event identifiers", () => {
+    const secret = "private@example.com";
+    const devtools = createDevtools();
+    devtools.emit({ package: secret, type: `customer:${secret}`, timestamp: 7 });
+    devtools.emit({ package: "@reckona/mreact-query", type: `query:${secret}`, timestamp: 8 });
+
+    const report = exportDevtoolsDiagnostics(devtools);
+    expect(report.events).toEqual([
+      { package: "other", type: "other", timestamp: 7 },
+      { package: "@reckona/mreact-query", type: "other", timestamp: 8 },
+    ]);
+    expect(JSON.stringify(report)).not.toContain(secret);
+    devtools.dispose();
+  });
+
+  test("includes special property names in resource counts without exporting labels", () => {
+    const devtools = createDevtools();
+    const resource = devtools.resources().register({ kind: "__proto__", label: "secret" });
+    expect(exportDevtoolsDiagnostics(devtools).resources).toMatchObject({
+      byKind: [{ kind: "other", created: 1, disposed: 0, live: 1 }],
+      live: 1,
+    });
+    resource.dispose();
+    devtools.dispose();
   });
 });

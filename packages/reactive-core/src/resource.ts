@@ -106,11 +106,11 @@ export function createResource<TKey, TValue>(
       return {
         state: readonlyState,
         setKey(nextKey) {
-          if (disposed || (currentEntry !== undefined && sameKey(currentKey, nextKey))) return;
+          if (disposed || (currentEntry?.active === true && sameKey(currentKey, nextKey))) return;
           const previous = currentEntry;
           currentEntry = undefined;
-          if (previous !== undefined) release(currentKey, previous, state);
           state.setValue(pending);
+          if (previous !== undefined) release(currentKey, previous, state);
           currentKey = nextKey;
           currentEntry = attach(nextKey, state);
         },

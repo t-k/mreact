@@ -203,6 +203,25 @@ scope.dispose();
 
 Disposing an observer removes that observer's subscriptions and browser listeners. `cancelQueries()` aborts matching in-flight requests, `removeQueries()` evicts matching cache entries, and client `inactiveGcTime` performs eventual cleanup for settled entries without active observers. These operations remain separate so disposing one observer does not cancel a request shared by another observer.
 
+For a continuous external stream, `createResource()` shares one subscription per active key inside that factory. Each `observe()` call returns a lease with a reactive `pending` or `ready` state. The last lease disconnects, and `setKey()` disconnects from the old key before subscribing to the new one. A lease created inside a cleanup scope is disposed with that scope; otherwise, call `dispose()` explicitly.
+
+```ts
+import { createResource } from "@reckona/mreact-reactive-core";
+
+const messages = createResource<string, string>((channel, emit) => {
+  const stream = new EventSource(`/events/${encodeURIComponent(channel)}`);
+  stream.addEventListener("message", (event) => emit((event as MessageEvent).data));
+  return () => stream.close();
+});
+
+const lease = messages.observe("project-42");
+const state = lease.state.get();
+lease.setKey("project-43");
+lease.dispose();
+```
+
+Create browser-only transports when observing on the client. This API keeps the latest value; it does not preserve every event, reconnect automatically, or reconcile an SSR snapshot with a stream cursor. Use a transport-specific adapter when those guarantees matter.
+
 ### Resources that outlive a component evaluation
 
 `computed()`, effects, query observers, and the computeds inside virtual grids register with the cleanup owner active when they are constructed. A component evaluation can have a shorter lifetime than the component or a controller retained by your application: reevaluation can dispose that evaluation's resources. Keeping an object in a variable does not change its cleanup owner.

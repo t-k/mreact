@@ -42,6 +42,43 @@ export interface Devtools {
 }
 
 // @public
+export interface DevtoolsDiagnosticEvent {
+    // (undocumented)
+    package: string;
+    // (undocumented)
+    timestamp: number | null;
+    // (undocumented)
+    type: string;
+}
+
+// @public
+export interface DevtoolsDiagnosticKindCounts {
+    // (undocumented)
+    created: number;
+    // (undocumented)
+    disposed: number;
+    // (undocumented)
+    kind: string;
+    // (undocumented)
+    live: number;
+}
+
+// @public
+export interface DevtoolsDiagnosticsV1 {
+    // (undocumented)
+    events: readonly DevtoolsDiagnosticEvent[];
+    // (undocumented)
+    resources: {
+        byKind: readonly DevtoolsDiagnosticKindCounts[];
+        live: number;
+        missingMetadata: number;
+        retainedMetadata: number;
+    };
+    // (undocumented)
+    schemaVersion: 1;
+}
+
+// @public
 export interface DevtoolsEvent {
     // (undocumented)
     [key: string]: unknown;
@@ -150,6 +187,9 @@ export interface DevtoolsResourceSnapshotOptions {
 export function emitMreactDevtoolsEvent(packageName: string, event: {
     type: string;
 } & Record<string, unknown>): void;
+
+// @public
+export function exportDevtoolsDiagnostics(devtools: Devtools): DevtoolsDiagnosticsV1;
 
 // @public
 export function getInstalledDevtools(): Devtools | undefined;
