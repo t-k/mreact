@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { primitiveBrowserCases, primitiveBrowserFrameworks } from "./cases.js";
+import { browserEntrySource, rotateFrameworksForRound } from "./run.js";
 
 describe("primitive browser benchmark configuration", () => {
   it("covers mreact browser primitive frameworks", () => {
@@ -70,22 +71,20 @@ describe("primitive browser benchmark configuration", () => {
     ]);
 
     expect(runSource).toContain("if (process.argv[1] !== undefined");
-    expect(runSource).toContain("createBrowserFixture(browserEntrySource())");
-    expect(buildSource).toContain("createBrowserFixture(browserEntrySource())");
+    expect(runSource).toContain("createBrowserFixture(browserEntrySource(framework))");
+    expect(buildSource).toContain("createBrowserFixture(browserEntrySource(framework))");
     expect(buildSource).not.toContain("chromium");
     expect(fixtureSource).toContain("await rm(rootDir, { force: true, recursive: true });");
   });
 
-  it("labels the shared mixed-framework entry instead of a per-framework bundle size", async () => {
+  it("labels isolated primitive entries as fixture size rather than application delivery size", async () => {
     const [runSource, fixtureSource] = await Promise.all([
       readFile(new URL("./run.ts", import.meta.url), "utf8"),
       readFile(new URL("./fixture.ts", import.meta.url), "utf8"),
     ]);
 
-    // Every framework case shares one Vite entry, so a plain "bundle gzip bytes" note reads as a
-    // per-framework client payload that this fixture never measures.
     expect(runSource).not.toContain("bundle gzip bytes:");
-    expect(runSource).toContain("mixed-framework benchmark entry gzip bytes");
+    expect(runSource).toContain("isolated primitive fixture entry gzip bytes");
     expect(runSource).toContain("emitted JavaScript gzip bytes");
     expect(fixtureSource).toContain("entryGzipBytes");
     expect(fixtureSource).toContain("emittedJavaScriptGzipBytes");
@@ -97,5 +96,37 @@ describe("primitive browser benchmark configuration", () => {
 
     expect(source).toContain("primitiveBrowserMeasurementExpression(");
     expect(source).not.toContain("const samples = await page.evaluate(\n          async (options)");
+  });
+
+  it("generates an entry with only the selected framework imports and runner", () => {
+    const mreact = browserEntrySource("mreact");
+    const angular = browserEntrySource("angular");
+
+    expect(mreact).toContain('from "@reckona/mreact-reactive-core"');
+    expect(mreact).toContain("async function runMreact(");
+    expect(mreact).not.toContain('import "zone.js"');
+    expect(mreact).not.toContain('from "react-dom/client"');
+    expect(mreact).not.toContain("async function runAngular(");
+    expect(angular).toContain('import "zone.js"');
+    expect(angular).toContain("async function runAngular(");
+    expect(angular).not.toContain("async function runMreact(");
+  });
+
+  it("rotates framework order once per independent round", () => {
+    expect(rotateFrameworksForRound(["mreact", "react", "solid"], 0)).toEqual([
+      "mreact",
+      "react",
+      "solid",
+    ]);
+    expect(rotateFrameworksForRound(["mreact", "react", "solid"], 1)).toEqual([
+      "react",
+      "solid",
+      "mreact",
+    ]);
+    expect(rotateFrameworksForRound(["mreact", "react", "solid"], 3)).toEqual([
+      "mreact",
+      "react",
+      "solid",
+    ]);
   });
 });

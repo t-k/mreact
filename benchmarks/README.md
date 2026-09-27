@@ -5,10 +5,8 @@ This directory contains fair, repeatable benchmark fixtures for mreact and peer 
 ## Tracks
 
 - `primitive`: framework primitive comparison without routers. Current adapters: Marko, Vue, Svelte, Angular, Qwik, React, Solid, and mreact.
-- `primitive-browser`: real Chromium primitive comparison for mreact and
-  mreact react-compat. It mirrors the create/update/select/clear shape used by
-  the Node+happy-dom primitive suite so happy-dom-specific rankings can be
-  cross-checked against real browser DOM behavior.
+- `primitive-browser`: real Chromium comparison of hand-written primitive APIs and framework adapters. It mirrors the create/update/select/clear shape used by the Node+happy-dom suite; its mreact rows do not measure generated JSX.
+- `js-framework-benchmark`: the canonical compiled JSX comparison for mreact, its React compatibility variants, and peer frameworks. The keyed/mreact fixture uses ordinary cell-backed JSX through the public compiler path. Keep its results separate from primitive-browser rows.
 - `non-router`: package-level regression microbenchmarks for virtual, forms,
   query, store, auth, and other non-router packages.
 - `router`: production router/app framework comparison across Marko Run, Nuxt, SvelteKit, Qwik City, SolidStart, TanStack Start, Next.js App Router, and mreact app router.
@@ -36,6 +34,7 @@ The Analog production fixture serializes Vite's client and SSR environment build
 - Use warmup runs before measured runs, and report the median of measured samples as the primary value to reduce sensitivity to transient system load.
 - The Nuxt, SvelteKit, and Analog router adapters use generated production app fixtures. Their SSR and client-bundle rows come from each framework's build/start path rather than the shared lightweight proxy fixture.
 - Store raw samples, percentile summaries, and markdown reports under `benchmarks/results/<date>/<run>/`, where `<run>` is a same-day sequence such as `001` or `002`.
+- Primitive-browser methodology v2 builds one entry per supported framework, starts a fresh Chromium process for every scored trial, and rotates framework order by round. Each browser performs its configured warmups, then one measured operation with explicit GC before and after; `primitive-browser.trials.json` records the round, position, browser version, and outcome. This is an isolated primitive track, not a natural-GC endurance test. Its numbers cannot be compared directly with mixed-entry methodology v1 or the official compiled JSX harness.
 - The Benchmarks GitHub Actions workflow commits changed result directories back to the selected branch; do not rely on Actions artifacts for long-term access. A single workflow dispatch writes all selected public benchmark reports into the same run directory, so `all` produces `primitive.md`, `primitive-browser.md`, `non-router.md`, and `router.md` side by side. Microbenchmarks such as `html-escape` and `request-fastpaths` are local investigation tools and are not published by the workflow.
 - Router `app HTTP v2` cases separate the orchestrator, HTTP load generator and production server into different processes. One trial supplies throughput, p50/p95/p99 and a single server PID's RSS before/after delta. Burst uses 200 requests with at most 100 in flight and a fresh keep-alive pool, repeated in three rotated rounds. Steady load uses a two-second warmup at the configured concurrency and three consecutive five-second windows with the same pool. Requests already in flight drain within the request deadline, and actual elapsed time includes that drain. This is not a cold-server test. JSON `router.http-trials.json` stores each raw trial once; summary-row `httpTrials` entries link to it with `latencySamplesRef` and retain workload configuration, trial/series IDs, execution order, process IDs, warmup measurements, per-window connection-open/reuse counts and explicit worker totals, and RSS snapshots. RSS is neither peak memory nor a process-tree total; negative deltas are retained but excluded from RSS rankings. `samples` carries metric-specific units rather than storing bytes or ops/sec in `samplesMs`. Route/cache semantics remain unchanged and may differ across frameworks: mreact targets `/static-page` with its existing memory route cache; other adapters keep their existing `/` fixtures. Methodology v2 is not directly comparable to the legacy concurrent probes, and topology changes are not runtime speedups.
 - The primitive Vue, Svelte, and Angular adapters use framework-runtime fixtures: Vue mounts `createApp` components, Svelte mounts compiler-generated components, and Angular mounts JIT standalone components with signals. Source-primitive rows remain unsupported unless the framework has a directly comparable fine-grained source primitive.
@@ -46,6 +45,7 @@ The Analog production fixture serializes Vite's client and SSR environment build
 ```bash
 pnpm bench:primitive
 pnpm bench:primitive-browser
+pnpm bench:js-framework
 pnpm bench:html-escape
 pnpm bench:request-fastpaths
 pnpm bench:non-router

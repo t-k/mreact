@@ -8,6 +8,7 @@ import { formatBenchmarkMarkdown } from "../shared/report.js";
 import { createDatedResultsDir, writeJsonFile, writeTextFile } from "../shared/results.js";
 import { summarizeSamples } from "../shared/stats.js";
 import type { BenchmarkRow } from "../shared/types.js";
+import type { PrimitiveBrowserFramework } from "./cases.js";
 import {
   primitiveBrowserCases,
   primitiveBrowserFrameworks,
@@ -23,107 +24,115 @@ async function runBenchmark(): Promise<void> {
     process.env.MREACT_PRIMITIVE_BROWSER_MEASURED_RUNS ?? "15",
     "MREACT_PRIMITIVE_BROWSER_MEASURED_RUNS",
   );
-  const fixture = await createBrowserFixture(browserEntrySource());
-  const server = await serveDirectory(fixture.outDir);
-const browser = await chromium.launch({
-  args: ["--js-flags=--expose-gc"],
-  headless: true,
-});
-const rows: BenchmarkRow[] = [];
-
-try {
-  const page = await browser.newPage();
-  const diagnostics: string[] = [];
-  page.on("console", (message) => diagnostics.push(`[console:${message.type()}] ${message.text()}`));
-  page.on("pageerror", (error) => diagnostics.push(`[pageerror] ${error.stack ?? error.message}`));
-  page.on("requestfailed", (request) =>
-    diagnostics.push(`[requestfailed] ${request.url()} ${request.failure()?.errorText ?? ""}`),
+  const supportedFrameworks = primitiveBrowserFrameworks.filter(
+    (framework): framework is Exclude<PrimitiveBrowserFramework, "marko"> => framework !== "marko",
   );
-  page.on("response", (response) => {
-    if (response.status() >= 400) {
-      diagnostics.push(`[response:${response.status()}] ${response.url()}`);
-    }
-  });
-  await page.goto(server.url, { waitUntil: "domcontentloaded" });
-  await page
-    .waitForFunction(() => {
-      return typeof (globalThis as { __mreactPrimitiveBrowserBench?: unknown })
-        .__mreactPrimitiveBrowserBench === "object";
-    })
-    .catch((error: unknown) => {
-      const suffix = diagnostics.length === 0 ? "no browser diagnostics" : diagnostics.join("\n");
-      throw new Error(
-        `${error instanceof Error ? error.message : String(error)}\n${suffix}`,
-      );
-    });
-
-  for (const benchmarkCase of primitiveBrowserCases) {
-    for (const framework of primitiveBrowserFrameworks) {
-      if (framework === "marko") {
-        rows.push({
-          suite: "primitive-browser",
-          framework,
-          version: "workspace",
-          caseName: benchmarkCase.name,
-          status: "unsupported",
-          metric: "duration",
-          unit: "ms",
-          value: 0,
-          notes: [
-            "Marko's standalone browser primitive fixture requires the Marko client compiler/runtime integration; keep Marko covered by router browser probes until a stable standalone harness is added.",
-          ],
-        });
-        continue;
-      }
-
+  const fixtures = new Map<Exclude<PrimitiveBrowserFramework, "marko">, {
+    fixture: Awaited<ReturnType<typeof createBrowserFixture>>;
+    server: Awaited<ReturnType<typeof serveDirectory>>;
+  }>();
+  const rows: BenchmarkRow[] = [];
+  const trials: Array<{
+    methodologyVersion: 2;
+    framework: string;
+    caseName: string;
+    round: number;
+    position: number;
+    status: "completed" | "failed";
+    browserVersion?: string;
+    value?: number;
+    error?: string;
+  }> = [];
+  try {
+    for (const framework of supportedFrameworks) {
+      const fixture = await createBrowserFixture(browserEntrySource(framework));
       try {
-        const samples = await page.evaluate(
-          primitiveBrowserMeasurementExpression({
+        const server = await serveDirectory(fixture.outDir);
+        fixtures.set(framework, { fixture, server });
+      } catch (error) {
+        await rm(fixture.rootDir, { force: true, recursive: true });
+        throw error;
+      }
+    }
+
+    for (const benchmarkCase of primitiveBrowserCases) {
+      const samplesByFramework = new Map<string, number[]>();
+      const errorsByFramework = new Map<string, string>();
+      for (let round = 0; round < browserMeasuredRuns; round += 1) {
+        const frameworks = rotateFrameworksForRound(supportedFrameworks, round);
+        for (const [position, framework] of frameworks.entries()) {
+          if (errorsByFramework.has(framework)) continue;
+          const prepared = fixtures.get(framework);
+          if (prepared === undefined) throw new Error(`Missing fixture for ${framework}`);
+          const trial = await measurePrimitiveBrowserTrial({
+            url: prepared.server.url,
+            framework,
             caseName: benchmarkCase.name,
             count: benchmarkCase.count,
-            framework,
-            measuredRuns: browserMeasuredRuns,
             warmupRuns: browserWarmupRuns,
-          }),
-        ) as number[];
-        const summary = summarizeSamples(samples);
+          });
+          trials.push({
+            methodologyVersion: 2,
+            framework,
+            caseName: benchmarkCase.name,
+            round,
+            position,
+            ...trial,
+          });
+          if (trial.status === "failed") {
+            errorsByFramework.set(framework, trial.error ?? "Unknown trial failure");
+          } else if (trial.value !== undefined) {
+            const samples = samplesByFramework.get(framework) ?? [];
+            samples.push(trial.value);
+            samplesByFramework.set(framework, samples);
+          }
+        }
+      }
 
+      for (const framework of primitiveBrowserFrameworks) {
+        if (framework === "marko") {
+          rows.push({
+            suite: "primitive-browser",
+            framework,
+            version: "workspace",
+            caseName: benchmarkCase.name,
+            status: "unsupported",
+            metric: "duration",
+            unit: "ms",
+            value: 0,
+            notes: ["Marko's standalone browser primitive fixture requires the Marko client compiler/runtime integration; keep Marko covered by router browser probes until a stable standalone harness is added."],
+          });
+          continue;
+        }
+        const error = errorsByFramework.get(framework);
+        const samples = samplesByFramework.get(framework) ?? [];
+        const summary = error === undefined && samples.length > 0 ? summarizeSamples(samples) : undefined;
+        const fixture = fixtures.get(framework)?.fixture;
         rows.push({
           suite: "primitive-browser",
           framework,
           version: "workspace",
           caseName: benchmarkCase.name,
-          status: "completed",
+          status: error === undefined && summary !== undefined ? "completed" : "failed",
           metric: "duration",
           unit: "ms",
-          value: summary.median,
+          value: summary?.median ?? 0,
           summary,
           samples,
-          notes: [
-            `mixed-framework benchmark entry gzip bytes (all frameworks compiled into assets/bench.js, dependency chunks excluded): ${fixture.entryGzipBytes}`,
-            `fixture emitted JavaScript gzip bytes (entry plus every emitted chunk): ${fixture.emittedJavaScriptGzipBytes}`,
-          ],
-        });
-      } catch (error) {
-        rows.push({
-          suite: "primitive-browser",
-          framework,
-          version: "workspace",
-          caseName: benchmarkCase.name,
-          status: "failed",
-          metric: "duration",
-          unit: "ms",
-          value: 0,
-          notes: [error instanceof Error ? error.message : String(error)],
+          notes: error === undefined ? [
+            "methodology v2: hand-written primitive API, independent browser per measured trial, round-rotated order, forced GC between operations",
+            `isolated primitive fixture entry gzip bytes (dependency chunks excluded): ${fixture?.entryGzipBytes}`,
+            `fixture emitted JavaScript gzip bytes (entry plus every emitted chunk): ${fixture?.emittedJavaScriptGzipBytes}`,
+          ] : [error],
         });
       }
     }
+  } finally {
+    for (const { fixture, server } of fixtures.values()) {
+      await server.close();
+      await rm(fixture.rootDir, { force: true, recursive: true });
+    }
   }
-} finally {
-  await browser.close();
-  await server.close();
-  await rm(fixture.rootDir, { force: true, recursive: true });
-}
 
 const env = await collectBenchmarkEnvironment([
   "@reckona/mreact-compat",
@@ -151,6 +160,7 @@ const markdown = formatBenchmarkMarkdown("Primitive Browser Benchmark", env, row
 });
 
 await writeJsonFile(join(dir, "primitive-browser.summary.json"), rows);
+await writeJsonFile(join(dir, "primitive-browser.trials.json"), trials);
 await writeTextFile(join(dir, "primitive-browser.md"), markdown);
 
 console.log(markdown);
@@ -159,6 +169,49 @@ if (rows.some((row) => row.status === "failed")) {
   process.exitCode = 1;
 }
 
+}
+
+async function measurePrimitiveBrowserTrial(options: {
+  url: string;
+  framework: string;
+  caseName: string;
+  count: number;
+  warmupRuns: number;
+}): Promise<{
+  status: "completed" | "failed";
+  browserVersion?: string;
+  value?: number;
+  error?: string;
+}> {
+  let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
+  const diagnostics: string[] = [];
+  try {
+    browser = await chromium.launch({ args: ["--js-flags=--expose-gc"], headless: true });
+    const browserVersion = browser.version();
+    const page = await browser.newPage();
+    page.on("console", (message) => diagnostics.push(`[console:${message.type()}] ${message.text()}`));
+    page.on("pageerror", (error) => diagnostics.push(`[pageerror] ${error.stack ?? error.message}`));
+    page.on("requestfailed", (request) => diagnostics.push(`[requestfailed] ${request.url()} ${request.failure()?.errorText ?? ""}`));
+    page.on("response", (response) => {
+      if (response.status() >= 400) diagnostics.push(`[response:${response.status()}] ${response.url()}`);
+    });
+    await page.goto(options.url, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => typeof (globalThis as { __mreactPrimitiveBrowserBench?: unknown }).__mreactPrimitiveBrowserBench === "object");
+    const samples = await page.evaluate(primitiveBrowserMeasurementExpression({
+      caseName: options.caseName,
+      count: options.count,
+      framework: options.framework,
+      measuredRuns: 1,
+      warmupRuns: options.warmupRuns,
+    })) as number[];
+    if (samples.length !== 1 || !Number.isFinite(samples[0])) throw new Error("Expected one finite browser sample");
+    if (diagnostics.length > 0) throw new Error(diagnostics.join("\n"));
+    return { status: "completed", browserVersion, value: samples[0] };
+  } catch (error) {
+    return { status: "failed", error: `${error instanceof Error ? error.message : String(error)}${diagnostics.length > 0 ? `\n${diagnostics.join("\n")}` : ""}` };
+  } finally {
+    await browser?.close();
+  }
 }
 
 function primitiveBrowserMeasurementExpression(options: {
@@ -209,8 +262,8 @@ function primitiveBrowserMeasurementExpression(options: {
   })()`;
 }
 
-export function browserEntrySource(): string {
-  return String.raw`
+export function browserEntrySource(framework: Exclude<PrimitiveBrowserFramework, "marko">): string {
+  const source = String.raw`
 import "zone.js";
 import "@angular/compiler";
 import { batch, cell, effect } from "@reckona/mreact-reactive-core";
@@ -1040,6 +1093,73 @@ globalThis.__mreactPrimitiveBrowserBench = {
   },
 };
 `;
+  const sectionNames = [
+    "function compatRows(",
+    "async function runMreact(",
+    "async function runCompat(",
+    "async function runReact(",
+    "async function runSolid(",
+    "async function runVue(",
+    "async function runSvelte(",
+    "class AngularRowsComponent",
+    "async function runQwik(",
+    "globalThis.__mreactPrimitiveBrowserBench =",
+  ];
+  const boundaries = sectionNames.map((name) => {
+    const index = source.indexOf(name);
+    if (index < 0) throw new Error(`Missing primitive-browser entry section: ${name}`);
+    return index;
+  });
+  const sections = boundaries.slice(0, -1).map((start, index) =>
+    source.slice(start, boundaries[index + 1]),
+  );
+  const sourceSections: Record<Exclude<PrimitiveBrowserFramework, "marko">, number[]> = {
+    mreact: [1],
+    "mreact react-compat": [0, 2],
+    react: [3],
+    solid: [4],
+    vue: [5],
+    svelte: [6],
+    angular: [7],
+    qwik: [8],
+  };
+  const entryModules: Record<Exclude<PrimitiveBrowserFramework, "marko">, string[]> = {
+    mreact: ["@reckona/mreact-reactive-core", "@reckona/mreact-reactive-core/testing", "@reckona/mreact-reactive-dom", "@reckona/mreact-reactive-dom/internal"],
+    "mreact react-compat": ["@reckona/mreact-compat"],
+    react: ["react", "react-dom", "react-dom/client"],
+    solid: ["solid-js"],
+    vue: ["vue"],
+    svelte: ["svelte", "./svelte/Rows.mjs"],
+    angular: ["zone.js", "@angular/compiler", "@angular/core", "@angular/platform-browser"],
+    qwik: ["@builder.io/qwik"],
+  };
+  const runnerNames: Record<Exclude<PrimitiveBrowserFramework, "marko">, string> = {
+    mreact: "runMreact",
+    "mreact react-compat": "runCompat",
+    react: "runReact",
+    solid: "runSolid",
+    vue: "runVue",
+    svelte: "runSvelte",
+    angular: "runAngular",
+    qwik: "runQwik",
+  };
+  const allowedModules = new Set(entryModules[framework]);
+  const common = source.slice(0, boundaries[0]).split("\n").filter((line) => {
+    const imported = line.match(/^import (?:.* from )?"([^"]+)";/u);
+    return imported === null || allowedModules.has(imported[1]);
+  }).join("\n").replace("void bindInternalCapturedEvent;", framework === "mreact" ? "void bindInternalCapturedEvent;" : "");
+  return `${common}\n${sourceSections[framework].map((index) => sections[index]).join("\n")}\nglobalThis.__mreactPrimitiveBrowserBench = {
+  async run(selected, caseName, count) {
+    if (selected !== ${JSON.stringify(framework)}) throw new Error("wrong framework " + selected);
+    return await ${runnerNames[framework]}(caseName, count);
+  },
+};\n`;
+}
+
+export function rotateFrameworksForRound<T>(frameworks: readonly T[], round: number): T[] {
+  if (frameworks.length === 0) return [];
+  const offset = round % frameworks.length;
+  return [...frameworks.slice(offset), ...frameworks.slice(0, offset)];
 }
 
 async function serveDirectory(rootDir: string): Promise<{ close(): Promise<void>; url: string }> {

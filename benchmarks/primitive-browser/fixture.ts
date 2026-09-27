@@ -15,13 +15,13 @@ const vuePackageDir = dirname(requireFromHere.resolve("vue/package.json"));
 export interface BrowserFixture {
   /**
    * Gzip size of every JavaScript file Vite emitted for the fixture, including chunks the entry
-   * pulls in. This is the fixture's whole client payload, still shared by all frameworks.
+   * pulls in. This is the fixture's whole client payload for one primitive benchmark entry.
    */
   emittedJavaScriptGzipBytes: number;
   /**
-   * Gzip size of `assets/bench.js` only. Every framework case is compiled into this single entry,
-   * so the value is a mixed-framework harness measurement and never a per-framework bundle size.
-   * Dependency chunks emitted next to the entry are excluded.
+   * Gzip size of `assets/bench.js` only. Each fixture contains one framework's primitive runner.
+   * This is harness size, not the client payload of a compiled application. Dependency chunks
+   * emitted next to the entry are excluded.
    */
   entryGzipBytes: number;
   outDir: string;
