@@ -1,8 +1,6 @@
 # @reckona/mreact-compiler
 
-`@reckona/mreact-compiler` contains the compiler passes used by mreact. It
-analyzes JSX modules, produces client and server output, and reports diagnostics
-for code that cannot be compiled safely.
+`@reckona/mreact-compiler` contains the compiler passes used by mreact. It analyzes JSX modules, produces client and server output, and reports diagnostics for code that cannot be compiled safely.
 
 ## Usage
 
@@ -11,8 +9,9 @@ import { transform } from "@reckona/mreact-compiler";
 
 const result = transform({
   filename: "app/page.tsx",
-  source: `export default function Page() { return <main>Hello</main>; }`,
+  code: `export default function Page() { return <main>Hello</main>; }`,
   target: "server",
+  dev: false,
 });
 ```
 
@@ -32,9 +31,21 @@ console.log(graph.clientBoundaries, graph.serverActions, graph.trace);
 
 For reactive client transforms, `reportClientSpecializations: true` adds `metadata.clientSpecializations` with the actual helper chosen for each direct cell text, branch insertion, element property, select binding, and compiler keyed list decision. Each entry records whether the specialization was applied, a reason when it was not, and a source location when the IR node came from a concrete JSX syntax node. Generated code and runtime imports are unchanged by the report. `metadata.imports` describes module-level dependencies; the report does not attribute those imports or subscription counts to individual JSX sites. Compat and server transforms do not emit this report.
 
+`explainTransform()` provides a versioned JSON report containing these decisions, diagnostics, module-level runtime imports, generated code, and the existing source map in one call:
+
+```ts
+import { explainTransform } from "@reckona/mreact-compiler";
+
+const report = explainTransform({ code, filename: "App.tsx", target: "client", dev: false });
+console.log(report.decisions, report.generated.code);
+```
+
+Decision `source` locations are one-based JSX positions from compiler analysis, or `null` when no concrete source node exists. Decision `reason` is a stable code such as `not-native-cell-read`, `applied`, or `unknown`. The existing source map uses heuristic token matching and is labeled `sourceMapAccuracy: "heuristic"`; the report does not assign exact generated spans to individual decisions. Boundary import paths remain available through `analyzeBoundaryGraph()` rather than this single-module transform report.
+
 ## Exports
 
 - `transform()` is the public compiler entrypoint.
+- `explainTransform()` returns a versioned transform decision report for tooling.
 - `analyzeBoundaryGraph()` traces module classifications, rendered client boundaries, and inferred form server action sites across app-local static imports.
 - `@reckona/mreact-compiler/internal` exposes lower-level IR analysis helpers
   used by the router and tests.
@@ -42,9 +53,7 @@ For reactive client transforms, `reportClientSpecializations: true` adds `metada
 
 ## Notes
 
-This package is intended for framework integration and tooling. Application
-projects should normally consume it through `@reckona/mreact-router` or
-`@reckona/mreact-vite`.
+This package is intended for framework integration and tooling. Application projects should normally consume it through `@reckona/mreact-router` or `@reckona/mreact-vite`.
 
 The server target supports JSX spread attributes on HTML and SVG elements. Spread attributes use the same escaping and URL filtering as normal dynamic attributes, normalize common JSX aliases such as `className`, `htmlFor`, `srcDoc`, `tabIndex`, `defaultValue`, and `defaultChecked`, and drop `key`, `ref`, `children`, event handlers, invalid attribute names, unsafe URL values such as `javascript:`, and raw `srcDoc` strings. Use `{ __html: value }` for `srcDoc` when you intentionally need trusted iframe document HTML; the value is escaped as an attribute but can execute inside the iframe document. Explicit `dangerouslySetInnerHTML={{ __html: value }}` on an element emits trusted raw children on server and reactive client output, which is intended for small root-level bootstraps such as inline scripts where the application owns the full string. The payload must have an own data property named `__html` whose value is a string; extra keys are ignored, while accessors, inherited values, invalid values, and null clear the element without coercion. A direct `dangerouslySetInnerHTML` prop takes precedence over JSX children. Direct props and spreads are applied in source order during initial client setup, so the later binding wins; after setup, the most recent reactive write wins.
 
