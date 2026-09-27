@@ -7,9 +7,11 @@ This directory contains fair, repeatable benchmark fixtures for mreact and peer 
 - `primitive`: framework primitive comparison without routers. Current adapters: Marko, Vue, Svelte, Angular, Qwik, React, Solid, and mreact.
 - `primitive-browser`: real Chromium comparison of hand-written primitive APIs and framework adapters. It mirrors the create/update/select/clear shape used by the Node+happy-dom suite; its mreact rows do not measure generated JSX.
 - `primitive-browser-list-rotation`: a targeted browser check of the compiler-keyed list runtime with 10,000 rows. It reports last-row-to-front DOM moves, key evaluations, row creations, operation times, and total generated JavaScript gzip size; it is a runtime microbenchmark, separate from the canonical JSX score.
+- `primitive-browser-event-lifecycle`: a targeted browser check of connected registration, detached fallback, promotion after insertion, and individual disposal through the public event API. Listener counts are gathered in separate instrumented trials.
 - `js-framework-benchmark`: the canonical compiled JSX comparison for mreact, its React compatibility variants, and peer frameworks. The keyed/mreact fixture uses ordinary cell-backed JSX through the public compiler path. Keep its results separate from primitive-browser rows.
 - `compiled-jsx-endurance`: a natural-GC repeated-operation track using the production build of the canonical keyed/mreact fixture in one persistent Chromium page. It records DOM verification time and heap/node trends without treating either as paint, INP, or retained allocation.
 - `compiler-specializations`: an opt-in emitter report for the canonical JSX fixture, recording applied helpers, fallback reasons, source locations, and module-level runtime imports. It does not measure runtime subscriptions or effects.
+- `compiler-specialization-ablation`: one ordinary JSX fixture that exercises the four existing compiler flags. It compares each flag on/off with fresh Chromium trials and records verified DOM times, emitted helper decisions, runtime imports, and generated/bundled bytes; it is a diagnostic fixture, separate from the canonical keyed score.
 - `non-router`: package-level regression microbenchmarks for virtual, forms,
   query, store, auth, and other non-router packages.
 - `router`: production router/app framework comparison across Marko Run, Nuxt, SvelteKit, Qwik City, SolidStart, TanStack Start, Next.js App Router, and mreact app router.
@@ -52,9 +54,11 @@ The Analog production fixture serializes Vite's client and SSR environment build
 pnpm bench:primitive
 pnpm bench:primitive-browser
 pnpm bench:primitive-browser:list-rotation
+pnpm bench:primitive-browser:event-lifecycle
 pnpm bench:js-framework
 pnpm bench:js-framework:endurance
 pnpm report:compiler-specializations
+pnpm bench:compiler-specializations
 pnpm bench:html-escape
 pnpm bench:request-fastpaths
 pnpm bench:non-router
