@@ -57,6 +57,9 @@ jobs:
             command: pnpm scenario:lifecycle
           - track: client-delivery-size
             command: pnpm size:client:check
+          - track: client-delivery-browser
+            command: pnpm size:client:browser
+            browser: true
 
     steps:
       - uses: actions/checkout@v6
