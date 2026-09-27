@@ -1,7 +1,7 @@
 import { readdir } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { createNativeRouteMatcher } from "./native-route-matcher.js";
-import { partitionStaticRoutes } from "./static-route-lookup.js";
+import { createLeadingStaticRouteLookup, partitionStaticRoutes } from "./static-route-lookup.js";
 import { appFileConventionForRootFilename, type AppFileConvention } from "./file-conventions.js";
 
 /**
@@ -188,6 +188,10 @@ export function createRouteMatcher(
 ): RouteMatcher {
   if (artifact?.version === 1) {
     const partition = partitionStaticRoutes(artifact.routes, (entry) => entry.segments);
+    const leadingStatic = createLeadingStaticRouteLookup(
+      partition.other,
+      (entry) => entry.segments,
+    );
 
     return {
       match(pathname) {
@@ -200,7 +204,7 @@ export function createRouteMatcher(
 
         return matchCompiledRoutes(
           routes,
-          exactEntry === undefined ? partition.other : artifact.routes,
+          exactEntry === undefined ? leadingStatic.candidates(normalized) : artifact.routes,
           normalized,
         );
       },
@@ -215,13 +219,14 @@ export function createRouteMatcher(
   }
 
   const partition = partitionStaticRoutes(sortedRoutes, (route) => route.segments);
+  const leadingStatic = createLeadingStaticRouteLookup(partition.other, (route) => route.segments);
 
   return {
     match(pathname) {
       const normalized = normalizePath(pathname);
       const exactRoute = partition.exact.get(normalized);
       return exactRoute === undefined
-        ? matchSortedRoutes(partition.other, normalized)
+        ? matchSortedRoutes(leadingStatic.candidates(normalized), normalized)
         : { route: exactRoute, params: {} };
     },
   };

@@ -138651,9 +138651,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/render.ts",
-											"line": 280,
+											"line": 282,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/render.ts#L280"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/render.ts#L282"
 										}
 									],
 									"type": {
@@ -138682,9 +138682,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/render.ts",
-											"line": 281,
+											"line": 283,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/render.ts#L281"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/render.ts#L283"
 										}
 									],
 									"type": {
@@ -138705,9 +138705,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/render.ts",
-									"line": 279,
+									"line": 281,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/render.ts#L279"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/render.ts#L281"
 								}
 							]
 						},
@@ -139497,9 +139497,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/render.ts",
-											"line": 296,
+											"line": 298,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/render.ts#L296"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/render.ts#L298"
 										}
 									],
 									"type": {
@@ -139525,9 +139525,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/render.ts",
-									"line": 295,
+									"line": 297,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/render.ts#L295"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/render.ts#L297"
 								}
 							]
 						},
@@ -159445,9 +159445,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/render.ts",
-									"line": 287,
+									"line": 289,
 									"character": 12,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/render.ts#L287"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/render.ts#L289"
 								}
 							],
 							"type": {
@@ -167531,9 +167531,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/render.ts",
-									"line": 710,
+									"line": 712,
 									"character": 22,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/render.ts#L710"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/render.ts#L712"
 								}
 							],
 							"signatures": [
@@ -167562,9 +167562,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/render.ts",
-											"line": 710,
+											"line": 712,
 											"character": 22,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/render.ts#L710"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/render.ts#L712"
 										}
 									],
 									"parameters": [

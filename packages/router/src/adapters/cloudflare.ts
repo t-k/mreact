@@ -42,7 +42,7 @@ import {
 import { middlewareMatches, type MiddlewareModule } from "../middleware.js";
 import { normalizeRoutePath } from "../route-path.js";
 import type { AppRoute } from "../routes.js";
-import { partitionStaticRoutes } from "../static-route-lookup.js";
+import { createLeadingStaticRouteLookup, partitionStaticRoutes } from "../static-route-lookup.js";
 import {
   trackRequestHeaderReads,
   withTrackedRequest,
@@ -1578,7 +1578,7 @@ function normalizeCloudflareRouteModulePath(path: string): string {
 // indexing run once even when middleware rewrites a request.
 interface CloudflareRouteIndex {
   exact: ReadonlyMap<string, AppRoute>;
-  other: readonly AppRoute[];
+  candidates(pathname: string): readonly AppRoute[];
 }
 
 const routeIndexByManifest = new WeakMap<BuiltServerManifest, CloudflareRouteIndex>();
@@ -1598,7 +1598,9 @@ function indexedCloudflareRoutes(manifest: BuiltServerManifest): CloudflareRoute
 
 function createCloudflareRouteIndex(manifest: BuiltServerManifest): CloudflareRouteIndex {
   const sorted = [...manifest.routes].sort(compareCloudflareRoutes);
-  return partitionStaticRoutes(sorted, (route) => route.segments);
+  const partition = partitionStaticRoutes(sorted, (route) => route.segments);
+  const leadingStatic = createLeadingStaticRouteLookup(partition.other, (route) => route.segments);
+  return { exact: partition.exact, candidates: leadingStatic.candidates };
 }
 
 function matchCloudflareRoute(
@@ -1613,7 +1615,7 @@ function matchCloudflareRoute(
 
   const pathSegments = normalizedPath === "/" ? [] : normalizedPath.slice(1).split("/");
 
-  for (const route of index.other) {
+  for (const route of index.candidates(normalizedPath)) {
     const params: Record<string, readonly string[] | string> = {};
     const catchAllIndex = route.segments.findIndex((segment) => segment.kind === "catch-all");
 

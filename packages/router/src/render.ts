@@ -250,6 +250,8 @@ export interface RenderAppRequestOptions {
 }
 
 export interface RenderAppRequestRuntimeOptions extends RenderAppRequestOptions {
+  /** Indicates that matchedRoute already contains the result for this request, including a miss. */
+  matchedRouteResolved?: boolean | undefined;
   /**
    * Wraps a server-only page with build-time variant capture comments.
    *
@@ -893,9 +895,11 @@ async function renderAppRequestInternal(
   const url = options.requestUrl ?? new URL(options.request.url);
   phaseStartedAt = renderTimingPhaseStartedAt(timing);
   const matched =
-    options.matchedRoute ??
-    options.routeMatcher?.match(url.pathname) ??
-    matchRoute(routes, url.pathname);
+    options.matchedRouteResolved === true
+      ? options.matchedRoute
+      : (options.matchedRoute ??
+        options.routeMatcher?.match(url.pathname) ??
+        matchRoute(routes, url.pathname));
   finishRenderTimingPhase(timing, phaseStartedAt, "routeMatchMs");
   const hasMiddleware =
     options.skipMiddleware === true
@@ -943,6 +947,7 @@ async function renderAppRequestInternal(
     return renderAppRequestInternal({
       ...options,
       matchedRoute: undefined,
+      matchedRouteResolved: false,
       request: middlewareResult.request,
       requestUrl: new URL(middlewareResult.request.url),
       skipMiddleware: true,
@@ -958,6 +963,7 @@ async function renderAppRequestInternal(
         renderAppRequestInternal({
           ...options,
           matchedRoute: undefined,
+          matchedRouteResolved: false,
           // This renders a different route than the caller asked about, so its
           // header dependence says nothing about the caller's request.
           renderSignals: undefined,

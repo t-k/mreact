@@ -37,6 +37,10 @@ import { appRouterBuildTargetMetadata } from "../src/config.js";
 import { exportStaticApp } from "../src/adapters/static.js";
 import { hasFastPathBody } from "../src/http.js";
 import { renderAppRequest } from "../src/render.js";
+import {
+  __getMatchRouteMatcherBuildCountForTest,
+  __resetMatchRouteCacheForTest,
+} from "../src/routes.js";
 import { preloadBuiltAppRuntime, renderBuiltAppRequest, startServer } from "../src/serve.js";
 import {
   __readServerActionInferenceTypeScriptLoadedForTests,
@@ -8833,6 +8837,27 @@ export default function Page({ data }) {
     });
 
     expect(response.status).toBe(404);
+  });
+
+  test("does not rebuild the fallback matcher after a built route miss", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-known-route-miss-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "api", "known"), { recursive: true });
+    await writeFile(
+      join(appDir, "api", "known", "route.ts"),
+      "export const GET = () => new Response('known');\n",
+    );
+    await buildApp({ appDir, outDir, targets: ["node"] });
+
+    __resetMatchRouteCacheForTest();
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/api/missing"),
+    });
+
+    expect(response.status).toBe(404);
+    expect(__getMatchRouteMatcherBuildCountForTest()).toBe(0);
   });
 
   test("uses built compiled route matcher artifact instead of request-time route segments", async () => {

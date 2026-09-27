@@ -1,7 +1,10 @@
 import { describe, expect, test } from "vitest";
 import { createCloudflareBuiltRequestHandler } from "../src/adapters/cloudflare.js";
 import { compileRouteMatcherArtifact, createRouteMatcher, type AppRoute } from "../src/routes.js";
-import { partitionStaticRoutes } from "../src/static-route-lookup.js";
+import {
+  createLeadingStaticRouteLookup,
+  partitionStaticRoutes,
+} from "../src/static-route-lookup.js";
 
 interface RouteEntry {
   name: string;
@@ -67,6 +70,209 @@ describe("partitionStaticRoutes", () => {
 
     expect(partition.exact.size).toBe(0);
     expect(partition.other).toEqual([malformed]);
+  });
+});
+
+describe("createLeadingStaticRouteLookup", () => {
+  test("narrows large dynamic route sets while preserving generic route order", () => {
+    const genericFirst: RouteEntry = {
+      name: "generic-first",
+      segments: [{ kind: "dynamic", name: "section" }],
+    };
+    const genericLast: RouteEntry = {
+      name: "generic-last",
+      segments: [{ kind: "catch-all", name: "rest" }],
+    };
+    const specific = Array.from(
+      { length: 70 },
+      (_, index): RouteEntry => ({
+        name: `item-${index}`,
+        segments: [
+          { kind: "static", value: "api" },
+          { kind: "static", value: `item-${index}` },
+          { kind: "dynamic", name: "id" },
+        ],
+      }),
+    );
+    const entries = [genericFirst, ...specific, genericLast];
+    const lookup = createLeadingStaticRouteLookup(entries, (entry) => entry.segments);
+
+    expect(lookup.candidates("/api/item-69/value")).toEqual([
+      genericFirst,
+      specific[69],
+      genericLast,
+    ]);
+    expect(lookup.candidates("/api/absent/value")).toEqual([genericFirst, genericLast]);
+    expect(lookup.candidates("/api/item-69%2Fvalue/value")).toEqual([genericFirst, genericLast]);
+    expect(lookup.candidates("/api/item-69")).toEqual([genericFirst, specific[69], genericLast]);
+
+    const genericBeforeSpecific = createLeadingStaticRouteLookup(
+      [genericFirst, genericLast, ...specific],
+      (entry) => entry.segments,
+    );
+    expect(genericBeforeSpecific.candidates("/api/item-69/value")).toEqual([
+      genericFirst,
+      genericLast,
+      specific[69],
+    ]);
+  });
+
+  test("keeps small and generic-heavy route sets on the existing candidate list", () => {
+    const specific: RouteEntry = {
+      name: "specific",
+      segments: [
+        { kind: "static", value: "api" },
+        { kind: "static", value: "item" },
+        { kind: "dynamic", name: "id" },
+      ],
+    };
+    const small = [specific];
+    expect(
+      createLeadingStaticRouteLookup(small, (entry) => entry.segments).candidates("/api/item/1"),
+    ).toBe(small);
+
+    const generic = Array.from(
+      { length: 33 },
+      (_, index): RouteEntry => ({
+        name: `generic-${index}`,
+        segments: [{ kind: "dynamic", name: `value${index}` }],
+      }),
+    );
+    const all = [
+      ...generic,
+      ...Array.from(
+        { length: 70 },
+        (_, index): RouteEntry => ({
+          ...specific,
+          name: `item-${index}`,
+          segments: [
+            specific.segments[0]!,
+            { kind: "static", value: `item-${index}` },
+            specific.segments[2]!,
+          ],
+        }),
+      ),
+    ];
+    expect(
+      createLeadingStaticRouteLookup(all, (entry) => entry.segments).candidates("/api/item-69/1"),
+    ).toBe(all);
+  });
+
+  test("only builds an index at 64 routes with at least two prefixes", () => {
+    const entries = Array.from(
+      { length: 64 },
+      (_, index): RouteEntry => ({
+        name: `route-${index}`,
+        segments: [
+          { kind: "static", value: "api" },
+          { kind: "static", value: index < 32 ? "first" : "second" },
+          { kind: "dynamic", name: `id${index}` },
+        ],
+      }),
+    );
+    const onePrefix = entries.map((entry) => ({
+      ...entry,
+      segments: [
+        entry.segments[0]!,
+        { kind: "static" as const, value: "first" },
+        entry.segments[2]!,
+      ],
+    }));
+
+    expect(
+      createLeadingStaticRouteLookup(entries.slice(0, 63), (entry) => entry.segments).candidates(
+        "/api/first/x",
+      ),
+    ).toHaveLength(63);
+    expect(
+      createLeadingStaticRouteLookup(entries, (entry) => entry.segments).candidates("/api/first/x"),
+    ).toHaveLength(32);
+    expect(
+      createLeadingStaticRouteLookup(onePrefix, (entry) => entry.segments).candidates(
+        "/api/first/x",
+      ),
+    ).toBe(onePrefix);
+  });
+
+  test("keeps malformed and dynamic leading segments in candidate lists", () => {
+    const generic: RouteEntry[] = [
+      { name: "empty", segments: [] },
+      { name: "one-static-segment", segments: [{ kind: "static", value: "api" }] },
+      {
+        name: "missing-first-value",
+        segments: [{ kind: "static" }, { kind: "static", value: "item" }] as RouteEntry["segments"],
+      },
+      {
+        name: "dynamic-first",
+        segments: [
+          { kind: "dynamic", name: "section" },
+          { kind: "static", value: "item" },
+        ],
+      },
+      {
+        name: "missing-second-value",
+        segments: [{ kind: "static", value: "api" }, { kind: "static" }] as RouteEntry["segments"],
+      },
+      {
+        name: "dynamic-second",
+        segments: [
+          { kind: "static", value: "api" },
+          { kind: "dynamic", name: "item" },
+        ],
+      },
+    ];
+    const specifics = Array.from(
+      { length: 70 },
+      (_, index): RouteEntry => ({
+        name: `specific-${index}`,
+        segments: [
+          { kind: "static", value: "api" },
+          { kind: "static", value: `item-${index}` },
+          { kind: "dynamic", name: "id" },
+        ],
+      }),
+    );
+    const lookup = createLeadingStaticRouteLookup(
+      [...generic, ...specifics],
+      (entry) => entry.segments,
+    );
+
+    expect(lookup.candidates("/api/item-69/x")).toEqual([...generic, specifics[69]]);
+    expect(lookup.candidates("/api/absent/x")).toEqual(generic);
+  });
+
+  test("caps duplicated generic candidates and keeps the exact boundary indexed", () => {
+    const generic = Array.from(
+      { length: 32 },
+      (_, index): RouteEntry => ({
+        name: `generic-${index}`,
+        segments: [{ kind: "dynamic", name: `id${index}` }],
+      }),
+    );
+    const specifics = Array.from(
+      { length: 3126 },
+      (_, index): RouteEntry => ({
+        name: `specific-${index}`,
+        segments: [
+          { kind: "static", value: "api" },
+          { kind: "static", value: `item-${index}` },
+          { kind: "dynamic", name: "id" },
+        ],
+      }),
+    );
+    const withinBudget = [...generic, ...specifics.slice(0, 3125)];
+    const overBudget = [...generic, ...specifics];
+
+    expect(
+      createLeadingStaticRouteLookup(withinBudget, (entry) => entry.segments).candidates(
+        "/api/item-3124/x",
+      ),
+    ).toHaveLength(33);
+    expect(
+      createLeadingStaticRouteLookup(overBudget, (entry) => entry.segments).candidates(
+        "/api/item-3125/x",
+      ),
+    ).toBe(overBudget);
   });
 });
 
@@ -248,5 +454,60 @@ describe("indexed route matching", () => {
     expect(
       await (await handler.fetch(new Request("https://example.test/api/item"), {}, context)).text(),
     ).toBe("/api/:id");
+  });
+
+  test("large dynamic route sets match the same path and params in built and Cloudflare handlers", async () => {
+    const many: AppRoute[] = Array.from({ length: 70 }, (_, index) => {
+      const item = `item-${String(index).padStart(5, "0")}`;
+      return {
+        kind: "server",
+        path: `/api/${item}/:id`,
+        file: `api/${item}/$id/route.ts`,
+        segments: [
+          { kind: "static", value: "api" },
+          { kind: "static", value: item },
+          { kind: "dynamic", name: "id" },
+        ],
+      };
+    });
+    const catchAll: AppRoute = {
+      kind: "server",
+      path: "/api/:...rest",
+      file: "api/$...rest/route.ts",
+      segments: [
+        { kind: "static", value: "api" },
+        { kind: "catch-all", name: "rest" },
+      ],
+    };
+    const all = [catchAll, ...many];
+    const matcher = createRouteMatcher(all, compileRouteMatcherArtifact(all));
+    const sourceMatcher = createRouteMatcher(all);
+    const handler = createCloudflareBuiltRequestHandler({
+      clientManifest: { routes: [] },
+      serverManifest: { files: {}, routes: all, version: 1 },
+      renderRoute: (_request, context) =>
+        Response.json({ path: context.route.path, params: context.params }),
+    });
+    const context = { passThroughOnException() {}, waitUntil() {} };
+    const cases = [
+      { path: "/api/item-00069/caf%C3%A9", route: "/api/item-00069/:id", params: { id: "café" } },
+      { path: "/api/absent/value", route: "/api/:...rest", params: { rest: ["absent", "value"] } },
+      { path: "/api/item-00069/%ZZ", route: undefined, params: undefined },
+    ];
+    for (const item of cases) {
+      expect(matcher.match(item.path)?.route.path).toBe(item.route);
+      expect(matcher.match(item.path)?.params).toEqual(item.params);
+      expect(sourceMatcher.match(item.path)?.route.path).toBe(item.route);
+      expect(sourceMatcher.match(item.path)?.params).toEqual(item.params);
+      const response = await handler.fetch(
+        new Request(`https://example.test${item.path}`),
+        {},
+        context,
+      );
+      expect(response.status).toBe(item.route === undefined ? 404 : 200);
+      if (item.route !== undefined) {
+        expect(await response.json()).toEqual({ path: item.route, params: item.params });
+      }
+    }
   });
 });

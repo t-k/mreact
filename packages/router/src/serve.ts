@@ -940,6 +940,7 @@ function builtRenderAppRequestOptions(
     instrumentation: options.instrumentation,
     logger: options.logger,
     matchedRoute: options.matchedRoute,
+    matchedRouteResolved: Object.hasOwn(options, "matchedRoute"),
     navigationScripts: options.runtime.navigationScripts,
     routeCache: options.routeCache,
     routeMatcher: options.runtime.routeMatcher,

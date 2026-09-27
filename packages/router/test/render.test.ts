@@ -15,6 +15,24 @@ import { bundleMiddlewareModuleCode, renderAppRequest } from "../src/render.js";
 import { getRouterRuntimeCacheStats } from "../src/runtime-cache.js";
 
 describe("mreact app request rendering", () => {
+  test("uses the default matcher after a custom matcher misses", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-custom-matcher-fallback-"));
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(pageFile, "export default function Page() { return <main>Fallback</main>; }");
+    const customMatcher = vi.fn(() => undefined);
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+      routeMatcher: { match: customMatcher },
+      routes: [{ file: pageFile, kind: "page", path: "/", segments: [] }],
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("<main>Fallback</main>");
+    expect(customMatcher).toHaveBeenCalledOnce();
+  });
+
   test("renders a .mreact.tsx page route to HTML", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-render-"));
     await writeFile(
