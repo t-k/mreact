@@ -859,11 +859,17 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
 
           try {
             const data = await handler(validation.value);
+            if (activeSubmit !== submitToken) {
+              return { status: "duplicate" };
+            }
             return {
               data,
               status: "success",
             };
           } catch (error) {
+            if (activeSubmit !== submitToken) {
+              return { status: "duplicate" };
+            }
             return {
               error,
               status: "error",

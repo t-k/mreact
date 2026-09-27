@@ -76,14 +76,14 @@ type FieldLedger = {
   visibleValue: unknown;
   operations: Operation[];
 };
-type CacheLedger = Map<string, FieldLedger>;
+type CacheLedger = { fields: Map<string, FieldLedger>; revision: number };
 type QueryLedgers = Map<string, CacheLedger>;
 type Change = { field: string; ledger: FieldLedger; operation: Operation };
 type MutationContext = {
   queryKey: QueryKey;
   queryHash: string;
   queries: QueryLedgers;
-  fields: CacheLedger;
+  cache: CacheLedger;
   changes: Change[];
 };
 
@@ -108,23 +108,25 @@ function isUnsafeKey(key: string): boolean {
 function getCacheLedger(
   client: QueryClient,
   queryHash: string,
-): { queries: QueryLedgers; fields: CacheLedger } {
+  queryKey: QueryKey,
+): { queries: QueryLedgers; cache: CacheLedger } {
   let queries = clientLedgers.get(client);
   if (queries === undefined) {
     queries = new Map();
     clientLedgers.set(client, queries);
   }
-  let fields = queries.get(queryHash);
-  if (fields === undefined) {
-    fields = new Map();
-    queries.set(queryHash, fields);
+  let cache = queries.get(queryHash);
+  const revision = client.getQueryEntry(queryKey)?.revision ?? -1;
+  if (cache === undefined || cache.revision !== revision) {
+    cache = { fields: new Map(), revision };
+    queries.set(queryHash, cache);
   }
-  return { queries, fields };
+  return { queries, cache };
 }
 
 function pruneQueryLedger(context: MutationContext): void {
-  if (context.queries.get(context.queryHash) !== context.fields) return;
-  for (const ledger of context.fields.values()) {
+  if (context.queries.get(context.queryHash) !== context.cache) return;
+  for (const ledger of context.cache.fields.values()) {
     if (ledger.operations.some((operation) => operation.status === "pending")) return;
   }
   context.queries.delete(context.queryHash);
@@ -148,11 +150,11 @@ function applyOptimisticPatch<TSubmitValues, TQueryData extends Record<string, u
   if (entries.length === 0) return undefined;
 
   const queryHash = hashQueryKey(optimistic.queryKey);
-  const { queries, fields } = getCacheLedger(client, queryHash);
+  const { queries, cache } = getCacheLedger(client, queryHash, optimistic.queryKey);
   const changes: Change[] = [];
   const next = { ...current };
   for (const [field, value] of entries) {
-    let ledger = fields.get(field);
+    let ledger = cache.fields.get(field);
     if (ledger === undefined || !Object.is(current[field], ledger.visibleValue)) {
       ledger = {
         basePresent: Object.prototype.hasOwnProperty.call(current, field),
@@ -161,7 +163,7 @@ function applyOptimisticPatch<TSubmitValues, TQueryData extends Record<string, u
         visibleValue: current[field],
         operations: [],
       };
-      fields.set(field, ledger);
+      cache.fields.set(field, ledger);
     }
     const operation: Operation = { value, status: "pending" };
     ledger.operations.push(operation);
@@ -170,8 +172,9 @@ function applyOptimisticPatch<TSubmitValues, TQueryData extends Record<string, u
     changes.push({ field, ledger, operation });
     next[field] = value;
   }
-  client.setQueryData(optimistic.queryKey, next);
-  return { queryKey: optimistic.queryKey, queryHash, queries, fields, changes };
+  const writeRevision = client.setQueryData(optimistic.queryKey, next);
+  cache.revision = Math.max(cache.revision, writeRevision);
+  return { queryKey: optimistic.queryKey, queryHash, queries, cache, changes };
 }
 
 function settleOptimisticPatch(
@@ -181,7 +184,16 @@ function settleOptimisticPatch(
 ): void {
   if (context === undefined) return;
   const current = client.getQueryData(context.queryKey);
-  const fields = context.queries.get(context.queryHash);
+  const activeCache = context.queries.get(context.queryHash);
+  const currentRevision = client.getQueryEntry(context.queryKey)?.revision ?? -1;
+  if (activeCache !== context.cache || currentRevision !== context.cache.revision) {
+    for (const { operation } of context.changes) {
+      operation.status = success ? "success" : "failed";
+    }
+    pruneQueryLedger(context);
+    client.invalidateQueries({ queryKey: context.queryKey });
+    return;
+  }
   if (!isPlainRecord(current)) {
     for (const { operation } of context.changes) {
       operation.status = success ? "success" : "failed";
@@ -195,7 +207,7 @@ function settleOptimisticPatch(
   let conflicted = false;
   for (const { field, ledger, operation } of context.changes) {
     operation.status = success ? "success" : "failed";
-    if (fields?.get(field) !== ledger || !Object.is(current[field], ledger.visibleValue)) {
+    if (context.cache.fields.get(field) !== ledger || !Object.is(current[field], ledger.visibleValue)) {
       conflicted = true;
       continue;
     }
@@ -223,7 +235,10 @@ function settleOptimisticPatch(
     }
   }
   pruneQueryLedger(context);
-  if (changed) client.setQueryData(context.queryKey, next);
+  if (changed) {
+    const writeRevision = client.setQueryData(context.queryKey, next);
+    context.cache.revision = Math.max(context.cache.revision, writeRevision);
+  }
   if (conflicted) client.invalidateQueries({ queryKey: context.queryKey });
 }
 
@@ -244,10 +259,12 @@ export function createFormMutationFlow<
       if (!response.ok) throw new ServerErrorsSignal(response.errors);
       return response.data;
     },
-    onMutate: (values) =>
-      options.optimistic === undefined
+    onMutate: async (values) => {
+      await Promise.resolve();
+      return options.optimistic === undefined
         ? undefined
-        : applyOptimisticPatch(client, values, options.optimistic),
+        : applyOptimisticPatch(client, values, options.optimistic);
+    },
     onError: (_error, _values, context) => settleOptimisticPatch(client, context, false),
     onSettled: (result, _values, context) => {
       if ("data" in result) settleOptimisticPatch(client, context, true);

@@ -91,7 +91,8 @@ describe("form mutation flow", () => {
       status: "server-errors",
       errors: { fieldErrors: { name: ["Already used"] } },
     });
-    expect(client.getQueryData(key)).toEqual({ name: "old", status: "done" });
+    expect(client.getQueryData(key)).toEqual({ name: "new", status: "done" });
+    expect(client.getQueryEntry(key)?.stale).toBe(true);
     expect(form.state.get().errors.name).toEqual(["Already used"]);
   });
 
@@ -182,6 +183,190 @@ describe("form mutation flow", () => {
     expect(client.getQueryData(key)).toEqual({ name: "external" });
     expect(client.getQueryEntry(key)?.stale).toBe(true);
     expect(client.getQueryEntry(sibling)?.stale).toBe(false);
+  });
+
+  it("does not roll back an external same-value write after a failed mutation", async () => {
+    const client = createQueryClient();
+    const form = createForm({ initialValues: { name: "new" } });
+    const key = ["project", 1] as const;
+    client.setQueryData(key, { name: "old", status: "open" });
+    const server = deferred<{ ok: false; errors: { formErrors: string[] } }>();
+    const flow = createFormMutationFlow(client, form, {
+      server: () => server.promise,
+      optimistic: { queryKey: key, patch: (values: { name: string }) => ({ name: values.name }) },
+    });
+
+    const submission = flow.submit();
+    await vi.waitFor(() => expect(client.getQueryData(key)).toEqual({ name: "new", status: "open" }));
+    client.setQueryData(key, { name: "new", status: "fresh" });
+    server.resolve({ ok: false, errors: { formErrors: ["Rejected"] } });
+    await submission;
+
+    expect(client.getQueryData(key)).toEqual({ name: "new", status: "fresh" });
+    expect(client.getQueryEntry(key)?.stale).toBe(true);
+  });
+
+  it("detects an external write even when the cache structurally reuses its data", async () => {
+    const client = createQueryClient();
+    const key = ["project", 11] as const;
+    client.setQueryData(key, { name: "old" });
+    const server = deferred<{ ok: false; errors: { formErrors: string[] } }>();
+    const flow = createFormMutationFlow(client, createForm({ initialValues: { name: "new" } }), {
+      server: () => server.promise,
+      optimistic: { queryKey: key, patch: (values: { name: string }) => ({ name: values.name }) },
+    });
+
+    const submission = flow.submit();
+    await vi.waitFor(() => expect(client.getQueryData(key)).toEqual({ name: "new" }));
+    const beforeWrite = client.getQueryEntry(key)!.revision;
+    client.setQueryData(key, { name: "new" });
+    expect(client.getQueryEntry(key)!.revision).toBeGreaterThan(beforeWrite);
+    server.resolve({ ok: false, errors: { formErrors: ["Rejected"] } });
+    await submission;
+
+    expect(client.getQueryData(key)).toEqual({ name: "new" });
+    expect(client.getQueryEntry(key)?.stale).toBe(true);
+  });
+
+  it("does not absorb a cache write reentered from the optimistic notification", async () => {
+    const client = createQueryClient();
+    const key = ["project", 12] as const;
+    client.setQueryData(key, { name: "old" });
+    const server = deferred<{ ok: false; errors: { formErrors: string[] } }>();
+    const flow = createFormMutationFlow(client, createForm({ initialValues: { name: "new" } }), {
+      server: () => server.promise,
+      optimistic: { queryKey: key, patch: (values: { name: string }) => ({ name: values.name }) },
+    });
+    let replaced = false;
+    const unsubscribe = client.subscribe<{ name: string }>(key, (entry) => {
+      if (entry.data?.name === "new" && !replaced) {
+        replaced = true;
+        client.setQueryData(key, { name: "new" });
+      }
+    }, { exact: true });
+
+    const submission = flow.submit();
+    await vi.waitFor(() => expect(replaced).toBe(true));
+    server.resolve({ ok: false, errors: { formErrors: ["Rejected"] } });
+    await submission;
+
+    expect(client.getQueryData(key)).toEqual({ name: "new" });
+    expect(client.getQueryEntry(key)?.stale).toBe(true);
+    unsubscribe();
+  });
+
+  it("keeps the later flow revision when its optimistic write reenters an earlier write", async () => {
+    const client = createQueryClient();
+    const key = ["project", 15] as const;
+    client.setQueryData(key, { name: "base" });
+    const firstServer = deferred<{ ok: false; errors: { formErrors: string[] } }>();
+    const secondServer = deferred<{ ok: false; errors: { formErrors: string[] } }>();
+    const first = createFormMutationFlow(client, createForm({ initialValues: { name: "first" } }), {
+      server: () => firstServer.promise,
+      optimistic: { queryKey: key, patch: (values: { name: string }) => ({ name: values.name }) },
+    });
+    const second = createFormMutationFlow(client, createForm({ initialValues: { name: "second" } }), {
+      server: () => secondServer.promise,
+      optimistic: { queryKey: key, patch: (values: { name: string }) => ({ name: values.name }) },
+    });
+    let later: Promise<unknown> | undefined;
+    const unsubscribe = client.subscribe<{ name: string }>(key, (entry) => {
+      if (entry.data?.name === "first" && later === undefined) {
+        later = second.mutation.mutate({ name: "second" });
+      }
+    }, { exact: true });
+
+    const earlier = first.mutation.mutate({ name: "first" });
+    await vi.waitFor(() => expect(client.getQueryData(key)).toEqual({ name: "second" }));
+    secondServer.resolve({ ok: false, errors: { formErrors: ["Second failed"] } });
+    await expect(later).rejects.toThrow("Server validation failed");
+    expect(client.getQueryData(key)).toEqual({ name: "first" });
+    firstServer.resolve({ ok: false, errors: { formErrors: ["First failed"] } });
+    await expect(earlier).rejects.toThrow("Server validation failed");
+
+    expect(client.getQueryData(key)).toEqual({ name: "base" });
+    unsubscribe();
+  });
+
+  it("rolls back after a refetch starts and then fails without replacing cache data", async () => {
+    const client = createQueryClient();
+    const key = ["project", 13] as const;
+    client.setQueryData(key, { name: "old" });
+    const mutationServer = deferred<{ ok: false; errors: { formErrors: string[] } }>();
+    const fetchServer = deferred<{ name: string }>();
+    const flow = createFormMutationFlow(client, createForm({ initialValues: { name: "new" } }), {
+      server: () => mutationServer.promise,
+      optimistic: { queryKey: key, patch: (values: { name: string }) => ({ name: values.name }) },
+    });
+
+    const submission = flow.submit();
+    await vi.waitFor(() => expect(client.getQueryData(key)).toEqual({ name: "new" }));
+    const dataRevision = client.getQueryEntry(key)!.revision;
+    client.invalidateQueries({ queryKey: key });
+    const refetch = client.fetchQuery({ queryKey: key, queryFn: () => fetchServer.promise, retry: false });
+    await vi.waitFor(() => expect(client.getQueryEntry(key)?.isFetching).toBe(true));
+    expect(client.getQueryEntry(key)?.revision).toBe(dataRevision);
+    fetchServer.reject(new Error("offline"));
+    await expect(refetch).rejects.toThrow("offline");
+    mutationServer.resolve({ ok: false, errors: { formErrors: ["Rejected"] } });
+    await submission;
+
+    expect(client.getQueryData(key)).toEqual({ name: "old" });
+  });
+
+  it("does not confuse a recreated cache entry with an older matching revision", async () => {
+    const client = createQueryClient();
+    const key = ["project", 14] as const;
+    client.setQueryData(key, { name: "old" });
+    const server = deferred<{ ok: false; errors: { formErrors: string[] } }>();
+    const flow = createFormMutationFlow(client, createForm({ initialValues: { name: "new" } }), {
+      server: () => server.promise,
+      optimistic: { queryKey: key, patch: (values: { name: string }) => ({ name: values.name }) },
+    });
+
+    const submission = flow.submit();
+    await vi.waitFor(() => expect(client.getQueryData(key)).toEqual({ name: "new" }));
+    const oldRevision = client.getQueryEntry(key)!.revision;
+    client.removeQueries({ queryKey: key });
+    client.setQueryData(key, { name: "draft" });
+    client.setQueryData(key, { name: "new", stamp: 2 });
+    expect(client.getQueryEntry(key)!.revision).toBeGreaterThan(oldRevision);
+    server.resolve({ ok: false, errors: { formErrors: ["Rejected"] } });
+    await submission;
+
+    expect(client.getQueryData(key)).toEqual({ name: "new", stamp: 2 });
+    expect(client.getQueryEntry(key)?.stale).toBe(true);
+  });
+
+  it("does not apply server errors to a form reset during the request", async () => {
+    const client = createQueryClient();
+    const form = createForm({ initialValues: { name: "old" } });
+    const server = deferred<{ ok: false; errors: { formErrors: string[] } }>();
+    const flow = createFormMutationFlow(client, form, { server: () => server.promise });
+
+    const submission = flow.submit();
+    await vi.waitFor(() => expect(form.state.get().submitting).toBe(true));
+    form.reset({ name: "reset" });
+    server.resolve({ ok: false, errors: { formErrors: ["Old request"] } });
+
+    await expect(submission).resolves.toEqual({ status: "duplicate" });
+    expect(form.state.get().values.name).toBe("reset");
+    expect(form.state.get().errors.root).toBeUndefined();
+  });
+
+  it("does not report a completed request as the result of a reset form", async () => {
+    const client = createQueryClient();
+    const form = createForm({ initialValues: { name: "old" } });
+    const server = deferred<{ ok: true; data: string }>();
+    const flow = createFormMutationFlow(client, form, { server: () => server.promise });
+
+    const submission = flow.submit();
+    await vi.waitFor(() => expect(form.state.get().submitting).toBe(true));
+    form.reset({ name: "reset" });
+    server.resolve({ ok: true, data: "saved" });
+
+    await expect(submission).resolves.toEqual({ status: "duplicate" });
+    expect(form.state.get().values.name).toBe("reset");
   });
 
   it("restores the base value when two same-field mutations fail in reverse order", async () => {
@@ -334,7 +519,7 @@ describe("form mutation flow", () => {
     expect(client.getQueryData(key)).toEqual({ name: "old" });
   });
 
-  it("rolls back an unaffected field when an external update conflicts with another field", async () => {
+  it("preserves all fields of an external cache write after a conflicting mutation", async () => {
     const client = createQueryClient();
     const key = ["project", 8] as const;
     client.setQueryData(key, { name: "base", status: "open" });
@@ -354,7 +539,8 @@ describe("form mutation flow", () => {
     client.setQueryData(key, { name: "external", status: "closed" });
     server.resolve({ ok: false, errors: { formErrors: ["Rejected"] } });
     await submission;
-    expect(client.getQueryData(key)).toEqual({ name: "external", status: "open" });
+    expect(client.getQueryData(key)).toEqual({ name: "external", status: "closed" });
+    expect(client.getQueryEntry(key)?.stale).toBe(true);
   });
 
   it("does not resurrect a record removed while a mutation is pending", async () => {

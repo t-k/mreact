@@ -6,6 +6,7 @@ import type { Cell, ReadonlyCell } from "./types.js";
 export interface EventResourceState {
   readonly queued: number;
   readonly dropped: number;
+  readonly error?: unknown;
 }
 
 /** Events and loss since the last drain of one event observer. */
@@ -33,12 +34,19 @@ interface LeaseQueue<TEvent> {
   write: number;
   count: number;
   dropped: number;
+  generation: number;
+}
+
+interface Binding<TEvent> {
+  queue: LeaseQueue<TEvent>;
+  generation: number;
+  active: boolean;
 }
 
 interface Entry<TEvent> {
   active: boolean;
   dispose: (() => void) | undefined;
-  leases: Set<LeaseQueue<TEvent>>;
+  leases: Set<Binding<TEvent>>;
 }
 
 const empty = { queued: 0, dropped: 0 } as const;
@@ -66,19 +74,22 @@ export function createEventResource<TKey, TEvent>(
   }
   const entries = new Map<TKey, Entry<TEvent>>();
 
-  function attach(key: TKey, lease: LeaseQueue<TEvent>): Entry<TEvent> {
+  function attach(key: TKey, binding: Binding<TEvent>): Entry<TEvent> {
     let entry = entries.get(key);
     if (entry !== undefined) {
-      entry.leases.add(lease);
+      entry.leases.add(binding);
       return entry;
     }
 
-    entry = { active: true, dispose: undefined, leases: new Set([lease]) };
+    entry = { active: true, dispose: undefined, leases: new Set([binding]) };
     entries.set(key, entry);
     const current = entry;
     try {
       current.dispose = subscribe(key, (event) => {
-        for (const observer of current.leases) {
+        if (!current.active) return;
+        for (const connection of current.leases) {
+          const observer = connection.queue;
+          if (!connection.active || connection.generation !== observer.generation) continue;
           observer.slots[observer.write] = event;
           observer.write = (observer.write + 1) % capacity;
           if (observer.count < capacity) observer.count += 1;
@@ -89,15 +100,22 @@ export function createEventResource<TKey, TEvent>(
     } catch (error) {
       current.active = false;
       if (entries.get(key) === current) entries.delete(key);
-      for (const observer of current.leases) clear(observer);
+      for (const connection of current.leases) {
+        connection.active = false;
+        if (connection.generation === connection.queue.generation) {
+          clear(connection.queue);
+          connection.queue.state.setValue({ queued: 0, dropped: 0, error });
+        }
+      }
       current.leases.clear();
       throw error;
     }
     return current;
   }
 
-  function release(key: TKey, entry: Entry<TEvent>, lease: LeaseQueue<TEvent>): void {
-    entry.leases.delete(lease);
+  function release(key: TKey, entry: Entry<TEvent>, binding: Binding<TEvent>): void {
+    binding.active = false;
+    entry.leases.delete(binding);
     if (entry.leases.size !== 0) return;
     entry.active = false;
     if (entries.get(key) === entry) entries.delete(key);
@@ -112,11 +130,14 @@ export function createEventResource<TKey, TEvent>(
         write: 0,
         count: 0,
         dropped: 0,
+        generation: 0,
       };
       const readonlyState: ReadonlyCell<EventResourceState> = { get: () => queue.state.get() };
       let currentKey = key;
-      let currentEntry: Entry<TEvent> | undefined = attach(key, queue);
+      let currentBinding: Binding<TEvent> = { queue, generation: ++queue.generation, active: true };
+      let currentEntry: Entry<TEvent> | undefined = attach(key, currentBinding);
       let disposed = false;
+      let keyChangeRevision = 0;
       let unregister: (() => void) | undefined;
 
       const dispose = (): void => {
@@ -127,8 +148,9 @@ export function createEventResource<TKey, TEvent>(
         currentUnregister?.();
         const previous = currentEntry;
         currentEntry = undefined;
+        ++queue.generation;
         clear(queue);
-        if (previous !== undefined) release(currentKey, previous, queue);
+        if (previous !== undefined) release(currentKey, previous, currentBinding);
       };
 
       const registration = registerCleanup(dispose);
@@ -155,12 +177,22 @@ export function createEventResource<TKey, TEvent>(
         },
         setKey(nextKey) {
           if (disposed || (currentEntry?.active === true && sameKey(currentKey, nextKey))) return;
+          const revision = ++keyChangeRevision;
           const previous = currentEntry;
           currentEntry = undefined;
+          ++queue.generation;
           clear(queue);
-          if (previous !== undefined) release(currentKey, previous, queue);
+          if (previous !== undefined) release(currentKey, previous, currentBinding);
+          if (disposed || revision !== keyChangeRevision) return;
           currentKey = nextKey;
-          currentEntry = attach(nextKey, queue);
+          const nextBinding: Binding<TEvent> = { queue, generation: ++queue.generation, active: true };
+          currentBinding = nextBinding;
+          const nextEntry = attach(nextKey, nextBinding);
+          if (disposed || revision !== keyChangeRevision) {
+            release(nextKey, nextEntry, nextBinding);
+            return;
+          }
+          currentEntry = nextEntry;
         },
         dispose,
       };

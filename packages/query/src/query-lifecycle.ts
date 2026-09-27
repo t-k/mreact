@@ -25,7 +25,7 @@ import type {
 
 const queryInvalidationRevisionKey = Symbol("mreact.query.invalidationRevision");
 
-interface InternalQueryEntry<TData = unknown> extends QueryEntry<TData> {
+interface InternalQueryEntry<TData = unknown> extends Omit<QueryEntry<TData>, "revision"> {
   abortController?: AbortController | undefined;
   canceled?: boolean | undefined;
   promise?: Promise<TData> | undefined;
@@ -34,6 +34,7 @@ interface InternalQueryEntry<TData = unknown> extends QueryEntry<TData> {
   resource?: QueryDevtoolsResourceHandle | undefined;
   resourceOwnerId?: string | undefined;
   version: number;
+  dataRevision: number;
 }
 
 interface SetSuccessOptions {
@@ -73,6 +74,7 @@ export function createQueryLifecycle(
   const gcTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const pendingInvalidationNotifications = new Set<InternalQueryEntry>();
   let invalidationNotifyScheduled = false;
+  let nextDataRevision = 0;
 
   function getOrCreateEntry<TData>(
     queryKey: QueryKey,
@@ -99,6 +101,7 @@ export function createQueryLifecycle(
       status: "pending",
       updatedAt: 0,
       version: 0,
+      dataRevision: ++nextDataRevision,
     };
     cache.set(queryHash, entry as InternalQueryEntry);
     syncEntryDevtoolsResource(entry);
@@ -161,29 +164,29 @@ export function createQueryLifecycle(
     queryKey: QueryKey,
     data: TData | ((previous: TData | undefined) => TData),
     options: SetSuccessOptions = {},
-  ): void {
+  ): number {
     const entry = getOrCreateEntry<TData>(queryKey, options.queryHash);
     const resolvedData =
       typeof data === "function"
         ? (data as (previous: TData | undefined) => TData)(entry.data)
         : data;
-    setSuccessValue(queryKey, resolvedData, options);
+    return setSuccessValue(queryKey, resolvedData, options);
   }
 
   function setSuccessValue<TData>(
     queryKey: QueryKey,
     data: TData,
     options: SetSuccessOptions = {},
-  ): void {
+  ): number {
     const entry = getOrCreateEntry<TData>(queryKey, options.queryHash);
-    setSuccessEntry(entry, data, options);
+    return setSuccessEntry(entry, data, options);
   }
 
   function setSuccessEntry<TData>(
     entry: InternalQueryEntry<TData>,
     data: TData,
     options: SetSuccessOptions = {},
-  ): void {
+  ): number {
     clearInactiveTimer(entry.queryHash);
     const sharedData = replaceEqualDeep(entry.data, data) as TData;
     if (entry.abortController !== undefined && !entry.abortController.signal.aborted) {
@@ -191,6 +194,8 @@ export function createQueryLifecycle(
     }
 
     entry.version += 1;
+    const dataRevision = ++nextDataRevision;
+    entry.dataRevision = dataRevision;
     entry.data = sharedData;
     entry.error = undefined;
     entry.errorReason = undefined;
@@ -205,6 +210,7 @@ export function createQueryLifecycle(
     scheduleInactiveExpiry(entry.queryHash);
     enforceInactiveLimit();
     syncEntryDevtoolsResource(entry);
+    return dataRevision;
   }
 
   function hydrateQueryData<TData>(
@@ -571,8 +577,8 @@ export function createQueryLifecycle(
     setQueryData<TData>(
       queryKeyOrDefinition: QueryKey | QueryDefinition<TData, QueryKey>,
       data: TData | ((previous: TData | undefined) => TData),
-    ): void {
-      setSuccess(queryKeyFromDefinition(queryKeyOrDefinition), data);
+    ): number {
+      return setSuccess(queryKeyFromDefinition(queryKeyOrDefinition), data);
     },
     [hydrateQueryDataSymbol]: hydrateQueryData,
     invalidateQueries(options: InvalidateQueriesOptions = {}): void {
@@ -855,6 +861,7 @@ export function queryInvalidationRevision(entry: QueryEntry | undefined): number
 function toPublicEntry<TData>(entry: InternalQueryEntry<TData>): QueryEntry<TData> {
   const publicEntry: QueryEntry<TData> = {
     data: entry.data,
+    revision: entry.dataRevision,
     error: entry.error,
     errorReason: entry.errorReason,
     isFetching: entry.isFetching,

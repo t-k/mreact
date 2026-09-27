@@ -160,6 +160,124 @@ describe("createEventResource", () => {
     lease.dispose();
   });
 
+  it("does not attach an outer target after unsubscribe reenters a key change", () => {
+    const emitters = new Map<string, (event: number) => void>();
+    const lifecycle: string[] = [];
+    let lease!: ReturnType<ReturnType<typeof createEventResource<string, number>>["observe"]>;
+    const resource = createEventResource<string, number>((key, emit) => {
+      lifecycle.push(`connect:${key}`);
+      emitters.set(key, emit);
+      return () => {
+        lifecycle.push(`disconnect:${key}`);
+        if (key === "a") lease.setKey("c");
+      };
+    }, { capacity: 2 });
+    lease = resource.observe("a");
+
+    lease.setKey("b");
+    emitters.get("b")?.(1);
+    emitters.get("c")?.(2);
+    expect(lease.drain()).toEqual({ events: [2], dropped: 0 });
+    lease.dispose();
+    expect(lifecycle).toEqual(["connect:a", "disconnect:a", "connect:c", "disconnect:c"]);
+  });
+
+  it("releases an outer subscription when subscribe reenters a key change", () => {
+    const emitters = new Map<string, (event: number) => void>();
+    const lifecycle: string[] = [];
+    let lease!: ReturnType<ReturnType<typeof createEventResource<string, number>>["observe"]>;
+    const resource = createEventResource<string, number>((key, emit) => {
+      lifecycle.push(`connect:${key}`);
+      emitters.set(key, emit);
+      if (key === "b") {
+        emit(0);
+        lease.setKey("c");
+        emit(1);
+      }
+      if (key === "c") emit(2);
+      return () => { lifecycle.push(`disconnect:${key}`); };
+    }, { capacity: 2 });
+    lease = resource.observe("a");
+
+    lease.setKey("b");
+    emitters.get("b")?.(3);
+    expect(lease.drain()).toEqual({ events: [2], dropped: 0 });
+    lease.dispose();
+    expect(lifecycle).toEqual([
+      "connect:a", "disconnect:a", "connect:b", "connect:c", "disconnect:b", "disconnect:c",
+    ]);
+  });
+
+  it("disconnects a subscription that completes after its lease is disposed", () => {
+    const lifecycle: string[] = [];
+    let emitB!: (event: number) => void;
+    let lease!: ReturnType<ReturnType<typeof createEventResource<string, number>>["observe"]>;
+    const resource = createEventResource<string, number>((key, emit) => {
+      lifecycle.push(`connect:${key}`);
+      if (key === "b") {
+        emitB = emit;
+        lease.dispose();
+        emit(1);
+      }
+      return () => { lifecycle.push(`disconnect:${key}`); };
+    }, { capacity: 2 });
+    lease = resource.observe("a");
+
+    lease.setKey("b");
+    emitB(2);
+    expect(lease.drain()).toEqual({ events: [], dropped: 0 });
+    expect(lifecycle).toEqual(["connect:a", "disconnect:a", "connect:b", "disconnect:b"]);
+  });
+
+  it("preserves a newer key when an older reentrant subscription throws", () => {
+    const lifecycle: string[] = [];
+    let emitC!: (event: number) => void;
+    let lease!: ReturnType<ReturnType<typeof createEventResource<string, number>>["observe"]>;
+    const resource = createEventResource<string, number>((key, emit) => {
+      lifecycle.push(`connect:${key}`);
+      if (key === "b") {
+        lease.setKey("c");
+        throw new Error("b failed");
+      }
+      if (key === "c") emitC = emit;
+      return () => { lifecycle.push(`disconnect:${key}`); };
+    }, { capacity: 2 });
+    lease = resource.observe("a");
+
+    expect(() => lease.setKey("b")).toThrow("b failed");
+    emitC(3);
+    expect(lease.drain()).toEqual({ events: [3], dropped: 0 });
+    lease.dispose();
+    expect(lifecycle).toEqual(["connect:a", "disconnect:a", "connect:b", "connect:c", "disconnect:c"]);
+  });
+
+  it("keeps a reentrant second observer connected when the first switches away", () => {
+    const lifecycle: string[] = [];
+    let emitB!: (event: number) => void;
+    let first!: ReturnType<ReturnType<typeof createEventResource<string, number>>["observe"]>;
+    let second!: typeof first;
+    const resource = createEventResource<string, number>((key, emit) => {
+      lifecycle.push(`connect:${key}`);
+      if (key === "b") {
+        emitB = emit;
+        second = resource.observe("b");
+        first.setKey("c");
+      }
+      return () => { lifecycle.push(`disconnect:${key}`); };
+    }, { capacity: 2 });
+    first = resource.observe("a");
+
+    first.setKey("b");
+    emitB(4);
+    expect(first.drain()).toEqual({ events: [], dropped: 0 });
+    expect(second.drain()).toEqual({ events: [4], dropped: 0 });
+    first.dispose();
+    second.dispose();
+    expect(lifecycle).toEqual([
+      "connect:a", "disconnect:a", "connect:b", "connect:c", "disconnect:c", "disconnect:b",
+    ]);
+  });
+
   it("retains values including undefined through a wrapped queue", () => {
     let emit!: (event: number | undefined) => void;
     const resource = createEventResource<string, number | undefined>((_key, next) => {
@@ -274,7 +392,9 @@ describe("createEventResource", () => {
     }, { capacity: 2 });
     expect(() => resource.observe("a")).toThrow("offline");
     expect(joined.drain()).toEqual({ events: [], dropped: 0 });
+    expect(joined.state.get().error).toEqual(new Error("offline"));
     joined.setKey("a");
+    expect(joined.state.get().error).toBeUndefined();
     emit(2);
     expect(joined.drain()).toEqual({ events: [2], dropped: 0 });
     joined.dispose();

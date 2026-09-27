@@ -222,6 +222,24 @@ lease.dispose();
 
 Create browser-only transports when observing on the client. This API keeps the latest value; it does not preserve every event, reconnect automatically, or reconcile an SSR snapshot with a stream cursor. Use a transport-specific adapter when those guarantees matter.
 
+For an event stream where individual events matter, use `createEventResource()` with an explicit per-observer queue capacity. Each observer drains its own FIFO queue; if it fills, the oldest events are removed and `dropped` reports the loss. Treat any nonzero loss as a signal to resynchronize when the stream cannot tolerate gaps.
+
+```ts
+import { createEventResource } from "@reckona/mreact-reactive-core";
+
+const events = createEventResource<string, string>((channel, emit) => {
+  const source = new EventSource(`/events/${encodeURIComponent(channel)}`);
+  source.addEventListener("message", (event) => emit((event as MessageEvent).data));
+  return () => source.close();
+}, { capacity: 128 });
+
+const observer = events.observe("project-42");
+const { events: messages, dropped } = observer.drain();
+observer.dispose();
+```
+
+`createEventResource()` shares the upstream subscription for observers of the same key and disconnects after the last observer leaves. If a synchronous subscription fails after another observer has joined, that observer's `state.get().error` exposes the failure and `setKey()` can retry. It does not implement transport reconnects or SSR cursor reconciliation; an adapter must supply those rules for its service.
+
 ### Resources that outlive a component evaluation
 
 `computed()`, effects, query observers, and the computeds inside virtual grids register with the cleanup owner active when they are constructed. A component evaluation can have a shorter lifetime than the component or a controller retained by your application: reevaluation can dispose that evaluation's resources. Keeping an object in a variable does not change its cleanup owner.

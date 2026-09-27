@@ -80,6 +80,8 @@ export interface MutationResult<TData> {
 /** Stores the cache metadata and result state for one query key. */
 export interface QueryEntry<TData = unknown> {
   data: TData | undefined;
+  /** Advances when cached data is written or this entry is recreated. */
+  revision: number;
   error: unknown;
   errorReason: QueryErrorReason | undefined;
   isFetching: boolean;
@@ -172,13 +174,13 @@ export interface QueryClient {
   setQueryData<TData>(
     queryKey: QueryKey,
     data: TData | ((previous: TData | undefined) => TData),
-  ): void;
+  ): number;
   setQueryData<TDefinition extends QueryDefinition<unknown, QueryKey>>(
     definition: TDefinition,
     data:
       | QueryDefinitionData<TDefinition>
       | ((previous: QueryDefinitionData<TDefinition> | undefined) => QueryDefinitionData<TDefinition>),
-  ): void;
+  ): number;
   invalidateQueries(options?: InvalidateQueriesOptions): void;
   removeQueries(options?: InvalidateQueriesOptions): void;
   subscribe<TData = unknown>(

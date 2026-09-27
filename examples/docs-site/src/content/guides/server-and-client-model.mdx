@@ -177,6 +177,23 @@ await buildApp({
 
 Use these contracts when deployment or ownership rules require an explicit boundary policy. Keep the patterns narrow and review them with the generated boundary report so a new client dependency or compatibility fallback fails close to its source.
 
+## Inspect a compiler transform
+
+`explainTransform()` returns a versioned JSON report for one source file. It includes compiler decisions with source positions and reason codes, diagnostics, runtime imports, emitted code, and the current heuristic source map. An editor or CI tool can consume this report alongside the route boundary report; it does not yet trace a DOM element back to JSX or attribute route bundle bytes to an individual expression.
+
+```ts
+import { explainTransform } from "@reckona/mreact-compiler";
+
+const report = explainTransform({
+  code: source,
+  filename: "src/components/Search.tsx",
+  target: "client",
+  dev: false,
+});
+
+console.log(JSON.stringify(report, null, 2));
+```
+
 ## Related pages
 
 - [App Router](/guides/app-router/)
