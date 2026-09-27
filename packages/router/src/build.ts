@@ -3072,6 +3072,11 @@ async function prerenderStaticRoutes(options: {
       route.client && route.script !== undefined ? [[route.path, route.script]] : [],
     ),
   );
+  const clientAttachScripts = new Map(
+    options.clientRoutes.flatMap((route) =>
+      route.client && route.attachScript !== undefined ? [[route.path, route.attachScript]] : [],
+    ),
+  );
   const clientScriptPreloads = new Map(
     options.clientRoutes.flatMap((route) =>
       route.client && route.script !== undefined && route.modulePreloads !== undefined
@@ -3130,6 +3135,7 @@ async function prerenderStaticRoutes(options: {
           appDir: options.appDir,
           assetBaseUrl: options.assetBaseUrl,
           clientScripts,
+          clientAttachScripts,
           clientScriptPreloads,
           clientStyles,
           define: options.define,
@@ -5348,7 +5354,7 @@ function cloudflareHydrationMarkerParts(props) {
     ? undefined
     : escapeScriptJson(JSON.stringify(route.clientReferenceManifest));
   return {
-    prefix: \`<div data-mreact-route-id="\${escapedRouteId}">\`,
+    prefix: \`<div data-mreact-route-id="\${escapedRouteId}"\${route.attachScript === undefined ? "" : \` data-mreact-attach-script="\${escapeHtmlAttribute(route.attachScript)}"\`}>\`,
     suffix: [
       "</div>",
       \`<script type="application/json" id="mreact-props-\${escapedRouteId}">\${propsJson}</script>\`,
@@ -7079,6 +7085,7 @@ async function writeClientRouteBundles(options: {
       ...(navigation ? { navigation } : {}),
       routeId,
       script: routeOutput.chunk.fileName,
+      ...(routeOutput.attach === true ? { attachScript: routeOutput.chunk.fileName } : {}),
       ...(options.sourceMaps === "linked" ? { sourceMap } : {}),
       devScript: clientScriptForPath(entry.route.path),
     };

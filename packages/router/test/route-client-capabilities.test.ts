@@ -98,6 +98,38 @@ export default function Page() {
     expect(code).toContain("__mreactRouteStateSignature");
   });
 
+  test("omits the route effect for a closed direct-cell text route without navigation", async () => {
+    const files = {
+      "page.mreact.tsx": `import { cell } from "@reckona/mreact-reactive-core";
+export const clientNavigation = false;
+export default function Page() {
+  const count = cell(0);
+  return <main><button type="button" onClick={() => count.set((value) => value + 1)}>count: {count.get()}</button></main>;
+}`,
+    };
+    const entry = await buildRouteEntry(files);
+    const code = await buildRoute(files);
+
+    expect(entry).toContain("__mreactRouteStates");
+    expect(entry).toContain("bindCellText");
+    expect(entry).not.toContain("effect as __mreactRouteEffect");
+    expect(code).not.toContain("packages/reactive-core/src/effect.ts");
+  });
+
+  test("keeps the route effect when a cell read escapes direct text binding", async () => {
+    const entry = await buildRouteEntry({
+      "page.mreact.tsx": `import { cell } from "@reckona/mreact-reactive-core";
+export const clientNavigation = false;
+export default function Page() {
+  const count = cell(0);
+  const label = count.get();
+  return <button type="button" onClick={() => count.set((value) => value + 1)}>{label}</button>;
+}`,
+    });
+
+    expect(entry).toContain("effect as __mreactRouteEffect");
+  });
+
   test("omits route state restoration for a route whose reachable graph never calls cell", async () => {
     const code = await buildRoute({
       "Label.tsx": `export function Label(props: { text: string }) {
@@ -275,6 +307,21 @@ export default function Page() {
     expect(code).toContain("__mreactRouteUrl");
   });
 
+  test("omits request url restoration when a resolved dynamic import does not read request", async () => {
+    const code = await buildRoute({
+      "page.mreact.tsx": `export const clientNavigation = false;
+const loadPanel = () => import("./Panel.js");
+export default function Page() {
+  return <button type="button" onClick={() => void loadPanel()}>Load</button>;
+}`,
+      "Panel.tsx": `export function Panel() {
+  return <span>Loaded</span>;
+}`,
+    });
+
+    expect(code).not.toContain("__mreactRouteUrl");
+  });
+
   test("keeps event binding synchronisation when an unrelated static import is opaque", async () => {
     const code = await buildRouteEntry({
       "page.mreact.tsx": `import { formatLabel } from "./labels.js";
@@ -381,7 +428,8 @@ export default function Page() {
 `,
       "page.mreact.tsx": `export const clientNavigation = false;
 
-const loadPanel = () => import("./panel.js");
+const panelPath = "./panel.js";
+const loadPanel = () => import(panelPath);
 const cell = (value) => ({ get: () => value });
 
 export default function Page() {
@@ -391,7 +439,7 @@ export default function Page() {
     });
 
     // No imported cell call, so there is no compiled evidence to force the capability on, and the
-    // dynamic import leaves the graph unknown. An unknown fact must fall back to the conservative
+    // computed dynamic import leaves the graph unknown. An unknown fact must fall back to the conservative
     // name-shaped hint rather than resolving the capability off.
     expect(code).toContain("__mreactRouteStates");
   });

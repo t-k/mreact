@@ -7,10 +7,7 @@ import {
 
 function createGraph(
   modules: Readonly<Record<string, string>>,
-): Pick<
-  Parameters<typeof collectClientRouteCapabilityFacts>[0],
-  "readModule" | "resolveImport"
-> {
+): Pick<Parameters<typeof collectClientRouteCapabilityFacts>[0], "readModule" | "resolveImport"> {
   return {
     readModule: async (file) => {
       const source = modules[file];
@@ -213,6 +210,29 @@ export default function Page() {
     expect(facts.requestLocation).toBe("unknown");
   });
 
+  test("follows a literal dynamic import without making unrelated capabilities unknown", async () => {
+    const facts = await factsFor(
+      `const load = () => import("./panel.js");
+export default function Page() { return <button onClick={() => void load()}>Load</button>; }`,
+      {
+        panel: `import { cell } from "@reckona/mreact-reactive-core";
+export const counter = cell(0);`,
+      },
+    );
+
+    expect(facts.cells).toBe("known-used");
+    expect(facts.requestLocation).toBe("known-unused");
+    expect(facts.domRefs).toBe("known-unused");
+  });
+
+  test("keeps a computed dynamic import unknown", async () => {
+    const facts = await factsFor(`const path = "./panel.js";
+const load = () => import(path);
+export default function Page() { return <main>{String(load)}</main>; }`);
+
+    expect(facts.requestLocation).toBe("unknown");
+  });
+
   test("falls back to unknown for an opaque package but not for a runtime package", async () => {
     const opaque = await factsFor(`import { chart } from "some-charting-library";
 
@@ -310,7 +330,8 @@ export function readTitle(id) {
   });
 
   test("reads an aliased and a type-prefixed named import binding", async () => {
-    const aliased = await factsFor(`import { type Cell, effect as runEffect } from "@reckona/mreact-reactive-core";
+    const aliased =
+      await factsFor(`import { type Cell, effect as runEffect } from "@reckona/mreact-reactive-core";
 
 export default function Page() {
   runEffect(() => undefined);
@@ -324,7 +345,7 @@ export default function Page() {
 
     expect(aliased.reactiveEffect).toBe("known-used");
     expect(aliased.cells).toBe("known-unused");
-    expect(defaultOnly.reactiveEffect).toBe("known-unused");
+    expect(defaultOnly.reactiveEffect).toBe("unknown");
   });
 
   test("survives empty and trailing entries in a named import clause", async () => {
@@ -340,8 +361,34 @@ export const value = core.cell(0);`);
 
     expect(trailingComma.cells).toBe("known-used");
     expect(emptyClause.cells).toBe("known-unused");
-    // A namespace import binds no name we track, so nothing is claimed either way beyond the module.
-    expect(namespaceOnly.cells).toBe("known-unused");
+    expect(namespaceOnly.cells).toBe("known-used");
+    expect(namespaceOnly.requestLocation).toBe("known-unused");
+  });
+
+  test("keeps reactive capabilities unknown when a runtime namespace escapes", async () => {
+    const facts = await factsFor(`import * as core from "@reckona/mreact-reactive-core";
+export const runtime = core;`);
+
+    expect(facts.cells).toBe("unknown");
+    expect(facts.reactiveEffect).toBe("unknown");
+    expect(facts.requestLocation).toBe("known-unused");
+  });
+
+  test("treats a named default import as a possible runtime namespace", async () => {
+    const facts = await factsFor(`import { default as core } from "@reckona/mreact-reactive-core";
+export const runtime = core;`);
+
+    expect(facts.cells).toBe("unknown");
+    expect(facts.reactiveEffect).toBe("unknown");
+    expect(facts.requestLocation).toBe("known-unused");
+  });
+
+  test("recognizes a namespace DOM ref binding without obscuring reactive core facts", async () => {
+    const facts = await factsFor(`import * as dom from "@reckona/mreact-reactive-dom";
+export function attach(element, ref) { dom.bindDomRef(element, ref); }`);
+
+    expect(facts.domRefs).toBe("known-used");
+    expect(facts.cells).toBe("known-unused");
   });
 
   test("reads a use client directive on a child but not on the route itself", async () => {
@@ -454,7 +501,9 @@ export const test = pattern;`);
   });
 
   test("blanks template literal text but keeps the surrounding code", () => {
-    const scanned = scanModuleSource("const label = `cell(0) ${value} effect(1)`;\nexport { label };");
+    const scanned = scanModuleSource(
+      "const label = `cell(0) ${value} effect(1)`;\nexport { label };",
+    );
 
     expect(scanned?.withoutLiterals).not.toContain("cell(0)");
     expect(scanned?.withoutLiterals).toContain("const label");
@@ -536,7 +585,7 @@ export const test = pattern;`);
 
   test("tracks brace depth inside a template substitution", () => {
     const scanned = scanModuleSource(
-      "const value = `a${ { key: 1 } }b`;\nconst other = \"cell(0)\";\nexport const done = 1;",
+      'const value = `a${ { key: 1 } }b`;\nconst other = "cell(0)";\nexport const done = 1;',
     );
 
     expect(scanned?.withoutLiterals).not.toContain("cell(0)");

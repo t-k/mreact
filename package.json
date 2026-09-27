@@ -73,6 +73,8 @@
     "test:mutation:compiler-specialization-report": "stryker run stryker.compiler-specialization-report.config.mjs",
     "test:mutation:list-rotation": "stryker run stryker.list-rotation.config.mjs",
     "test:mutation:size": "stryker run stryker.size.config.mjs",
+    "test:mutation:static-reactivity": "stryker run stryker.static-reactivity.config.mjs",
+    "test:mutation:server-only-attribute": "stryker run stryker.server-only-attribute.config.mjs",
     "test:mutation:release-readiness": "stryker run stryker.release-readiness.config.mjs",
     "test:mutation:reactive-core": "stryker run stryker.reactive-core.config.mjs",
     "test:mutation:state": "stryker run stryker.state.config.mjs",

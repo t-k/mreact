@@ -361,6 +361,8 @@ export interface BuiltServerModuleOutput {
 // @public (undocumented)
 export interface ClientRouteManifestEntry {
     // (undocumented)
+    attachScript?: string | undefined;
+    // (undocumented)
     bytes?: number;
     // (undocumented)
     client: boolean;

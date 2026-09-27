@@ -926,6 +926,7 @@ function builtRenderAppRequestOptions(
     appDir: options.runtime.appDir,
     assetBaseUrl: options.runtime.assetBaseUrl,
     clientScripts: options.runtime.clientScripts,
+    clientAttachScripts: options.runtime.clientAttachScripts,
     clientScriptPreloads: options.runtime.clientScriptPreloads,
     clientStylesByFile: options.runtime.clientStylesByFile,
     clientStyles: options.runtime.clientStyles,

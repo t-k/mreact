@@ -1553,6 +1553,8 @@ export interface RenderAppRequestOptions {
     // (undocumented)
     assetBaseUrl?: string | undefined;
     // (undocumented)
+    clientAttachScripts?: ReadonlyMap<string, string> | undefined;
+    // (undocumented)
     clientRouteInferenceCache?: ClientRouteInferenceCache | undefined;
     // (undocumented)
     clientScriptPreloads?: ReadonlyMap<string, readonly string[]>;

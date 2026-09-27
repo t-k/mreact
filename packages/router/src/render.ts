@@ -210,6 +210,7 @@ export interface AppRouterServerRenderArtifactLoader {
 export interface RenderAppRequestOptions {
   appDir: string;
   assetBaseUrl?: string | undefined;
+  clientAttachScripts?: ReadonlyMap<string, string> | undefined;
   clientRouteInferenceCache?: ClientRouteInferenceCache | undefined;
   clientScripts?: ReadonlyMap<string, string>;
   clientScriptPreloads?: ReadonlyMap<string, readonly string[]>;
@@ -1010,6 +1011,7 @@ async function renderAppRequestInternal(
         props: unknown;
         routePath: string;
         script: string | undefined;
+        attachScript?: string | undefined;
       }
     | undefined;
   let trackedRequest: TrackedHeaderRequest | undefined;
@@ -1209,6 +1211,7 @@ async function renderAppRequestInternal(
           },
           routePath: matched.route.path,
           script: clientScript,
+          attachScript: options.clientAttachScripts?.get(matched.route.path),
         };
         if (streamRoute) {
           phaseStartedAt = renderTimingPhaseStartedAt(timing);
@@ -1296,6 +1299,7 @@ async function renderAppRequestInternal(
             const pageHtml = renderedPage.html;
             const pageHtmlForLayout = clientRoute
               ? withHydrationMarkers({
+                  attachScript: options.clientAttachScripts?.get(matched.route.path),
                   assetBaseUrl: options.assetBaseUrl,
                   clientReferenceManifest: stringOutput.metadata.clientReferenceManifest,
                   html: pageHtml,
@@ -1475,6 +1479,7 @@ async function renderAppRequestInternal(
               clientRouteInferenceCache,
               importPolicy: options.importPolicy,
               script: clientScript,
+              attachScript: options.clientAttachScripts?.get(matched.route.path),
               clientReferenceManifest: output.metadata.clientReferenceManifest,
             });
             finishRenderTimingPhase(timing, phaseStartedAt, "streamConstructionMs");
@@ -1528,6 +1533,7 @@ async function renderAppRequestInternal(
             importPolicy: options.importPolicy,
             clientRoute,
             script: clientScript,
+            attachScript: options.clientAttachScripts?.get(matched.route.path),
             clientReferenceManifest: output.metadata.clientReferenceManifest,
           });
           finishRenderTimingPhase(timing, phaseStartedAt, "streamConstructionMs");
@@ -1616,6 +1622,7 @@ async function renderAppRequestInternal(
         // layout into the marker and breaks the hydration target lookup.
         const pageHtmlForLayout = clientRoute
           ? withHydrationMarkers({
+              attachScript: options.clientAttachScripts?.get(matched.route.path),
               assetBaseUrl: options.assetBaseUrl,
               clientReferenceManifest: output.metadata.clientReferenceManifest,
               html: pageHtml,
@@ -2296,6 +2303,7 @@ async function renderSpecialRoute(options: {
         props: unknown;
         routePath: string;
         script: string | undefined;
+        attachScript?: string | undefined;
       }
     | undefined;
   request: Request;
@@ -2338,6 +2346,7 @@ async function renderSpecialRoute(options: {
   const pageHtmlForLayout =
     options.navigation?.clientRoute === true
       ? withHydrationMarkers({
+          attachScript: options.navigation.attachScript,
           assetBaseUrl: options.assetBaseUrl,
           clientReferenceManifest: undefined,
           html: pageHtml,
@@ -3075,15 +3084,18 @@ function transformServerModule(options: {
         imports: [],
         serverOutput: options.serverOutput,
         ...(isCompatSsrFilename(options.filename)
-      ? { target: "client" as const, mode: "compat" as const }
-      : { target: "server" as const }),
+          ? { target: "client" as const, mode: "compat" as const }
+          : { target: "server" as const }),
       },
     };
   }
 
   const awaitHydrationKey = options.serverAwaitHydration === true ? "1" : "0";
   const boundaryKey = options.clientBoundaryImports?.join("\0") ?? "";
-  const fallbackKey = (options.clientBoundaryFallbackImports?.join("\0") ?? "") + "\0compat:" + (options.clientBoundaryCompatImports?.join("\0") ?? "");
+  const fallbackKey =
+    (options.clientBoundaryFallbackImports?.join("\0") ?? "") +
+    "\0compat:" +
+    (options.clientBoundaryCompatImports?.join("\0") ?? "");
   const key = `${options.filename}\0${options.serverOutput}\0${sourceHash}\0${awaitHydrationKey}\0${boundaryKey}\0${fallbackKey}`;
   const cached = readRouterRuntimeCacheEntry(
     serverTransformCache,
@@ -3607,6 +3619,7 @@ function runServerStreamModule(
     serverModuleCacheVersion?: string | undefined;
     serverSourceFiles?: ReadonlyMap<string, string> | undefined;
     script?: string | undefined;
+    attachScript?: string | undefined;
     vitePlugins?: readonly PluginOption[] | undefined;
     importPolicy?: AppRouterImportPolicy | undefined;
   },
@@ -3636,6 +3649,7 @@ function runServerStreamModule(
     );
     const marker = options.clientRoute
       ? hydrationMarkerParts({
+          attachScript: options.attachScript,
           assetBaseUrl: options.assetBaseUrl,
           clientReferenceManifest: options.clientReferenceManifest,
           routePath: options.routePath,
@@ -3890,6 +3904,7 @@ async function runServerStreamModuleWithLoading(
     serverModuleCacheVersion?: string | undefined;
     serverSourceFiles?: ReadonlyMap<string, string> | undefined;
     script?: string | undefined;
+    attachScript?: string | undefined;
     vitePlugins?: readonly PluginOption[] | undefined;
     importPolicy?: AppRouterImportPolicy | undefined;
   },
@@ -3928,6 +3943,7 @@ async function runServerStreamModuleWithLoading(
   );
   const marker = options.clientRoute
     ? hydrationMarkerParts({
+        attachScript: options.attachScript,
         assetBaseUrl: options.assetBaseUrl,
         clientReferenceManifest: options.clientReferenceManifest,
         routePath: options.routePath,

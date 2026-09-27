@@ -17,9 +17,14 @@ import {
 } from "@reckona/mreact-compiler";
 import type { ClientReferenceMetadata } from "@reckona/mreact-shared/compiler-contract";
 import {
+  analyzeCompilerModuleContextToIr,
   collectClientRouteModuleAnalysisFromContext,
   createCompilerModuleContext,
+  emitClosedDirectCellAttachRoute,
+  eraseServerOnlyTitleImport,
+  hasClosedDirectCellTextRoute,
   hasUnguardedBrowserGlobalReference,
+  isPureSingleStringExport,
   readTopLevelBooleanExport,
   readTopLevelBooleanExportFromContext,
   stripTypeScriptWithOxc,
@@ -67,6 +72,7 @@ import type { Plugin, PluginOption } from "vite";
 const nodeBuiltinPackages = new Set(builtinModules.flatMap((name) => [name, `node:${name}`]));
 
 export interface ClientRouteManifestEntry {
+  attachScript?: string | undefined;
   bytes?: number;
   css?: readonly string[];
   dynamicImports?: readonly string[];
@@ -117,6 +123,7 @@ export interface BuildClientRouteBatchOutput {
 }
 
 export interface BuildClientRouteBatchRouteOutput {
+  attach?: boolean | undefined;
   chunk: RouterBundleChunkOutput;
   routeId: string;
   routePath: string;
@@ -3190,6 +3197,7 @@ export function navigationRuntimeScriptForDev(): string {
 }
 
 export function withHydrationMarkers(options: {
+  attachScript?: string | undefined;
   assetBaseUrl?: string | undefined;
   clientReferenceManifest?: readonly ClientReferenceMetadata[] | undefined;
   html: string;
@@ -3198,6 +3206,7 @@ export function withHydrationMarkers(options: {
   script?: string | undefined;
 }): string {
   const marker = hydrationMarkerParts({
+    attachScript: options.attachScript,
     assetBaseUrl: options.assetBaseUrl,
     clientReferenceManifest: options.clientReferenceManifest,
     props: options.props,
@@ -3224,6 +3233,7 @@ export function routeMarkerParts(routePath: string): { prefix: string; suffix: s
 }
 
 export function hydrationMarkerParts(options: {
+  attachScript?: string | undefined;
   assetBaseUrl?: string | undefined;
   clientReferenceManifest?: readonly ClientReferenceMetadata[] | undefined;
   props: unknown;
@@ -3244,7 +3254,7 @@ export function hydrationMarkerParts(options: {
       : escapeScriptJson(JSON.stringify(options.clientReferenceManifest));
 
   return {
-    prefix: `<div ${routeHydrationContract.routeMarkerAttribute}="${escapedRouteId}">`,
+    prefix: `<div ${routeHydrationContract.routeMarkerAttribute}="${escapedRouteId}"${options.attachScript === undefined ? "" : ` data-mreact-attach-script="${escapeHtmlAttribute(options.attachScript)}"`}>`,
     suffix: [
       "</div>",
       `<script type="application/json" id="${propsScriptId}">${propsJson}</script>`,
@@ -3491,24 +3501,45 @@ export async function buildClientRouteBatchOutput(options: {
           },
         ];
   const routeEntries = await Promise.all(
-    options.routes.map(async (route) => ({
-      filename: route.filename,
-      name: routeIdForPath(route.routePath),
-      // Navigation invokes the hydration export again when a cached route module is revisited.
-      // Routes that cannot navigate only need their entry's initial side effect.
-      preserveExports: route.clientNavigation ?? detectClientNavigationHint(route.code),
-      routePath: route.routePath,
-      source: await buildClientRouteEntrySource({
+    options.routes.map(async (route) => {
+      const routeOptions = {
         ...route,
         minify: options.minify ?? route.minify,
-        // Only a build with more than one entry can hoist the hydration helpers into a shared
-        // chunk. A single entry would inline the same modules and pay the factory indirection
-        // for nothing, so it keeps the inline shape.
         shareHydrationRuntime: entryCount > 1,
         sourceMap: options.sourceMap ?? route.sourceMap,
         vitePlugins: options.vitePlugins ?? route.vitePlugins,
-      }),
-    })),
+      };
+      const attachCode =
+        (route.clientNavigation ?? detectClientNavigationHint(route.code)) === false &&
+        route.routeMayUseOutOfOrderFragments !== true &&
+        (route.clientReferenceManifest?.length ?? 0) === 0 &&
+        (route.clientReferenceImports?.length ?? 0) === 0 &&
+        (await resolveClosedAttachCode(routeOptions, options.projectRoot));
+      const fallbackSpecifier = attachCode
+        ? `mreact-route-attach-fallback/${routeIdForPath(route.routePath)}`
+        : undefined;
+      const source = await buildClientRouteEntrySourceInternal({
+        ...routeOptions,
+        attachCode: attachCode || undefined,
+        attachFallbackSpecifier: fallbackSpecifier,
+      });
+      const activeFallbackSpecifier = source.attach === true ? fallbackSpecifier : undefined;
+      return {
+        filename: route.filename,
+        name: routeIdForPath(route.routePath),
+        preserveExports: route.clientNavigation ?? detectClientNavigationHint(route.code),
+        routePath: route.routePath,
+        source,
+        fallbackSource:
+          activeFallbackSpecifier === undefined
+            ? undefined
+            : await buildClientRouteEntrySourceInternal({
+                ...routeOptions,
+                deferInitialHydration: true,
+              }),
+        fallbackSpecifier: activeFallbackSpecifier,
+      };
+    }),
   );
   const entries = [...routeEntries, ...navigationEntries];
   const debugLabels = options.routes.some((route) => route.debugLabels === true);
@@ -3520,6 +3551,36 @@ export async function buildClientRouteBatchOutput(options: {
     routeFiles: entries.map((entry) => entry.filename),
     sourceRegionModulePaths,
   });
+  const fallbackSources = new Map(
+    routeEntries.flatMap((entry) =>
+      entry.fallbackSpecifier === undefined || entry.fallbackSource === undefined
+        ? []
+        : [[entry.fallbackSpecifier, entry.fallbackSource.code] as const],
+    ),
+  );
+  const fallbackImporters = new Map(
+    routeEntries.flatMap((entry) =>
+      entry.fallbackSpecifier === undefined
+        ? []
+        : [[entry.fallbackSpecifier, entry.filename] as const],
+    ),
+  );
+  const fallbackPlugin: Plugin = {
+    name: "mreact-route-attach-fallback",
+    enforce: "pre",
+    async resolveId(id, importer) {
+      const routeFilename = importer?.startsWith("\0")
+        ? fallbackImporters.get(importer.slice(1))
+        : undefined;
+      if (routeFilename !== undefined && id.startsWith(".")) {
+        return (await this.resolve(id, routeFilename, { skipSelf: true })) ?? undefined;
+      }
+      return fallbackSources.has(id) ? `\0${id}` : undefined;
+    },
+    load(id) {
+      return fallbackSources.get(id.slice(1));
+    },
+  };
   const bundled = await bundleRouterModules({
     base: options.assetBaseUrl ?? "/_mreact/client/",
     cacheDir: options.cacheDir,
@@ -3539,7 +3600,10 @@ export async function buildClientRouteBatchOutput(options: {
     root: options.projectRoot,
     sourceMap: options.sourceMap,
     dropConsoleFunctions: options.dropConsoleFunctions,
-    vitePlugins: options.vitePlugins,
+    vitePlugins:
+      fallbackSources.size === 0
+        ? options.vitePlugins
+        : [fallbackPlugin, ...(options.vitePlugins ?? [])],
   });
   const entryChunks = new Map(
     bundled.chunks.filter((chunk) => chunk.isEntry).map((chunk) => [chunk.name, chunk]),
@@ -3557,11 +3621,84 @@ export async function buildClientRouteBatchOutput(options: {
 
       return {
         chunk,
+        ...("fallbackSpecifier" in entry && entry.fallbackSpecifier !== undefined
+          ? { attach: true }
+          : {}),
         routeId: entry.name,
         routePath: entry.routePath,
       };
     }),
   };
+}
+
+async function resolveClosedAttachCode(
+  route: BuildClientRouteOutputOptions,
+  projectRoot: string | undefined,
+): Promise<string | undefined> {
+  const moduleContext = createCompilerModuleContext({ code: route.code, filename: route.filename });
+  const analyzed = analyzeCompilerModuleContextToIr(moduleContext, {
+    target: "client",
+    options: {
+      topLevelJsx: "diagnostic",
+      bodyStatementJsx: "dom-node",
+      awaitCompatComponents: "diagnostic",
+    },
+  });
+  if (analyzed.diagnostics.length !== 0) return undefined;
+
+  const direct = emitClosedDirectCellAttachRoute(analyzed.ir);
+  if (direct !== undefined || projectRoot === undefined || (route.vitePlugins?.length ?? 0) > 0) {
+    return direct;
+  }
+
+  const imports = collectClientRouteModuleAnalysisFromContext(moduleContext).staticImports;
+  const [cellImport, valueImport] = imports;
+  if (
+    imports.length !== 2 ||
+    cellImport?.source !== "@reckona/mreact-reactive-core" ||
+    cellImport.specifiers.length !== 1 ||
+    cellImport.specifiers[0]?.kind !== "named" ||
+    cellImport.specifiers[0]?.importedName !== "cell" ||
+    cellImport.specifiers[0]?.localName !== "cell" ||
+    valueImport === undefined ||
+    !valueImport.source.startsWith(".") ||
+    valueImport.specifiers.length !== 1 ||
+    valueImport.specifiers[0]?.kind !== "named"
+  ) {
+    return undefined;
+  }
+
+  const base = join(dirname(route.filename), valueImport.source);
+  const sourceCandidates = sourceModuleCandidates(base);
+  const candidates =
+    extname(base) === ""
+      ? [base, ...sourceCandidates, `${base}.json`, join(base, "package.json")]
+      : sourceCandidates;
+  const existingCandidates = (
+    await Promise.all(
+      candidates.map(async (candidate) => ((await isFile(candidate)) ? candidate : undefined)),
+    )
+  ).filter((candidate): candidate is string => candidate !== undefined);
+  const resolved = existingCandidates.length === 1 ? existingCandidates[0] : undefined;
+  if (resolved === undefined || !sourceCandidates.includes(resolved)) return undefined;
+  const pathWithinProject = relative(projectRoot, resolved);
+  if (
+    pathWithinProject.startsWith(`..${sep}`) ||
+    pathWithinProject === ".." ||
+    isAbsolute(pathWithinProject)
+  ) {
+    return undefined;
+  }
+
+  const specifier = valueImport.specifiers[0]!;
+  const source = await readFile(resolved, "utf8");
+  if (!isPureSingleStringExport(source, specifier.importedName)) return undefined;
+  const erased = eraseServerOnlyTitleImport(
+    analyzed.ir,
+    specifier.localName,
+    analyzed.ir.userImports[1] ?? "",
+  );
+  return erased === undefined ? undefined : emitClosedDirectCellAttachRoute(erased);
 }
 
 const navigationStateDeclarationSource = `const __mreactNavigationState = __mreactGlobal.__mreactNavigationState ??= {
@@ -3622,6 +3759,18 @@ const routeCleanupNavigationDispose = `  if (currentRouteId !== nextRouteId) {
 export async function buildClientRouteEntrySource(
   options: BuildClientRouteOutputOptions,
 ): Promise<{ code: string }> {
+  return buildClientRouteEntrySourceInternal(options);
+}
+
+interface InternalClientRouteEntryOptions extends BuildClientRouteOutputOptions {
+  attachCode?: string | undefined;
+  attachFallbackSpecifier?: string | undefined;
+  deferInitialHydration?: boolean | undefined;
+}
+
+async function buildClientRouteEntrySourceInternal(
+  options: InternalClientRouteEntryOptions,
+): Promise<{ code: string; attach?: true }> {
   const moduleContext = createCompilerModuleContext({
     code: options.code,
     filename: options.filename,
@@ -3697,6 +3846,49 @@ export async function buildClientRouteEntrySource(
     fact: capabilityFacts.domRefs,
   });
   const routeUsesCleanupScope = routeUsesCells || routeUsesReactiveEffect || routeUsesDomRefs;
+  const staticCellTextRoute =
+    routeUsesCells &&
+    !routeUsesReactiveEffect &&
+    !routeUsesDomRefs &&
+    !clientNavigation &&
+    clientReferenceManifest.length === 0 &&
+    compiled.metadata.imports.some(
+      (entry) =>
+        entry.source === "@reckona/mreact-reactive-dom/internal" &&
+        entry.specifiers.includes("bindCellText"),
+    ) &&
+    (() => {
+      const analyzed = analyzeCompilerModuleContextToIr(moduleContext, {
+        target: "client",
+        options: {
+          topLevelJsx: "diagnostic",
+          bodyStatementJsx: "dom-node",
+          awaitCompatComponents: "diagnostic",
+          clientBoundaryImports: options.clientBoundaryImports ?? [],
+        },
+      });
+      return (
+        analyzed.diagnostics.length === 0 &&
+        (options.attachCode !== undefined || hasClosedDirectCellTextRoute(analyzed.ir))
+      );
+    })();
+  const attachCode =
+    options.attachFallbackSpecifier !== undefined && staticCellTextRoute
+      ? (options.attachCode ??
+        (() => {
+          const analyzed = analyzeCompilerModuleContextToIr(moduleContext, {
+            target: "client",
+            options: {
+              topLevelJsx: "diagnostic",
+              bodyStatementJsx: "dom-node",
+              awaitCompatComponents: "diagnostic",
+            },
+          });
+          return analyzed.diagnostics.length === 0
+            ? emitClosedDirectCellAttachRoute(analyzed.ir)
+            : undefined;
+        })())
+      : undefined;
   const routeExplicitlyRequiresHydration = isExplicitClientRouteSource(
     routeSourceAnalysis,
     options.filename,
@@ -3717,19 +3909,26 @@ export async function buildClientRouteEntrySource(
     !routeRequiresFullHydration &&
     clientReferenceManifest.length > 0 &&
     (options.clientReferenceImports?.length ?? 0) > 0;
-  const routeHydrationCode = routeUsesOnlyClientReferenceBoundaries ? "" : compiled.code;
+  const routeHydrationCode = routeUsesOnlyClientReferenceBoundaries
+    ? ""
+    : (attachCode ?? compiled.code);
   const hydratedRouteComponentExpression = routeUsesOnlyClientReferenceBoundaries
     ? "undefined"
-    : routeComponentExpression;
+    : attachCode === undefined
+      ? routeComponentExpression
+      : "__mreactAttachRoute";
   const routeStateSignature = routeUsesCells ? routeStateSignatureForSource(compiled.code) : "";
-  const routeCellEffectImport = routeUsesCells
-    ? `import { effect as __mreactRouteEffect } from "@reckona/mreact-reactive-core";\n`
-    : "";
+  const routeCellEffectImport =
+    routeUsesCells && !staticCellTextRoute
+      ? `import { effect as __mreactRouteEffect } from "@reckona/mreact-reactive-core";\n`
+      : "";
   const routeCleanupScopeImport = routeUsesCleanupScope
     ? `import { withCleanupScope as __mreactWithCleanupScope } from "@reckona/mreact-reactive-core/internal";\n`
     : "";
   const routeUsesEventBindingSync =
-    !routeUsesOnlyClientReferenceBoundaries && routeMayCaptureEventBindings;
+    attachCode === undefined &&
+    !routeUsesOnlyClientReferenceBoundaries &&
+    routeMayCaptureEventBindings;
   const routeCapturedEventImport = routeUsesEventBindingSync
     ? `import { bindCapturedEvent as __mreactBindCapturedEvent } from "@reckona/mreact-reactive-dom/internal";\n`
     : "";
@@ -3992,10 +4191,22 @@ __mreactGlobal.__mreactRouteCell = (nativeCell, initial) => {
   __mreactRouteStates.set(__mreactRouteId, __mreactState);
   __mreactState.dispose?.();
 
-  __mreactState.dispose = __mreactRouteEffect(() => {
+${staticCellTextRoute ? "  {" : "  __mreactState.dispose = __mreactRouteEffect(() => {"}
     const __mreactRouteEffectDisposers = new Set();
     __mreactActiveCellRecords = __mreactState.cells;
     __mreactActiveCellIndex = 0;
+${
+  staticCellTextRoute
+    ? `    __mreactState.dispose = () => {
+      __mreactRunLifecycleTasks(
+        Array.from(__mreactRouteEffectDisposers),
+        (__mreactDispose) => __mreactDispose(),
+      );
+      __mreactRouteEffectDisposers.clear();
+    };
+`
+    : ""
+}
     __mreactRouteDisposers.set(__mreactRouteId, () => __mreactState.dispose?.());
 
     try {
@@ -4006,14 +4217,18 @@ __mreactGlobal.__mreactRouteCell = (nativeCell, initial) => {
       __mreactActiveCellRecords = undefined;
       __mreactActiveCellIndex = 0;
     }
-    return () => {
+${
+  staticCellTextRoute
+    ? "  }"
+    : `    return () => {
       __mreactRunLifecycleTasks(
         Array.from(__mreactRouteEffectDisposers),
         (__mreactDispose) => __mreactDispose(),
       );
       __mreactRouteEffectDisposers.clear();
     };
-  });
+  });`
+}
 `
     : "";
   const routeCellHydrationIndent = routeUsesCells ? "      " : "  ";
@@ -4153,7 +4368,8 @@ ${routeCellHydrationIndent}}
   // A boundary-only route hydrates its client references and returns at the component guard,
   // so its resume walk is unreachable. Emitting it would make a minimal route pay for a
   // capability it cannot use.
-  const routeUsesResumeRuntime = inlineClientNavigation || !routeUsesOnlyClientReferenceBoundaries;
+  const routeUsesResumeRuntime =
+    inlineClientNavigation || (attachCode === undefined && !routeUsesOnlyClientReferenceBoundaries);
   const routeHydrationRuntimeImportBlock = shareHydrationRuntime
     ? [
         `import { __mreactRunLifecycleTasks } from ${JSON.stringify(routeHydrationRuntimeSpecifier("lifecycle"))};\n`,
@@ -4191,11 +4407,27 @@ ${inlineClientNavigation ? "  resumeNode: __mreactResumeNode,\n" : ""}  resumeRo
   const routeInlineLifecycleRuntime = shareHydrationRuntime
     ? ""
     : `\n${routeHydrationRuntimeInlineSource("lifecycle")}`;
-  const routeResumeCall = routeUsesResumeRuntime
-    ? `${routeCellHydrationIndent}const __mreactNode = ${routeHydrationNodeExpression};
+  const routeResumeCall =
+    attachCode !== undefined
+      ? `${routeCellHydrationIndent}const __mreactScript = __mreactMarker.getAttribute("data-mreact-attach-script");
+${routeCellHydrationIndent}const __mreactMatchesBuild = __mreactScript !== null && new URL(import.meta.url).pathname.endsWith("/" + __mreactScript);
+${routeCellHydrationIndent}const __mreactAttached = __mreactMatchesBuild && __mreactWithCleanupScope(
+${routeCellHydrationIndent}  (__mreactDispose) => __mreactRouteEffectDisposers.add(__mreactDispose),
+${routeCellHydrationIndent}  () => __mreactComponent(__mreactMarker),
+${routeCellHydrationIndent});
+${routeCellHydrationIndent}if (!__mreactAttached) {
+${routeCellHydrationIndent}  __mreactFallbackPromise ??= import(${JSON.stringify(options.attachFallbackSpecifier)}).then((module) => {
+${routeCellHydrationIndent}    __mreactFallbackModule = module;
+${routeCellHydrationIndent}    module.__mreactHydrateRoute();
+${routeCellHydrationIndent}  }).catch(__mreactReportRouteHydrationError);
+${routeCellHydrationIndent}  return;
+${routeCellHydrationIndent}}
+`
+      : routeUsesResumeRuntime
+        ? `${routeCellHydrationIndent}const __mreactNode = ${routeHydrationNodeExpression};
 ${routeCellHydrationIndent}__mreactResumeRoute(__mreactMarker, __mreactNode);
 `
-    : "";
+        : "";
   const routeComponentGuard = `${routeCellHydrationIndent}if (__mreactComponent === undefined) {
 ${routeCellHydrationIndent}  return;
 ${routeCellHydrationIndent}}
@@ -4222,8 +4454,10 @@ ${routeCleanupStateDeclaration}
 ${routeCellHook}
 ${clientReferenceRegistry}
 ${routeNodeResolver}
+${attachCode === undefined ? "" : "let __mreactFallbackModule;\nlet __mreactFallbackPromise;"}
 
 export function __mreactHydrateRoute() {
+${attachCode === undefined ? "" : "  if (__mreactFallbackModule !== undefined) return __mreactFallbackModule.__mreactHydrateRoute();\n"}
 ${routeOutOfOrderFragmentHydration}  const __mreactMarker = document.querySelector(\`[\${__mreactRouteMarkerAttribute}="\${__mreactRouteId}"]\`);
   const __mreactPropsElement = document.getElementById(\`\${__mreactPropsScriptPrefix}\${__mreactRouteId}\`);
   const __mreactClientReferencesElement = document.getElementById(\`\${__mreactClientReferencesScriptPrefix}\${__mreactRouteId}\`);
@@ -4322,7 +4556,7 @@ function __mreactRunRouteHydration(factory) {
 }
 
 ${deferredNavigationRuntime}
-__mreactRunRouteHydration(() => __mreactHydrateRoute());
+${options.deferInitialHydration === true ? "" : "__mreactRunRouteHydration(() => __mreactHydrateRoute());"}
 ${clientNavigation ? "__mreactInstallNavigation();" : ""}
 
 ${inlineClientNavigation ? inlineNavigationRuntimeSource() : ""}
@@ -4332,6 +4566,7 @@ ${routeDomRefBindingSyncFunction}
 ${routeInlineHydrationRuntime}`;
   return {
     code: stripTypeScriptWithOxc(entry),
+    ...(attachCode === undefined ? {} : { attach: true as const }),
   };
 }
 
