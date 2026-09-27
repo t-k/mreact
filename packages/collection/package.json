@@ -1,0 +1,44 @@
+{
+  "name": "@reckona/mreact-collection",
+  "version": "0.0.225",
+  "description": "Opt-in keyed reactive collections for mreact.",
+  "keywords": [
+    "collection",
+    "jsx",
+    "mreact",
+    "reactive",
+    "state"
+  ],
+  "homepage": "https://github.com/t-k/mreact/tree/main/packages/collection#readme",
+  "bugs": {
+    "url": "https://github.com/t-k/mreact/issues"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/t-k/mreact.git",
+    "directory": "packages/collection"
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.js.map",
+    "dist/**/*.d.ts",
+    "dist/**/*.d.ts.map",
+    "src/**/*"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@reckona/mreact-reactive-core": "workspace:*"
+  }
+}
