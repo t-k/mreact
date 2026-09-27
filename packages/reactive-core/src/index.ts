@@ -12,6 +12,8 @@ export { computed } from "./computed.js";
 export { effect } from "./effect.js";
 export { selector } from "./selector.js";
 export type { Selector, SelectorEquality } from "./selector.js";
+export { createResource } from "./resource.js";
+export type { Resource, ResourceLease, ResourceState } from "./resource.js";
 export { untrack } from "./untrack.js";
 export {
   requestState,
