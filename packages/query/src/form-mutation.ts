@@ -8,9 +8,7 @@ import {
 
 /** The subset of a form needed to validate and submit a mutation. */
 export interface MutationFlowForm<TValues extends object, TSubmitValues> {
-  submit<TResult>(
-    handler: (values: TSubmitValues) => Promise<TResult> | TResult,
-  ): Promise<
+  submit<TResult>(handler: (values: TSubmitValues) => Promise<TResult> | TResult): Promise<
     | { status: "success"; data: TResult }
     | { status: "duplicate" }
     | {
@@ -79,10 +77,17 @@ type FieldLedger = {
   operations: Operation[];
 };
 type CacheLedger = Map<string, FieldLedger>;
+type QueryLedgers = Map<string, CacheLedger>;
 type Change = { field: string; ledger: FieldLedger; operation: Operation };
-type MutationContext = { queryKey: QueryKey; queryHash: string; changes: Change[] };
+type MutationContext = {
+  queryKey: QueryKey;
+  queryHash: string;
+  queries: QueryLedgers;
+  fields: CacheLedger;
+  changes: Change[];
+};
 
-const clientLedgers = new WeakMap<QueryClient, Map<string, CacheLedger>>();
+const clientLedgers = new WeakMap<QueryClient, QueryLedgers>();
 
 class ServerErrorsSignal<TValues extends object> extends Error {
   constructor(readonly errors: MutationFlowServerErrors<TValues>) {
@@ -100,7 +105,10 @@ function isUnsafeKey(key: string): boolean {
   return key === "__proto__" || key === "constructor" || key === "prototype";
 }
 
-function getCacheLedger(client: QueryClient, queryHash: string): CacheLedger {
+function getCacheLedger(
+  client: QueryClient,
+  queryHash: string,
+): { queries: QueryLedgers; fields: CacheLedger } {
   let queries = clientLedgers.get(client);
   if (queries === undefined) {
     queries = new Map();
@@ -111,22 +119,15 @@ function getCacheLedger(client: QueryClient, queryHash: string): CacheLedger {
     fields = new Map();
     queries.set(queryHash, fields);
   }
-  return fields;
+  return { queries, fields };
 }
 
-function pruneLedger(
-  client: QueryClient,
-  context: MutationContext,
-  field: string,
-  ledger: FieldLedger,
-): void {
-  if (ledger.operations.some((operation) => operation.status === "pending")) return;
-  const queries = clientLedgers.get(client);
-  const fields = queries?.get(context.queryHash);
-  if (fields?.get(field) !== ledger) return;
-  fields.delete(field);
-  if (fields.size === 0) queries?.delete(context.queryHash);
-  if (queries?.size === 0) clientLedgers.delete(client);
+function pruneQueryLedger(context: MutationContext): void {
+  if (context.queries.get(context.queryHash) !== context.fields) return;
+  for (const ledger of context.fields.values()) {
+    if (ledger.operations.some((operation) => operation.status === "pending")) return;
+  }
+  context.queries.delete(context.queryHash);
 }
 
 function applyOptimisticPatch<TSubmitValues, TQueryData extends Record<string, unknown>>(
@@ -147,7 +148,7 @@ function applyOptimisticPatch<TSubmitValues, TQueryData extends Record<string, u
   if (entries.length === 0) return undefined;
 
   const queryHash = hashQueryKey(optimistic.queryKey);
-  const fields = getCacheLedger(client, queryHash);
+  const { queries, fields } = getCacheLedger(client, queryHash);
   const changes: Change[] = [];
   const next = { ...current };
   for (const [field, value] of entries) {
@@ -170,7 +171,7 @@ function applyOptimisticPatch<TSubmitValues, TQueryData extends Record<string, u
     next[field] = value;
   }
   client.setQueryData(optimistic.queryKey, next);
-  return { queryKey: optimistic.queryKey, queryHash, changes };
+  return { queryKey: optimistic.queryKey, queryHash, queries, fields, changes };
 }
 
 function settleOptimisticPatch(
@@ -180,12 +181,12 @@ function settleOptimisticPatch(
 ): void {
   if (context === undefined) return;
   const current = client.getQueryData(context.queryKey);
-  const fields = clientLedgers.get(client)?.get(context.queryHash);
+  const fields = context.queries.get(context.queryHash);
   if (!isPlainRecord(current)) {
-    for (const { field, ledger, operation } of context.changes) {
+    for (const { operation } of context.changes) {
       operation.status = success ? "success" : "failed";
-      pruneLedger(client, context, field, ledger);
     }
+    pruneQueryLedger(context);
     client.invalidateQueries({ queryKey: context.queryKey });
     return;
   }
@@ -196,7 +197,6 @@ function settleOptimisticPatch(
     operation.status = success ? "success" : "failed";
     if (fields?.get(field) !== ledger || !Object.is(current[field], ledger.visibleValue)) {
       conflicted = true;
-      pruneLedger(client, context, field, ledger);
       continue;
     }
     if (!success && ledger.visibleOperation === operation) {
@@ -221,8 +221,8 @@ function settleOptimisticPatch(
       }
       changed = true;
     }
-    pruneLedger(client, context, field, ledger);
   }
+  pruneQueryLedger(context);
   if (changed) client.setQueryData(context.queryKey, next);
   if (conflicted) client.invalidateQueries({ queryKey: context.queryKey });
 }
@@ -252,7 +252,7 @@ export function createFormMutationFlow<
     onSettled: (result, _values, context) => {
       if ("data" in result) settleOptimisticPatch(client, context, true);
     },
-    ...(options.invalidate === undefined ? {} : { invalidate: options.invalidate }),
+    invalidate: options.invalidate ?? [],
   });
 
   return {
