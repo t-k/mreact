@@ -21,8 +21,10 @@ import {
   collectClientRouteModuleAnalysisFromContext,
   createCompilerModuleContext,
   emitClosedDirectCellAttachRoute,
+  eraseServerOnlyTitleImport,
   hasClosedDirectCellTextRoute,
   hasUnguardedBrowserGlobalReference,
+  isPureSingleStringExport,
   readTopLevelBooleanExport,
   readTopLevelBooleanExportFromContext,
   stripTypeScriptWithOxc,
@@ -3507,33 +3509,18 @@ export async function buildClientRouteBatchOutput(options: {
         sourceMap: options.sourceMap ?? route.sourceMap,
         vitePlugins: options.vitePlugins ?? route.vitePlugins,
       };
-      const attachCandidate =
+      const attachCode =
         (route.clientNavigation ?? detectClientNavigationHint(route.code)) === false &&
         route.routeMayUseOutOfOrderFragments !== true &&
         (route.clientReferenceManifest?.length ?? 0) === 0 &&
         (route.clientReferenceImports?.length ?? 0) === 0 &&
-        (() => {
-          const analyzed = analyzeCompilerModuleContextToIr(
-            createCompilerModuleContext({ code: route.code, filename: route.filename }),
-            {
-              target: "client",
-              options: {
-                topLevelJsx: "diagnostic",
-                bodyStatementJsx: "dom-node",
-                awaitCompatComponents: "diagnostic",
-              },
-            },
-          );
-          return (
-            analyzed.diagnostics.length === 0 &&
-            emitClosedDirectCellAttachRoute(analyzed.ir) !== undefined
-          );
-        })();
-      const fallbackSpecifier = attachCandidate
+        (await resolveClosedAttachCode(routeOptions, options.projectRoot));
+      const fallbackSpecifier = attachCode
         ? `mreact-route-attach-fallback/${routeIdForPath(route.routePath)}`
         : undefined;
       const source = await buildClientRouteEntrySourceInternal({
         ...routeOptions,
+        attachCode: attachCode || undefined,
         attachFallbackSpecifier: fallbackSpecifier,
       });
       const activeFallbackSpecifier = source.attach === true ? fallbackSpecifier : undefined;
@@ -3571,10 +3558,23 @@ export async function buildClientRouteBatchOutput(options: {
         : [[entry.fallbackSpecifier, entry.fallbackSource.code] as const],
     ),
   );
+  const fallbackImporters = new Map(
+    routeEntries.flatMap((entry) =>
+      entry.fallbackSpecifier === undefined
+        ? []
+        : [[entry.fallbackSpecifier, entry.filename] as const],
+    ),
+  );
   const fallbackPlugin: Plugin = {
     name: "mreact-route-attach-fallback",
     enforce: "pre",
-    resolveId(id) {
+    async resolveId(id, importer) {
+      const routeFilename = importer?.startsWith("\0")
+        ? fallbackImporters.get(importer.slice(1))
+        : undefined;
+      if (routeFilename !== undefined && id.startsWith(".")) {
+        return (await this.resolve(id, routeFilename, { skipSelf: true })) ?? undefined;
+      }
       return fallbackSources.has(id) ? `\0${id}` : undefined;
     },
     load(id) {
@@ -3629,6 +3629,76 @@ export async function buildClientRouteBatchOutput(options: {
       };
     }),
   };
+}
+
+async function resolveClosedAttachCode(
+  route: BuildClientRouteOutputOptions,
+  projectRoot: string | undefined,
+): Promise<string | undefined> {
+  const moduleContext = createCompilerModuleContext({ code: route.code, filename: route.filename });
+  const analyzed = analyzeCompilerModuleContextToIr(moduleContext, {
+    target: "client",
+    options: {
+      topLevelJsx: "diagnostic",
+      bodyStatementJsx: "dom-node",
+      awaitCompatComponents: "diagnostic",
+    },
+  });
+  if (analyzed.diagnostics.length !== 0) return undefined;
+
+  const direct = emitClosedDirectCellAttachRoute(analyzed.ir);
+  if (direct !== undefined || projectRoot === undefined || (route.vitePlugins?.length ?? 0) > 0) {
+    return direct;
+  }
+
+  const imports = collectClientRouteModuleAnalysisFromContext(moduleContext).staticImports;
+  const [cellImport, valueImport] = imports;
+  if (
+    imports.length !== 2 ||
+    cellImport?.source !== "@reckona/mreact-reactive-core" ||
+    cellImport.specifiers.length !== 1 ||
+    cellImport.specifiers[0]?.kind !== "named" ||
+    cellImport.specifiers[0]?.importedName !== "cell" ||
+    cellImport.specifiers[0]?.localName !== "cell" ||
+    valueImport === undefined ||
+    !valueImport.source.startsWith(".") ||
+    valueImport.specifiers.length !== 1 ||
+    valueImport.specifiers[0]?.kind !== "named"
+  ) {
+    return undefined;
+  }
+
+  const base = join(dirname(route.filename), valueImport.source);
+  const sourceCandidates = sourceModuleCandidates(base);
+  const candidates =
+    extname(base) === ""
+      ? [base, ...sourceCandidates, `${base}.json`, join(base, "package.json")]
+      : sourceCandidates;
+  const existingCandidates = (
+    await Promise.all(
+      candidates.map(async (candidate) => ((await isFile(candidate)) ? candidate : undefined)),
+    )
+  ).filter((candidate): candidate is string => candidate !== undefined);
+  const resolved = existingCandidates.length === 1 ? existingCandidates[0] : undefined;
+  if (resolved === undefined || !sourceCandidates.includes(resolved)) return undefined;
+  const pathWithinProject = relative(projectRoot, resolved);
+  if (
+    pathWithinProject.startsWith(`..${sep}`) ||
+    pathWithinProject === ".." ||
+    isAbsolute(pathWithinProject)
+  ) {
+    return undefined;
+  }
+
+  const specifier = valueImport.specifiers[0]!;
+  const source = await readFile(resolved, "utf8");
+  if (!isPureSingleStringExport(source, specifier.importedName)) return undefined;
+  const erased = eraseServerOnlyTitleImport(
+    analyzed.ir,
+    specifier.localName,
+    analyzed.ir.userImports[1] ?? "",
+  );
+  return erased === undefined ? undefined : emitClosedDirectCellAttachRoute(erased);
 }
 
 const navigationStateDeclarationSource = `const __mreactNavigationState = __mreactGlobal.__mreactNavigationState ??= {
@@ -3693,6 +3763,7 @@ export async function buildClientRouteEntrySource(
 }
 
 interface InternalClientRouteEntryOptions extends BuildClientRouteOutputOptions {
+  attachCode?: string | undefined;
   attachFallbackSpecifier?: string | undefined;
   deferInitialHydration?: boolean | undefined;
 }
@@ -3796,11 +3867,15 @@ async function buildClientRouteEntrySourceInternal(
           clientBoundaryImports: options.clientBoundaryImports ?? [],
         },
       });
-      return analyzed.diagnostics.length === 0 && hasClosedDirectCellTextRoute(analyzed.ir);
+      return (
+        analyzed.diagnostics.length === 0 &&
+        (options.attachCode !== undefined || hasClosedDirectCellTextRoute(analyzed.ir))
+      );
     })();
   const attachCode =
     options.attachFallbackSpecifier !== undefined && staticCellTextRoute
-      ? (() => {
+      ? (options.attachCode ??
+        (() => {
           const analyzed = analyzeCompilerModuleContextToIr(moduleContext, {
             target: "client",
             options: {
@@ -3812,7 +3887,7 @@ async function buildClientRouteEntrySourceInternal(
           return analyzed.diagnostics.length === 0
             ? emitClosedDirectCellAttachRoute(analyzed.ir)
             : undefined;
-        })()
+        })())
       : undefined;
   const routeExplicitlyRequiresHydration = isExplicitClientRouteSource(
     routeSourceAnalysis,

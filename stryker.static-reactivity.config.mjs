@@ -7,7 +7,7 @@ export default {
     breakThreshold: 80,
     mutate: [
       "packages/compiler/src/static-reactivity.ts",
-      "packages/router/src/client.ts:3844-3847",
+      "packages/router/src/client.ts:3921-3924",
     ],
     testFiles: [
       "packages/compiler/test/static-reactivity.test.ts",

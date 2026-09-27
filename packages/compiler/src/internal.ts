@@ -9,6 +9,7 @@ export {
   emitClosedDirectCellAttachRoute,
   hasClosedDirectCellTextRoute,
 } from "./static-reactivity.js";
+export { eraseServerOnlyTitleImport, isPureSingleStringExport } from "./server-only-attribute.js";
 export { stripTypeScriptWithOxc } from "./oxc-transform.js";
 export type { CompilerModuleContext } from "./compiler-module-context.js";
 import type { AnalyzeModuleOptions, CompileTarget, Diagnostic } from "./types.js";

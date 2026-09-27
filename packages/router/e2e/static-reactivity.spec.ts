@@ -76,7 +76,7 @@ test("a closed direct-cell route updates its existing button and text node", asy
   }
 });
 
-test("a fixed route attaches to server DOM without loading its mount fallback", async ({
+test("a fixed route preserves an imported SSR title and lazily loads its mount fallback", async ({
   page,
 }) => {
   const base = clientDeliveryFixtures.find(
@@ -93,11 +93,13 @@ test("a fixed route attaches to server DOM without loading its mount fallback", 
     name: "native-attach-e2e",
     files: {
       ...base.files,
+      "src/app/legal-copy.ts": 'export const legalText = "Legal notice rendered on the server";',
       "src/app/page.tsx": `import { cell } from "@reckona/mreact-reactive-core";
+import { legalText } from "./legal-copy";
 export const clientNavigation = false;
 export default function Page() {
   const count = cell(0);
-  return <main><p>Long content rendered only on the server</p><button type="button" onClick={() => count.set(value => value + 1)}>{count.get()}</button></main>;
+  return <main><p>Long content rendered only on the server</p><button type="button" title={legalText} onClick={() => count.set(value => value + 1)}>{count.get()}</button></main>;
 }`,
     },
   };
@@ -144,6 +146,7 @@ export default function Page() {
     await expect(marker).toHaveAttribute("data-mreact-attach-script", /assets\/routes\//);
     const button = page.getByRole("button");
     await expect(button).toHaveText("0");
+    await expect(button).toHaveAttribute("title", "Legal notice rendered on the server");
     expect(
       await button.evaluate((element) => {
         const host = window as typeof window & {
@@ -185,11 +188,83 @@ export default function Page() {
     await page.reload();
     await page.waitForFunction(() => document.documentElement.hasAttribute("data-mreact-hydrated"));
     await expect(button).toHaveText("0");
+    await expect(button).toHaveAttribute("title", "Legal notice rendered on the server");
     await button.click();
     await expect(button).toHaveText("1");
     expect(
       requestedAssets.some((path) => deferredChunks.some((chunk) => path.endsWith(chunk))),
     ).toBe(true);
+  } finally {
+    await server.close();
+    await rm(workDir, { force: true, recursive: true });
+  }
+});
+
+test("an imported SSR title survives client navigation into an attach route", async ({ page }) => {
+  const base = clientDeliveryFixtures.find(
+    (entry) => entry.name === "native-counter-no-navigation",
+  );
+  expect(base).toBeDefined();
+  if (base === undefined) return;
+
+  const workDir = join(repositoryRoot, "test-results", "static-attach-navigation-e2e");
+  await rm(workDir, { force: true, recursive: true });
+  await mkdir(workDir, { recursive: true });
+  const fixture = {
+    ...base,
+    name: "native-attach-navigation-e2e",
+    files: {
+      ...base.files,
+      "src/app/page.tsx": `import { cell } from "@reckona/mreact-reactive-core";
+export default function Home() {
+  const count = cell(0);
+  return <main><a href="/about">About</a><button onClick={() => count.set(value => value + 1)}>{count.get()}</button></main>;
+}`,
+      "src/app/about/legal-copy.ts": 'export const legalText = "About notice";',
+      "src/app/about/page.tsx": `import { cell } from "@reckona/mreact-reactive-core";
+import { legalText } from "./legal-copy";
+export const clientNavigation = false;
+export default function About() {
+  const count = cell(0);
+  return <button title={legalText} onClick={() => count.set(value => value + 1)}>{count.get()}</button>;
+}`,
+    },
+  };
+  const project = await materializeClientDeliveryFixture(fixture, workDir);
+  const previousNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = "production";
+  try {
+    await buildApp({
+      appDir: project.appDir,
+      outDir: project.outDir,
+      projectRoot: project.projectRoot,
+    });
+  } finally {
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+  }
+
+  const server = await startServer({ outDir: project.outDir, port: 0 });
+  try {
+    await page.goto(server.url);
+    await page.waitForFunction(() => document.documentElement.hasAttribute("data-mreact-hydrated"));
+    await page.evaluate(() => {
+      (window as typeof window & { __mreactNavigationMarker?: object }).__mreactNavigationMarker =
+        {};
+    });
+    await page.getByRole("link", { name: "About" }).click();
+    await expect(page).toHaveURL(/\/about$/u);
+    const button = page.getByRole("button");
+    await expect(button).toHaveAttribute("title", "About notice");
+    expect(
+      await page.evaluate(
+        () =>
+          (window as typeof window & { __mreactNavigationMarker?: object })
+            .__mreactNavigationMarker !== undefined,
+      ),
+    ).toBe(true);
+    await button.click();
+    await expect(button).toHaveText("1");
   } finally {
     await server.close();
     await rm(workDir, { force: true, recursive: true });
