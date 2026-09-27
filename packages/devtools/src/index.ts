@@ -4,6 +4,13 @@ import {
   type DevtoolsResourceRegistration,
 } from "./resources.js";
 
+export { exportDevtoolsDiagnostics } from "./diagnostics.js";
+export type {
+  DevtoolsDiagnosticEvent,
+  DevtoolsDiagnosticKindCounts,
+  DevtoolsDiagnosticsV1,
+} from "./diagnostics.js";
+
 export {
   compareDevtoolsResourceSnapshots,
   createDevtoolsResourceInspector,
