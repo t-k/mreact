@@ -118,6 +118,7 @@ function transformWithAnalyzer(
             dev: input.dev,
             filename: input.filename,
             specializations: input.clientSpecializations,
+            reportSpecializations: input.reportClientSpecializations,
           });
 
   const metadata: ModuleMetadata = {
@@ -133,6 +134,9 @@ function transformWithAnalyzer(
     })),
     imports: emitted.imports,
   };
+  if ("clientSpecializations" in emitted && Array.isArray(emitted.clientSpecializations)) {
+    metadata.clientSpecializations = emitted.clientSpecializations;
+  }
   const events = collectEventHydrationEntries(analyzed.ir.components);
 
   if (events.length > 0) {

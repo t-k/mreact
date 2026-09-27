@@ -51,6 +51,7 @@ export type JsxNodeIr =
 /** Represents a lowered intrinsic JSX element. */
 export interface JsxElementIr {
   kind: "element";
+  loc?: SourceLocation | undefined;
   tagName: string;
   namespace?: "svg";
   keyCode?: string;
@@ -118,6 +119,7 @@ export interface JsxFragmentIr {
 /** Represents a conditional JSX expression with true and false branches. */
 export interface ConditionalIr {
   kind: "conditional";
+  loc?: SourceLocation | undefined;
   conditionCode: string;
   conditionValueName?: string;
   conditionTestCode?: string;
@@ -128,6 +130,7 @@ export interface ConditionalIr {
 /** Represents a JSX list rendering expression and its lowered item body. */
 export interface ListIr {
   kind: "list";
+  loc?: SourceLocation | undefined;
   itemsCode: string;
   itemName: string;
   indexName?: string;
@@ -177,6 +180,7 @@ export interface TextIr {
 /** Represents a dynamic expression emitted from JSX. */
 export interface ExprIr {
   kind: "expr";
+  loc?: SourceLocation | undefined;
   code: string;
   /** Conservative facts proven about `code`; absent means every fact is unknown. */
   facts?: ExpressionFactsIr;
@@ -227,6 +231,7 @@ export interface StaticAttributeIr {
 /** Represents a dynamic intrinsic attribute expression. */
 export interface DynamicAttributeIr {
   kind: "dynamic-attr";
+  loc?: SourceLocation | undefined;
   name: string;
   code: string;
   omitServerRenderValue?: true;

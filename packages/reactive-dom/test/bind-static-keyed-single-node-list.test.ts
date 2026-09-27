@@ -8,6 +8,136 @@ import { bindEvent, bindStaticKeyedSingleNodeList, bindText } from "../src/index
 import { bindCompilerKeyedSingleNodeList, bindCompilerKeyedText } from "../src/internal.js";
 
 describe("bindStaticKeyedSingleNodeList", () => {
+  test("moves only the last row for a last-to-front rotation", async () => {
+    const items = cell([1, 2, 3, 4].map((id) => ({ id, label: `row-${id}` })));
+    const parent = document.createElement("ul");
+    const marker = document.createComment("rows");
+    parent.append(marker);
+    document.body.append(parent);
+    const dispose = bindCompilerKeyedSingleNodeList(
+      parent,
+      marker,
+      () => items.get(),
+      (context) => {
+        const row = document.createElement("li");
+        row.dataset.id = String(context.item.id);
+        const input = document.createElement("input");
+        input.value = context.item.label;
+        row.append(input);
+        return row;
+      },
+      { key: (item) => item.id },
+    );
+    await flushEffects();
+    const original = Array.from(parent.children);
+    const input = original[0]?.querySelector("input");
+    expect(input).toBeInstanceOf(HTMLInputElement);
+    input!.value = "edited";
+    input!.focus();
+    const insertBefore = vi.spyOn(parent, "insertBefore");
+    const siblingReads = original.map((row) => vi.spyOn(row, "nextSibling", "get"));
+
+    items.set([items.get()[3]!, ...items.get().slice(0, 3)]);
+    await flushEffects();
+
+    expect(Array.from(parent.children)).toEqual([original[3], original[0], original[1], original[2]]);
+    expect(insertBefore).toHaveBeenCalledTimes(1);
+    expect(siblingReads.reduce((total, read) => total + read.mock.calls.length, 0)).toBeLessThanOrEqual(5);
+    expect(input!.value).toBe("edited");
+    expect(document.activeElement).toBe(input);
+    dispose();
+    parent.remove();
+  });
+
+  test.each(["first", "middle"])("falls back when external code reorders the %s rows", async (position) => {
+    const items = cell([1, 2, 3, 4]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("rows");
+    parent.append(marker);
+    const dispose = bindStaticKeyedSingleNodeList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const row = document.createElement("li");
+        row.textContent = String(item);
+        return row;
+      },
+      { key: (item) => item },
+    );
+    await flushEffects();
+    const original = Array.from(parent.children);
+    if (position === "first") {
+      parent.insertBefore(original[1]!, original[0]!);
+    } else {
+      parent.insertBefore(original[2]!, original[1]!);
+    }
+
+    items.set([4, 1, 2, 3]);
+    await flushEffects();
+
+    expect(Array.from(parent.children)).toEqual([original[3], original[0], original[1], original[2]]);
+    dispose();
+  });
+
+  test("keeps every four-row permutation in key order without recreating rows", async () => {
+    const permutations = (values: readonly number[]): number[][] =>
+      values.length === 0
+        ? [[]]
+        : values.flatMap((value, index) =>
+            permutations(values.filter((_, other) => other !== index)).map((tail) => [value, ...tail]),
+          );
+
+    for (const order of permutations([1, 2, 3, 4])) {
+      const items = cell([1, 2, 3, 4]);
+      const parent = document.createElement("ul");
+      const marker = document.createComment("rows");
+      parent.append(marker);
+      const dispose = bindStaticKeyedSingleNodeList(
+        parent,
+        marker,
+        () => items.get(),
+        (item) => {
+          const row = document.createElement("li");
+          row.textContent = String(item);
+          return row;
+        },
+        { key: (item) => item },
+      );
+      await flushEffects();
+      const original = Array.from(parent.children);
+
+      items.set(order);
+      await flushEffects();
+
+      expect(Array.from(parent.children), `order ${order.join(",")}`).toEqual(order.map((id) => original[id - 1]));
+      dispose();
+    }
+  });
+
+  test("moves a three-row last-to-front rotation once", async () => {
+    const items = cell([1, 2, 3]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("rows");
+    parent.append(marker);
+    const dispose = bindStaticKeyedSingleNodeList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => document.createTextNode(String(item)),
+      { key: (item) => item },
+    );
+    await flushEffects();
+    const original = Array.from(parent.childNodes);
+    const insertBefore = vi.spyOn(parent, "insertBefore");
+
+    items.set([3, 1, 2]);
+    await flushEffects();
+
+    expect(Array.from(parent.childNodes)).toEqual([original[2], original[0], original[1], marker]);
+    expect(insertBefore).toHaveBeenCalledTimes(1);
+    dispose();
+  });
   test("warns once when compiler-fast rows contain a duplicate key", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const items = cell([{ id: "a" }, { id: "a" }]);

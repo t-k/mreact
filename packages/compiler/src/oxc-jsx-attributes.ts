@@ -126,7 +126,7 @@ export function analyzeOxcAttribute(
 
   if (value.type === "Literal") {
     if (name === "dangerouslySetInnerHTML") {
-      return [{ kind: "dynamic-attr", name, code: JSON.stringify(value.value) }];
+      return [{ kind: "dynamic-attr", name, code: JSON.stringify(value.value), loc: getOxcLocation(code, object.name) }];
     }
 
     return [{ kind: "static-attr", name, value: String(value.value) }];
@@ -139,6 +139,7 @@ export function analyzeOxcAttribute(
     const attribute: DynamicAttributeIr = {
       kind: "dynamic-attr",
       name,
+      loc: getOxcLocation(code, object.name),
       code: expressionCode,
       ...(target === "server" && options.isServerRenderValueExpression?.(expression) === true
         ? { omitServerRenderValue: true }
@@ -150,7 +151,7 @@ export function analyzeOxcAttribute(
   }
 
   return name === "dangerouslySetInnerHTML"
-    ? [{ kind: "dynamic-attr", name, code: "true" }]
+    ? [{ kind: "dynamic-attr", name, code: "true", loc: getOxcLocation(code, object.name) }]
     : [{ kind: "static-attr", name, value: "" }];
 }
 

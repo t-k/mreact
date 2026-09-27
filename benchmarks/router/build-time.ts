@@ -9,8 +9,15 @@ import { createDatedResultsDir, writeJsonFile, writeTextFile } from "../shared/r
 
 interface RouterBuildTimeRow {
   caseName: string;
+  methodologyVersion: 2;
+  processModel: "same-process-rebuild";
+  osCache: "retained";
   meanMs: number;
   meanRssDeltaBytes: number;
+  medianMs: number;
+  medianRssDeltaBytes: number;
+  maxMs: number;
+  maxRssDeltaBytes: number;
   p75Ms: number;
   p75RssDeltaBytes: number;
   p99Ms: number;
@@ -58,7 +65,7 @@ try {
         : {}),
     });
     samplesMs.push(round(performance.now() - startedAt));
-    rssDeltaBytesSamples.push(Math.max(0, process.memoryUsage().rss - beforeRss));
+    rssDeltaBytesSamples.push(process.memoryUsage().rss - beforeRss);
 
     for (const timing of phaseTimings) {
       const samples = phaseSamples.get(timing.phase) ?? [];
@@ -69,8 +76,15 @@ try {
 
   const row: RouterBuildTimeRow = {
     caseName: "app build with rendered-export client inference",
+    methodologyVersion: 2,
+    processModel: "same-process-rebuild",
+    osCache: "retained",
     meanMs: round(mean(samplesMs)),
     meanRssDeltaBytes: round(mean(rssDeltaBytesSamples)),
+    medianMs: percentile(samplesMs, 50),
+    medianRssDeltaBytes: percentile(rssDeltaBytesSamples, 50),
+    maxMs: percentile(samplesMs, 100),
+    maxRssDeltaBytes: percentile(rssDeltaBytesSamples, 100),
     p75Ms: percentile(samplesMs, 75),
     p75RssDeltaBytes: percentile(rssDeltaBytesSamples, 75),
     p99Ms: percentile(samplesMs, 99),
@@ -106,9 +120,11 @@ try {
     "",
     "## Results",
     "",
-    "| case | routes | mean ms | p75 ms | p99 ms | mean RSS delta bytes | p75 RSS delta bytes | p99 RSS delta bytes | raw samples ms | raw RSS delta bytes |",
-    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
-    `| ${row.caseName} | ${row.routeCount} | ${row.meanMs} | ${row.p75Ms} | ${row.p99Ms} | ${row.meanRssDeltaBytes} | ${row.p75RssDeltaBytes} | ${row.p99RssDeltaBytes} | ${row.samplesMs.join(", ")} | ${row.rssDeltaBytesSamples.join(", ")} |`,
+    "This track deletes generated output between builds but reuses one Node process and retains OS caches. RSS deltas are signed; they are not peak or process-tree memory. With the default five samples, p99 is the maximum sample, so use the median and raw samples for comparisons.",
+    "",
+    "| case | routes | median ms | max ms | mean ms | p75 ms | p99 ms | median RSS delta bytes | max RSS delta bytes | raw samples ms | raw RSS delta bytes |",
+    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
+    `| ${row.caseName} | ${row.routeCount} | ${row.medianMs} | ${row.maxMs} | ${row.meanMs} | ${row.p75Ms} | ${row.p99Ms} | ${row.medianRssDeltaBytes} | ${row.maxRssDeltaBytes} | ${row.samplesMs.join(", ")} | ${row.rssDeltaBytesSamples.join(", ")} |`,
     ...(phaseRows.length === 0
       ? []
       : [

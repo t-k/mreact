@@ -1,5 +1,6 @@
 import type {
   ClientReferenceMetadata as SharedClientReferenceMetadata,
+  ClientSpecializationMetadata as SharedClientSpecializationMetadata,
   CompileTarget as SharedCompileTarget,
   CompilerFrontend as SharedCompilerFrontend,
   ComponentMetadata as SharedComponentMetadata,
@@ -73,6 +74,8 @@ export interface TransformInput {
    * against the generic runtime path it replaces.
    */
   clientSpecializations?: Partial<ClientSpecializationFlags>;
+  /** @internal Collects actual reactive client emitter specialization decisions. */
+  reportClientSpecializations?: boolean;
 }
 
 /**
@@ -110,6 +113,9 @@ export type SourceLocation = SharedSourceLocation;
 
 /** Describes metadata collected for one transformed module. */
 export type ModuleMetadata = SharedModuleMetadata;
+
+/** One opt-in reactive client emitter decision. */
+export type ClientSpecializationMetadata = SharedClientSpecializationMetadata;
 
 /** Describes compiler frontend metadata for one transformed module. */
 export type CompilerMetadata = SharedModuleMetadata["compiler"];

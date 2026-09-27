@@ -249,6 +249,8 @@ export interface ConditionalIr {
     // (undocumented)
     kind: "conditional";
     // (undocumented)
+    loc?: SourceLocation | undefined;
+    // (undocumented)
     whenFalse: JsxNodeIr[];
     // (undocumented)
     whenTrue: JsxNodeIr[];
@@ -275,6 +277,8 @@ export interface DynamicAttributeIr {
     code: string;
     // (undocumented)
     kind: "dynamic-attr";
+    // (undocumented)
+    loc?: SourceLocation | undefined;
     // (undocumented)
     name: string;
     // (undocumented)
@@ -333,6 +337,8 @@ export interface ExprIr {
     // (undocumented)
     kind: "expr";
     // (undocumented)
+    loc?: SourceLocation | undefined;
+    // (undocumented)
     renderMode?: "dynamic" | "render-value" | "html" | "server-render-value" | "react-node" | "stream-node" | "compat-child" | "compiler-keyed-initial-text" | "compiler-keyed-cell-text" | "compiler-keyed-text";
 }
 
@@ -349,6 +355,8 @@ export interface JsxElementIr {
     keyCode?: string;
     // (undocumented)
     kind: "element";
+    // (undocumented)
+    loc?: SourceLocation | undefined;
     // (undocumented)
     namespace?: "svg";
     // (undocumented)
@@ -388,6 +396,8 @@ export interface ListIr {
     keyCode?: string;
     // (undocumented)
     kind: "list";
+    // (undocumented)
+    loc?: SourceLocation | undefined;
     // (undocumented)
     parameterBinding?: ListParameterBindingIr;
     // (undocumented)

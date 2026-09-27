@@ -1719,7 +1719,7 @@ export default function Page() {
         },
         context,
       ),
-    ).toEqual([{ kind: "expr", code: "loweredNested", renderMode: "dynamic" }]);
+    ).toEqual([{ kind: "expr", code: "loweredNested", renderMode: "dynamic", loc: { line: 1, column: 1 } }]);
   });
 
   test("lowers nested JSX expressions for DOM, compat, and reactive component values", () => {

@@ -444,7 +444,9 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
     }
 
     removeStaleSingleNodeRecords(records, nextRecords, selectedClassState, deferEventPromotion);
-    reconcileSingleNodeRecordOrder(insertionParent, marker, orderedRecords);
+    if (!ownsCurrentParent || !moveLastSingleNodeRecordToFront(insertionParent, records, orderedRecords)) {
+      reconcileSingleNodeRecordOrder(insertionParent, marker, orderedRecords);
+    }
     if (deferEventPromotion) {
       promoteRecordEvents(nextRecords.values());
     }
@@ -1718,6 +1720,34 @@ function reconcileSingleNodeRecordOrder(
     parent.insertBefore(record.node, anchor);
     anchor = record.node;
   }
+}
+
+function moveLastSingleNodeRecordToFront(
+  parent: ParentNode,
+  records: Map<unknown, SingleNodeRecord>,
+  orderedRecords: readonly SingleNodeRecord[],
+): boolean {
+  if (orderedRecords.length < 2 || orderedRecords.length !== records.size) {
+    return false;
+  }
+
+  const previousRecords = records.values();
+  const first = previousRecords.next().value as SingleNodeRecord;
+  let previous = first;
+  for (let index = 1; index < orderedRecords.length; index += 1) {
+    if (orderedRecords[index] !== previous) {
+      return false;
+    }
+    const next = previousRecords.next().value as SingleNodeRecord;
+    if (previous.node.nextSibling !== next.node) {
+      return false;
+    }
+    previous = next;
+  }
+
+  // Equal counts and sibling continuity prove the old chain ends at the marker.
+  parent.insertBefore(previous.node, first.node);
+  return true;
 }
 
 function removeStaleSingleNodeRecords(

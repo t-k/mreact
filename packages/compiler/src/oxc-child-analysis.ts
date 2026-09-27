@@ -130,7 +130,7 @@ export function analyzeOxcJsxNode(
   }
 
   if (node.type !== "JSXElement") {
-    return { kind: "expr", code: readSource(code, node) };
+    return { kind: "expr", code: readSource(code, node), loc: getOxcLocation(code, node) };
   }
 
   const openingElement = readObject(node.openingElement);
@@ -161,6 +161,7 @@ export function analyzeOxcJsxNode(
     return {
       kind: "element",
       tagName: "slot",
+      loc: getOxcLocation(code, openingElementName),
       ...(keyCode === undefined ? {} : { keyCode }),
       attributes: attributes
         .flatMap((attr) =>
@@ -309,6 +310,7 @@ export function analyzeOxcJsxNode(
       : {
           kind: "conditional",
           conditionCode: calleeCode,
+          loc: getOxcLocation(code, openingElementName),
           whenTrue: [component],
           whenFalse: [],
         };
@@ -338,6 +340,7 @@ export function analyzeOxcJsxNode(
   return {
     kind: "element",
     tagName,
+    loc: getOxcLocation(code, openingElementName),
     ...(namespace === undefined ? {} : { namespace }),
     ...(keyCode === undefined ? {} : { keyCode }),
     attributes: attributes
@@ -546,6 +549,7 @@ export function analyzeOxcExpressionChild(
     return [
       {
         kind: "conditional",
+        loc: getOxcLocation(code, unwrappedExpression),
         conditionCode: readOxcReactiveExpressionCode(
           code,
           readObject(unwrappedExpression.test),
@@ -592,6 +596,7 @@ export function analyzeOxcExpressionChild(
       return [
         {
           kind: "conditional",
+          loc: getOxcLocation(code, unwrappedExpression),
           conditionCode: readOxcReactiveExpressionCode(code, leftExpression, context),
           conditionValueName,
           whenTrue: rightBranch,
@@ -610,6 +615,7 @@ export function analyzeOxcExpressionChild(
       return [
         {
           kind: "conditional",
+          loc: getOxcLocation(code, unwrappedExpression),
           conditionCode: readOxcReactiveExpressionCode(code, leftExpression, context),
           conditionValueName,
           whenTrue: leftBranch,
@@ -622,6 +628,7 @@ export function analyzeOxcExpressionChild(
       return [
         {
           kind: "conditional",
+          loc: getOxcLocation(code, unwrappedExpression),
           conditionCode: readOxcReactiveExpressionCode(code, leftExpression, context),
           conditionValueName,
           conditionTestCode: `${conditionValueName} != null`,
@@ -728,6 +735,7 @@ export function analyzeOxcExpressionChild(
   return [
     {
       kind: "expr",
+      loc: getOxcLocation(code, unwrappedExpression),
       code:
         sameModuleComponentStreamCall ??
         (containsNestedRenderValue
@@ -1131,6 +1139,7 @@ function analyzeOxcListExpression(
 
   return {
     kind: "list",
+    loc: getOxcLocation(code, expression),
     itemsCode:
       callee.optional === true
         ? `(${readOxcReactiveExpressionCode(code, readObject(callee.object), context)} ?? [])`

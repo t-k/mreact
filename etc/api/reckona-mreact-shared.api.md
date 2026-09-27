@@ -15,6 +15,15 @@ export interface ClientReferenceMetadata {
 }
 
 // @public
+export interface ClientSpecializationMetadata {
+    applied: boolean;
+    helper: string;
+    loc?: SourceLocation;
+    name: "branchInsertion" | "compilerKeyedList" | "directCellText" | "elementProperty" | "selectBinding";
+    reason?: "disabled" | "owner-scoped-memo" | "list-producing-branch" | "no-key" | "not-single-node-eligible" | "not-native-cell-read" | "svg-namespace" | "unsupported-property" | "spread-attribute" | "dynamic-multiple";
+}
+
+// @public
 export type CompilerFrontend = "oxc";
 
 // @public
@@ -140,6 +149,7 @@ export interface ModuleMetadata {
     clientReferenceManifest?: ClientReferenceMetadata[];
     // (undocumented)
     clientReferences?: string[];
+    clientSpecializations?: ClientSpecializationMetadata[];
     // (undocumented)
     compiler: CompilerMetadata;
     // (undocumented)

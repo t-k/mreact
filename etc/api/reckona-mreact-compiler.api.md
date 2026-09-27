@@ -450,6 +450,8 @@ export interface TransformInput {
     parser?: ParserMode;
     // (undocumented)
     reactSuspenseRevealScriptSrc?: string;
+    // @internal
+    reportClientSpecializations?: boolean;
     // (undocumented)
     serverAwaitHydration?: boolean;
     // (undocumented)

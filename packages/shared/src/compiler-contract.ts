@@ -60,6 +60,22 @@ export interface ModuleMetadata {
   clientReferenceManifest?: ClientReferenceMetadata[];
   serverReferences?: string[];
   eventHydrationManifest?: EventHydrationManifestMetadata;
+  /** Opt-in decisions made while emitting a reactive client module. */
+  clientSpecializations?: ClientSpecializationMetadata[];
+}
+
+/** One reactive client emitter decision collected for an opt-in transform report. */
+export interface ClientSpecializationMetadata {
+  /** The candidate specialization checked at this emitted site. */
+  name: "branchInsertion" | "compilerKeyedList" | "directCellText" | "elementProperty" | "selectBinding";
+  /** Whether the specialized helper was selected. */
+  applied: boolean;
+  /** Canonical name of the helper chosen by the emitter. */
+  helper: string;
+  /** Why the specialized helper was not selected, when known. */
+  reason?: "disabled" | "owner-scoped-memo" | "list-producing-branch" | "no-key" | "not-single-node-eligible" | "not-native-cell-read" | "svg-namespace" | "unsupported-property" | "spread-attribute" | "dynamic-multiple";
+  /** Original JSX location; synthesized IR nodes may have no source location. */
+  loc?: SourceLocation;
 }
 
 /** Compilation target used to select client or server output. */

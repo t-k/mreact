@@ -30,6 +30,8 @@ const graph = await analyzeBoundaryGraph({
 console.log(graph.clientBoundaries, graph.serverActions, graph.trace);
 ```
 
+For reactive client transforms, `reportClientSpecializations: true` adds `metadata.clientSpecializations` with the actual helper chosen for each direct cell text, branch insertion, element property, select binding, and compiler keyed list decision. Each entry records whether the specialization was applied, a reason when it was not, and a source location when the IR node came from a concrete JSX syntax node. Generated code and runtime imports are unchanged by the report. `metadata.imports` describes module-level dependencies; the report does not attribute those imports or subscription counts to individual JSX sites. Compat and server transforms do not emit this report.
+
 ## Exports
 
 - `transform()` is the public compiler entrypoint.

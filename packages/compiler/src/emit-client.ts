@@ -8,7 +8,7 @@ import {
   usesDedicatedSelectBinding,
   withClientSpecializations,
 } from "./emit-client-specialization.js";
-import type { ClientSpecializationFlags, RuntimeImport } from "./types.js";
+import type { ClientSpecializationFlags, ClientSpecializationMetadata, RuntimeImport, SourceLocation } from "./types.js";
 import { listReadsNestedItemObject } from "./ir-nested-object-read.js";
 import { OXC_BIND_DOM_REF_PLACEHOLDER } from "./oxc-dom-lowering.js";
 import {
@@ -26,6 +26,7 @@ import {
 export interface EmitResult {
   code: string;
   imports: RuntimeImport[];
+  clientSpecializations?: ClientSpecializationMetadata[];
 }
 
 export function emitClient(
@@ -34,12 +35,25 @@ export function emitClient(
     dev?: boolean;
     filename?: string;
     specializations?: Partial<ClientSpecializationFlags> | undefined;
+    reportSpecializations?: boolean | undefined;
   } = {},
 ): EmitResult {
-  return withClientSpecializations(options.specializations, () => emitClientModule(ir, options));
+  const specializationReport: ClientSpecializationMetadata[] | undefined =
+    options.reportSpecializations === true ? [] : undefined;
+  return withClientSpecializations(options.specializations, () =>
+    emitClientModule(ir, { ...options, specializationReport }),
+  );
 }
 
-function emitClientModule(ir: ModuleIr, options: { dev?: boolean; filename?: string }): EmitResult {
+function emitClientModule(
+  ir: ModuleIr,
+  options: {
+    dev?: boolean;
+    filename?: string;
+    specializations?: Partial<ClientSpecializationFlags> | undefined;
+    specializationReport?: ClientSpecializationMetadata[] | undefined;
+  },
+): EmitResult {
   const imports = collectImports(ir);
   const helperNames = allocateRuntimeHelperNames(
     ir,
@@ -106,6 +120,9 @@ function emitClientModule(ir: ModuleIr, options: { dev?: boolean; filename?: str
       .filter(Boolean)
       .join("\n")}\n\n${components}\n`,
     imports,
+    ...(options.specializationReport === undefined
+      ? {}
+      : { clientSpecializations: options.specializationReport }),
   };
 }
 
@@ -559,7 +576,12 @@ function emitComponent(
   inlineMemoComponents: ReadonlyMap<string, CompatInlineMemo>,
   nonNullishComponents: ReadonlySet<string>,
   routerLinkComponentNames: ReadonlySet<string>,
-  options: { dev?: boolean; filename?: string },
+  options: {
+    dev?: boolean;
+    filename?: string;
+    specializations?: Partial<ClientSpecializationFlags> | undefined;
+    specializationReport?: ClientSpecializationMetadata[] | undefined;
+  },
 ): string {
   const templateName = moduleAllocator("_tmpl_" + component.name, component.bindingNames);
   const allocator = createNameAllocator([...component.bindingNames, templateName]);
@@ -592,6 +614,8 @@ function emitComponent(
       debugLabel,
       ownerDeclarations: [],
       listBindingCaches: new Map(),
+      specializationReport: options.specializationReport,
+      disabledSpecializations: options.specializations,
     };
     const componentCall = emitComponentCall(
       component.root.name,
@@ -624,11 +648,15 @@ function emitComponent(
       debugLabel,
       ownerDeclarations: [],
       listBindingCaches: new Map(),
+      specializationReport: options.specializationReport,
+      disabledSpecializations: options.specializations,
     };
     const fragmentName = allocator("_fragment");
     const markerName = allocator("_marker");
     const ownerScopedMemoHelper = ownerScopedMemoInsertionHelper(component.root, state);
     const renderValue = emitNodeRenderValueExpression(component.root, state);
+    const branchInsertion = ownerScopedMemoHelper === undefined && usesBranchInsertion(component.root);
+    reportBranchInsertion(state, component.root, branchInsertion, ownerScopedMemoHelper);
     return [
       `${functionKeyword} ${component.name}(${parameters}) {`,
       ...body,
@@ -636,7 +664,7 @@ function emitComponent(
       `  const ${fragmentName} = document.createDocumentFragment();`,
       `  const ${markerName} = document.createComment("");`,
       `  ${fragmentName}.append(${markerName});`,
-      `  ${ownerScopedMemoHelper ?? (usesBranchInsertion(component.root) ? helperNames.insertBranch : helperNames.insertDynamic)}(${fragmentName}, ${markerName}, () => ${renderValue}${emitDynamicOptions(debugLabel)});`,
+      `  ${ownerScopedMemoHelper ?? (branchInsertion ? helperNames.insertBranch : helperNames.insertDynamic)}(${fragmentName}, ${markerName}, () => ${renderValue}${emitDynamicOptions(debugLabel)});`,
       `  return ${fragmentName};`,
       `}`,
     ].join("\n");
@@ -656,6 +684,8 @@ function emitComponent(
     debugLabel,
     ownerDeclarations: [],
     listBindingCaches: new Map(),
+    specializationReport: options.specializationReport,
+    disabledSpecializations: options.specializations,
   };
   const setup = emitSetup(component.root, rootName, state);
   const createTemplateHelper =
@@ -809,6 +839,48 @@ interface EmitSetupState {
   compilerKeyedRowContext?: string | undefined;
   ownerDeclarations: string[];
   listBindingCaches: Map<Extract<JsxNodeIr, { kind: "list" }>, string>;
+  specializationReport?: ClientSpecializationMetadata[] | undefined;
+  disabledSpecializations?: Partial<ClientSpecializationFlags> | undefined;
+}
+
+function reportSpecialization(
+  state: EmitSetupState,
+  name: ClientSpecializationMetadata["name"],
+  applied: boolean,
+  helper: string,
+  loc: SourceLocation | undefined,
+  reason?: ClientSpecializationMetadata["reason"],
+): void {
+  if (state.specializationReport === undefined) return;
+  state.specializationReport.push({
+    name,
+    applied,
+    helper,
+    ...(reason === undefined ? {} : { reason }),
+    ...(loc === undefined ? {} : { loc }),
+  });
+}
+
+function reportBranchInsertion(
+  state: EmitSetupState,
+  node: Extract<JsxNodeIr, { kind: "conditional" }>,
+  applied: boolean,
+  ownerScopedMemoHelper: string | undefined,
+): void {
+  if (state.specializationReport === undefined) return;
+  const helper = ownerScopedMemoHelper === undefined
+    ? applied ? "insertBranch" : "insertDynamic"
+    : ownerScopedMemoHelper === state.helperNames.insertMemoDynamic
+      ? "insertMemoDynamic"
+      : "insertMemo";
+  const reason = ownerScopedMemoHelper !== undefined
+    ? "owner-scoped-memo"
+    : applied
+      ? undefined
+      : state.disabledSpecializations?.branchInsertion === false
+        ? "disabled"
+        : "list-producing-branch";
+  reportSpecialization(state, "branchInsertion", applied, helper, node.loc, reason);
 }
 
 /** Reports whether a component call is proven to return a DOM node rather than a render value. */
@@ -920,6 +992,18 @@ function emitSetup(
         }
 
         const specializedProperty = specializedElementProperty(node, attr.name);
+        reportSpecialization(
+          state,
+          "elementProperty",
+          specializedProperty !== undefined,
+          specializedProperty === undefined ? "bindProp" : "bindElementProperty",
+          attr.loc,
+          specializedProperty !== undefined
+            ? undefined
+            : state.disabledSpecializations?.elementProperty === false
+              ? "disabled"
+              : node.namespace === "svg" ? "svg-namespace" : "unsupported-property",
+        );
         const line =
           specializedProperty === undefined
             ? `  ${state.helperNames.bindProp}(${currentPath}, ${JSON.stringify(attr.name)}, () => (${attr.code}));`
@@ -972,6 +1056,25 @@ function emitSetup(
     );
 
     if (selectBindingLine !== undefined) {
+      if (node.tagName === "select" && node.attributes.some((attr) =>
+        (attr.kind === "static-attr" || attr.kind === "dynamic-attr") &&
+        isSelectControlAttributeName(attr.name))) {
+        const reason = dedicatedSelectBinding
+          ? undefined
+          : state.disabledSpecializations?.selectBinding === false
+            ? "disabled"
+            : node.attributes.some((attr) => attr.kind === "spread-attr")
+              ? "spread-attribute"
+              : "dynamic-multiple";
+        reportSpecialization(
+          state,
+          "selectBinding",
+          dedicatedSelectBinding,
+          dedicatedSelectBinding ? "bindSelectValue" : "bindSpreadProps",
+          node.loc,
+          reason,
+        );
+      }
       if (hasDirectDangerouslySetInnerHtml(node)) {
         lines.push(selectBindingLine);
         return lines.join("\n");
@@ -1101,6 +1204,18 @@ function emitSetup(
         }
       } else if (child.renderMode !== "compiler-keyed-initial-text") {
         const provenCell = provenNativeCellTextBinding(child);
+        reportSpecialization(
+          state,
+          "directCellText",
+          provenCell !== undefined,
+          provenCell === undefined ? "bindText" : "bindCellText",
+          child.loc,
+          provenCell !== undefined
+            ? undefined
+            : state.disabledSpecializations?.directCellText === false
+              ? "disabled"
+              : "not-native-cell-read",
+        );
         lines.push(
           provenCell === undefined
             ? `  ${state.helperNames.bindText}(${textVar}, () => (${child.code}));`
@@ -1113,11 +1228,13 @@ function emitSetup(
 
     if (child.kind === "conditional") {
       const ownerScopedMemoHelper = ownerScopedMemoInsertionHelper(child, state);
+      const branchInsertion = ownerScopedMemoHelper === undefined && usesBranchInsertion(child);
       const insertionHelper =
         ownerScopedMemoHelper ??
-        (usesBranchInsertion(child)
+        (branchInsertion
           ? state.helperNames.insertBranch
           : state.helperNames.insertDynamic);
+      reportBranchInsertion(state, child, branchInsertion, ownerScopedMemoHelper);
       lines.push(
         `  ${insertionHelper}(${currentPath}, ${childPath}, () => ${emitConditionalRenderValueExpression(child, state)}${emitDynamicOptions(state.debugLabel)});`,
       );
@@ -1127,6 +1244,19 @@ function emitSetup(
 
     if (child.kind === "list") {
       const parameters = emitListParameters(child);
+      const explicitRenderArity = child.compiledSingleNode === undefined && requiresExplicitListRenderArity(child);
+      reportSpecialization(
+        state,
+        "compilerKeyedList",
+        child.compiledSingleNode !== undefined,
+        child.compiledSingleNode !== undefined
+          ? "bindCompilerKeyedSingleNodeList"
+          : explicitRenderArity ? "bindListWithRenderArity" : "bindList",
+        child.loc,
+        child.compiledSingleNode !== undefined
+          ? undefined
+          : child.keyCode === undefined ? "no-key" : "not-single-node-eligible",
+      );
       const optionEntries: string[] = [];
       const eventPrograms = child.compiledSingleNode?.eventPrograms;
       const eventSlotKeys = eventPrograms?.map(() => state.allocateName("_keyedEventSlot"));
@@ -1165,7 +1295,6 @@ function emitSetup(
 
       const options = optionEntries.length === 0 ? "" : `, { ${optionEntries.join(", ")} }`;
       if (child.compiledSingleNode === undefined) {
-        const explicitRenderArity = requiresExplicitListRenderArity(child);
         const listOptions = explicitRenderArity && options === "" ? ", undefined" : options;
         lines.push(
           `  ${explicitRenderArity ? state.helperNames.bindListWithRenderArity : state.helperNames.bindList}(${currentPath}, ${childPath}, ${emitListItems(child, state)}, ${emitListRenderer(child, parameters, state)}${listOptions}${explicitRenderArity ? `, ${emitListRenderArity(child)}` : ""});`,
