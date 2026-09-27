@@ -10,7 +10,7 @@ export default createStrykerConfig({
     "packages/reactive-core/src/computed.ts:275-280",
     "packages/reactive-core/src/scheduler.ts:78-84",
     "packages/reactive-core/src/scheduler.ts:137-152",
-    "packages/reactive-core/src/tracking.ts:338-346",
+    "packages/reactive-core/src/tracking.ts:340-348",
     "packages/server/src/stream.ts:303-307",
   ],
   testFiles: [

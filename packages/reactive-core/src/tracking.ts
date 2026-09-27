@@ -55,6 +55,8 @@ export function removeSourceSubscriber(source: Source, computation: ReactiveComp
     if (subscribers.size === 0) {
       source.subscribers = null;
       source.onNoSubscribers?.();
+    } else if (subscribers.size === 1) {
+      source.subscribers = subscribers.values().next().value as ReactiveComputation;
     }
     return true;
   }

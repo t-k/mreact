@@ -4,10 +4,106 @@ import { flushEffects } from "../src/testing.js";
 import { getCellSource } from "../src/cell.js";
 import { runtimeState } from "../src/state.js";
 import { cell, computed, effect } from "../src/index.js";
+import { subscribeCell } from "../src/internal.js";
 import { createCurrentCheckContext, untrackedDependencyIsCurrent } from "../src/state.js";
-import type { CurrentCheckContext, Source } from "../src/state.js";
+import type { CurrentCheckContext, ReactiveComputation, Source } from "../src/state.js";
 
 describe("reactive-core tracking hot path", () => {
+  test("demotes an effect source from Set to its remaining subscriber", async () => {
+    const sourceCell = cell(0);
+    const seen: number[] = [];
+    const disposeFirst = effect(() => { sourceCell.get(); });
+    const disposeSecond = effect(() => { seen.push(sourceCell.get()); });
+    await flushEffects();
+    const source = getCellSource(sourceCell)!;
+    expect(source.subscribers).toBeInstanceOf(Set);
+    const second = [...(source.subscribers as Set<unknown>)][1];
+
+    disposeFirst();
+    expect(source.subscribers).toBe(second);
+    sourceCell.set(1);
+    await flushEffects();
+    expect(seen).toEqual([0, 1]);
+    disposeSecond();
+    expect(source.subscribers).toBeNull();
+  });
+
+  test("demotes a direct cell subscription without retaining its Set", async () => {
+    const sourceCell = cell(0);
+    const seen: number[] = [];
+    const disposeFirst = subscribeCell(sourceCell, () => {});
+    const disposeSecond = subscribeCell(sourceCell, (value) => seen.push(value));
+    const source = getCellSource(sourceCell)!;
+    expect(source.subscribers).toBeInstanceOf(Set);
+    const second = [...(source.subscribers as Set<unknown>)][1];
+
+    disposeFirst?.();
+    expect(source.subscribers).toBe(second);
+    sourceCell.set(1);
+    await flushEffects();
+    expect(seen).toEqual([1]);
+    disposeSecond?.();
+    expect(source.subscribers).toBeNull();
+  });
+
+  test("keeps a Set while two effects remain and releases the last one", async () => {
+    const sourceCell = cell(0);
+    const seen: number[] = [];
+    const disposers = [
+      effect(() => { sourceCell.get(); }),
+      effect(() => { seen.push(sourceCell.get()); }),
+      effect(() => { seen.push(sourceCell.get()); }),
+    ];
+    await flushEffects();
+    const source = getCellSource(sourceCell)!;
+    disposers[0]?.();
+    expect(source.subscribers).toBeInstanceOf(Set);
+    expect((source.subscribers as Set<unknown>).size).toBe(2);
+    sourceCell.set(1);
+    await flushEffects();
+    expect(seen.filter((value) => value === 1)).toHaveLength(2);
+    disposers[1]?.();
+    expect(source.subscribers).not.toBeInstanceOf(Set);
+    disposers[2]?.();
+    expect(source.subscribers).toBeNull();
+  });
+
+  test("releases a legacy one-member Set when its effect is disposed", async () => {
+    const sourceCell = cell(0);
+    const dispose = effect(() => { sourceCell.get(); });
+    await flushEffects();
+    const source = getCellSource(sourceCell)!;
+    source.subscribers = new Set([source.subscribers as ReactiveComputation]);
+    let noSubscribers = 0;
+    source.onNoSubscribers = () => { noSubscribers += 1; };
+
+    dispose();
+    expect(source.subscribers).toBeNull();
+    expect(noSubscribers).toBe(1);
+  });
+
+  test("keeps two direct listeners and releases a legacy one-member Set", async () => {
+    const sourceCell = cell(0);
+    const seen: number[] = [];
+    const first = subscribeCell(sourceCell, () => {});
+    const second = subscribeCell(sourceCell, (value) => seen.push(value));
+    const third = subscribeCell(sourceCell, (value) => seen.push(value));
+    const source = getCellSource(sourceCell)!;
+    first?.();
+    expect(source.subscribers).toBeInstanceOf(Set);
+    expect((source.subscribers as Set<unknown>).size).toBe(2);
+    sourceCell.set(1);
+    await flushEffects();
+    expect(seen).toEqual([1, 1]);
+    second?.();
+    source.subscribers = new Set([source.subscribers as ReactiveComputation]);
+    let noSubscribers = 0;
+    source.onNoSubscribers = () => { noSubscribers += 1; };
+    third?.();
+    expect(source.subscribers).toBeNull();
+    expect(noSubscribers).toBe(1);
+  });
+
   test("checks the ordered dependency fast path before same-pass duplicate tracking", async () => {
     const source = await readFile(new URL("../src/tracking.ts", import.meta.url), "utf8");
 

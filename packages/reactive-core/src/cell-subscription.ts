@@ -115,5 +115,7 @@ function removeCellSubscriptionSourceSubscriber(
     if (onNoSubscribers !== undefined) {
       onNoSubscribers();
     }
+  } else if (subscribers.size === 1) {
+    source.subscribers = subscribers.values().next().value as ReactiveComputation;
   }
 }

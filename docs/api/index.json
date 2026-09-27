@@ -119723,9 +119723,9 @@
 							"sources": [
 								{
 									"fileName": "tracking.ts",
-									"line": 340,
+									"line": 342,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/tracking.ts#L340"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/tracking.ts#L342"
 								}
 							],
 							"signatures": [
@@ -119746,9 +119746,9 @@
 									"sources": [
 										{
 											"fileName": "tracking.ts",
-											"line": 340,
+											"line": 342,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/tracking.ts#L340"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/tracking.ts#L342"
 										}
 									],
 									"type": {
@@ -119882,9 +119882,9 @@
 							"sources": [
 								{
 									"fileName": "tracking.ts",
-									"line": 260,
+									"line": 262,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/tracking.ts#L260"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/tracking.ts#L262"
 								}
 							],
 							"signatures": [
@@ -119897,9 +119897,9 @@
 									"sources": [
 										{
 											"fileName": "tracking.ts",
-											"line": 260,
+											"line": 262,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/tracking.ts#L260"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-core/src/tracking.ts#L262"
 										}
 									],
 									"parameters": [
