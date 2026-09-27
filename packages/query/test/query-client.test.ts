@@ -18,6 +18,12 @@ describe("createQueryClient", () => {
     const key = ["revision"] as const;
     const first = client.setQueryData(key, { value: 1 });
     expect(client.getQueryEntry(key)?.revision).toBe(first);
+    expect(client.getQueryEntry(key)).toMatchObject({
+      isFetching: false,
+      stale: false,
+      status: "success",
+    });
+    expect(client.getQueryEntry(key)?.updatedAt).toBeGreaterThan(0);
     const other = client.setQueryData(["other"], 1);
     const equivalent = client.setQueryData(key, { value: 1 });
     expect(first).toBeLessThan(other);

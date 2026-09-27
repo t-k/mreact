@@ -47,10 +47,51 @@ export interface ComputedOptions<T> {
 export function createCleanupScope(): CleanupScope;
 
 // @public
+export function createEventResource<TKey, TEvent>(subscribe: (key: TKey, emit: (event: TEvent) => void) => () => void, options: {
+    readonly capacity: number;
+}): EventResource<TKey, TEvent>;
+
+// @public
 export function createResource<TKey, TValue>(subscribe: (key: TKey, emit: (value: TValue) => void) => () => void): Resource<TKey, TValue>;
 
 // @public
 export function effect(fn: () => void | (() => void)): () => void;
+
+// @public
+export interface EventResource<TKey, TEvent> {
+    // (undocumented)
+    observe(key: TKey): EventResourceLease<TKey, TEvent>;
+}
+
+// @public
+export interface EventResourceBatch<TEvent> {
+    // (undocumented)
+    readonly dropped: number;
+    // (undocumented)
+    readonly events: readonly TEvent[];
+}
+
+// @public
+export interface EventResourceLease<TKey, TEvent> {
+    // (undocumented)
+    dispose(): void;
+    // (undocumented)
+    drain(): EventResourceBatch<TEvent>;
+    // (undocumented)
+    setKey(key: TKey): void;
+    // (undocumented)
+    readonly state: ReadonlyCell<EventResourceState>;
+}
+
+// @public
+export interface EventResourceState {
+    // (undocumented)
+    readonly dropped: number;
+    // (undocumented)
+    readonly error?: unknown;
+    // (undocumented)
+    readonly queued: number;
+}
 
 // @public
 export function installRequestStateStorage(storage: RequestStateStorage | undefined): void;

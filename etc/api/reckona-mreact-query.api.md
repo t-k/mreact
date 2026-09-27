@@ -13,6 +13,9 @@ export const __MREACT_QUERY_STATE_SCRIPT_ID = "__mreact_query_state";
 export function __resetQueryClientForTesting(): void;
 
 // @public
+export function createFormMutationFlow<TValues extends object, TSubmitValues, TData, TQueryData extends Record<string, unknown> = Record<string, unknown>>(client: QueryClient, form: MutationFlowForm<TValues, TSubmitValues>, options: FormMutationFlowOptions<TValues, TSubmitValues, TData, TQueryData>): FormMutationFlow<TValues, TSubmitValues, TData>;
+
+// @public
 export function createInfiniteQuery<TPage, TPageParam>(client: QueryClient, options: CreateInfiniteQueryOptions<TPage, TPageParam>): InfiniteQueryObserver<TPage, TPageParam>;
 
 // @public
@@ -150,6 +153,43 @@ export interface FetchQueryOptions<TData, TQueryKey extends QueryKey = QueryKey>
 }
 
 // @public
+export interface FormMutationFlow<TValues extends object, TSubmitValues, TData> {
+    // (undocumented)
+    readonly mutation: MutationObserver_2<TSubmitValues, TData>;
+    // (undocumented)
+    submit(): Promise<FormMutationFlowResult<TValues, TData>>;
+}
+
+// @public
+export interface FormMutationFlowOptions<TValues extends object, TSubmitValues, TData, TQueryData extends Record<string, unknown>> {
+    // (undocumented)
+    invalidate?: readonly QueryKey[] | undefined;
+    optimistic?: {
+        queryKey: QueryKey;
+        patch: (values: TSubmitValues) => Partial<TQueryData>;
+    } | undefined;
+    // (undocumented)
+    server: (values: TSubmitValues) => Promise<MutationFlowServerResult<TValues, TData>> | MutationFlowServerResult<TValues, TData>;
+}
+
+// @public
+export type FormMutationFlowResult<TValues extends object, TData> = {
+    status: "success";
+    data: TData;
+} | {
+    status: "duplicate";
+} | {
+    status: "invalid";
+    errors: Partial<Record<Extract<keyof TValues, string> | "root", string[]>>;
+} | {
+    status: "server-errors";
+    errors: MutationFlowServerErrors<TValues>;
+} | {
+    status: "error";
+    error: unknown;
+};
+
+// @public
 export function getQueryClient(): QueryClient;
 
 // @public
@@ -213,6 +253,42 @@ export interface InvalidateQueriesOptions {
 
 // @public
 export function isQueryClientScopeUnavailableError(error: unknown): error is Error;
+
+// @public
+export interface MutationFlowForm<TValues extends object, TSubmitValues> {
+    // (undocumented)
+    setServerErrors(errors: MutationFlowServerErrors<TValues>): void;
+    // (undocumented)
+    submit<TResult>(handler: (values: TSubmitValues) => Promise<TResult> | TResult): Promise<{
+        status: "success";
+        data: TResult;
+    } | {
+        status: "duplicate";
+    } | {
+        status: "invalid";
+        errors: Partial<Record<Extract<keyof TValues, string> | "root", string[]>>;
+    } | {
+        status: "error";
+        error: unknown;
+    }>;
+}
+
+// @public
+export interface MutationFlowServerErrors<TValues extends object> {
+    // (undocumented)
+    fieldErrors?: Partial<Record<Extract<keyof TValues, string>, readonly string[]>> | undefined;
+    // (undocumented)
+    formErrors?: readonly string[] | undefined;
+}
+
+// @public
+export type MutationFlowServerResult<TValues extends object, TData> = {
+    ok: true;
+    data: TData;
+} | {
+    ok: false;
+    errors: MutationFlowServerErrors<TValues>;
+};
 
 // @public
 interface MutationObserver_2<TVariables, TData> {
@@ -283,9 +359,9 @@ export interface QueryClient {
     // (undocumented)
     removeQueries(options?: InvalidateQueriesOptions): void;
     // (undocumented)
-    setQueryData<TData>(queryKey: QueryKey, data: TData | ((previous: TData | undefined) => TData)): void;
+    setQueryData<TData>(queryKey: QueryKey, data: TData | ((previous: TData | undefined) => TData)): number;
     // (undocumented)
-    setQueryData<TDefinition extends QueryDefinition<unknown, QueryKey>>(definition: TDefinition, data: QueryDefinitionData<TDefinition> | ((previous: QueryDefinitionData<TDefinition> | undefined) => QueryDefinitionData<TDefinition>)): void;
+    setQueryData<TDefinition extends QueryDefinition<unknown, QueryKey>>(definition: TDefinition, data: QueryDefinitionData<TDefinition> | ((previous: QueryDefinitionData<TDefinition> | undefined) => QueryDefinitionData<TDefinition>)): number;
     // (undocumented)
     subscribe<TData = unknown>(queryKey: QueryKey, listener: (entry: QueryEntry<TData>) => void, options?: QuerySubscriptionOptions): () => void;
 }
@@ -329,6 +405,7 @@ export interface QueryEntry<TData = unknown> {
     queryHash: string;
     // (undocumented)
     queryKey: QueryKey;
+    revision: number;
     // (undocumented)
     stale: boolean;
     // (undocumented)
