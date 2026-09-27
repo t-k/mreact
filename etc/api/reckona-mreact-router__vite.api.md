@@ -72,10 +72,12 @@ export interface AppRouterCspInlineNonceWarningLogEvent {
 
 // @public
 export interface AppRouterExecutionContracts {
+    maxInitialJsGzipBytes?: Readonly<Record<string, number>> | undefined;
     // (undocumented)
     noCompatComponents?: readonly string[] | undefined;
     // (undocumented)
     serverOnlyRoutes?: readonly string[] | undefined;
+    zeroClientJsRoutes?: readonly string[] | undefined;
 }
 
 // @public

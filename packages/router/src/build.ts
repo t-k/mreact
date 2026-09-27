@@ -46,6 +46,7 @@ import {
 import {
   createBoundaryReport,
   validateBoundaryExecutionContracts,
+  validateClientDeliveryContracts,
   type BoundaryReport,
 } from "./boundaries.js";
 import {
@@ -552,6 +553,9 @@ async function buildAppWithResolvedProject(
           }),
         );
   validateBoundaryExecutionContracts(sourceAnalysis.boundaryReport, project.executionContracts);
+  const requiresClientDeliveryReport =
+    (project.executionContracts?.zeroClientJsRoutes?.length ?? 0) > 0 ||
+    Object.keys(project.executionContracts?.maxInitialJsGzipBytes ?? {}).length > 0;
 
   if (shouldTrackBuildPhases === false) {
     await validateProductionRoutes({
@@ -587,18 +591,18 @@ async function buildAppWithResolvedProject(
       outDir: options.outDir,
     }))
   ) {
-    if (options.onBoundaryReport !== undefined) {
+    if (options.onBoundaryReport !== undefined || requiresClientDeliveryReport) {
       const clientManifest = await readJsonBuildOutput<ClientArtifactManifest>(
         join(options.outDir, "client", "manifest.json"),
       );
-      options.onBoundaryReport(
-        await boundaryReportWithArtifactCosts({
-          boundaryCost: options.boundaryCost,
-          clientDir,
-          manifest: clientManifest,
-          report: sourceAnalysis.boundaryReport,
-        }),
-      );
+      const boundaryReport = await boundaryReportWithArtifactCosts({
+        boundaryCost: options.boundaryCost,
+        clientDir,
+        manifest: clientManifest,
+        report: sourceAnalysis.boundaryReport,
+      });
+      validateClientDeliveryContracts(boundaryReport, project.executionContracts);
+      options.onBoundaryReport?.(boundaryReport);
     }
     return { routes };
   }
@@ -1010,15 +1014,15 @@ async function buildAppWithResolvedProject(
     await writeIncrementalBuildCacheManifest(options.outDir, incrementalBuildFingerprint);
   }
 
-  if (options.onBoundaryReport !== undefined) {
-    options.onBoundaryReport(
-      await boundaryReportWithArtifactCosts({
-        boundaryCost: options.boundaryCost,
-        clientDir,
-        manifest: clientManifest,
-        report: sourceAnalysis.boundaryReport,
-      }),
-    );
+  if (options.onBoundaryReport !== undefined || requiresClientDeliveryReport) {
+    const boundaryReport = await boundaryReportWithArtifactCosts({
+      boundaryCost: options.boundaryCost,
+      clientDir,
+      manifest: clientManifest,
+      report: sourceAnalysis.boundaryReport,
+    });
+    validateClientDeliveryContracts(boundaryReport, project.executionContracts);
+    options.onBoundaryReport?.(boundaryReport);
   }
 
   return { routes };
@@ -1103,6 +1107,10 @@ async function boundaryReportWithArtifactCosts(options: {
       }
 
       const initial = byteCostForPaths(entry.initial, measurements);
+      const initialJs = byteCostForPaths(
+        new Set([...entry.initial].filter((path) => /\.(?:m?js)$/u.test(path))),
+        measurements,
+      );
       const navigation = byteCostForPaths(
         new Set([...entry.navigation].filter((path) => !sharedPaths.has(path))),
         measurements,
@@ -1117,6 +1125,7 @@ async function boundaryReportWithArtifactCosts(options: {
             navigationGzipDeltaBytes: navigation.gzipEstimateBytes,
           },
           initial,
+          initialJs,
           navigation,
           status: "available",
         },

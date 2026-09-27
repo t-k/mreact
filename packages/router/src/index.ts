@@ -6,6 +6,7 @@ export {
   formatBoundaryReport,
   formatBoundaryReportJson,
   validateBoundaryExecutionContracts,
+  validateClientDeliveryContracts,
 } from "./boundaries.js";
 export type {
   AnalyzeAppBoundariesOptions,

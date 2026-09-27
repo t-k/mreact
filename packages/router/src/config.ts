@@ -35,6 +35,10 @@ export interface AppRouterProductionOptions {
 
 /** Opt-in compile-time constraints for route and component execution modes. */
 export interface AppRouterExecutionContracts {
+  /** Route patterns whose initial response must not reference browser JavaScript, including navigation. */
+  zeroClientJsRoutes?: readonly string[] | undefined;
+  /** Maximum compressed initial JavaScript bytes for each route pattern. */
+  maxInitialJsGzipBytes?: Readonly<Record<string, number>> | undefined;
   noCompatComponents?: readonly string[] | undefined;
   serverOnlyRoutes?: readonly string[] | undefined;
 }
@@ -169,10 +173,25 @@ function normalizeExecutionContracts(
 ): AppRouterExecutionContracts {
   const noCompatComponents = uniquePatterns(contracts.noCompatComponents);
   const serverOnlyRoutes = uniquePatterns(contracts.serverOnlyRoutes);
+  const zeroClientJsRoutes = uniquePatterns(contracts.zeroClientJsRoutes);
+  const maxInitialJsGzipBytes = Object.fromEntries(
+    Object.entries(contracts.maxInitialJsGzipBytes ?? {})
+      .filter(([pattern]) => pattern.length > 0)
+      .sort(([left], [right]) => left.localeCompare(right)),
+  );
+  for (const [pattern, budget] of Object.entries(maxInitialJsGzipBytes)) {
+    if (!Number.isSafeInteger(budget) || budget < 0) {
+      throw new Error(
+        `mreactRouter initial JavaScript gzip budget for ${JSON.stringify(pattern)} must be a non-negative safe integer.`,
+      );
+    }
+  }
 
   return {
+    ...(Object.keys(maxInitialJsGzipBytes).length === 0 ? {} : { maxInitialJsGzipBytes }),
     ...(noCompatComponents.length === 0 ? {} : { noCompatComponents }),
     ...(serverOnlyRoutes.length === 0 ? {} : { serverOnlyRoutes }),
+    ...(zeroClientJsRoutes.length === 0 ? {} : { zeroClientJsRoutes }),
   };
 }
 

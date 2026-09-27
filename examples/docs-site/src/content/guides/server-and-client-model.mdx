@@ -164,12 +164,16 @@ await buildApp({
   outDir: ".mreact",
   executionContracts: {
     serverOnlyRoutes: ["/account/**"],
+    zeroClientJsRoutes: ["/articles/**"],
+    maxInitialJsGzipBytes: { "/search": 20_000 },
     noCompatComponents: ["src/components/**"],
   },
 });
 ```
 
 `serverOnlyRoutes` rejects client, shared, or unresolved boundaries reachable from a matching route. `noCompatComponents` rejects filename-based compatibility fallbacks and unresolved components whose normalized file or export matches the pattern. `*` matches one path segment and `**` matches across segments. Matching is evaluated during source analysis, before production artifacts are emitted, so a failed contract does not silently produce a build with a different execution mode.
+
+`zeroClientJsRoutes` is a separate delivery contract: a server-only route can still ship the navigation runtime. `maxInitialJsGzipBytes` sets a compressed initial JavaScript budget by route pattern. Both contracts inspect the production client manifest and its static import closure, including navigation JavaScript and excluding CSS; they are checked again when an incremental build reuses artifacts. These are per-artifact gzip estimates, not observed network transfer sizes. The standalone `boundaries` command cannot enforce delivery contracts because it has no production artifacts. Routes that must deliver no JavaScript may need `navigationRuntime = false` in their route module.
 
 Use these contracts when deployment or ownership rules require an explicit boundary policy. Keep the patterns narrow and review them with the generated boundary report so a new client dependency or compatibility fallback fails close to its source.
 

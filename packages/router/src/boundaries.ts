@@ -62,6 +62,7 @@ export interface BoundaryReportCost {
       }
     | undefined;
   initial?: BoundaryReportByteCost | undefined;
+  initialJs?: BoundaryReportByteCost | undefined;
   navigation?: BoundaryReportByteCost | undefined;
   reason?: string | undefined;
   status: "available" | "unavailable";
@@ -364,6 +365,55 @@ export function validateBoundaryExecutionContracts(
   if (violations.length > 0) {
     throw new Error(
       `mreactRouter execution contract violation(s):\n${violations.map((violation) => `- ${violation}`).join("\n")}`,
+    );
+  }
+}
+
+/** Validates opt-in browser delivery constraints against measured production artifacts. */
+export function validateClientDeliveryContracts(
+  report: BoundaryReport,
+  contracts: AppRouterExecutionContracts | undefined,
+): void {
+  if (contracts === undefined) {
+    return;
+  }
+
+  const zeroClientJsRoutes = contracts.zeroClientJsRoutes ?? [];
+  const budgets = Object.entries(contracts.maxInitialJsGzipBytes ?? {});
+  const violations: string[] = [];
+
+  for (const route of report.routes) {
+    const mustHaveZeroJs = zeroClientJsRoutes.some((pattern) => globMatches(route.path, pattern));
+    const matchingBudgets = budgets.filter(([pattern]) => globMatches(route.path, pattern));
+    if (!mustHaveZeroJs && matchingBudgets.length === 0) {
+      continue;
+    }
+
+    const cost = route.cost.initialJs;
+    if (route.cost.status !== "available" || cost === undefined) {
+      violations.push(
+        `initial JavaScript cost is unavailable for route ${JSON.stringify(route.path)}: ${route.cost.reason ?? "no artifact measurement"}`,
+      );
+      continue;
+    }
+
+    if (mustHaveZeroJs && cost.rawBytes > 0) {
+      violations.push(
+        `zero-client-JS route ${JSON.stringify(route.path)} ships ${cost.rawBytes} initial JavaScript bytes`,
+      );
+    }
+    for (const [pattern, budget] of matchingBudgets) {
+      if (cost.gzipEstimateBytes > budget) {
+        violations.push(
+          `route ${JSON.stringify(route.path)} initial JavaScript exceeds gzip budget ${budget} byte(s) for ${JSON.stringify(pattern)}: ${cost.gzipEstimateBytes} bytes`,
+        );
+      }
+    }
+  }
+
+  if (violations.length > 0) {
+    throw new Error(
+      `mreactRouter client delivery contract violation(s):\n${violations.map((violation) => `- ${violation}`).join("\n")}`,
     );
   }
 }

@@ -145,10 +145,12 @@ export interface AppRouterCspInlineNonceWarningLogEvent {
 
 // @public
 export interface AppRouterExecutionContracts {
+    maxInitialJsGzipBytes?: Readonly<Record<string, number>> | undefined;
     // (undocumented)
     noCompatComponents?: readonly string[] | undefined;
     // (undocumented)
     serverOnlyRoutes?: readonly string[] | undefined;
+    zeroClientJsRoutes?: readonly string[] | undefined;
 }
 
 // @public
@@ -508,6 +510,8 @@ export interface BoundaryReportCost {
     } | undefined;
     // (undocumented)
     initial?: BoundaryReportByteCost | undefined;
+    // (undocumented)
+    initialJs?: BoundaryReportByteCost | undefined;
     // (undocumented)
     navigation?: BoundaryReportByteCost | undefined;
     // (undocumented)
@@ -2104,6 +2108,9 @@ export type TrustedLinkHtml = {
 
 // @public
 export function validateBoundaryExecutionContracts(report: BoundaryReport, contracts: AppRouterExecutionContracts | undefined): void;
+
+// @public
+export function validateClientDeliveryContracts(report: BoundaryReport, contracts: AppRouterExecutionContracts | undefined): void;
 
 // @public
 export function validateFormCsrf(request: Request, formData: FormData): Response | undefined;

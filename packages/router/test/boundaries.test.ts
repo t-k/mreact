@@ -8,6 +8,7 @@ import {
   formatBoundaryReport,
   formatBoundaryReportJson,
   validateBoundaryExecutionContracts,
+  validateClientDeliveryContracts,
 } from "../src/boundaries.js";
 import { inferClientRouteModule } from "../src/client.js";
 
@@ -299,6 +300,76 @@ describe("boundary reports", () => {
         serverOnlyRoutes: ["/admin/**"],
       }),
     ).not.toThrow();
+  });
+
+  test("validates delivery budgets only for matching routes and fails closed when cost is missing", () => {
+    const report = createBoundaryReport({
+      projectRoot: "/workspace",
+      routes: [
+        {
+          components: [],
+          cost: { reason: "No production artifact supplied.", status: "unavailable" },
+          diagnostics: [],
+          entry: "/workspace/src/app/page.tsx",
+          path: "/",
+        },
+      ],
+    });
+
+    expect(() => validateClientDeliveryContracts(report, undefined)).not.toThrow();
+    expect(() =>
+      validateClientDeliveryContracts(report, { zeroClientJsRoutes: ["/other"] }),
+    ).not.toThrow();
+    expect(() =>
+      validateClientDeliveryContracts(report, { zeroClientJsRoutes: ["/"] }),
+    ).toThrow(/initial JavaScript cost is unavailable.*No production artifact supplied/s);
+
+    const missingJsCost = createBoundaryReport({
+      projectRoot: "/workspace",
+      routes: [
+        {
+          components: [],
+          cost: { initial: { gzipEstimateBytes: 0, rawBytes: 0 }, status: "available" },
+          diagnostics: [],
+          entry: "/workspace/src/app/page.tsx",
+          path: "/",
+        },
+      ],
+    });
+    expect(() =>
+      validateClientDeliveryContracts(missingJsCost, { maxInitialJsGzipBytes: { "/": 0 } }),
+    ).toThrow(/initial JavaScript cost is unavailable.*no artifact measurement/s);
+  });
+
+  test("accepts an exact initial JS budget and rejects only larger costs", () => {
+    const report = createBoundaryReport({
+      projectRoot: "/workspace",
+      routes: [
+        {
+          components: [],
+          cost: {
+            initialJs: { gzipEstimateBytes: 100, rawBytes: 220 },
+            status: "available",
+          },
+          diagnostics: [],
+          entry: "/workspace/src/app/page.tsx",
+          path: "/",
+        },
+      ],
+    });
+
+    expect(() =>
+      validateClientDeliveryContracts(report, { maxInitialJsGzipBytes: { "/": 100 } }),
+    ).not.toThrow();
+    expect(() =>
+      validateClientDeliveryContracts(report, { maxInitialJsGzipBytes: { "/": 99 } }),
+    ).toThrow(/gzip budget 99 byte\(s\).*100 bytes/s);
+    expect(() =>
+      validateClientDeliveryContracts(report, {
+        maxInitialJsGzipBytes: { "/": 99 },
+        zeroClientJsRoutes: ["/"],
+      }),
+    ).toThrow(/zero-client-JS route.*\n- route .*gzip budget/s);
   });
 
   test("analyzes routes, shells, explicit boundaries, barrels, and Vite transforms without building", async () => {

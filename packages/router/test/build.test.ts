@@ -484,6 +484,107 @@ export default function Page() { return <main>Client page</main>; }`,
     ).rejects.toThrow(/server-only route.*client execution/s);
   });
 
+  test("rejects a zero-JS contract when a server-only route ships navigation JavaScript", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-zero-js-contract-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const navigationRuntime = true;
+export default function Page() { return <main>Server page</main>; }`,
+    );
+
+    await expect(
+      buildApp({
+        appDir,
+        executionContracts: { serverOnlyRoutes: ["/"], zeroClientJsRoutes: ["/"] },
+        outDir,
+      }),
+    ).rejects.toThrow(/zero-client-JS route.*\/.*initial JavaScript/s);
+  });
+
+  test("accepts a zero-JS contract when navigation is disabled", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-zero-js-pass-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const navigationRuntime = false;
+export default function Page() { return <main>Server page</main>; }`,
+    );
+
+    await expect(
+      buildApp({
+        appDir,
+        executionContracts: { serverOnlyRoutes: ["/"], zeroClientJsRoutes: ["/"] },
+        outDir,
+      }),
+    ).resolves.toMatchObject({ routes: [expect.objectContaining({ path: "/" })] });
+  });
+
+  test("enforces the initial JS gzip budget on fresh and cached builds", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-js-budget-contract-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `"use client";
+export default function Page() { return <button>Client page</button>; }`,
+    );
+
+    await buildApp({
+      appDir,
+      executionContracts: { maxInitialJsGzipBytes: { "/": 1_000_000 } },
+      outDir,
+    });
+
+    await expect(
+      buildApp({
+        appDir,
+        executionContracts: { maxInitialJsGzipBytes: { "/": 1 } },
+        outDir,
+      }),
+    ).rejects.toThrow(/initial JavaScript.*gzip budget.*1 byte/s);
+  });
+
+  test("excludes route CSS from the initial JavaScript budget", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-js-only-budget-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(join(appDir, "style.css"), ".fixture { color: rebeccapurple; }");
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import "./style.css";
+export const navigationRuntime = true;
+export default function Page() { return <main className="fixture">Styled</main>; }`,
+    );
+
+    let initialJsGzipBytes = -1;
+    let initialTotalGzipBytes = -1;
+    await buildApp({
+      appDir,
+      onBoundaryReport(report) {
+        initialJsGzipBytes = report.routes[0]?.cost.initialJs?.gzipEstimateBytes ?? -1;
+        initialTotalGzipBytes = report.routes[0]?.cost.initial?.gzipEstimateBytes ?? -1;
+      },
+      outDir,
+    });
+    expect(initialJsGzipBytes).toBeGreaterThan(0);
+    expect(initialTotalGzipBytes).toBeGreaterThan(initialJsGzipBytes);
+
+    await expect(
+      buildApp({
+        appDir,
+        executionContracts: { maxInitialJsGzipBytes: { "/": initialJsGzipBytes } },
+        outDir,
+      }),
+    ).resolves.toMatchObject({ routes: [expect.objectContaining({ path: "/" })] });
+  });
+
   test("injects source-root directives before production route CSS plugins transform Tailwind entries", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-tailwind-source-"));
     const appDir = join(rootDir, "src", "app");
