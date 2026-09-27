@@ -10,6 +10,8 @@ const options = normalizeHttpOptions(config.options);
 const url = new URL(config.target.url);
 if (url.protocol !== "http:" || !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname))
   throw new Error("HTTP probe requires a loopback HTTP server");
+if (config.target.requestKeyMode !== undefined && !["fixed", "unique-query"].includes(config.target.requestKeyMode))
+  throw new Error("Invalid HTTP request key mode");
 const agent = new Agent({
   keepAlive: true,
   maxSockets: options.concurrency,
@@ -21,6 +23,7 @@ let reusedRequests = 0;
 let busy = false;
 let closing = false;
 const sockets = new WeakSet<object>();
+let requestSequence = 0;
 
 async function load(warmup: boolean) {
   const openedBefore = connectionsOpened;
@@ -40,8 +43,12 @@ async function load(warmup: boolean) {
         issued++;
         try {
           const began = performance.now();
+          const requestUrl = new URL(url);
+          if (config.target.requestKeyMode === "unique-query") {
+            requestUrl.searchParams.set("__mreact_bench_key", `${process.pid}-${++requestSequence}`);
+          }
           await new Promise<void>((resolve, reject) => {
-            const req = request(url, { agent }, (res) => {
+            const req = request(requestUrl, { agent }, (res) => {
               let body = "";
               let bytes = 0;
               res.setEncoding("utf8");
@@ -58,6 +65,14 @@ async function load(warmup: boolean) {
                   return reject(new Error(`HTTP ${res.statusCode}`));
                 if (!body.includes(config.target.requiredText))
                   return reject(new Error("HTTP body validation failed"));
+                for (const [name, value] of Object.entries(config.target.expectedHeaders ?? {})) {
+                  if (res.headers[name.toLowerCase()] !== value)
+                    return reject(new Error(`HTTP response header ${name} was not ${value}`));
+                }
+                for (const name of config.target.forbiddenHeaders ?? []) {
+                  if (res.headers[name.toLowerCase()] !== undefined)
+                    return reject(new Error(`HTTP response header ${name} was unexpectedly present`));
+                }
                 latenciesMs.push(latency);
                 resolve();
               });

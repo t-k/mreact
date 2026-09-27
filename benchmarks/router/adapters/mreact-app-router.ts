@@ -574,7 +574,7 @@ function createMreactAppRouterAdapter(options: {
         requiredText: "<span>999</span>",
         workload: {
           route: "/static-page",
-          cache: "memory route cache; maxAge=60",
+          cache: "no server route cache; max-age=60 response header",
           sinkStrategy:
             process.env["MREACT_APP_ROUTER_SINK_STRATEGY"] === "buffer" ? "buffer" : "string",
           logger: String(logEnabled),

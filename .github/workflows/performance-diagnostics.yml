@@ -46,6 +46,8 @@ jobs:
             command: MREACT_BUILD_TIMINGS=1 pnpm bench:router-build:incremental
           - track: router-build-layout-change
             command: MREACT_BUILD_TIMINGS=1 MREACT_ROUTER_BUILD_BENCH_CHANGE_KIND=shared-layout pnpm bench:router-build:incremental
+          - track: router-http-cache-modes
+            command: pnpm bench:router-http-cache-modes
           - track: scheduler
             command: pnpm bench:scheduler
           - track: lambda-generated-handler
@@ -92,6 +94,7 @@ jobs:
         env:
           NODE_ENV: production
           MREACT_BENCHMARK_RESULTS_DIR: ${{ runner.temp }}/performance/${{ matrix.track }}
+          MREACT_SCENARIO_OUTPUT_DIR: ${{ runner.temp }}/performance/${{ matrix.track }}
         run: ${{ matrix.command }}
 
       - name: Upload raw results

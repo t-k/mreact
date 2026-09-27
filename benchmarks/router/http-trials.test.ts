@@ -25,8 +25,14 @@ async function withServer(
 import { createServer } from 'node:http';
 let count = 0;
 const retained = [];
+const seen = new Set();
 const server = createServer((req, res) => {
   count++;
+  if (req.url?.startsWith('/unique')) {
+    if (seen.has(req.url)) { res.statusCode = 503; res.end('duplicate'); return; }
+    seen.add(req.url);
+    res.setHeader('x-probe', 'ok');
+  }
   if (req.url === '/allocate') retained.push(Buffer.alloc(16 * 1024 * 1024, 1));
   if (req.url === '/exit') { res.end('ok:' + count, () => process.exit(0)); return; }
   if (req.url === '/hang') return;
@@ -58,6 +64,49 @@ server.listen(0, '127.0.0.1', () => process.send({port: server.address().port}))
 }
 
 describe("isolated HTTP trials", () => {
+  it("uses distinct query keys for every concurrent cache-miss request", async () => {
+    await withServer(async (target) => {
+      const [trial] = await measureHttpTrials({
+        ...target,
+        url: new URL("/unique", target.url).href,
+        requestKeyMode: "unique-query",
+        expectedHeaders: { "x-probe": "ok" },
+      }, { profile: "burst", totalRequests: 20, concurrency: 5, windows: 1 });
+      expect(trial?.status, trial?.error).toBe("completed");
+      expect(trial?.requestCount).toBe(20);
+    });
+  });
+  it("keeps cache-miss keys distinct across warmup and steady windows", async () => {
+    await withServer(async (target) => {
+      const trials = await measureHttpTrials({
+        ...target,
+        url: new URL("/unique", target.url).href,
+        requestKeyMode: "unique-query",
+        expectedHeaders: { "x-probe": "ok" },
+      }, { profile: "steady", concurrency: 2, warmupMs: 10, durationMs: 20, windows: 2 });
+      expect(trials).toHaveLength(2);
+      expect(trials.every((trial) => trial.status === "completed")).toBe(true);
+      expect(trials.every((trial) => trial.warmupRequests > 0)).toBe(true);
+    });
+  });
+  it("fails a scored request when the declared response header is absent or forbidden", async () => {
+    await withServer(async (target) => {
+      const [missing] = await measureHttpTrials({
+        ...target,
+        url: new URL("/unique", target.url).href,
+        expectedHeaders: { "x-probe": "missing" },
+      }, { profile: "burst", totalRequests: 1, concurrency: 1, windows: 1 });
+      expect(missing?.status).toBe("failed");
+      expect(missing?.error).toContain("x-probe");
+      const [forbidden] = await measureHttpTrials({
+        ...target,
+        url: new URL("/unique?test=forbidden", target.url).href,
+        forbiddenHeaders: ["x-probe"],
+      }, { profile: "burst", totalRequests: 1, concurrency: 1, windows: 1 });
+      expect(forbidden?.status).toBe("failed");
+      expect(forbidden?.error).toContain("x-probe");
+    });
+  });
   it("retains successful partial samples without ranking a failed burst", async () => {
     await withServer(async (target) => {
       const [trial] = await measureHttpTrials(

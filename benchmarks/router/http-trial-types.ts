@@ -3,6 +3,9 @@ export interface HttpTarget {
   serverPid: number;
   requiredText: string;
   workload: Record<string, string>;
+  requestKeyMode?: "fixed" | "unique-query";
+  expectedHeaders?: Record<string, string>;
+  forbiddenHeaders?: string[];
 }
 
 export interface HttpTrialOptions {

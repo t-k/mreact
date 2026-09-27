@@ -45,13 +45,20 @@ describe("production fixture process isolation", () => {
       await rm(root, { recursive: true, force: true });
     }
   }, 30_000);
-  it("runs mreact's existing cached route in a child and closes it after load", async () => {
+  it("runs mreact's existing browser-cache-header route in a child and closes it after load", async () => {
     let pid: number | undefined;
     try {
       const target = await mreactAppRouterAdapter.getHttpTarget!();
       pid = target.serverPid;
       expect(pid).not.toBe(process.pid);
       expect(target.url).toContain("/static-page");
+      for (let index = 0; index < 2; index++) {
+        const response = await fetch(target.url);
+        expect(response.status).toBe(200);
+        expect(response.headers.get("cache-control")).toBe("max-age=60");
+        expect(response.headers.get("x-mreact-cache")).toBeNull();
+        expect(await response.text()).toContain("<span>999</span>");
+      }
       const [trial] = await measureHttpTrials(target, {
         profile: "burst",
         concurrency: 2,

@@ -25,7 +25,7 @@ describe("mreact app-router benchmark fixtures", () => {
     expect(primaryFixtureSource).not.toContain("renderToString");
   });
 
-  it("measures the static cached route with an actual route cache", async () => {
+  it("measures the static route with a browser cache header and no server route cache", async () => {
     const source = await readFile(adapterPath, "utf8");
 
     expect(source).toContain('import { cacheControl } from "@reckona/mreact-router";');
@@ -44,7 +44,7 @@ describe("mreact app-router benchmark fixtures", () => {
     expect(source).not.toContain("Math.max(0, process.memoryUsage().rss - beforeRss),");
   });
 
-  it("exposes the production cached route PID to the common HTTP trial runner", async () => {
+  it("exposes the production route PID to the common HTTP trial runner", async () => {
     const source = await readFile(adapterPath, "utf8");
     expect(source).toContain("async getHttpTarget()");
     expect(source).toContain("serverPid: server.pid");

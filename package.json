@@ -30,6 +30,7 @@
     "bench:request-fastpaths": "NODE_ENV=production pnpm build && NODE_ENV=production tsx benchmarks/primitive/request-fastpaths.ts",
     "bench:non-router": "NODE_ENV=production pnpm build && NODE_ENV=production tsx benchmarks/non-router/run.ts",
     "bench:router": "NODE_ENV=production pnpm build && NODE_ENV=production tsx benchmarks/router/run.ts",
+    "bench:router-http-cache-modes": "NODE_ENV=production pnpm build && NODE_ENV=production tsx benchmarks/router/http-cache-modes.ts",
     "bench:router-build": "NODE_ENV=production pnpm build && NODE_ENV=production tsx benchmarks/router/build-time.ts",
     "bench:router-build:fresh": "NODE_ENV=production pnpm build && MREACT_ROUTER_BUILD_BENCH_PROCESS_MODEL=fresh-process NODE_ENV=production tsx benchmarks/router/build-time.ts",
     "bench:router-build:incremental": "NODE_ENV=production pnpm build && MREACT_ROUTER_BUILD_BENCH_PROCESS_MODEL=incremental-source-change NODE_ENV=production tsx benchmarks/router/build-time.ts",
