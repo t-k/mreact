@@ -186,15 +186,11 @@ function settleOptimisticPatch(
   const current = client.getQueryData(context.queryKey);
   const activeCache = context.queries.get(context.queryHash);
   const currentRevision = client.getQueryEntry(context.queryKey)?.revision ?? -1;
-  if (activeCache !== context.cache || currentRevision !== context.cache.revision) {
-    for (const { operation } of context.changes) {
-      operation.status = success ? "success" : "failed";
-    }
-    pruneQueryLedger(context);
-    client.invalidateQueries({ queryKey: context.queryKey });
-    return;
-  }
-  if (!isPlainRecord(current)) {
+  if (
+    activeCache !== context.cache ||
+    currentRevision !== context.cache.revision ||
+    !isPlainRecord(current)
+  ) {
     for (const { operation } of context.changes) {
       operation.status = success ? "success" : "failed";
     }

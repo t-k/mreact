@@ -285,6 +285,26 @@ Keep the dispose function returned by `createRoot()` when mounting manually. Bin
 
 Use `bindList()` for low-level list bindings. Keyed lists use reactive object rows by default, so replacing an item with the same key can update field reads inside that row without recreating its DOM. Pass `itemMode: "static"` when the renderer treats each item as an immutable snapshot and you want append, remove, clear, and reverse paths to preserve keyed DOM identity without per-row object tracking.
 
+## Keyed collections for large lists
+
+`@reckona/mreact-collection` is an opt-in store for keyed rows. Each row has a separate reactive value, while `order` and `count` can be read independently. Use it when frequent row edits would otherwise replace a large array and wake consumers that only need one row.
+
+```ts
+import { createCollection } from "@reckona/mreact-collection";
+
+const projects = createCollection([{ id: "p1", status: "open" }], {
+  key: (project) => project.id,
+});
+
+projects.patch("p1", { status: "done" });
+projects.append({ id: "p2", status: "open" });
+projects.move("p2", { before: "p1" });
+const firstStatus = projects.row("p1")?.get()?.status;
+const total = projects.count.get();
+```
+
+`patch()` changes one row without changing the `order` or `count` cells. `move()` changes order, while `append()` and `remove()` change order and count. `toArray()` walks every row, so passing it into the current `bindList()` path still performs a full list read. Filtering and sorting by an edited field may require structural work as well; this package does not automatically incrementalize arbitrary JavaScript callbacks.
+
 ## Client boundaries
 
 Mreact usually infers client interactivity from code that needs the browser, such as event handlers and reactive state. Keep ordinary interactive components in regular files first; the compiler can still keep the surrounding page server-rendered while hydrating the interactive part that needs the browser.

@@ -13,6 +13,42 @@ afterEach(() => {
 });
 
 describe("createQueryClient", () => {
+  it("returns a data revision that is unique across keys and recreated entries", () => {
+    const client = createQueryClient();
+    const key = ["revision"] as const;
+    const first = client.setQueryData(key, { value: 1 });
+    expect(client.getQueryEntry(key)?.revision).toBe(first);
+    const other = client.setQueryData(["other"], 1);
+    const equivalent = client.setQueryData(key, { value: 1 });
+    expect(first).toBeLessThan(other);
+    expect(other).toBeLessThan(equivalent);
+    expect(client.getQueryEntry(key)?.revision).toBe(equivalent);
+
+    client.removeQueries({ queryKey: key });
+    const recreated = client.setQueryData(key, { value: 2 });
+    expect(recreated).toBeGreaterThan(equivalent);
+    expect(client.getQueryEntry(key)?.revision).toBe(recreated);
+  });
+
+  it("returns the initiating write revision when a subscriber writes again", () => {
+    const client = createQueryClient();
+    const key = ["nested-revision"] as const;
+    let nestedRevision = 0;
+    let nested = false;
+    const unsubscribe = client.subscribe<number>(key, () => {
+      if (!nested) {
+        nested = true;
+        nestedRevision = client.setQueryData(key, 2);
+      }
+    }, { exact: true });
+
+    const outerRevision = client.setQueryData(key, 1);
+    expect(outerRevision).toBeLessThan(nestedRevision);
+    expect(client.getQueryEntry(key)?.revision).toBe(nestedRevision);
+    expect(client.getQueryData(key)).toBe(2);
+    unsubscribe();
+  });
+
   it("expires successful and failed unused prefetches with the client policy", async () => {
     vi.useFakeTimers();
     const client = createQueryClient({ inactiveGcTime: 10 });

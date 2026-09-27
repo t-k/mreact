@@ -255,6 +255,8 @@ The optimistic patch tracks fields per mutation, so a failed operation does not 
 
 Use `queryClient.setQueryData(queryKey, updater)` when the new value can be derived from the previous cached value without fetching. The updater receives `undefined` when the query is not currently cached, so keep it total and side-effect free.
 
+`setQueryData()` returns the revision of its own data write, and `getQueryEntry(queryKey)?.revision` exposes the latest data revision. Revisions advance across keys and recreated entries within one query client. Fetch start, cancellation, and invalidation alone do not advance them. Use them to detect an intervening cache write; they are local process counters, not server versions or durable cursors.
+
 ```ts
 getQueryClient().setQueryData<Profile>(["profile"], (previous) => ({
   ...(previous ?? { name: "" }),
