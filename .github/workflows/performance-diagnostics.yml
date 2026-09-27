@@ -1,0 +1,98 @@
+name: Performance Diagnostics
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 3 * * 2"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: performance-diagnostics-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  measure:
+    name: ${{ matrix.track }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - track: compiled-jsx-endurance
+            command: pnpm bench:js-framework:endurance
+            browser: true
+            hosted-chrome: true
+          - track: compiler-specializations
+            command: pnpm bench:compiler-specializations
+            browser: true
+          - track: event-lifecycle
+            command: pnpm bench:primitive-browser:event-lifecycle
+            browser: true
+          - track: list-rotation
+            command: pnpm bench:primitive-browser:list-rotation
+            browser: true
+          - track: router-build
+            command: MREACT_BUILD_TIMINGS=1 pnpm bench:router-build
+          - track: router-build-fresh
+            command: MREACT_BUILD_TIMINGS=1 pnpm bench:router-build:fresh
+          - track: scheduler
+            command: pnpm bench:scheduler
+          - track: lambda-generated-handler
+            command: pnpm bench:lambda-generated-handler
+            native: true
+          - track: lifecycle
+            command: pnpm scenario:lifecycle
+          - track: client-delivery-size
+            command: pnpm size:client:check
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Install Playwright Chromium
+        if: matrix.browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Resolve hosted Chrome for the official harness
+        if: matrix.hosted-chrome
+        run: |
+          chrome_binary="$(command -v google-chrome)"
+          test -x "$chrome_binary"
+          echo "MREACT_JS_FRAMEWORK_CHROME_BINARY=$chrome_binary" >> "$GITHUB_ENV"
+
+      - name: Build native router addon
+        if: matrix.native
+        run: pnpm --dir packages/router-native build
+
+      - name: Run diagnostic track
+        env:
+          NODE_ENV: production
+          MREACT_BENCHMARK_RESULTS_DIR: ${{ runner.temp }}/performance/${{ matrix.track }}
+        run: ${{ matrix.command }}
+
+      - name: Upload raw results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-${{ matrix.track }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/performance/${{ matrix.track }}
+            size/reports
+          if-no-files-found: warn
+          retention-days: 90
