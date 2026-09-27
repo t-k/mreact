@@ -58,6 +58,7 @@
     "test:mutation:core": "stryker run stryker.core.config.mjs",
     "test:mutation:compiler": "stryker run stryker.compiler.config.mjs",
     "test:mutation:lifecycle": "stryker run stryker.lifecycle.config.mjs",
+    "test:mutation:stream-diagnostics": "stryker run stryker.stream-diagnostics.config.mjs",
     "test:mutation:size": "stryker run stryker.size.config.mjs",
     "test:mutation:release-readiness": "stryker run stryker.release-readiness.config.mjs",
     "test:mutation:reactive-core": "stryker run stryker.reactive-core.config.mjs",

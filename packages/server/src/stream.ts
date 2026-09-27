@@ -50,6 +50,9 @@ export function renderToReadableStream(
   //   4. End of stream - any tail bytes.
   const abortController = new AbortController();
   const queuedChunks: Uint8Array[] = [];
+  const queueStateCallback = options.onQueueStateChange;
+  const retainedBackingBuffers = queueStateCallback === undefined ? undefined : new Map<ArrayBufferLike, number>();
+  let retainedBackingBytes = 0;
   let controllerRef: ReadableStreamDefaultController<Uint8Array> | undefined;
   let cancelled = false;
   let complete = false;
@@ -82,7 +85,9 @@ export function renderToReadableStream(
       controller.enqueue(buffer);
       controllerQueuedBytes = (controller.desiredSize ?? 0) <= 0 ? buffer.byteLength : 0;
       controllerQueuedChunkCount = (controller.desiredSize ?? 0) <= 0 ? 1 : 0;
-      controllerQueuedBuffer = (controller.desiredSize ?? 0) <= 0 ? buffer.buffer : undefined;
+      if (queueStateCallback !== undefined) {
+        setControllerQueuedBuffer((controller.desiredSize ?? 0) <= 0 ? buffer.buffer : undefined);
+      }
       reportQueueState();
       resolveBackpressureIfReady();
       return;
@@ -95,10 +100,13 @@ export function renderToReadableStream(
       const chunk = queuedChunks.shift();
       if (chunk !== undefined) {
         queuedBytes -= chunk.byteLength;
+        if (queueStateCallback !== undefined) releaseBackingBuffer(chunk.buffer);
         controller.enqueue(chunk);
         controllerQueuedBytes = (controller.desiredSize ?? 0) <= 0 ? chunk.byteLength : 0;
         controllerQueuedChunkCount = (controller.desiredSize ?? 0) <= 0 ? 1 : 0;
-        controllerQueuedBuffer = (controller.desiredSize ?? 0) <= 0 ? chunk.buffer : undefined;
+        if (queueStateCallback !== undefined) {
+          setControllerQueuedBuffer((controller.desiredSize ?? 0) <= 0 ? chunk.buffer : undefined);
+        }
       }
     }
 
@@ -205,7 +213,7 @@ export function renderToReadableStream(
     pull(controller) {
       controllerQueuedBytes = 0;
       controllerQueuedChunkCount = 0;
-      controllerQueuedBuffer = undefined;
+      if (queueStateCallback !== undefined) setControllerQueuedBuffer(undefined);
       reportQueueState();
       drainQueuedChunks(controller);
       resolveBackpressureAfterPull();
@@ -277,6 +285,7 @@ export function renderToReadableStream(
   function queueChunk(buffer: Uint8Array): void {
     queuedChunks.push(buffer);
     queuedBytes += buffer.byteLength;
+    if (queueStateCallback !== undefined) retainBackingBuffer(buffer.buffer);
     reportQueueState();
 
     if (
@@ -316,6 +325,8 @@ export function renderToReadableStream(
     cancelled = true;
     complete = false;
     queuedChunks.length = 0;
+    retainedBackingBuffers?.clear();
+    retainedBackingBytes = 0;
     controllerQueuedBytes = 0;
     controllerQueuedChunkCount = 0;
     controllerQueuedBuffer = undefined;
@@ -334,28 +345,40 @@ export function renderToReadableStream(
     controllerRef?.error(error);
   }
 
+  function retainBackingBuffer(buffer: ArrayBufferLike): void {
+    const backingBuffers = retainedBackingBuffers!;
+    const count = backingBuffers.get(buffer) ?? 0;
+    if (count === 0) retainedBackingBytes += buffer.byteLength;
+    backingBuffers.set(buffer, count + 1);
+  }
+
+  function releaseBackingBuffer(buffer: ArrayBufferLike): void {
+    const backingBuffers = retainedBackingBuffers!;
+    const count = backingBuffers.get(buffer)!;
+    if (count === 1) {
+      backingBuffers.delete(buffer);
+      retainedBackingBytes -= buffer.byteLength;
+    } else {
+      backingBuffers.set(buffer, count - 1);
+    }
+  }
+
+  function setControllerQueuedBuffer(buffer: ArrayBufferLike | undefined): void {
+    if (controllerQueuedBuffer !== undefined) releaseBackingBuffer(controllerQueuedBuffer);
+    controllerQueuedBuffer = buffer;
+    if (buffer !== undefined) retainBackingBuffer(buffer);
+  }
+
   function reportQueueState(): void {
-    const callback = options.onQueueStateChange;
-    if (callback === undefined) {
+    if (queueStateCallback === undefined) {
       return;
     }
 
-    const backingBuffers = new Set<ArrayBufferLike>();
-    if (controllerQueuedBuffer !== undefined) {
-      backingBuffers.add(controllerQueuedBuffer);
-    }
-    for (const chunk of queuedChunks) {
-      backingBuffers.add(chunk.buffer);
-    }
-
-    callback({
+    queueStateCallback({
       controllerQueuedBytes,
       controllerQueuedChunkCount,
-      retainedBackingBufferCount: backingBuffers.size,
-      retainedBackingBytes: [...backingBuffers].reduce(
-        (total, buffer) => total + buffer.byteLength,
-        0,
-      ),
+      retainedBackingBufferCount: retainedBackingBuffers!.size,
+      retainedBackingBytes,
       queuedBytes,
       queuedChunkCount: queuedChunks.length,
       retainedBytes: controllerQueuedBytes + queuedBytes,

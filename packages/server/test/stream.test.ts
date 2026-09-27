@@ -96,6 +96,105 @@ describe("server streaming runtime", () => {
     await expect(readStream(stream)).resolves.toBe("SHELLBODY");
   });
 
+  test("queue diagnostics read each backing buffer a bounded number of times", async () => {
+    const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype) as object;
+    const descriptor = Object.getOwnPropertyDescriptor(typedArrayPrototype, "buffer");
+    if (descriptor?.get === undefined) throw new Error("TypedArray buffer getter unavailable");
+    let bufferReads = 0;
+    Object.defineProperty(typedArrayPrototype, "buffer", {
+      ...descriptor,
+      get() {
+        bufferReads += 1;
+        return descriptor.get?.call(this);
+      },
+    });
+
+    try {
+      const stream = renderToReadableStream(
+        (sink) => {
+          sink.append("SHELL");
+          sink.defer?.(Promise.resolve().then(() => {
+            for (let index = 0; index < 100; index += 1) sink.append("x");
+          }));
+        },
+        { onQueueStateChange() {} },
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+      await stream.getReader().cancel();
+      expect(bufferReads).toBeLessThan(600);
+    } finally {
+      Object.defineProperty(typedArrayPrototype, "buffer", descriptor);
+    }
+  });
+
+  test("queue diagnostics release retained buffers after partial reading and cancellation", async () => {
+    const states: Array<{ queuedChunkCount: number; retainedBackingBytes: number; retainedBackingBufferCount: number }> = [];
+    const stream = renderToReadableStream(
+      (sink) => {
+        sink.append("SHELL");
+        sink.defer?.(Promise.resolve().then(() => {
+          for (let index = 0; index < 5; index += 1) sink.append(String(index));
+        }));
+      },
+      { onQueueStateChange: (state) => states.push(state) },
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(states.some((state) => state.queuedChunkCount >= 4)).toBe(true);
+
+    const reader = stream.getReader();
+    await reader.read();
+    await reader.read();
+    await reader.cancel();
+    expect(states.at(-1)).toMatchObject({
+      queuedChunkCount: 0,
+      retainedBackingBytes: 0,
+      retainedBackingBufferCount: 0,
+    });
+  });
+
+  test("queue diagnostics count each emitted backing buffer once", async () => {
+    const states: Array<{ queuedChunkCount: number; retainedBackingBytes: number; retainedBackingBufferCount: number }> = [];
+    const stream = renderToReadableStream(
+      (sink) => {
+        sink.append("SHELL");
+        sink.defer?.(Promise.resolve().then(() => {
+          for (let index = 0; index < 5; index += 1) sink.append(String(index));
+        }));
+      },
+      { onQueueStateChange: (state) => states.push(state) },
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    const peak = states.find((state) => state.queuedChunkCount === 5);
+    expect(peak).toBeDefined();
+
+    const chunks: Uint8Array[] = [];
+    const afterReads: typeof states = [];
+    const reader = stream.getReader();
+    for (;;) {
+      const result = await reader.read();
+      if (result.done) break;
+      chunks.push(result.value);
+      await Promise.resolve();
+      afterReads.push(states.at(-1)!);
+    }
+    const buffers = new Set(chunks.map((chunk) => chunk.buffer));
+    expect(chunks).toHaveLength(6);
+    expect(peak?.retainedBackingBufferCount).toBe(buffers.size);
+    expect(peak?.retainedBackingBytes).toBe(
+      [...buffers].reduce((bytes, buffer) => bytes + buffer.byteLength, 0),
+    );
+    for (let index = 0; index < 5; index += 1) {
+      const remainingBuffers = new Set(chunks.slice(index + 1).map((chunk) => chunk.buffer));
+      expect(afterReads[index]?.retainedBackingBufferCount).toBe(remainingBuffers.size);
+      expect(afterReads[index]?.retainedBackingBytes).toBe(
+        [...remainingBuffers].reduce((bytes, buffer) => bytes + buffer.byteLength, 0),
+      );
+    }
+  });
+
   test("rejects the reader when synchronous render throws undefined", async () => {
     const stream = renderToReadableStream(() => {
       throw undefined;
