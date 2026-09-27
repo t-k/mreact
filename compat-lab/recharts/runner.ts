@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type Page } from "@playwright/test";
 import { createServer, type ViteDevServer } from "vite";
 import { assertCompatLabPassed } from "../shared/assert-run-passed.js";
+import { writeCompatDoctorReport } from "../shared/compat-doctor.js";
 import type { DomSummary } from "./dom-summary.js";
 import { rechartsFixtures } from "./fixtures.js";
 import { diffPngWithBrowserCanvas } from "./image-diff.js";
@@ -73,6 +74,15 @@ async function main(): Promise<void> {
       );
     }
     await writeRunSummary({ outputDir, runId, results });
+    await writeCompatDoctorReport({
+      repoRoot,
+      outputDir,
+      runId,
+      lab: "recharts",
+      browserVersion: browser.version(),
+      fixtures: selectedFixtures,
+      results,
+    });
     assertCompatLabPassed({ labName: "Recharts", outputDir, results });
     console.log(`Recharts compat lab results: ${outputDir}`);
   } finally {

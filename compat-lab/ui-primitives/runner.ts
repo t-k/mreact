@@ -5,6 +5,7 @@ import { chromium, type Browser, type ConsoleMessage, type Page } from "@playwri
 import { createServer, type ViteDevServer } from "vite";
 import { diffPngWithBrowserCanvas } from "../recharts/image-diff.js";
 import { assertCompatLabPassed } from "../shared/assert-run-passed.js";
+import { writeCompatDoctorReport } from "../shared/compat-doctor.js";
 import { uiPrimitiveFixtures } from "./fixtures.js";
 import { writeRunSummary, type FixtureRunResult } from "./result-writer.js";
 import type { UiPrimitiveDomSummary, UiPrimitiveFixture, UiPrimitiveInteraction } from "./types.js";
@@ -89,6 +90,15 @@ async function main(): Promise<void> {
     }
 
     await writeRunSummary({ outputDir, runId, results });
+    await writeCompatDoctorReport({
+      repoRoot,
+      outputDir,
+      runId,
+      lab: "ui-primitives",
+      browserVersion: browser.version(),
+      fixtures: selectedFixtures,
+      results,
+    });
     assertCompatLabPassed({ labName: "UI primitive", outputDir, results });
     console.log(`UI primitive compat lab results: ${outputDir}`);
   } finally {
