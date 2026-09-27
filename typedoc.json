@@ -6,6 +6,7 @@
     "packages/auth",
     "packages/compiler",
     "packages/create-mreact-app",
+    "packages/collection",
     "packages/devtools",
     "packages/forms",
     "packages/next",
