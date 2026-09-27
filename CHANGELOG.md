@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.227 - 2026-09-27
+
+### Changed
+
+- Improved built app-router request matching for large route sets by indexing static paths and shared dynamic-route prefixes, and avoided repeating a known unsuccessful match before rendering.
+
 ## 0.0.226 - 2026-09-27
 
 ### Added
