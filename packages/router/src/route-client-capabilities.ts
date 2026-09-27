@@ -63,7 +63,7 @@ const transparentPackages = new Set([
 const styleExtensions = [".css", ".sass", ".scss", ".less", ".styl"];
 
 const eventAttributePattern = /\bon[A-Z][\w$]*\s*=/u;
-const dynamicImportPattern = /\bimport\s*\(/u;
+const dynamicImportPattern = /\bimport\s*\(/gu;
 const requestMemberPattern = /\.\s*request\b/u;
 const requestReadPattern = /(?:^|[^.\w$])request\s*\.\s*(?:hash|pathname|search|url)\b/u;
 // A binding destructure closes with `)`, `:` or `=`; a JSX expression container such as `{request}`
@@ -81,6 +81,13 @@ export async function collectClientRouteCapabilityFacts(
     { code: options.code, file: options.filename },
   ];
   const used = {
+    cells: false,
+    domRefs: false,
+    eventBindings: false,
+    reactiveEffect: false,
+    requestLocation: false,
+  };
+  const unknown = {
     cells: false,
     domRefs: false,
     eventBindings: false,
@@ -119,13 +126,19 @@ export async function collectClientRouteCapabilityFacts(
       continue;
     }
 
-    if (dynamicImportPattern.test(withoutLiterals)) {
+    const dynamicImports = parseLiteralDynamicImports(withoutComments, withoutLiterals);
+    if (dynamicImports.opaque) {
       opaque = true;
     }
 
-    recordModuleCapabilities(used, blankStaticImports(withoutComments, withoutLiterals), imports);
+    recordModuleCapabilities(
+      used,
+      unknown,
+      blankStaticImports(withoutComments, withoutLiterals),
+      imports,
+    );
 
-    for (const specifier of imports.sources) {
+    for (const specifier of [...imports.sources, ...dynamicImports.sources]) {
       if (specifier.startsWith(".")) {
         if (isStyleSpecifier(specifier)) {
           continue;
@@ -171,21 +184,23 @@ export async function collectClientRouteCapabilityFacts(
     }
   }
 
-  const fact = (capabilityUsed: boolean): ClientCapabilityFact =>
-    capabilityUsed ? "known-used" : opaque ? "unknown" : "known-unused";
+  const fact = (capability: keyof ClientRouteCapabilityFacts): ClientCapabilityFact =>
+    used[capability] ? "known-used" : opaque || unknown[capability] ? "unknown" : "known-unused";
 
   return {
-    cells: fact(used.cells),
-    domRefs: fact(used.domRefs),
-    eventBindings: fact(used.eventBindings),
-    reactiveEffect: fact(used.reactiveEffect),
-    requestLocation: fact(used.requestLocation),
+    cells: fact("cells"),
+    domRefs: fact("domRefs"),
+    eventBindings: fact("eventBindings"),
+    reactiveEffect: fact("reactiveEffect"),
+    requestLocation: fact("requestLocation"),
   };
 }
 
 interface ModuleImports {
   reactiveCoreLocalNames: Map<string, string>;
+  reactiveCoreNamespaces: string[];
   reactiveDomLocalNames: Map<string, string>;
+  reactiveDomNamespaces: string[];
   sources: string[];
 }
 
@@ -197,6 +212,7 @@ function recordModuleCapabilities(
     reactiveEffect: boolean;
     requestLocation: boolean;
   },
+  unknown: { cells: boolean; domRefs: boolean; reactiveEffect: boolean },
   stripped: string,
   imports: ModuleImports,
 ): void {
@@ -212,6 +228,14 @@ function recordModuleCapabilities(
     used.domRefs = true;
   }
 
+  recordRuntimeNamespaceUses(stripped, imports.reactiveCoreNamespaces, used, unknown, {
+    cell: "cells",
+    effect: "reactiveEffect",
+  });
+  recordRuntimeNamespaceUses(stripped, imports.reactiveDomNamespaces, used, unknown, {
+    bindDomRef: "domRefs",
+  });
+
   if (eventAttributePattern.test(stripped)) {
     used.eventBindings = true;
   }
@@ -225,6 +249,56 @@ function recordModuleCapabilities(
   }
 }
 
+function recordRuntimeNamespaceUses(
+  stripped: string,
+  names: readonly string[],
+  used: { cells: boolean; domRefs: boolean; reactiveEffect: boolean },
+  unknown: { cells: boolean; domRefs: boolean; reactiveEffect: boolean },
+  members: Readonly<Record<string, "cells" | "domRefs" | "reactiveEffect">>,
+): void {
+  for (const name of names) {
+    const pattern = new RegExp(`(?:^|[^.\\w$])(${escapeRegExp(name)})(?![\\w$])`, "gu");
+
+    for (const match of stripped.matchAll(pattern)) {
+      const suffix = stripped.slice((match.index ?? 0) + match[0].length);
+      const member = /^\s*\.\s*([\w$]+)/u.exec(suffix)?.[1];
+      const capability = member === undefined ? undefined : members[member];
+
+      if (capability !== undefined) {
+        used[capability] = true;
+      } else {
+        for (const key of Object.values(members)) {
+          unknown[key] = true;
+        }
+      }
+    }
+  }
+}
+
+/** Resolves only literal import() arguments whose spelling needs no JavaScript escape decoding. */
+function parseLiteralDynamicImports(
+  withoutComments: string,
+  withoutLiterals: string,
+): { sources: string[]; opaque: boolean } {
+  const sources: string[] = [];
+  let opaque = false;
+
+  for (const match of withoutLiterals.matchAll(dynamicImportPattern)) {
+    const expression = withoutComments.slice(match.index);
+    const literal = /^import\s*\(\s*(["'])([^"'\\]+)\1\s*\)/u.exec(expression);
+
+    const specifier = literal?.[2];
+
+    if (specifier === undefined) {
+      opaque = true;
+    } else {
+      sources.push(specifier);
+    }
+  }
+
+  return { sources, opaque };
+}
+
 /**
  * True when the imported binding is mentioned anywhere outside its own import statement.
  *
@@ -232,7 +306,10 @@ function recordModuleCapabilities(
  * matching a call shape would have to model type arguments, re-exports and indirection correctly or
  * risk turning a capability off for a module that really uses it.
  */
-function referencesLocalName(strippedWithoutImports: string, localName: string | undefined): boolean {
+function referencesLocalName(
+  strippedWithoutImports: string,
+  localName: string | undefined,
+): boolean {
   return (
     localName !== undefined &&
     new RegExp(`(?:^|[^.\\w$])${escapeRegExp(localName)}(?![\\w$])`, "u").test(
@@ -287,7 +364,9 @@ const importStatementPattern =
 function parseStaticImports(stripped: string): ModuleImports {
   const sources: string[] = [];
   const reactiveCoreLocalNames = new Map<string, string>();
+  const reactiveCoreNamespaces: string[] = [];
   const reactiveDomLocalNames = new Map<string, string>();
+  const reactiveDomNamespaces: string[] = [];
 
   for (const match of stripped.matchAll(importStatementPattern)) {
     const source =
@@ -314,12 +393,33 @@ function parseStaticImports(stripped: string): ModuleImports {
       continue;
     }
 
+    const namespaceNames =
+      target === reactiveCoreLocalNames ? reactiveCoreNamespaces : reactiveDomNamespaces;
     for (const [imported, local] of parseNamedImportBindings(clause)) {
-      target.set(imported, local);
+      if (imported === "default") {
+        namespaceNames.push(local);
+      } else {
+        target.set(imported, local);
+      }
+    }
+
+    if (!/^\s*type\b/u.test(clause)) {
+      const namespace = /^\s*\*\s+as\s+([\w$]+)/u.exec(clause)?.[1];
+      const defaultBinding = /^\s*([\w$]+)\s*(?:,|$)/u.exec(clause)?.[1];
+      const local = namespace ?? defaultBinding;
+      if (local !== undefined) {
+        namespaceNames.push(local);
+      }
     }
   }
 
-  return { reactiveCoreLocalNames, reactiveDomLocalNames, sources };
+  return {
+    reactiveCoreLocalNames,
+    reactiveCoreNamespaces,
+    reactiveDomLocalNames,
+    reactiveDomNamespaces,
+    sources,
+  };
 }
 
 function parseNamedImportBindings(clause: string): Array<[string, string]> {
