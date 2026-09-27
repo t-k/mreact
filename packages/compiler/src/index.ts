@@ -68,6 +68,7 @@ export type {
   ServerOutputMode,
   SourceLocation,
   ClientSpecializationFlags,
+  ClientSpecializationMetadata,
   TransformInput,
   TransformOutput,
 } from "./types.js";

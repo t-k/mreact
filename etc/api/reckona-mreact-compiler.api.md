@@ -5,6 +5,7 @@
 ```ts
 
 import type { ClientReferenceMetadata as ClientReferenceMetadata_2 } from '@reckona/mreact-shared/compiler-contract';
+import type { ClientSpecializationMetadata as ClientSpecializationMetadata_2 } from '@reckona/mreact-shared/compiler-contract';
 import type { CompilerFrontend as CompilerFrontend_2 } from '@reckona/mreact-shared/compiler-contract';
 import type { CompileTarget as CompileTarget_2 } from '@reckona/mreact-shared/compiler-contract';
 import type { ComponentMetadata as ComponentMetadata_2 } from '@reckona/mreact-shared/compiler-contract';
@@ -198,6 +199,9 @@ export interface ClientSpecializationFlags {
 }
 
 // @public
+export type ClientSpecializationMetadata = ClientSpecializationMetadata_2;
+
+// @public
 export function collectClientRouteModuleAnalysis(input: {
     code: string;
     filename?: string | undefined;
@@ -264,10 +268,66 @@ export function collectTopLevelValueExportNames(input: {
 }): string[];
 
 // @public
+export interface CompilerDecision {
+    // (undocumented)
+    applied: boolean;
+    // (undocumented)
+    helper: string;
+    // (undocumented)
+    kind: "client-specialization";
+    // (undocumented)
+    name: ClientSpecializationMetadata["name"];
+    // (undocumented)
+    reason: NonNullable<ClientSpecializationMetadata["reason"]> | "applied" | "unknown";
+    // (undocumented)
+    source: SourceLocation | null;
+}
+
+// @public
+export interface CompilerDecisionReport {
+    // (undocumented)
+    components: ComponentMetadata[];
+    // (undocumented)
+    decisions: CompilerDecision[];
+    // (undocumented)
+    diagnostics: CompilerReportDiagnostic[];
+    // (undocumented)
+    filename: string;
+    // (undocumented)
+    generated: {
+        code: string;
+        sourceMap: string;
+        sourceMapAccuracy: "heuristic";
+    };
+    // (undocumented)
+    mode: "reactive" | "compat";
+    // (undocumented)
+    runtimeImports: RuntimeImport[];
+    // (undocumented)
+    schemaVersion: 1;
+    // (undocumented)
+    target: TransformInput["target"];
+}
+
+// @public
 export type CompilerFrontend = CompilerFrontend_2;
 
 // @public
 export type CompilerMetadata = ModuleMetadata_2["compiler"];
+
+// @public
+export interface CompilerReportDiagnostic {
+    // (undocumented)
+    code: Diagnostic["code"];
+    // (undocumented)
+    level: Diagnostic["level"];
+    // (undocumented)
+    message: Diagnostic["message"];
+    // (undocumented)
+    source: SourceLocation | null;
+    // (undocumented)
+    suggestion?: Diagnostic["suggestion"];
+}
 
 // @public
 export type CompileTarget = CompileTarget_2;
@@ -284,6 +344,9 @@ export function demoteTopLevelExportDeclarations(input: {
 
 // @public
 export type Diagnostic = Diagnostic_2;
+
+// @public
+export function explainTransform(input: TransformInput): CompilerDecisionReport;
 
 // @public
 export interface FormActionExpressionReference {

@@ -116,7 +116,7 @@ snapshots.save("projects", { selectedId: "p3", scrollOffset: 420 });
 const restored = snapshots.load<{ selectedId: string; scrollOffset: number }>("projects");
 ```
 
-Values are limited to 32 KiB each by default, and `save()` returns `false` for unsupported or oversized values. Call `snapshots.clear()` on logout or tenant changes. Validate restored values before using them as trusted application data.
+Values are limited to 32 KiB each by default, with at most 32 keys and 128 KiB per history entry. `save()` returns `false` for unsupported or oversized values. Call `snapshots.clear()` on logout or tenant changes. Validate restored values before using them as trusted application data. The store follows router-managed history; direct History API writes that clone an entry state at the same URL are outside this contract.
 
 ## Prefetch, not preload
 

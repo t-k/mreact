@@ -128,4 +128,67 @@ describe("navigation snapshots", () => {
     expect(expired.save("text", "a")).toBe(true);
     expect(expired.load("text")).toBeUndefined();
   });
+
+  it("bounds key length, key count, and aggregate bytes within one entry", () => {
+    const store = createNavigationSnapshotStore({
+      maxBytes: 3,
+      maxEntries: 1,
+      maxKeysPerEntry: 2,
+      maxKeyBytes: 2,
+      maxEntryBytes: 8,
+    });
+    expect(store.save("aaa", 0)).toBe(false);
+    expect(store.save("a", "x")).toBe(true);
+    expect(store.save("b", "y")).toBe(true);
+    expect(store.save("c", 0)).toBe(false);
+    expect(store.save("a", "z")).toBe(true);
+    expect(store.load("a")).toBe("z");
+    expect(() => createNavigationSnapshotStore({ maxKeysPerEntry: 0 })).toThrow();
+    expect(() => createNavigationSnapshotStore({ maxKeyBytes: 0 })).toThrow();
+    expect(() => createNavigationSnapshotStore({ maxEntryBytes: 0 })).toThrow();
+  });
+
+  it("enforces key count and aggregate size independently", () => {
+    const countLimited = createNavigationSnapshotStore({ maxKeysPerEntry: 2, maxEntryBytes: 100 });
+    expect(countLimited.save("a", 0)).toBe(true);
+    expect(countLimited.save("b", 0)).toBe(true);
+    expect(countLimited.save("c", 0)).toBe(false);
+    expect(countLimited.save("a", 1)).toBe(true);
+
+    const bytesLimited = createNavigationSnapshotStore({
+      maxBytes: 6,
+      maxKeysPerEntry: 10,
+      maxKeyBytes: 2,
+      maxEntryBytes: 7,
+    });
+    expect(bytesLimited.save("é", "x")).toBe(true);
+    expect(bytesLimited.save("b", "y")).toBe(false);
+    expect(bytesLimited.save("é", "z")).toBe(true);
+    expect(bytesLimited.save("é", "zzz")).toBe(true);
+    expect(bytesLimited.save("é", "zzzz")).toBe(false);
+    expect(bytesLimited.save("abc", 0)).toBe(false);
+    expect(bytesLimited.load("é")).toBe("zzz");
+    expect(() => createNavigationSnapshotStore({ maxKeysPerEntry: 1, maxKeyBytes: 1, maxEntryBytes: 1 })).not.toThrow();
+  });
+
+  it("uses the documented default TTL", () => {
+    vi.useFakeTimers();
+    const store = createNavigationSnapshotStore();
+    expect(store.save("selection", "p1")).toBe(true);
+    vi.advanceTimersByTime(60_000);
+    expect(store.load("selection")).toBe("p1");
+  });
+
+  it("isolates a state object copied into a different URL", () => {
+    const store = createNavigationSnapshotStore();
+    expect(store.save("draft", "A")).toBe(true);
+    const originalState = history.state;
+    history.pushState(originalState, "", "/other");
+    expect(store.load("draft")).toBeUndefined();
+    expect(store.save("draft", "B")).toBe(true);
+    expect(history.state.__mreactEntryId).not.toBe(originalState.__mreactEntryId);
+    expect(store.load("draft")).toBe("B");
+    history.replaceState(originalState, "", "/projects");
+    expect(store.load("draft")).toBe("A");
+  });
 });

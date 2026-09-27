@@ -41,8 +41,10 @@ export const searchParam = {
   },
 };
 
-type SearchSchema = Record<string, SearchParam<unknown>>;
-type SearchValue<T extends SearchSchema> = { [K in keyof T]: T[K] extends SearchParam<infer V> ? V : never };
+/** A map of named URL search codecs. */
+export type SearchSchema = Record<string, SearchParam<unknown>>;
+/** Infers the validated values of a URL search schema. */
+export type SearchValue<T extends SearchSchema> = { [K in keyof T]: T[K] extends SearchParam<infer V> ? V : never };
 const pendingWrites = new WeakMap<object, Promise<unknown>>();
 
 /** A parsed URL search state and the keys that had invalid or unknown values. */

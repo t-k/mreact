@@ -899,6 +899,9 @@ export function createMemoryRouteCache(options?: MemoryRouteCacheOptions): AppRo
 // @public @deprecated
 export function createMemorySessionStore<TData = unknown>(options?: MemorySessionStoreOptions): SessionStore<TData>;
 
+// @public
+export function createNavigationSnapshotStore(options?: NavigationSnapshotStoreOptions): NavigationSnapshotStore;
+
 // @public @deprecated
 export function createSession<TData>(response: Response, store: SessionStore<TData>, data: TData, options?: SessionCookieOptions): Promise<SessionRecord<TData>>;
 
@@ -911,10 +914,33 @@ export type DeferredLoaderData<TData extends Record<string, unknown>> = TData & 
 };
 
 // @public
+export interface DefinedSearchState<T extends object> {
+    // (undocumented)
+    format(value: T): string;
+    // (undocumented)
+    get(): ParsedSearchState<T>;
+    // (undocumented)
+    parse(search: string | URLSearchParams): ParsedSearchState<T>;
+    // (undocumented)
+    set(patch: Partial<T>, options?: {
+        history?: "push" | "replace";
+    }): Promise<boolean>;
+    // (undocumented)
+    subscribe<K extends keyof T>(key: K, listener: (value: T[K]) => void): () => void;
+}
+
+// @public
 export function defineMessages<const Messages extends MessageTree>(messages: Messages): Messages;
 
 // @public
 export function definePage<TLoader extends RouteLoader>(component: PageComponent<TLoader>): PageComponent<TLoader>;
+
+// @public
+export function defineSearchState<T extends SearchSchema>(schema: T, options?: {
+    navigate?: (url: string, options: {
+        type: "push" | "replace";
+    }) => Promise<boolean>;
+}): DefinedSearchState<SearchValue<T>>;
 
 // @public
 export function deleteCookie(response: Response, name: string, options?: Pick<CookieOptions, "domain" | "path" | "sameSite" | "secure">): Response;
@@ -1350,6 +1376,32 @@ export interface MultipartStreamPart {
 }
 
 // @public
+export interface NavigationSnapshotStore {
+    // (undocumented)
+    clear(): void;
+    // (undocumented)
+    load<T = unknown>(key: string): T | undefined;
+    // (undocumented)
+    save(key: string, value: unknown): boolean;
+}
+
+// @public
+export interface NavigationSnapshotStoreOptions {
+    // (undocumented)
+    maxBytes?: number;
+    // (undocumented)
+    maxEntries?: number;
+    // (undocumented)
+    maxEntryBytes?: number;
+    // (undocumented)
+    maxKeyBytes?: number;
+    // (undocumented)
+    maxKeysPerEntry?: number;
+    // (undocumented)
+    ttlMs?: number;
+}
+
+// @public
 export function next(): MiddlewareNext;
 
 // @public
@@ -1414,6 +1466,14 @@ export interface PageRoute {
 
 // @public
 export function parseCookieHeader(cookieHeader: string | null | undefined): Map<string, string>;
+
+// @public
+export interface ParsedSearchState<T> {
+    // (undocumented)
+    invalid: readonly string[];
+    // (undocumented)
+    value: T;
+}
 
 // @public
 export function parseForm(request: Request): Promise<FormData>;
@@ -1890,6 +1950,33 @@ export interface ScanAppRoutesOptions {
     // (undocumented)
     appDir: string;
 }
+
+// @public
+export interface SearchParam<T> {
+    // (undocumented)
+    readonly defaultValue: T;
+    // (undocumented)
+    format(value: T): string;
+    // (undocumented)
+    parse(value: string): T | undefined;
+}
+
+// @public
+export const searchParam: {
+    oneOf<const T extends string>(values: readonly T[], defaultValue: T): SearchParam<T>;
+    integer(defaultValue: number, options?: {
+        min?: number;
+        max?: number;
+    }): SearchParam<number>;
+};
+
+// @public
+export type SearchSchema = Record<string, SearchParam<unknown>>;
+
+// @public
+export type SearchValue<T extends SearchSchema> = {
+    [K in keyof T]: T[K] extends SearchParam<infer V> ? V : never;
+};
 
 // @public (undocumented)
 export type SegmentRouteParam<Segment extends string> = Segment extends `:...${infer Name}` ? {
