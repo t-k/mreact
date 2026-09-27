@@ -42,11 +42,11 @@ async function load(warmup: boolean) {
       ) {
         issued++;
         try {
-          const began = performance.now();
-          const requestUrl = new URL(url);
+          const requestUrl = config.target.requestKeyMode === "unique-query" ? new URL(url) : url;
           if (config.target.requestKeyMode === "unique-query") {
             requestUrl.searchParams.set("__mreact_bench_key", `${process.pid}-${++requestSequence}`);
           }
+          const began = performance.now();
           await new Promise<void>((resolve, reject) => {
             const req = request(requestUrl, { agent }, (res) => {
               let body = "";
