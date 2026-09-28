@@ -1,0 +1,30 @@
+{
+  "status": "completed",
+  "workerPid": 4318,
+  "ownedGroups": [
+    4318,
+    4489,
+    4541
+  ],
+  "owners": [
+    {
+      "pid": 4318,
+      "owner": "router benchmark worker"
+    },
+    {
+      "pid": 4489,
+      "owner": "nuxt"
+    },
+    {
+      "pid": 4541,
+      "owner": "svelte-kit"
+    }
+  ],
+  "unverifiedGroups": [],
+  "remainingGroups": [],
+  "exitCode": 0,
+  "signal": null,
+  "forced": false,
+  "signals": [],
+  "observationErrors": []
+}
