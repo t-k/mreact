@@ -1,0 +1,1 @@
+{"framework":"mreact-react-compat-vdom-v0.0.227-local-keyed","keyed":true,"benchmark":"25_run-clear-memory","type":"memory","values":{"DEFAULT":{"min":2.6116952896118164,"max":2.6116952896118164,"median":2.6116952896118164,"mean":2.6116952896118164,"stddev":null,"values":[2.6116952896118164]}}}

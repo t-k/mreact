@@ -1,0 +1,4802 @@
+[
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser create 1k rows",
+    "round": 0,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.8850000000093132
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser create 1k rows",
+    "round": 0,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.080000000074506
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser create 1k rows",
+    "round": 0,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.869999999878928
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser create 1k rows",
+    "round": 0,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 1.5549999999348074
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser create 1k rows",
+    "round": 0,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.330000000074506
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser create 1k rows",
+    "round": 0,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.96999999997206
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser create 1k rows",
+    "round": 0,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 7.475000000093132
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser create 1k rows",
+    "round": 0,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.300000000046566
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser create 1k rows",
+    "round": 1,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 3.6399999998975545
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser create 1k rows",
+    "round": 1,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.375
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser create 1k rows",
+    "round": 1,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.4799999999813735
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser create 1k rows",
+    "round": 1,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.569999999832362
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser create 1k rows",
+    "round": 1,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.724999999860302
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser create 1k rows",
+    "round": 1,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 7.210000000195578
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser create 1k rows",
+    "round": 1,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.010000000009313
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser create 1k rows",
+    "round": 1,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.5300000000279397
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser create 1k rows",
+    "round": 2,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.449999999953434
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser create 1k rows",
+    "round": 2,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.6450000000186265
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser create 1k rows",
+    "round": 2,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.510000000009313
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser create 1k rows",
+    "round": 2,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.1049999999813735
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser create 1k rows",
+    "round": 2,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.989999999990687
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser create 1k rows",
+    "round": 2,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.439999999944121
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser create 1k rows",
+    "round": 2,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 3.7549999998882413
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser create 1k rows",
+    "round": 2,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.324999999953434
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser create 1k rows",
+    "round": 3,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 1.944999999832362
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser create 1k rows",
+    "round": 3,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.215000000083819
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser create 1k rows",
+    "round": 3,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 7.2350000001024455
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser create 1k rows",
+    "round": 3,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 7.0200000000186265
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser create 1k rows",
+    "round": 3,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.829999999841675
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser create 1k rows",
+    "round": 3,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.6450000000186265
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser create 1k rows",
+    "round": 3,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.079999999841675
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser create 1k rows",
+    "round": 3,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 7.754999999888241
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser create 1k rows",
+    "round": 4,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.7649999998975545
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser create 1k rows",
+    "round": 4,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.074999999953434
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser create 1k rows",
+    "round": 4,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.965000000083819
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser create 1k rows",
+    "round": 4,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.314999999944121
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser create 1k rows",
+    "round": 4,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.919999999925494
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser create 1k rows",
+    "round": 4,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 3.8799999998882413
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser create 1k rows",
+    "round": 4,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.820000000065193
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser create 1k rows",
+    "round": 4,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 1.5549999999348074
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser create 1k rows",
+    "round": 5,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.370000000111759
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser create 1k rows",
+    "round": 5,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 9.199999999953434
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser create 1k rows",
+    "round": 5,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.6450000000186265
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser create 1k rows",
+    "round": 5,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 3.2700000000186265
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser create 1k rows",
+    "round": 5,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 3.6450000000186265
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser create 1k rows",
+    "round": 5,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.450000000186265
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser create 1k rows",
+    "round": 5,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.2800000000279397
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser create 1k rows",
+    "round": 5,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.75
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser create 1k rows",
+    "round": 6,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 7.060000000055879
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser create 1k rows",
+    "round": 6,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.714999999850988
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser create 1k rows",
+    "round": 6,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.5099999997764826
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser create 1k rows",
+    "round": 6,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.399999999906868
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser create 1k rows",
+    "round": 6,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 7.310000000055879
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser create 1k rows",
+    "round": 6,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 1.744999999878928
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser create 1k rows",
+    "round": 6,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.364999999990687
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser create 1k rows",
+    "round": 6,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.459999999962747
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser create 1k rows",
+    "round": 7,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.560000000055879
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser create 1k rows",
+    "round": 7,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 3.295000000158325
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser create 1k rows",
+    "round": 7,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.795000000158325
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser create 1k rows",
+    "round": 7,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 7.339999999850988
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser create 1k rows",
+    "round": 7,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 1.6000000000931323
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser create 1k rows",
+    "round": 7,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.529999999795109
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser create 1k rows",
+    "round": 7,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 7.53000000002794
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser create 1k rows",
+    "round": 7,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 7.170000000158325
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser create 1k rows",
+    "round": 8,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 3.699999999953434
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser create 1k rows",
+    "round": 8,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.440000000176951
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser create 1k rows",
+    "round": 8,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.495000000111759
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser create 1k rows",
+    "round": 8,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 1.694999999832362
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser create 1k rows",
+    "round": 8,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.540000000037253
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser create 1k rows",
+    "round": 8,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.689999999944121
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser create 1k rows",
+    "round": 8,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.204999999841675
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser create 1k rows",
+    "round": 8,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.184999999823049
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser create 1k rows",
+    "round": 9,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 3.609999999869615
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser create 1k rows",
+    "round": 9,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 7.754999999888241
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser create 1k rows",
+    "round": 9,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.890000000130385
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser create 1k rows",
+    "round": 9,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.935000000055879
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser create 1k rows",
+    "round": 9,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.445000000065193
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser create 1k rows",
+    "round": 9,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 7.034999999916181
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser create 1k rows",
+    "round": 9,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.960000000195578
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser create 1k rows",
+    "round": 9,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 3.3449999999720603
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser create 1k rows",
+    "round": 10,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.46999999997206
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser create 1k rows",
+    "round": 10,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 1.6500000001396984
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser create 1k rows",
+    "round": 10,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.625
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser create 1k rows",
+    "round": 10,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.114999999990687
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser create 1k rows",
+    "round": 10,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.909999999916181
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser create 1k rows",
+    "round": 10,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.689999999944121
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser create 1k rows",
+    "round": 10,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.875
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser create 1k rows",
+    "round": 10,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 3.7299999999813735
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser create 1k rows",
+    "round": 11,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.125
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser create 1k rows",
+    "round": 11,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.060000000055879
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser create 1k rows",
+    "round": 11,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.53000000002794
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser create 1k rows",
+    "round": 11,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 9.199999999953434
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser create 1k rows",
+    "round": 11,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.234999999869615
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser create 1k rows",
+    "round": 11,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.715000000083819
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser create 1k rows",
+    "round": 11,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.045000000158325
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser create 1k rows",
+    "round": 11,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.629999999888241
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser create 1k rows",
+    "round": 12,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 7.675000000046566
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser create 1k rows",
+    "round": 12,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.209999999962747
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser create 1k rows",
+    "round": 12,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 9.474999999860302
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser create 1k rows",
+    "round": 12,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.880000000121072
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser create 1k rows",
+    "round": 12,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 3.2399999999906868
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser create 1k rows",
+    "round": 12,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 3.8200000000651926
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser create 1k rows",
+    "round": 12,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 7.350000000093132
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser create 1k rows",
+    "round": 12,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 1.6100000001024455
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser create 1k rows",
+    "round": 13,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 7.3600000001024455
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser create 1k rows",
+    "round": 13,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 7.625
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser create 1k rows",
+    "round": 13,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.284999999916181
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser create 1k rows",
+    "round": 13,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.5599999998230487
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser create 1k rows",
+    "round": 13,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.160000000149012
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser create 1k rows",
+    "round": 13,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.425000000046566
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser create 1k rows",
+    "round": 13,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.715000000083819
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser create 1k rows",
+    "round": 13,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.8950000000186265
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser create 1k rows",
+    "round": 14,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.9850000001024455
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser create 1k rows",
+    "round": 14,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.044999999925494
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser create 1k rows",
+    "round": 14,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.9649999998509884
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser create 1k rows",
+    "round": 14,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 3.6399999998975545
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser create 1k rows",
+    "round": 14,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 7.584999999962747
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser create 1k rows",
+    "round": 14,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 1.6400000001303852
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser create 1k rows",
+    "round": 14,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 7.65500000002794
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser create 1k rows",
+    "round": 14,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.084999999962747
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 0,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 1.659999999916181
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 0,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.894999999785796
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 0,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.28000000002794
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 0,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.43500000005588
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 0,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 17.68999999994412
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 0,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.459999999962747
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 0,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.989999999990687
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 0,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 15.504999999888241
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 1,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.755000000121072
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 1,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 11.59499999997206
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 1,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.569999999832362
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 1,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 19.859999999869615
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 1,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.335000000195578
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 1,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.364999999990687
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 1,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 15.699999999953434
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 1,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.2450000001117587
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 2,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.214999999850988
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 2,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.25
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 2,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 15.764999999897555
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 2,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.175000000046566
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 2,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 9.125
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 2,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 20.179999999934807
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 2,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 1.8200000000651926
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 2,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.169999999925494
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 3,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.59499999997206
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 3,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 21.860000000102445
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 3,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 7.1450000000186265
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 3,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 10.18500000005588
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 3,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 19.764999999897555
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 3,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.040000000037253
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 3,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.050000000046566
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 3,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 15.770000000018626
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 4,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 24.62999999988824
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 4,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 7.165000000037253
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 4,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.064999999944121
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 4,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 19.604999999981374
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 4,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 0.9450000000651926
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 4,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.9799999999813735
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 4,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 11.919999999925494
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 4,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 10.940000000176951
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 5,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.980000000214204
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 5,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 7.409999999916181
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 5,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 17.87999999988824
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 5,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.294999999925494
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 5,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.194999999832362
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 5,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 13.190000000176951
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 5,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.15500000002794
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 5,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 16.68500000005588
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 6,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.130000000121072
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 6,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 16.070000000065193
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 6,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.2350000001024455
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 6,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.90500000002794
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 6,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 11.254999999888241
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 6,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.590000000083819
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 6,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 16.84000000008382
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 6,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.055000000167638
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 7,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 15.78000000002794
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 7,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.0049999998882413
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 7,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.489999999990687
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 7,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 11.489999999990687
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 7,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.399999999906868
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 7,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 18.915000000037253
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 7,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.885000000009313
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 7,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.84499999997206
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 8,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.3099999998230487
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 8,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 7.314999999944121
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 8,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 11.18500000005588
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 8,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.445000000065193
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 8,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 16.549999999813735
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 8,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.955000000074506
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 8,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.495000000111759
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 8,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 17.304999999934807
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 9,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 7.119999999878928
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 9,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.149999999906868
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 9,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.229999999981374
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 9,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 15.989999999990687
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 9,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.034999999916181
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 9,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.854999999981374
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 9,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 18.06000000005588
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 9,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 1.8999999999068677
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 10,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.629999999888241
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 10,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.449999999953434
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 10,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 19.485000000102445
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 10,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.445000000065193
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 10,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.159999999916181
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 10,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 16.395000000018626
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 10,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 1.7549999998882413
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 10,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.544999999925494
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 11,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.234999999869615
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 11,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 18.015000000130385
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 11,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.465000000083819
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 11,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 9.145000000018626
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 11,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 19.00499999988824
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 11,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 1.5750000001862645
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 11,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.150000000139698
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 11,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.335000000195578
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 12,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 15.875
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 12,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.40500000002794
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 12,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.650000000139698
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 12,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 16.90999999991618
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 12,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.3449999999720603
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 12,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.370000000111759
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 12,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 13.974999999860302
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 12,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.554999999934807
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 13,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.28000000002794
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 13,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.2350000001024455
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 13,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 16.230000000214204
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 13,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.255000000121072
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 13,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.569999999832362
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 13,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 11.659999999916181
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 13,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.270000000018626
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 13,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 19.885000000009313
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 14,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.715000000083819
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 14,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 15.705000000074506
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 14,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 0.8799999998882413
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 14,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.209999999962747
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 14,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 11.534999999916181
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 14,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 10.139999999897555
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 14,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 15.820000000065193
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser update every 10th in 10k rows",
+    "round": 14,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.955000000074506
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser select row in 10k rows",
+    "round": 0,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 0.8899999998975545
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser select row in 10k rows",
+    "round": 0,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.699999999953434
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser select row in 10k rows",
+    "round": 0,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.21999999997206
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser select row in 10k rows",
+    "round": 0,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 0.8149999999441206
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser select row in 10k rows",
+    "round": 0,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 13.885000000009313
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser select row in 10k rows",
+    "round": 0,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.884999999776483
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser select row in 10k rows",
+    "round": 0,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 9.035000000149012
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser select row in 10k rows",
+    "round": 0,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 18.209999999962747
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser select row in 10k rows",
+    "round": 1,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.939999999944121
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser select row in 10k rows",
+    "round": 1,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.070000000065193
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser select row in 10k rows",
+    "round": 1,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 0.8499999998603016
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser select row in 10k rows",
+    "round": 1,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 14.335000000195578
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser select row in 10k rows",
+    "round": 1,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.084999999962747
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser select row in 10k rows",
+    "round": 1,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 9.284999999916181
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser select row in 10k rows",
+    "round": 1,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 16.520000000018626
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser select row in 10k rows",
+    "round": 1,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 0.8599999998696148
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser select row in 10k rows",
+    "round": 2,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.715000000083819
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser select row in 10k rows",
+    "round": 2,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 0.8350000001955777
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser select row in 10k rows",
+    "round": 2,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 13.430000000167638
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser select row in 10k rows",
+    "round": 2,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.71999999997206
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser select row in 10k rows",
+    "round": 2,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.619999999878928
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser select row in 10k rows",
+    "round": 2,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 17.584999999962747
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser select row in 10k rows",
+    "round": 2,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 0.8649999999906868
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser select row in 10k rows",
+    "round": 2,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.669999999925494
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser select row in 10k rows",
+    "round": 3,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 0.875
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser select row in 10k rows",
+    "round": 3,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 14.979999999981374
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser select row in 10k rows",
+    "round": 3,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.804999999934807
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser select row in 10k rows",
+    "round": 3,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.849999999860302
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser select row in 10k rows",
+    "round": 3,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 17.670000000158325
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser select row in 10k rows",
+    "round": 3,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 0.8499999998603016
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser select row in 10k rows",
+    "round": 3,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.640000000130385
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser select row in 10k rows",
+    "round": 3,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 13.705000000074506
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser select row in 10k rows",
+    "round": 4,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 14.135000000009313
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser select row in 10k rows",
+    "round": 4,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.75
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser select row in 10k rows",
+    "round": 4,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 9.840000000083819
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser select row in 10k rows",
+    "round": 4,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 17.020000000018626
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser select row in 10k rows",
+    "round": 4,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 1.0800000000745058
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser select row in 10k rows",
+    "round": 4,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.9850000001024455
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser select row in 10k rows",
+    "round": 4,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.520000000018626
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser select row in 10k rows",
+    "round": 4,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 0.8850000000093132
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser select row in 10k rows",
+    "round": 5,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.489999999990687
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser select row in 10k rows",
+    "round": 5,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 9.675000000046566
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser select row in 10k rows",
+    "round": 5,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 18.169999999925494
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser select row in 10k rows",
+    "round": 5,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 0.8000000000465661
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser select row in 10k rows",
+    "round": 5,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.919999999925494
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser select row in 10k rows",
+    "round": 5,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.675000000046566
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser select row in 10k rows",
+    "round": 5,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 0.8649999999906868
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser select row in 10k rows",
+    "round": 5,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 13.794999999925494
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser select row in 10k rows",
+    "round": 6,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.675000000046566
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser select row in 10k rows",
+    "round": 6,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 17.37999999988824
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser select row in 10k rows",
+    "round": 6,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 0.8449999999720603
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser select row in 10k rows",
+    "round": 6,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.529999999795109
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser select row in 10k rows",
+    "round": 6,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.81000000005588
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser select row in 10k rows",
+    "round": 6,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 0.8800000001210719
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser select row in 10k rows",
+    "round": 6,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 14.340000000083819
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser select row in 10k rows",
+    "round": 6,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.915000000037253
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser select row in 10k rows",
+    "round": 7,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 18.56499999994412
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser select row in 10k rows",
+    "round": 7,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 0.8549999999813735
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser select row in 10k rows",
+    "round": 7,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.510000000009313
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser select row in 10k rows",
+    "round": 7,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.285000000149012
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser select row in 10k rows",
+    "round": 7,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 0.8499999998603016
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser select row in 10k rows",
+    "round": 7,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 13.364999999990687
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser select row in 10k rows",
+    "round": 7,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.679999999934807
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser select row in 10k rows",
+    "round": 7,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.7999999998137355
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser select row in 10k rows",
+    "round": 8,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 0.9699999999720603
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser select row in 10k rows",
+    "round": 8,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.034999999916181
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser select row in 10k rows",
+    "round": 8,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 14.129999999888241
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser select row in 10k rows",
+    "round": 8,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 0.8299999998416752
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser select row in 10k rows",
+    "round": 8,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 13.159999999916181
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser select row in 10k rows",
+    "round": 8,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.284999999916181
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser select row in 10k rows",
+    "round": 8,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 6.574999999953434
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser select row in 10k rows",
+    "round": 8,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 18.670000000158325
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser select row in 10k rows",
+    "round": 9,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.0200000000186265
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser select row in 10k rows",
+    "round": 9,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 11.369999999878928
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser select row in 10k rows",
+    "round": 9,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 0.8599999998696148
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser select row in 10k rows",
+    "round": 9,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 13.824999999953434
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser select row in 10k rows",
+    "round": 9,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.160000000149012
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser select row in 10k rows",
+    "round": 9,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 9.599999999860302
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser select row in 10k rows",
+    "round": 9,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 16.34000000008382
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser select row in 10k rows",
+    "round": 9,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 0.875
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser select row in 10k rows",
+    "round": 10,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 11.979999999981374
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser select row in 10k rows",
+    "round": 10,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 0.8600000001024455
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser select row in 10k rows",
+    "round": 10,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 14.390000000130385
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser select row in 10k rows",
+    "round": 10,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.6450000000186265
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser select row in 10k rows",
+    "round": 10,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 9.395000000018626
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser select row in 10k rows",
+    "round": 10,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 16.649999999906868
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser select row in 10k rows",
+    "round": 10,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 0.8449999999720603
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser select row in 10k rows",
+    "round": 10,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.590000000083819
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser select row in 10k rows",
+    "round": 11,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 1.040000000037253
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser select row in 10k rows",
+    "round": 11,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 13.955000000074506
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser select row in 10k rows",
+    "round": 11,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.784999999916181
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser select row in 10k rows",
+    "round": 11,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.895000000018626
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser select row in 10k rows",
+    "round": 11,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 17.419999999925494
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser select row in 10k rows",
+    "round": 11,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 0.8499999998603016
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser select row in 10k rows",
+    "round": 11,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.675000000046566
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser select row in 10k rows",
+    "round": 11,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.399999999906868
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser select row in 10k rows",
+    "round": 12,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 13.020000000018626
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser select row in 10k rows",
+    "round": 12,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.3950000000186265
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser select row in 10k rows",
+    "round": 12,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.870000000111759
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser select row in 10k rows",
+    "round": 12,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 18.929999999934807
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser select row in 10k rows",
+    "round": 12,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 0.8350000001955777
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser select row in 10k rows",
+    "round": 12,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.060000000055879
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser select row in 10k rows",
+    "round": 12,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.434999999823049
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser select row in 10k rows",
+    "round": 12,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 1.1149999999906868
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser select row in 10k rows",
+    "round": 13,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.185000000055879
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser select row in 10k rows",
+    "round": 13,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.005000000121072
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser select row in 10k rows",
+    "round": 13,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 17.324999999953434
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser select row in 10k rows",
+    "round": 13,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 0.8299999998416752
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser select row in 10k rows",
+    "round": 13,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.930000000167638
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser select row in 10k rows",
+    "round": 13,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.715000000083819
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser select row in 10k rows",
+    "round": 13,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 0.8549999999813735
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser select row in 10k rows",
+    "round": 13,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 13.659999999916181
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser select row in 10k rows",
+    "round": 14,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 7.415000000037253
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser select row in 10k rows",
+    "round": 14,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 17.915000000037253
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser select row in 10k rows",
+    "round": 14,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 0.8449999999720603
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser select row in 10k rows",
+    "round": 14,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 7.2649999998975545
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser select row in 10k rows",
+    "round": 14,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.260000000009313
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser select row in 10k rows",
+    "round": 14,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 0.8649999999906868
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser select row in 10k rows",
+    "round": 14,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 14.234999999869615
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser select row in 10k rows",
+    "round": 14,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.054999999934807
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser clear 10k rows",
+    "round": 0,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.2800000000279397
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser clear 10k rows",
+    "round": 0,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.614999999990687
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser clear 10k rows",
+    "round": 0,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 9.225000000093132
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser clear 10k rows",
+    "round": 0,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 3.3950000000186265
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser clear 10k rows",
+    "round": 0,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.84499999997206
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser clear 10k rows",
+    "round": 0,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 10.054999999934807
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser clear 10k rows",
+    "round": 0,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.569999999832362
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser clear 10k rows",
+    "round": 0,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 9.920000000158325
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser clear 10k rows",
+    "round": 1,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.580000000074506
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser clear 10k rows",
+    "round": 1,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 9.290000000037253
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser clear 10k rows",
+    "round": 1,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 3.2899999998044223
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser clear 10k rows",
+    "round": 1,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 9.21999999997206
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser clear 10k rows",
+    "round": 1,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.800000000046566
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser clear 10k rows",
+    "round": 1,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 14.525000000139698
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser clear 10k rows",
+    "round": 1,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 10.380000000121072
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser clear 10k rows",
+    "round": 1,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.2649999998975545
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser clear 10k rows",
+    "round": 2,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 9.369999999878928
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser clear 10k rows",
+    "round": 2,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.114999999990687
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser clear 10k rows",
+    "round": 2,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 10.90500000002794
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser clear 10k rows",
+    "round": 2,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 11.735000000102445
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser clear 10k rows",
+    "round": 2,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.955000000074506
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser clear 10k rows",
+    "round": 2,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 10.445000000065193
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser clear 10k rows",
+    "round": 2,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.3049999999348074
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser clear 10k rows",
+    "round": 2,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.705000000074506
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser clear 10k rows",
+    "round": 3,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.0200000000186265
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser clear 10k rows",
+    "round": 3,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.744999999878928
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser clear 10k rows",
+    "round": 3,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.40500000002794
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser clear 10k rows",
+    "round": 3,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 14.03000000002794
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser clear 10k rows",
+    "round": 3,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 9.90500000002794
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser clear 10k rows",
+    "round": 3,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.2450000001117587
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser clear 10k rows",
+    "round": 3,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.544999999925494
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser clear 10k rows",
+    "round": 3,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.43999999994412
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser clear 10k rows",
+    "round": 4,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 13.18999999994412
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser clear 10k rows",
+    "round": 4,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.489999999990687
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser clear 10k rows",
+    "round": 4,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 14.114999999990687
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser clear 10k rows",
+    "round": 4,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 10.604999999981374
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser clear 10k rows",
+    "round": 4,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.3049999999348074
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser clear 10k rows",
+    "round": 4,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.620000000111759
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser clear 10k rows",
+    "round": 4,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 9.125
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser clear 10k rows",
+    "round": 4,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 3.215000000083819
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser clear 10k rows",
+    "round": 5,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 10.06499999994412
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser clear 10k rows",
+    "round": 5,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.425000000046566
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser clear 10k rows",
+    "round": 5,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 10.375
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser clear 10k rows",
+    "round": 5,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.2299999999813735
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser clear 10k rows",
+    "round": 5,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.494999999878928
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser clear 10k rows",
+    "round": 5,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 9.045000000158325
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser clear 10k rows",
+    "round": 5,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.9450000000651926
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser clear 10k rows",
+    "round": 5,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 10.444999999832362
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser clear 10k rows",
+    "round": 6,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.21999999997206
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser clear 10k rows",
+    "round": 6,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.650000000139698
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser clear 10k rows",
+    "round": 6,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.2450000001117587
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser clear 10k rows",
+    "round": 6,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.619999999878928
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser clear 10k rows",
+    "round": 6,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 9.679999999934807
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser clear 10k rows",
+    "round": 6,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 5.165000000037253
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser clear 10k rows",
+    "round": 6,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 9.545000000158325
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser clear 10k rows",
+    "round": 6,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 9.074999999953434
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser clear 10k rows",
+    "round": 7,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.484999999869615
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser clear 10k rows",
+    "round": 7,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.2399999999906868
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser clear 10k rows",
+    "round": 7,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.620000000111759
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser clear 10k rows",
+    "round": 7,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 10.889999999897555
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser clear 10k rows",
+    "round": 7,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 3.2700000000186265
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser clear 10k rows",
+    "round": 7,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 10.629999999888241
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser clear 10k rows",
+    "round": 7,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.880000000121072
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser clear 10k rows",
+    "round": 7,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.614999999990687
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser clear 10k rows",
+    "round": 8,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.1450000000186265
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser clear 10k rows",
+    "round": 8,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.6450000000186265
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser clear 10k rows",
+    "round": 8,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 9.119999999878928
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser clear 10k rows",
+    "round": 8,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 3.159999999916181
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser clear 10k rows",
+    "round": 8,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 10.084999999962747
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser clear 10k rows",
+    "round": 8,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.459999999962747
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser clear 10k rows",
+    "round": 8,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 11.979999999981374
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser clear 10k rows",
+    "round": 8,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 7.995000000111759
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser clear 10k rows",
+    "round": 9,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.584999999962747
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser clear 10k rows",
+    "round": 9,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.929999999934807
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser clear 10k rows",
+    "round": 9,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.989999999990687
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser clear 10k rows",
+    "round": 9,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 10.5
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser clear 10k rows",
+    "round": 9,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 11.370000000111759
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser clear 10k rows",
+    "round": 9,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.040000000037253
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser clear 10k rows",
+    "round": 9,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 10.375
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser clear 10k rows",
+    "round": 9,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.1350000000093132
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser clear 10k rows",
+    "round": 10,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.96999999997206
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser clear 10k rows",
+    "round": 10,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.96999999997206
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser clear 10k rows",
+    "round": 10,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 10.559999999823049
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser clear 10k rows",
+    "round": 10,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 9.40500000002794
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser clear 10k rows",
+    "round": 10,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 13.710000000195578
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser clear 10k rows",
+    "round": 10,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.350000000093132
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser clear 10k rows",
+    "round": 10,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.074999999953434
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser clear 10k rows",
+    "round": 10,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.65500000002794
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser clear 10k rows",
+    "round": 11,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 3.1399999998975545
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser clear 10k rows",
+    "round": 11,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.769999999785796
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser clear 10k rows",
+    "round": 11,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.590000000083819
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser clear 10k rows",
+    "round": 11,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.974999999860302
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser clear 10k rows",
+    "round": 11,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 10.229999999981374
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser clear 10k rows",
+    "round": 11,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.1450000000186265
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser clear 10k rows",
+    "round": 11,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.714999999850988
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser clear 10k rows",
+    "round": 11,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 9.260000000009313
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser clear 10k rows",
+    "round": 12,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 10.044999999925494
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser clear 10k rows",
+    "round": 12,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 11.875
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser clear 10k rows",
+    "round": 12,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 12.56000000005588
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser clear 10k rows",
+    "round": 12,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.455000000074506
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser clear 10k rows",
+    "round": 12,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.1850000000558794
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser clear 10k rows",
+    "round": 12,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.415000000037253
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser clear 10k rows",
+    "round": 12,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 9.604999999981374
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser clear 10k rows",
+    "round": 12,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.7800000000279397
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser clear 10k rows",
+    "round": 13,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 11.954999999841675
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser clear 10k rows",
+    "round": 13,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 16.09499999997206
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser clear 10k rows",
+    "round": 13,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 10.380000000121072
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser clear 10k rows",
+    "round": 13,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.2199999999720603
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser clear 10k rows",
+    "round": 13,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.6049999999813735
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser clear 10k rows",
+    "round": 13,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 11.09499999997206
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser clear 10k rows",
+    "round": 13,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.819999999832362
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser clear 10k rows",
+    "round": 13,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 10.725000000093132
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "angular",
+    "caseName": "browser clear 10k rows",
+    "round": 14,
+    "position": 0,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 14.054999999934807
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "qwik",
+    "caseName": "browser clear 10k rows",
+    "round": 14,
+    "position": 1,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 7.869999999878928
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact",
+    "caseName": "browser clear 10k rows",
+    "round": 14,
+    "position": 2,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 2.1149999999906868
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "mreact react-compat",
+    "caseName": "browser clear 10k rows",
+    "round": 14,
+    "position": 3,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 4.744999999878928
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "react",
+    "caseName": "browser clear 10k rows",
+    "round": 14,
+    "position": 4,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 9.184999999823049
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "solid",
+    "caseName": "browser clear 10k rows",
+    "round": 14,
+    "position": 5,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 3.0649999999441206
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "vue",
+    "caseName": "browser clear 10k rows",
+    "round": 14,
+    "position": 6,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 9.445000000065193
+  },
+  {
+    "methodologyVersion": 2,
+    "framework": "svelte",
+    "caseName": "browser clear 10k rows",
+    "round": 14,
+    "position": 7,
+    "status": "completed",
+    "browserVersion": "148.0.7778.96",
+    "value": 8.700000000186265
+  }
+]
