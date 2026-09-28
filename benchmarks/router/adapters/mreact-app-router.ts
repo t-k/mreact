@@ -1324,7 +1324,7 @@ export function Counter() {
     );
 
     await buildApp({ appDir, outDir });
-    return sumClientBundleGzipBytes(outDir);
+    return await sumClientBundleGzipBytes(outDir);
   } finally {
     await rm(fixtureDir, { force: true, recursive: true });
   }
@@ -1386,7 +1386,7 @@ export function Counter() {
     }
 
     await buildApp({ appDir, outDir });
-    return measureClientManifestJavaScriptGzipBytes(outDir);
+    return await measureClientManifestJavaScriptGzipBytes(outDir);
   } finally {
     await rm(fixtureDir, { force: true, recursive: true });
   }
