@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.0.228 - 2026-10-06
+
+### Changed
+
+- Reduced React-compatible keyed deletion registration costs for large lists and temporary allocations during ref cleanup while preserving deletion order and cleanup behavior.
+- Avoided filesystem probes for paths absent from the built public-asset manifest, bounded retained public-asset bytes, and removed full expiration scans from ordinary route-cache capacity eviction.
+- Reused verified parsed HTML during uncached client navigation, bounded retained navigation HTML bytes, and shared deferred navigation helpers across route chunks to reduce cumulative client delivery.
+
+### Fixed
+
+- Fixed native keyed rows with three or more ordinary property text bindings so every field updates when a row object is replaced without changing its key.
+- Prevented superseded client navigations from changing the DOM, history, or pending state, including deferred hydration and View Transition callbacks.
+- Fixed native form hydration by emitting valid HTML void-element markup and preserved React-compatible text boundaries so selective hydration handles the first click without replacing its target.
+- Removed unused React-compatible imports from streaming output when JSX-like text is escaped rather than rendered as a component.
+
 ## 0.0.227 - 2026-09-27
 
 ### Changed

@@ -171,6 +171,8 @@ export default function Page() {
 
 Streaming is preserved on compatible runtimes. Cloudflare Workers can keep streamed HTML as a stream, and Mreact marks streamed responses with `Cache-Control: no-transform` so platform compression does not buffer the first shell before placeholders can paint.
 
+Document requests can display the streamed shell before asynchronous boundaries finish. Client navigation currently waits for the complete response before validating and applying the destination HTML. Measure server first-chunk latency separately from the time until a link navigation displays the destination shell.
+
 Some buffered platforms, such as standard Lambda proxy responses, materialize the stream before returning the body. Use the AWS Lambda streaming handler when a deployment path needs streaming response semantics.
 
 ## Related pages

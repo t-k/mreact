@@ -173,6 +173,8 @@ Set it to `false` when a route must stay JavaScript-free even though it renders 
 
 Mreact intercepts same-origin app navigation and updates the changed route payload without a full document reload. During client navigation, it keeps route data, metadata, scroll restoration, and client route scripts synchronized.
 
+When navigations overlap, the latest navigation owns the DOM update, history change, and pending state. A slower response from an earlier navigation cannot restore its destination or trigger a fallback document reload after it has been superseded.
+
 External URLs use normal document navigation. Use `reload` for an internal URL when the browser should also perform a normal document navigation.
 
 ## Related pages

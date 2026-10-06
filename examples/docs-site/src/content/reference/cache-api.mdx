@@ -75,6 +75,8 @@ export default {
 };
 ```
 
+The memory cache defaults to 10,000 entries and checks expiration on reads and periodic write sweeps, with a default sweep interval of 60,000ms. Capacity eviction removes the oldest entry in insertion or update order; reading an entry does not refresh that order. Capacity eviction does not scan the entire cache, so an older live entry can be evicted while a newer expired entry waits for its next read or sweep.
+
 ## Related pages
 
 - [Cache and Revalidation](/guides/cache-and-revalidation/)

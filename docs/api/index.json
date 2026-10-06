@@ -194562,31 +194562,7 @@
 				},
 				{
 					"kind": "text",
-					"text": "\n\nFor Node production hosting, "
-				},
-				{
-					"kind": "code",
-					"text": "`startServer()`"
-				},
-				{
-					"kind": "text",
-					"text": " creates and reuses its built request runtime. A custom handler serving an immutable build can pass "
-				},
-				{
-					"kind": "code",
-					"text": "`immutableRuntime: true`"
-				},
-				{
-					"kind": "text",
-					"text": " to "
-				},
-				{
-					"kind": "code",
-					"text": "`renderBuiltAppRequest()`"
-				},
-				{
-					"kind": "text",
-					"text": " to reuse loaded manifests without checking the files on every request. Restart the process or use a new output directory when deploying a different build. Keep the default when build artifacts can change while the process is running; the internal runtime constructor is not a public integration API.\n\nFor new applications, start with "
+					"text": "\n\nSee [Container and Cloud Run](https://t-k.github.io/mreact/deployments/container-and-cloud-run/) for Node hosting and custom request handlers.\n\nFor new applications, start with "
 				},
 				{
 					"kind": "code",
@@ -196722,7 +196698,7 @@
 				},
 				{
 					"kind": "text",
-					"text": " renderers, including mapped list rows in Cloudflare route modules.\n\nDocument requests can display the streamed shell before asynchronous boundaries finish. Client navigation currently waits for the complete response before validating and applying the destination HTML, so server first-chunk latency and the time until the destination shell becomes visible are separate measurements. Navigation HTML caches retain strings with a conservative UTF-16 payload estimate of at most 8MiB total and 1MiB per entry, in addition to the 64-entry and 30-second limits; larger responses are still navigable but are not retained in that cache.\n\n"
+					"text": " renderers, including mapped list rows in Cloudflare route modules.\n\nSee [SSR and Streaming](https://t-k.github.io/mreact/guides/ssr-and-streaming/) and [Cache and Revalidation](https://t-k.github.io/mreact/guides/cache-and-revalidation/) for navigation behavior and cache limits.\n\n"
 				},
 				{
 					"kind": "code",
@@ -233903,7 +233879,7 @@
 		}
 	],
 	"packageName": "mreact",
-	"packageVersion": "0.0.227",
+	"packageVersion": "0.0.228",
 	"readme": [
 		{
 			"kind": "text",

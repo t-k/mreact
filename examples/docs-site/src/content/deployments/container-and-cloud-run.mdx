@@ -22,6 +22,26 @@ MREACT_ROUTER_ALLOWED_HOSTS=app.example.com \
 mreact-router start .mreact
 ```
 
+## Custom Node handlers
+
+`startServer()` creates and reuses its built request runtime. A custom Node handler serving an immutable build can pass `immutableRuntime: true` to `renderBuiltAppRequest()` to reuse loaded manifests without checking them on every request.
+
+```ts
+import { renderBuiltAppRequest } from "@reckona/mreact-router";
+
+export function handleRequest(request: Request): Promise<Response> {
+  return renderBuiltAppRequest({
+    outDir: ".mreact",
+    request,
+    immutableRuntime: true,
+  });
+}
+```
+
+Restart the process or use a new output directory when deploying a different build. Keep the default when build artifacts can change while the process is running.
+
+Node serving uses the built public-asset manifest to skip filesystem lookups for dynamic URLs while keeping public files ahead of application routes. Its process-local public-file cache retains at most 32MiB across 1,024 entries and skips files larger than 2MiB. Larger files are still served; use a CDN when repeatedly serving them would make filesystem reads expensive.
+
 ## Containerfile shape
 
 Build the app inside the container instead of copying a local `node_modules` directory into the image. A practical Containerfile has a build stage with full dependencies, runs the Node build target there, and copies only production dependencies plus the generated output into the runtime stage.

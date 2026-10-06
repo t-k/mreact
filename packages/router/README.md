@@ -21,7 +21,7 @@ const response = await renderBuiltAppRequest({
 });
 ```
 
-For Node production hosting, `startServer()` creates and reuses its built request runtime. A custom handler serving an immutable build can pass `immutableRuntime: true` to `renderBuiltAppRequest()` to reuse loaded manifests without checking the files on every request. Restart the process or use a new output directory when deploying a different build. Keep the default when build artifacts can change while the process is running; the internal runtime constructor is not a public integration API.
+See [Container and Cloud Run](https://t-k.github.io/mreact/deployments/container-and-cloud-run/) for Node hosting and custom request handlers.
 
 For new applications, start with `@reckona/create-mreact-app` unless you need to wire the router into an existing Vite project:
 
@@ -291,7 +291,7 @@ export default function Page(props) {
 
 Routes that render route-local `<Await>` directly or through app-local server components are built as streaming routes automatically. Routes can still export `stream = true` to opt into streaming without an `<Await>` boundary. `placeholder` renders the early stream content, `placeholderAs` chooses the visible placeholder host element for block-level skeletons, and `catch` renders a route-local error branch when the awaited value rejects. Router `Link` components can be rendered inside streamed `<Await>` renderers, including mapped list rows in Cloudflare route modules.
 
-Document requests can display the streamed shell before asynchronous boundaries finish. Client navigation currently waits for the complete response before validating and applying the destination HTML, so server first-chunk latency and the time until the destination shell becomes visible are separate measurements. Navigation HTML caches retain strings with a conservative UTF-16 payload estimate of at most 8MiB total and 1MiB per entry, in addition to the 64-entry and 30-second limits; larger responses are still navigable but are not retained in that cache.
+See [SSR and Streaming](https://t-k.github.io/mreact/guides/ssr-and-streaming/) and [Cache and Revalidation](https://t-k.github.io/mreact/guides/cache-and-revalidation/) for navigation behavior and cache limits.
 
 ```tsx
 function FeedList(props) {

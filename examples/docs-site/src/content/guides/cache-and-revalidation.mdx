@@ -96,6 +96,8 @@ Query cross-tab sync lives at the `@reckona/mreact-query` browser cache layer an
 
 For browser-enhanced server action forms, a revalidation of the current route can use a single-flight mutation response. The action POST response carries fresh navigation HTML marked with `x-mreact-action-single-flight`, so the browser can update the visible route without a second GET. Unsupported server action flows still fall back to `x-mreact-revalidate`, redirect handling, or a later navigation request.
 
+Navigation HTML is retained for at most 30 seconds, with limits of 64 entries, 8MiB in total, and 1MiB per entry. The byte limits use a conservative UTF-16 estimate of the retained strings. Larger responses remain navigable but are not kept in the browser cache; authentication-context validation still applies before cache reuse.
+
 ## Use a shared route cache
 
 The default route cache is an in-memory process cache. It is useful for local development and single-process deployments. Multi-instance deployments should pass a shared `routeCache` adapter to the server, adapter, or custom handler.
