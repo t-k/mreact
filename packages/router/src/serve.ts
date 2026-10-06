@@ -420,8 +420,10 @@ function emitBuiltRequestStart(
   instrumentation: RouterInstrumentation | undefined,
   request: Request,
 ): void {
+  const callback = instrumentation?.onRequestStart;
+  if (callback === undefined) return;
   const trace = traceContextFromRequest(request);
-  invokeRouterInstrumentation(instrumentation?.onRequestStart, {
+  invokeRouterInstrumentation(callback, {
     method: request.method,
     path: new URL(request.url).pathname,
     request,
@@ -434,8 +436,10 @@ function emitBuiltRequestEnd(
   request: Request,
   status: number,
 ): void {
+  const callback = instrumentation?.onRequestEnd;
+  if (callback === undefined) return;
   const trace = traceContextFromRequest(request);
-  invokeRouterInstrumentation(instrumentation?.onRequestEnd, {
+  invokeRouterInstrumentation(callback, {
     method: request.method,
     path: new URL(request.url).pathname,
     request,
@@ -461,7 +465,11 @@ async function renderBuiltAppRequestWithRuntime(
   }
 
   if (options.request.method === "GET" || options.request.method === "HEAD") {
-    const publicAsset = await readBuiltPublicAsset(options.outDir, url.pathname);
+    const publicAsset = await readBuiltPublicAsset(
+      options.outDir,
+      url.pathname,
+      options.runtime.publicAssetPaths,
+    );
 
     if (publicAsset !== undefined) {
       return publicAsset;

@@ -933,7 +933,7 @@ async function buildAppWithResolvedProject(
   const clientManifest = {
     ...(clientManifestAssets.length === 0 ? {} : { assets: clientManifestAssets }),
     ...(clientBundle.chunks.length === 0 ? {} : { chunks: clientBundle.chunks }),
-    ...(publicAssets.length === 0 ? {} : { publicAssets }),
+    publicAssets,
     routes: clientManifestRoutes,
     ...(clientBundle.styles.length === 0 ? {} : { styles: clientBundle.styles }),
   };

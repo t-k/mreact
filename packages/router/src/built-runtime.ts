@@ -8,7 +8,7 @@ import type {
   BuiltServerManifest,
   BuiltServerModuleArtifact,
 } from "./build.js";
-import { builtClientAssetPaths } from "./built-assets.js";
+import { builtClientAssetPaths, readBuiltPublicAssetPaths } from "./built-assets.js";
 import type { BuiltServerModuleArtifactRuntime } from "./built-server-module-artifacts.js";
 import type { ClientRouteManifestEntry } from "./client-route-inference.js";
 import type { AppRouterImportPolicy } from "./import-policy.js";
@@ -30,6 +30,7 @@ export interface BuiltRuntime extends BuiltServerModuleArtifactRuntime {
   navigationScripts: ReadonlyMap<string, string>;
   projectRoot: string;
   publicAssetBaseUrl?: string | undefined;
+  publicAssetPaths: ReadonlySet<string> | undefined;
   prerenderableRoutes: ReadonlySet<string>;
   prerenderLocks: Map<string, Promise<{ response: Response; shareable: boolean }>>;
   prerenderedRoutes: Map<string, BuiltPrerenderedRoute>;
@@ -74,6 +75,7 @@ export async function materializeBuiltRuntime(options: {
   );
   const clientManifest = parseBuiltJsonArtifact<{
     assets?: readonly string[];
+    publicAssets?: readonly string[];
     routes: ClientRouteManifestEntry[];
     styles?: Array<{ css?: readonly string[]; file: string }>;
   }>(options.clientManifestText, options.clientManifestPath, "built app client manifest");
@@ -209,6 +211,7 @@ export async function materializeBuiltRuntime(options: {
     hasMiddleware,
     navigationScripts,
     projectRoot,
+    publicAssetPaths: await readBuiltPublicAssetPaths(options.outDir, clientManifest.publicAssets),
     ...(serverManifest.publicAssetBaseUrl === undefined
       ? {}
       : { publicAssetBaseUrl: serverManifest.publicAssetBaseUrl }),
