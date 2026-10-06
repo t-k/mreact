@@ -623,6 +623,14 @@ function registerCompilerStaticPropertyText(
   node: Text,
   property: PropertyKey,
 ): void {
+  const bindings = context[compilerRowStaticPropertyTexts];
+
+  // A row uses either the single binding fields or the packed binding array.
+  if (bindings !== undefined) {
+    bindings.push(node, property);
+    return;
+  }
+
   const firstNode = context[compilerRowStaticPropertyTextNode];
 
   if (firstNode === undefined) {
@@ -631,13 +639,14 @@ function registerCompilerStaticPropertyText(
     return;
   }
 
-  const bindings = (context[compilerRowStaticPropertyTexts] ??= [
+  context[compilerRowStaticPropertyTexts] = [
     firstNode,
     context[compilerRowStaticPropertyTextKey] as PropertyKey,
-  ]);
+    node,
+    property,
+  ];
   context[compilerRowStaticPropertyTextNode] = undefined;
   context[compilerRowStaticPropertyTextKey] = undefined;
-  bindings.push(node, property);
 }
 
 function registerCompilerRowTextSubscription(
