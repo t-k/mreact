@@ -24,8 +24,10 @@ export default function Page() { const count = cell(0); return <main><h1>${title
   }
   await buildApp({ appDir, outDir: join(directory, "build") });
   server = await startServer({ outDir: join(directory, "build"), port: 0 });
-  const manifest = JSON.parse(await readFile(join(directory, "build/client/manifest.json"), "utf8"));
-  navigationRuntimeUrl = new URL(`/_mreact/client/${manifest.navigationScript}`, server.url).href;
+  const manifest = JSON.parse(await readFile(join(directory, "build/client/manifest.json"), "utf8")) as { routes: Array<{ path: string; navigation?: boolean; navigationScript?: string }> };
+  const home = manifest.routes.find((route) => route.path === "/");
+  if (home?.navigation !== true || typeof home.navigationScript !== "string") throw new Error("Home must emit a navigation runtime");
+  navigationRuntimeUrl = new URL(`/_mreact/client/${home.navigationScript}`, server.url).href;
 });
 test.afterAll(async () => { await server?.close(); await rm(directory, { force: true, recursive: true }); });
 
