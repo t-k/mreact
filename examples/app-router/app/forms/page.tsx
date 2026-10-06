@@ -133,7 +133,7 @@ export default function Page() {
               }}
             />
           </label>
-          <span class="counter-tone-hot"> {firstError(contactFormState.get().errors.name)}</span>
+          <span class="form-error"> {firstError(contactFormState.get().errors.name)}</span>
         </p>
         <p>
           <label>
@@ -153,7 +153,7 @@ export default function Page() {
               }}
             />
           </label>
-          <span class="counter-tone-hot"> {firstError(contactFormState.get().errors.email)}</span>
+          <span class="form-error"> {firstError(contactFormState.get().errors.email)}</span>
         </p>
         <p>
           <label>
@@ -176,7 +176,7 @@ export default function Page() {
               }}
             />
           </label>
-          <span class="counter-tone-hot"> {firstError(contactFormState.get().errors.message)}</span>
+          <span class="form-error"> {firstError(contactFormState.get().errors.message)}</span>
         </p>
 
         <p>

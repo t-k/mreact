@@ -29,6 +29,7 @@ export default function Layout() {
           .counter-display { font-size: 1.5em; }
           .counter-tone-idle { color: #9ca3af; font-size: 0.85em; }
           .counter-tone-hot { color: #dc2626; font-size: 0.85em; }
+          .form-error { color: #dc2626; font-size: 0.85em; display: block; min-height: 1.5em; }
           .muted { color: #6b7280; font-size: 0.85em; }
           ul.feed-loading li { color: #9ca3af; }
           .action-input { font-size: 1rem; padding: 0.4rem 0.6rem; margin-right: 0.5rem; min-width: 18rem; }

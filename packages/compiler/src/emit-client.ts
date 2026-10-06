@@ -21,6 +21,7 @@ import {
   htmlAttributeNameForElement,
   isStaticUrlValueUnsafe,
   isUrlAttribute,
+  isVoidHtmlElement,
 } from "./emit-server-shared.js";
 
 export interface EmitResult {
@@ -769,6 +770,10 @@ function renderStaticHtml(node: JsxNodeIr): string {
         ? ""
         : renderStaticChildren(node.children)
       : escapeHtml(textareaSeed.value);
+
+  if (node.namespace !== "svg" && isVoidHtmlElement(node.tagName)) {
+    return `<${node.tagName}${attrs}>`;
+  }
 
   return `<${node.tagName}${attrs}>${children}</${node.tagName}>`;
 }
