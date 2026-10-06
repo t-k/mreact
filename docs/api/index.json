@@ -133738,9 +133738,9 @@
 							"sources": [
 								{
 									"fileName": "reactive-dom/src/bind-static-keyed-single-node-list.ts",
-									"line": 659,
+									"line": 668,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/bind-static-keyed-single-node-list.ts#L659"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/bind-static-keyed-single-node-list.ts#L668"
 								}
 							],
 							"signatures": [
@@ -133761,9 +133761,9 @@
 									"sources": [
 										{
 											"fileName": "reactive-dom/src/bind-static-keyed-single-node-list.ts",
-											"line": 659,
+											"line": 668,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/bind-static-keyed-single-node-list.ts#L659"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/bind-static-keyed-single-node-list.ts#L668"
 										}
 									],
 									"typeParameters": [
@@ -163334,9 +163334,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/cache.ts",
-									"line": 269,
+									"line": 268,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/cache.ts#L269"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/cache.ts#L268"
 								}
 							],
 							"signatures": [
@@ -163365,9 +163365,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/cache.ts",
-											"line": 269,
+											"line": 268,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/cache.ts#L269"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/cache.ts#L268"
 										}
 									],
 									"parameters": [
@@ -163792,7 +163792,7 @@
 										"summary": [
 											{
 												"kind": "text",
-												"text": "Creates an in-memory route response cache for app-router rendering.\n\nThe cache is process-local, evicts expired entries during reads/writes, and is suitable for development, tests, or single-process deployments that do not need shared invalidation."
+												"text": "Creates an in-memory route response cache for app-router rendering.\n\nThe cache is process-local and checks expiration on reads and periodic write sweeps. Capacity eviction follows insertion/update order; an oldest live entry can be evicted while a newer expired entry awaits its next read or sweep. It is suitable for development, tests, or single-process deployments that do not need shared invalidation."
 											}
 										]
 									},
@@ -167693,9 +167693,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/cache.ts",
-									"line": 521,
+									"line": 520,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/cache.ts#L521"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/cache.ts#L520"
 								}
 							],
 							"signatures": [
@@ -167716,9 +167716,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/cache.ts",
-											"line": 521,
+											"line": 520,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/cache.ts#L521"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/cache.ts#L520"
 										}
 									],
 									"parameters": [
@@ -168497,9 +168497,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/serve.ts",
-									"line": 688,
+									"line": 696,
 									"character": 22,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/serve.ts#L688"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/serve.ts#L696"
 								}
 							],
 							"signatures": [
@@ -168536,9 +168536,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/serve.ts",
-											"line": 688,
+											"line": 696,
 											"character": 22,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/serve.ts#L688"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/serve.ts#L696"
 										}
 									],
 									"parameters": [
@@ -168582,9 +168582,9 @@
 															"sources": [
 																{
 																	"fileName": "router/src/serve.ts",
-																	"line": 690,
+																	"line": 698,
 																	"character": 37,
-																	"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/serve.ts#L690"
+																	"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/serve.ts#L698"
 																}
 															],
 															"type": {
@@ -168608,9 +168608,9 @@
 															"sources": [
 																{
 																	"fileName": "router/src/serve.ts",
-																	"line": 690,
+																	"line": 698,
 																	"character": 53,
-																	"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/serve.ts#L690"
+																	"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/serve.ts#L698"
 																}
 															],
 															"type": {
@@ -168627,9 +168627,9 @@
 															"sources": [
 																{
 																	"fileName": "router/src/serve.ts",
-																	"line": 690,
+																	"line": 698,
 																	"character": 13,
-																	"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/serve.ts#L690"
+																	"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/serve.ts#L698"
 																}
 															],
 															"signatures": [
@@ -168642,9 +168642,9 @@
 																	"sources": [
 																		{
 																			"fileName": "router/src/serve.ts",
-																			"line": 690,
+																			"line": 698,
 																			"character": 13,
-																			"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/serve.ts#L690"
+																			"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/serve.ts#L698"
 																		}
 																	],
 																	"type": {
@@ -194554,7 +194554,7 @@
 				},
 				{
 					"kind": "text",
-					"text": " is the mreact app router. It covers file-system routes,\nloaders, metadata, server actions, prerendering, and deployment adapters.\n\n## Basic Usage\n\n"
+					"text": " is the mreact app router. It covers file-system routes, loaders, metadata, server actions, prerendering, and deployment adapters.\n\n## Basic Usage\n\n"
 				},
 				{
 					"kind": "code",
@@ -194562,7 +194562,31 @@
 				},
 				{
 					"kind": "text",
-					"text": "\n\nFor new applications, start with "
+					"text": "\n\nFor Node production hosting, "
+				},
+				{
+					"kind": "code",
+					"text": "`startServer()`"
+				},
+				{
+					"kind": "text",
+					"text": " creates and reuses its built request runtime. A custom handler serving an immutable build can pass "
+				},
+				{
+					"kind": "code",
+					"text": "`immutableRuntime: true`"
+				},
+				{
+					"kind": "text",
+					"text": " to "
+				},
+				{
+					"kind": "code",
+					"text": "`renderBuiltAppRequest()`"
+				},
+				{
+					"kind": "text",
+					"text": " to reuse loaded manifests without checking the files on every request. Restart the process or use a new output directory when deploying a different build. Keep the default when build artifacts can change while the process is running; the internal runtime constructor is not a public integration API.\n\nFor new applications, start with "
 				},
 				{
 					"kind": "code",
@@ -196698,7 +196722,7 @@
 				},
 				{
 					"kind": "text",
-					"text": " renderers, including mapped list rows in Cloudflare route modules.\n\n"
+					"text": " renderers, including mapped list rows in Cloudflare route modules.\n\nDocument requests can display the streamed shell before asynchronous boundaries finish. Client navigation currently waits for the complete response before validating and applying the destination HTML, so server first-chunk latency and the time until the destination shell becomes visible are separate measurements. Navigation HTML caches retain strings with a conservative UTF-16 payload estimate of at most 8MiB total and 1MiB per entry, in addition to the 64-entry and 30-second limits; larger responses are still navigable but are not retained in that cache.\n\n"
 				},
 				{
 					"kind": "code",
