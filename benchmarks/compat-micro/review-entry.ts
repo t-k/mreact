@@ -24,6 +24,7 @@ function rows(count: number, refMode: string, removed = -1, offset = 0) {
 
 let refCalls = 0;
 let refs: ((node: unknown) => void)[] = [];
+let prepared: { root: ReturnType<typeof createFiberRoot>; container: Element; count: number; refMode: string } | undefined;
 
 function reconcile(count: number, mode: string) {
   const current = oldChildren(count);
@@ -73,4 +74,30 @@ function full(count: number, mode: string) {
   return { total: ms };
 }
 
-(globalThis as unknown as { __review: unknown }).__review = { reconcile, host, full };
+function prepareHost(count: number, refMode: string) {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createFiberRoot(container);
+  refs = Array.from({ length: count }, () => (node: unknown) => { if (node === null) refCalls += 1; });
+  root.finishedWork = renderHostFiberRoot(root, rows(count, refMode));
+  commitFiberRoot(root);
+  refCalls = 0;
+  root.finishedWork = renderHostFiberRoot(root, rows(count, refMode, count / 2));
+  prepared = { root, container, count, refMode };
+}
+
+function commitPrepared() {
+  if (prepared === undefined) throw new Error("Prepare a host commit first");
+  commitFiberRoot(prepared.root);
+}
+
+function cleanupPrepared() {
+  if (prepared === undefined) throw new Error("Prepare a host commit first");
+  if (prepared.container.querySelectorAll("li").length !== prepared.count - 1) throw new Error("Profiled commit output changed");
+  if (refCalls !== (prepared.refMode === "none" ? 0 : 1)) throw new Error("Profiled ref cleanup changed");
+  prepared.container.remove();
+  prepared = undefined;
+  refs = [];
+}
+
+(globalThis as unknown as { __review: unknown }).__review = { reconcile, host, full, prepareHost, commitPrepared, cleanupPrepared };

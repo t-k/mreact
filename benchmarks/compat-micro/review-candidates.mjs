@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { performance } from "node:perf_hooks";
 
 const output = process.argv[2];
