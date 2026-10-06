@@ -65,6 +65,17 @@ test("legacy manifests discover public assets once while dynamic misses avoid re
   expect(publicReads()).toHaveLength(1);
 });
 
+test("a dangling legacy public symlink does not hide valid sibling assets", async () => {
+  const root = await fixture(undefined);
+  await symlink(join(root, "missing.txt"), join(root, "client", "public", "dangling.txt"));
+  const paths = await readBuiltPublicAssetPaths(root, undefined);
+  expect([...paths!]).toEqual(["asset.txt"]);
+  const runtime = await createBuiltRequestRuntime({ outDir: root });
+  expect(await (await runtime.render(new Request("http://local.test/asset.txt"))).text()).toBe(
+    "public asset",
+  );
+});
+
 test("safe decoded public manifest paths retain precedence and reject path traversal", async () => {
   const root = await fixture(["/asset.txt", "/space file.txt", "/percent%20.txt"]);
   await writeFile(join(root, "client", "public", "space file.txt"), "space");

@@ -98,20 +98,23 @@ export async function readBuiltPublicAssetPaths(
   const publicDir = join(outDir, "client", "public");
   try {
     const entries = await readdir(publicDir, { recursive: true, withFileTypes: true });
+    const paths = new Set<string>();
     for (const entry of entries) {
-      if (
-        entry.isSymbolicLink() &&
-        (await stat(join(entry.parentPath, entry.name))).isDirectory()
-      ) {
-        // Recursive readdir does not follow directory symlinks. Keep legacy access working.
-        return undefined;
+      const entryPath = join(entry.parentPath, entry.name);
+      if (entry.isSymbolicLink()) {
+        try {
+          if ((await stat(entryPath)).isDirectory()) {
+            // Recursive readdir does not follow directory symlinks. Keep legacy access working.
+            return undefined;
+          }
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+          throw error;
+        }
       }
+      if (entry.isFile() || entry.isSymbolicLink()) paths.add(relative(publicDir, entryPath));
     }
-    return new Set(
-      entries
-        .filter((entry) => entry.isFile() || entry.isSymbolicLink())
-        .map((entry) => relative(publicDir, join(entry.parentPath, entry.name))),
-    );
+    return paths;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return new Set();
     return undefined;
