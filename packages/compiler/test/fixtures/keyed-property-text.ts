@@ -12,10 +12,9 @@ export function App() {
   return <main>
     <button id="replace" onClick={() => rows.set([plain("new")])}>Replace</button>
     <button id="reactive" onClick={() => rows.set([reactive])}>Reactive</button>
-    <button id="suffix" onClick={() => suffix.set("updated")}>Update</button>
+    <button id="suffix" onClick={() => suffix.set(suffix.get() === "updated" ? "detached" : "updated")}>Update</button>
     <button id="clear" onClick={() => rows.set([])}>Clear</button>
     <table><tbody>{rows.get().map((row) => <tr key={row.id}>${cells}</tr>)}</tbody></table>
   </main>;
 }`;
 }
-
