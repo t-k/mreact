@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createStrykerConfig } from "./stryker.base.config.mjs";
 
 const source = await readFile(process.env.MREACT_REVIEW_CLIENT_SOURCE ?? new URL("./packages/router/src/client.ts", import.meta.url), "utf8");
-const template = source.match(/const deferredNavigationRuntime = deferredClientNavigation\s*\? (`[\s\S]*?`)\s*:\s*"";/);
+const template = source.match(/function deferredNavigationRuntimeSource\(\)\s*:\s*string\s*\{\s*return (`[\s\S]*?`)\s*;?\s*\}/);
 if (template === null) throw new Error("The actual deferred navigation template was not found");
 // Evaluate the source template itself; no navigation logic is reconstructed here.
 const code = `const __mreactGlobal = globalThis;\n${new Function(`return ${template[1]};`)()}\nexport { __mreactInstallNavigation, __mreactDeferredHandleClick };\n`;

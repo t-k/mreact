@@ -22,7 +22,7 @@ function deferred<T>(): Deferred<T> {
 }
 
 function emittedDeferredRuntime(text: string): string {
-  const match = text.match(/const deferredNavigationRuntime = deferredClientNavigation\s*\? (`[\s\S]*?`)\s*:\s*"";/);
+  const match = text.match(/function deferredNavigationRuntimeSource\(\)\s*:\s*string\s*\{\s*return (`[\s\S]*?`)\s*;?\s*\}/);
   if (match === null) throw new Error("The actual deferred navigation template was not found");
   // Evaluate the repository's template literal, preserving its emitted escaping.
   const code = new Function(`return ${match[1]};`)() as string;
