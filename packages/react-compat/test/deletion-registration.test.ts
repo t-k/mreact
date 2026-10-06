@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { reconcileChildFibers } from "../src/fiber-child.js";
 import { ChildDeletion } from "../src/fiber-flags.js";
 import { createFiber, createWorkInProgress, type Fiber } from "../src/fiber.js";
@@ -19,6 +19,28 @@ function children(count: number): Fiber[] {
 }
 
 describe("deletion registration", () => {
+  it.each([1, 8, 32])("avoids allocating an additional membership Set for %i deletions", (count) => {
+    const current = children(count);
+    const parent = createFiber("host-component");
+    let allocations = 0;
+    const originalSet = globalThis.Set;
+    vi.stubGlobal("Set", new Proxy(originalSet, {
+      construct(target, args, newTarget) {
+        allocations += 1;
+        return Reflect.construct(target, args, newTarget);
+      },
+    }));
+    try {
+      reconcileChildFibers(parent, current[0], []);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    // Keep the existing one-Set allocation budget for small reconciliations.
+    expect(allocations).toBeLessThanOrEqual(1);
+    expect(parent.deletions).toEqual(current);
+  });
+
   it("bounds membership work linearly for a full deletion", () => {
     const current = children(1000);
     const parent = createFiber("host-component");
@@ -94,8 +116,8 @@ describe("deletion registration", () => {
     root.render(rows(80));
     root.render(null);
 
-    expect(effects.toSorted((a, b) => a - b)).toEqual(Array.from({ length: 160 }, (_, index) => index));
-    expect(refs.toSorted((a, b) => a - b)).toEqual(Array.from({ length: 160 }, (_, index) => index));
+    expect(effects.slice().sort((a, b) => a - b)).toEqual(Array.from({ length: 160 }, (_, index) => index));
+    expect(refs.slice().sort((a, b) => a - b)).toEqual(Array.from({ length: 160 }, (_, index) => index));
     expect(container.innerHTML).toBe("");
     root.unmount();
   });
