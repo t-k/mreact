@@ -5487,8 +5487,8 @@ function __mreactRestoreHistoryEntry(state, traversal) {
 
   // An entry without hydratable HTML, such as the initial document, is refetched so the
   // document and its shared layout survive traversal instead of reloading.
-  __mreactSetNavigationState(__mreactPendingNavigationState(href, "pop"));
   __mreactNavigationState.pendingTraversalState = traversal;
+  __mreactSetNavigationState(__mreactPendingNavigationState(href, "pop"));
   const superseded = () => __mreactNavigationState.operation !== traversal;
   // A navigation that overtook this refetch owns the state only while it is pending itself;
   // a synchronous restore does not touch it, so this traversal still has to settle its own.
@@ -5506,6 +5506,7 @@ function __mreactRestoreHistoryEntry(state, traversal) {
           return "superseded";
         }
         settleState();
+        if (superseded()) return "superseded";
         if (response === undefined || !__mreactApplyNavigationHtml(response.html, href, response)) {
           return false;
         }
@@ -6228,16 +6229,18 @@ function __mreactInstallNavigation() {
     }
 
     event.preventDefault();
+    const operation = {};
+    __mreactNavigationState.operation = operation;
     void __mreactNavigate(nextUrl.href, {
       scroll: __mreactAnchorScrollMode(anchor),
       transition: __mreactAnchorTransitionMode(anchor),
-    })
+    }, operation)
       .then((navigated) => {
-        if (!navigated) {
+        if (!navigated && __mreactNavigationState.operation === operation) {
           location.href = nextUrl.href;
         }
       }).catch(() => {
-        location.href = nextUrl.href;
+        if (__mreactNavigationState.operation === operation) location.href = nextUrl.href;
       });
   });
 }

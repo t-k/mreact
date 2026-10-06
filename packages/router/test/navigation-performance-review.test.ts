@@ -247,3 +247,62 @@ test("a pending-state listener can synchronously supersede the navigation before
   expect(fetched).toEqual(["/B"]);
   expect(location.pathname).toBe("/B");
 });
+
+test.each(["invalid", "reject"])("a newer navigation from the idle event prevents an old %s click fallback", async (completion) => {
+  const requests = deferredRequests();
+  const href = vi.spyOn(location, "href", "set");
+  document.querySelector("main")!.insertAdjacentHTML("beforeend", '<a href="/A" data-mreact-prefetch="none">A</a>');
+  let latest: Promise<unknown> | undefined;
+  let started = false;
+  window.addEventListener("mreact:navigation-state-change", ((event: CustomEvent) => {
+    if (!event.detail.pending && !started) {
+      started = true;
+      latest = runtime.__mreactNavigate("/B");
+    }
+  }) as EventListener);
+  document.querySelector("a")!.dispatchEvent(new MouseEvent("click", { button: 0, bubbles: true, cancelable: true }));
+  if (completion === "reject") requests.get("/A")!.reject(new Error("old failure"));
+  else requests.get("/A")!.resolve(new Response("invalid HTML"));
+  await flush();
+  expect(started).toBe(true);
+  expect(href).not.toHaveBeenCalled();
+  requests.get("/B")!.resolve(new Response(html("B")));
+  await latest;
+  expect(location.pathname).toBe("/B");
+});
+
+test("a history pending event cannot take pending ownership back from a newer navigation", async () => {
+  const requests = deferredRequests();
+  let latest: Promise<unknown> | undefined;
+  window.addEventListener("mreact:navigation-state-change", ((event: CustomEvent) => {
+    if (event.detail.type === "pop" && event.detail.pending) latest = runtime.__mreactNavigate("/B");
+  }) as EventListener);
+  window.dispatchEvent(new PopStateEvent("popstate", { state: { __mreact: true, url: new URL("/A", location.href).href } }));
+  await flush();
+  expect(runtime.__mreactGetNavigationState()).toMatchObject({ pending: true, to: new URL("/B", location.href).href });
+  requests.get("/B")!.resolve(new Response(html("B")));
+  await latest;
+  expect(runtime.__mreactGetNavigationState().pending).toBe(false);
+  expect(location.pathname).toBe("/B");
+});
+
+test("a history idle event cannot apply stale HTML after a newer navigation starts", async () => {
+  const requests = deferredRequests();
+  let latest: Promise<unknown> | undefined;
+  let started = false;
+  window.addEventListener("mreact:navigation-state-change", ((event: CustomEvent) => {
+    if (!event.detail.pending && !started) {
+      started = true;
+      latest = runtime.__mreactNavigate("/B");
+    }
+  }) as EventListener);
+  window.dispatchEvent(new PopStateEvent("popstate", { state: { __mreact: true, url: new URL("/A", location.href).href } }));
+  requests.get("/A")!.resolve(new Response(html("A")));
+  await flush();
+  expect(started).toBe(true);
+  expect(document.querySelector("main")!.textContent).toBe("Home");
+  expect(runtime.__mreactGetNavigationState()).toMatchObject({ pending: true, to: new URL("/B", location.href).href });
+  requests.get("/B")!.resolve(new Response(html("B")));
+  await latest;
+  expect(document.querySelector("main")!.textContent).toBe("B");
+});
