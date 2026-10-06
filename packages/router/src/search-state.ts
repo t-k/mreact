@@ -144,6 +144,8 @@ export function defineSearchState<T extends SearchSchema>(
 }
 
 async function defaultNavigate(url: string, options: { type: "push" | "replace" }): Promise<boolean> {
-  const navigate = (globalThis as { __mreactNavigate?: typeof defaultNavigate }).__mreactNavigate;
-  return typeof navigate === "function" ? navigate(url, options) : false;
+  const navigate = (globalThis as {
+    __mreactNavigate?: (url: string, options: { type: "push" | "replace" }) => Promise<boolean | "superseded">;
+  }).__mreactNavigate;
+  return typeof navigate === "function" ? (await navigate(url, options)) === true : false;
 }
