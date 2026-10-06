@@ -11,13 +11,14 @@ const output = resolve(process.env.MREACT_REVIEW_OUTPUT ?? `benchmarks/results/r
 const temporary = await mkdtemp(join(tmpdir(), "mreact-review-delivery-"));
 const prepared = new Map<string, any>();
 const workspaces = { baseline: resolve(baseline), candidate: process.cwd() };
+const fixtureNames = ["native-counter", "native-counter-no-navigation", "react-compat", "multi-route-session"];
 process.env.NODE_ENV = "production";
 try {
   for (const [variant, workspace] of Object.entries(workspaces)) {
     const { buildApp } = await import(pathToFileURL(join(workspace, "packages/router/dist/build.js")).href);
     const { startServer } = await import(pathToFileURL(join(workspace, "packages/router/dist/serve.js")).href);
     const { clientDeliveryFixtures, materializeClientDeliveryFixture } = await import(pathToFileURL(join(workspace, "size/fixtures.ts")).href);
-    for (const fixtureName of ["native-counter", "native-counter-no-navigation", "react-compat"]) {
+    for (const fixtureName of fixtureNames) {
       const fixture = clientDeliveryFixtures.find((entry: any) => entry.name === fixtureName);
       const project = await materializeClientDeliveryFixture(fixture, join(temporary, variant));
       await buildApp({ appDir: project.appDir, outDir: project.outDir, projectRoot: project.projectRoot });
@@ -27,7 +28,7 @@ try {
   const runs: any[] = [];
   const startedAt = new Date().toISOString();
   for (const variant of ["baseline", "candidate", "candidate", "baseline"]) {
-    for (const fixtureName of ["native-counter", "native-counter-no-navigation", "react-compat"]) {
+    for (const fixtureName of fixtureNames) {
       const { project, startServer, fixture } = prepared.get(`${variant}/${fixtureName}`);
       const server = await startServer({ outDir: project.outDir, port: 0 });
       let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
@@ -82,8 +83,31 @@ try {
           firstNavigationMs = performance.now() - navigationStart;
           await page.waitForLoadState("networkidle");
           await checkpoint("first-navigation");
+          for (const destination of fixture.sessionVisits.slice(1)) {
+            await page.locator(`a[href="${destination}"]`).first().click();
+            await page.waitForURL((url) => url.pathname === destination);
+            await page.waitForLoadState("networkidle");
+            await checkpoint(`visit:${destination}`);
+          }
         }
-        runs.push({ variant, fixtureName, browserVersion: browser.version(), firstInteractionMs, firstNavigationMs, phases });
+        const coldNavigationSamples: number[] = [];
+        if (fixtureName === "native-counter") {
+          for (let trial = 0; trial < 30; trial++) {
+            const cold = await browser.newPage();
+            try {
+              await cold.addInitScript({ content: "window.requestIdleCallback = () => 0;" });
+              await cold.goto(server.url + fixture.initialPath);
+              await cold.waitForFunction(() => document.documentElement.hasAttribute("data-mreact-hydrated"));
+              coldNavigationSamples.push(await cold.evaluate(async (destination) => {
+                const start = performance.now();
+                const result = await (window as any).__mreactNavigate(destination);
+                if (result !== true || location.pathname !== destination || document.querySelector("h1")?.textContent !== "About") throw new Error("Cold navigation did not apply the destination");
+                return performance.now() - start;
+              }, fixture.sessionVisits[0]));
+            } finally { await cold.close(); }
+          }
+        }
+        runs.push({ variant, fixtureName, browserVersion: browser.version(), firstInteractionMs, firstNavigationMs, coldNavigationSamples, phases });
       } finally { await browser?.close(); await server.close(); }
     }
   }

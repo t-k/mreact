@@ -46,6 +46,26 @@ export default function Page() {
 }`;
 
 describe("production navigation runtime sharing", () => {
+  test("route visits share the deferred navigation bridge without eagerly importing navigation", async () => {
+    const { manifest, clientDir } = await buildFixture({
+      "page.tsx": `export const clientNavigation = true;\n${interactivePage}`,
+      "about/page.tsx": `export const clientNavigation = true;\n${interactivePage}`,
+      "settings/page.tsx": `export const clientNavigation = true;\n${interactivePage}`,
+    });
+    const report = await measureBrowserDelivery({
+      clientDir,
+      manifest,
+      initialPath: "/",
+      initialIncludesNavigationRuntime: false,
+      session: { includeNavigationRuntime: false, visits: [{ path: "/about" }, { path: "/settings" }] },
+    });
+    const paths = report.session!.cumulative.paths;
+    const sources = await Promise.all(paths.map((path) => readFile(join(clientDir, path), "utf8")));
+    expect(sources.filter((source) => source.includes("mreact-navigation-runtime"))).toHaveLength(1);
+    expect(paths).not.toContain(manifest.routes[0]?.navigationScript);
+    expect(report.session!.cumulative.unavailablePaths).toEqual([]);
+  });
+
   test("production query routes omit disabled query inspection from their initial graph", async () => {
     const { manifest, clientDir } = await buildFixture({
       "page.tsx": `import { createQueryClient } from ${JSON.stringify(new URL("../../query/dist/index.js", import.meta.url).pathname)};
