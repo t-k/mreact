@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, readdir, symlink, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, stat, symlink, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
@@ -14,7 +14,12 @@ import {
 
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
-  return { ...actual, readFile: vi.fn(actual.readFile), readdir: vi.fn(actual.readdir) };
+  return {
+    ...actual,
+    readFile: vi.fn(actual.readFile),
+    readdir: vi.fn(actual.readdir),
+    stat: vi.fn(actual.stat),
+  };
 });
 const roots: string[] = [];
 afterEach(async () => {
@@ -74,6 +79,29 @@ test("a dangling legacy public symlink does not hide valid sibling assets", asyn
   expect(await (await runtime.render(new Request("http://local.test/asset.txt"))).text()).toBe(
     "public asset",
   );
+});
+
+test("non-ENOENT legacy symlink stat errors retain per-file fallback", async () => {
+  const root = await fixture(undefined);
+  await symlink(join(root, "missing.txt"), join(root, "client", "public", "link.txt"));
+  vi.mocked(stat).mockRejectedValueOnce(Object.assign(new Error("denied"), { code: "EACCES" }));
+  expect(await readBuiltPublicAssetPaths(root, undefined)).toBeUndefined();
+  expect(await (await readBuiltPublicAsset(root, "/asset.txt"))?.text()).toBe("public asset");
+});
+
+test("public paths reject interior parent segments and absolute syntax before I/O", async () => {
+  const root = await fixture();
+  for (const path of ["/nested/../asset.txt", "/nested%2F..%2Fasset.txt", "//asset.txt"]) {
+    vi.clearAllMocks();
+    expect(await readBuiltPublicAsset(root, path)).toBeUndefined();
+    expect(publicReads()).toHaveLength(0);
+  }
+  const paths = await readBuiltPublicAssetPaths(root, [
+    "/nested/../asset.txt",
+    "//asset.txt",
+    "/asset.txt",
+  ]);
+  expect([...paths!]).toEqual(["asset.txt"]);
 });
 
 test("safe decoded public manifest paths retain precedence and reject path traversal", async () => {
