@@ -97,7 +97,7 @@ export default function Page() {
         validation.
       </p>
 
-      <p class="counter-tone-hot">{firstError(signupFormState.get().errors.root)}</p>
+      <p class="form-error">{firstError(signupFormState.get().errors.root)}</p>
 
       <p class="muted">{submittedText(lastSubmitted.get())}</p>
 
@@ -128,7 +128,7 @@ export default function Page() {
               }}
             />
           </label>
-          <span class="counter-tone-hot"> {firstError(signupFormState.get().errors.name)}</span>
+          <span class="form-error"> {firstError(signupFormState.get().errors.name)}</span>
         </p>
 
         <p>
@@ -149,7 +149,7 @@ export default function Page() {
               }}
             />
           </label>
-          <span class="counter-tone-hot"> {firstError(signupFormState.get().errors.email)}</span>
+          <span class="form-error"> {firstError(signupFormState.get().errors.email)}</span>
         </p>
 
         <p>
@@ -178,7 +178,7 @@ export default function Page() {
               <option value="pro">Pro</option>
             </select>
           </label>
-          <span class="counter-tone-hot"> {firstError(signupFormState.get().errors.plan)}</span>
+          <span class="form-error"> {firstError(signupFormState.get().errors.plan)}</span>
         </p>
 
         <p>
@@ -200,7 +200,7 @@ export default function Page() {
               }}
             />
           </label>
-          <span class="counter-tone-hot"> {firstError(signupFormState.get().errors.seats)}</span>
+          <span class="form-error"> {firstError(signupFormState.get().errors.seats)}</span>
         </p>
 
         <p>
@@ -222,7 +222,7 @@ export default function Page() {
             />{" "}
             Accept terms
           </label>
-          <span class="counter-tone-hot">
+          <span class="form-error">
             {" "}
             {firstError(signupFormState.get().errors.acceptTerms)}
           </span>

@@ -1,10 +1,31 @@
 import { parseSync } from "oxc-parser";
+import { escapeHtmlAttribute } from "@reckona/mreact-shared/html-escape";
+import type { JsxNodeIr } from "./ir.js";
 import { isBooleanishStringAttribute as isSharedBooleanishStringAttribute } from "@reckona/mreact-shared";
 import { readArray, readObject, unwrapOxcParentheses } from "./oxc-node-utils.js";
 
 export interface StaticStyleObjectEntry {
   cssName: string;
   valueCode: string;
+}
+
+/** Folds fixed text runs while preserving nonempty hydration text boundaries. */
+export function staticTextSeparatedHtml(children: readonly JsxNodeIr[]): string | undefined {
+  const texts: string[] = [];
+  for (const child of children) {
+    let text: string;
+    if (child.kind === "text") text = child.value;
+    else if (child.kind === "expr" && child.renderMode === undefined) {
+      if (!child.code.startsWith('"')) return undefined;
+      try {
+        text = JSON.parse(child.code) as string;
+      } catch {
+        return undefined;
+      }
+    } else return undefined;
+    if (text !== "") texts.push(escapeHtmlAttribute(text));
+  }
+  return texts.join("<!-- -->");
 }
 
 const URL_ATTRIBUTE_NAMES = new Set([

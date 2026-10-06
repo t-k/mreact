@@ -92,7 +92,7 @@ export default function Page() {
         transform and number checks run.
       </p>
 
-      <p class="counter-tone-hot">{firstError(inviteFormState.get().errors.root)}</p>
+      <p class="form-error">{firstError(inviteFormState.get().errors.root)}</p>
 
       <p class="muted">{submittedText(lastSubmitted.get())}</p>
 
@@ -123,7 +123,7 @@ export default function Page() {
               }}
             />
           </label>
-          <span class="counter-tone-hot"> {firstError(inviteFormState.get().errors.email)}</span>
+          <span class="form-error"> {firstError(inviteFormState.get().errors.email)}</span>
         </p>
 
         <p>
@@ -153,7 +153,7 @@ export default function Page() {
               <option value="admin">Admin</option>
             </select>
           </label>
-          <span class="counter-tone-hot"> {firstError(inviteFormState.get().errors.role)}</span>
+          <span class="form-error"> {firstError(inviteFormState.get().errors.role)}</span>
         </p>
 
         <p>
@@ -175,7 +175,7 @@ export default function Page() {
               }}
             />
           </label>
-          <span class="counter-tone-hot"> {firstError(inviteFormState.get().errors.seats)}</span>
+          <span class="form-error"> {firstError(inviteFormState.get().errors.seats)}</span>
         </p>
 
         <p>
@@ -206,7 +206,7 @@ export default function Page() {
             />{" "}
             Send welcome email
           </label>
-          <span class="counter-tone-hot">
+          <span class="form-error">
             {" "}
             {firstError(inviteFormState.get().errors.sendWelcomeEmail)}
           </span>

@@ -29,6 +29,7 @@ import {
   parseStaticStyleObjectLiteral,
   parseStyleLiteralValue,
   simpleSideEffectFreeExpression,
+  staticTextSeparatedHtml,
   type OptionSelectedLocalNames,
 } from "./emit-server-shared.js";
 import {
@@ -48,6 +49,7 @@ export interface EmitServerStreamOptions {
   serverBootstrapNonce?: string;
   serverBootstrapSrc?: string;
   serverHydration?: boolean;
+  preserveMixedTextNodes?: boolean;
   serverAwaitHydration?: boolean;
   escape?: ServerEscapeOptions | undefined;
   reactSuspenseRevealScriptSrc?: string;
@@ -68,6 +70,7 @@ let currentReactSuspenseOutOfOrderBoundaryHelperName: string =
   "_renderReactSuspenseOutOfOrderBoundary";
 let currentCompatRenderToStringHelperName: string = "_renderCompatToString";
 let currentCompatChildHelperName: string | undefined;
+let currentPreserveMixedTextNodes = false;
 let currentPropChildrenCollectState: CollectHtmlState | undefined;
 let currentMarkServerRenderValueHelperName: string = "_registerServerRenderValue";
 let currentMarkServerRenderThunkHelperName = "_registerServerRenderThunk";
@@ -100,6 +103,7 @@ export function emitServerStream(
   ir: ModuleIr,
   options: EmitServerStreamOptions = {},
 ): EmitServerStreamResult {
+  currentPreserveMixedTextNodes = options.preserveMixedTextNodes === true;
   currentRouterLinkComponentNames = new Set(ir.routerLinkComponentNames ?? []);
   const serverBootstrap = options.serverBootstrap ?? "none";
   const escapeHelperName = allocateHelperName(ir, "_escapeHtml");
@@ -305,7 +309,11 @@ export function emitServerStream(
     !components.includes(escapeBatchHelperName)
       ? ""
       : `import { ${options.escape.batchImportName} as ${escapeBatchHelperName} } from ${stringLiteral(options.escape.batchImportSource)};`;
-  const imports = collectImports(ir, serverBootstrap);
+  const imports = collectImports(
+    ir,
+    serverBootstrap,
+    emittedServerCode.includes(compatRenderToStringHelperName),
+  );
   ensureServerRuntimeImport(imports, components, asyncBoundaryHelperName, "renderAsyncBoundary");
   const importAliases: Record<string, string> = {
     renderAsyncBoundary: asyncBoundaryHelperName,
@@ -448,7 +456,11 @@ function ensureServerRuntimeImport(
   }
 }
 
-function collectImports(ir: ModuleIr, serverBootstrap: ServerBootstrapMode): RuntimeImport[] {
+function collectImports(
+  ir: ModuleIr,
+  serverBootstrap: ServerBootstrapMode,
+  usesCompatRenderToString: boolean,
+): RuntimeImport[] {
   const serverSpecifiers = [
     ...(hasInOrderAsyncBoundary(ir) ? ["renderAsyncBoundary"] : []),
     ...(hasOutOfOrderAsyncBoundary(ir) ? ["renderOutOfOrderBoundary"] : []),
@@ -468,7 +480,9 @@ function collectImports(ir: ModuleIr, serverBootstrap: ServerBootstrapMode): Run
   }
 
   const compatSpecifiers = [
-    ...(hasCompatComponentReference(ir) || hasReactNodeRender(ir) || hasRawJsxDynamicRender(ir)
+    ...(hasCompatComponentReference(ir) ||
+    hasReactNodeRender(ir) ||
+    (hasRawJsxDynamicRender(ir) && usesCompatRenderToString)
       ? ["renderToString"]
       : []),
     ...(usesCompatChildRender(ir) ? ["renderChildToString"] : []),
@@ -1819,16 +1833,20 @@ function collectHtmlParts(
   }
 
   if (node.kind === "fragment") {
-    return node.children.flatMap((child) =>
-      collectHtmlParts(
-        child,
-        escapeHelperName,
-        asyncBoundaryHelperName,
-        outOfOrderBoundaryHelperName,
-        reactSuspenseBoundaryHelperName,
-        reactSuspenseOutOfOrderBoundaryHelperName,
-        state,
-      ),
+    return collectTextSeparatedChildrenParts(
+      node.children,
+      escapeHelperName,
+      state.escapeBatchHelperName,
+      (child) =>
+        collectHtmlParts(
+          child,
+          escapeHelperName,
+          asyncBoundaryHelperName,
+          outOfOrderBoundaryHelperName,
+          reactSuspenseBoundaryHelperName,
+          reactSuspenseOutOfOrderBoundaryHelperName,
+          state,
+        ),
     );
   }
 
@@ -2130,16 +2148,20 @@ function collectHtmlParts(
             state.escapeBatchHelperName,
           )
         : undefined) ??
-      node.children.flatMap((child) =>
-        collectHtmlParts(
-          child,
-          escapeHelperName,
-          asyncBoundaryHelperName,
-          outOfOrderBoundaryHelperName,
-          reactSuspenseBoundaryHelperName,
-          reactSuspenseOutOfOrderBoundaryHelperName,
-          childState,
-        ),
+      collectTextSeparatedChildrenParts(
+        node.children,
+        escapeHelperName,
+        state.escapeBatchHelperName,
+        (child) =>
+          collectHtmlParts(
+            child,
+            escapeHelperName,
+            asyncBoundaryHelperName,
+            outOfOrderBoundaryHelperName,
+            reactSuspenseBoundaryHelperName,
+            reactSuspenseOutOfOrderBoundaryHelperName,
+            childState,
+          ),
       );
     return [
       emitMergedSpreadElementPart(
@@ -2186,16 +2208,20 @@ function collectHtmlParts(
               state.escapeBatchHelperName,
             )
           : undefined) ??
-        node.children.flatMap((child) =>
-          collectHtmlParts(
-            child,
-            escapeHelperName,
-            asyncBoundaryHelperName,
-            outOfOrderBoundaryHelperName,
-            reactSuspenseBoundaryHelperName,
-            reactSuspenseOutOfOrderBoundaryHelperName,
-            childState,
-          ),
+        collectTextSeparatedChildrenParts(
+          node.children,
+          escapeHelperName,
+          state.escapeBatchHelperName,
+          (child) =>
+            collectHtmlParts(
+              child,
+              escapeHelperName,
+              asyncBoundaryHelperName,
+              outOfOrderBoundaryHelperName,
+              reactSuspenseBoundaryHelperName,
+              reactSuspenseOutOfOrderBoundaryHelperName,
+              childState,
+            ),
         ));
 
   return [
@@ -3501,6 +3527,40 @@ function emitDynamicHtmlAppendStatement(
 
 function looksLikeRawJsxExpression(code: string): boolean {
   return /<\s*(?:[A-Za-z]|>)/.test(code);
+}
+
+function collectTextSeparatedChildrenParts(
+  children: JsxNodeIr[],
+  escapeHelperName: string,
+  escapeBatchHelperName: string | undefined,
+  collectChild: (child: JsxNodeIr) => HtmlPart[],
+): HtmlPart[] {
+  if (!currentPreserveMixedTextNodes) return children.flatMap(collectChild);
+  const isText = (child: JsxNodeIr) =>
+    child.kind === "text" ||
+    (child.kind === "expr" &&
+      child.renderMode !== "html" &&
+      child.renderMode !== "react-node" &&
+      child.renderMode !== "compat-child");
+  const parts: HtmlPart[] = [];
+  for (let index = 0; index < children.length; ) {
+    const child = children[index]!;
+    let end = index + 1;
+    if (isText(child)) {
+      while (end < children.length && isText(children[end]!)) end += 1;
+    }
+    let text: HtmlPart[] | undefined;
+    if (end > index + 1) {
+      const run = children.slice(index, end);
+      const fixedText = staticTextSeparatedHtml(run);
+      text = fixedText === undefined
+        ? collectTextSeparatedSimpleChildrenParts(run, escapeHelperName, escapeBatchHelperName)
+        : [{ kind: "static", value: fixedText }];
+    }
+    parts.push(...(text ?? collectChild(child)));
+    index = end;
+  }
+  return parts;
 }
 
 function collectTextSeparatedSimpleChildrenParts(

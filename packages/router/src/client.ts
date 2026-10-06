@@ -3703,6 +3703,7 @@ async function resolveClosedAttachCode(
 
 const navigationStateDeclarationSource = `const __mreactNavigationState = __mreactGlobal.__mreactNavigationState ??= {
   cache: new Map(),
+  cacheBytes: 0,
   cacheTokens: new Map(),
   current: {
     from: null,
@@ -3713,6 +3714,7 @@ const navigationStateDeclarationSource = `const __mreactNavigationState = __mrea
   fetchRevalidationInstalled: false,
   installed: false,
   navigationFetchInits: new WeakSet(),
+  operation: __mreactGlobal.__mreactDeferredNavigationOperation,
   pendingHtmlFetches: new Map(),
   prefetchedUrls: new Set(),
   prefetchedScripts: new Set(),
@@ -3727,7 +3729,9 @@ const navigationStateDeclarationSource = `const __mreactNavigationState = __mrea
   viewportMutationObserver: undefined,
 };
 __mreactNavigationState.cacheTokens ??= new Map();
-__mreactNavigationState.navigationFetchInits ??= new WeakSet();`;
+__mreactNavigationState.cacheBytes ??= 0;
+__mreactNavigationState.navigationFetchInits ??= new WeakSet();
+delete __mreactGlobal.__mreactDeferredNavigationOperation;`;
 
 // Navigation entries and boundary-only routes never bind captured events themselves, so the
 // synchroniser only disposes listeners left by the previous route.
@@ -3937,206 +3941,11 @@ async function buildClientRouteEntrySourceInternal(
     : "";
   const navigationStateDeclaration = inlineClientNavigation ? navigationStateDeclarationSource : "";
   const deferredNavigationRuntime = deferredClientNavigation
-    ? `
-let __mreactDeferredNavigationRuntime = undefined;
-
-function __mreactNavigationRuntimeScript() {
-  if (typeof document === "undefined") {
-    return undefined;
-  }
-
-  const element = document.getElementById("mreact-navigation-runtime");
-  const text = element?.textContent;
-
-  if (text === undefined || text === "") {
-    return undefined;
-  }
-
-  try {
-    const parsed = JSON.parse(text);
-    return typeof parsed?.script === "string" ? parsed.script : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function __mreactLoadNavigationRuntime() {
-  const script = __mreactNavigationRuntimeScript();
-  if (script === undefined) {
-    return Promise.resolve(undefined);
-  }
-
-  if (__mreactDeferredNavigationRuntime !== undefined) {
-    return __mreactDeferredNavigationRuntime;
-  }
-
-  __mreactDeferredNavigationRuntime = import(/* @vite-ignore */ script).catch(() => undefined);
-  return __mreactDeferredNavigationRuntime;
-}
-
-function __mreactDeferredAnchorFromEvent(event) {
-  const target = event.target;
-  const anchor = target instanceof Element ? target.closest("a[href]") : null;
-
-  return anchor instanceof HTMLAnchorElement ? anchor : null;
-}
-
-function __mreactDeferredAnchorScrollMode(anchor) {
-  return anchor.dataset.mreactScroll === "preserve" ? false : true;
-}
-
-function __mreactDeferredAnchorTransitionMode(anchor) {
-  return anchor.dataset.mreactTransition === "auto" ? "auto" : false;
-}
-
-function __mreactDeferredIsHashOnlyNavigation(nextUrl) {
-  return nextUrl.origin === location.origin &&
-    nextUrl.pathname === location.pathname &&
-    nextUrl.search === location.search &&
-    nextUrl.hash !== "" &&
-    nextUrl.hash !== location.hash;
-}
-
-function __mreactDeferredIsCurrentLocationNavigation(nextUrl) {
-  return nextUrl.origin === location.origin &&
-    nextUrl.pathname === location.pathname &&
-    nextUrl.search === location.search;
-}
-
-function __mreactDeferredHandleClick(event) {
-  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-    return;
-  }
-
-  const anchor = __mreactDeferredAnchorFromEvent(event);
-
-  if (anchor === null || anchor.dataset.mreactReload === "true") {
-    return;
-  }
-
-  const nextUrl = new URL(anchor.href, location.href);
-
-  if (nextUrl.origin !== location.origin || __mreactDeferredIsHashOnlyNavigation(nextUrl)) {
-    return;
-  }
-
-  if (__mreactNavigationRuntimeScript() === undefined) {
-    return;
-  }
-
-  if (__mreactDeferredIsCurrentLocationNavigation(nextUrl)) {
-    event.preventDefault();
-
-    if (__mreactDeferredAnchorScrollMode(anchor) !== false && nextUrl.hash === "") {
-      scrollTo(0, 0);
-    }
-
-    return;
-  }
-
-  event.preventDefault();
-  void __mreactLoadNavigationRuntime()
-    .then((runtime) =>
-      typeof runtime?.__mreactNavigate === "function"
-        ? runtime.__mreactNavigate(nextUrl.href, {
-            scroll: __mreactDeferredAnchorScrollMode(anchor),
-            transition: __mreactDeferredAnchorTransitionMode(anchor),
-          })
-        : false,
-    )
-    .then((navigated) => {
-      if (!navigated) {
-        location.href = nextUrl.href;
-      }
-    })
-    .catch(() => {
-      location.href = nextUrl.href;
-    });
-}
-
-function __mreactInstallNavigation() {
-  if (typeof document === "undefined") {
-    return;
-  }
-
-  __mreactGlobal.__mreactNavigate = __mreactNavigate;
-
-  const load = () => {
-    void __mreactLoadNavigationRuntime();
-  };
-  const loadFromAnchorEvent = (event) => {
-    const target = event.target;
-    const anchor = target instanceof Element ? target.closest("a[href]") : null;
-
-    if (anchor instanceof HTMLAnchorElement && anchor.origin === location.origin) {
-      load();
-    }
-  };
-
-  const hasSameOriginAnchor = Array.from(document.querySelectorAll("a[href]")).some((anchor) =>
-    anchor instanceof HTMLAnchorElement && anchor.origin === location.origin,
-  );
-
-  if (hasSameOriginAnchor) {
-    if (typeof requestIdleCallback === "function") {
-      requestIdleCallback(load);
-    } else {
-      setTimeout(load, 0);
-    }
-  }
-
-  addEventListener("popstate", (event) => {
-    if (__mreactGlobal.__mreactNavigationState?.installed) {
-      return;
-    }
-    // Keep the latest destination while the runtime import is pending.
-    const pending = { state: event.state };
-    __mreactGlobal.__mreactPendingHistoryTraversal = pending;
-    void __mreactLoadNavigationRuntime().then((runtime) => {
-      if (runtime === undefined && __mreactGlobal.__mreactPendingHistoryTraversal === pending) {
-        location.reload();
-      }
-    });
-  });
-  document.addEventListener("pointerover", loadFromAnchorEvent, true);
-  document.addEventListener("pointerdown", loadFromAnchorEvent, true);
-  document.addEventListener("click", __mreactDeferredHandleClick, true);
-  document.addEventListener("focusin", loadFromAnchorEvent);
-}
-
-export async function __mreactNavigate(url, options = {}) {
-  const runtime = await __mreactLoadNavigationRuntime();
-  return typeof runtime?.__mreactNavigate === "function"
-    ? runtime.__mreactNavigate(url, options)
-    : false;
-}
-
-export async function __mreactPrefetch(url, options = {}) {
-  const runtime = await __mreactLoadNavigationRuntime();
-  return typeof runtime?.__mreactPrefetch === "function"
-    ? runtime.__mreactPrefetch(url, options)
-    : false;
-}
-
-export async function __mreactInvalidateNavigationCache(path) {
-  const runtime = await __mreactLoadNavigationRuntime();
-  runtime?.__mreactInvalidateNavigationCache?.(path);
-}
-
-export async function __mreactRestoreHistoryState(state) {
-  const runtime = await __mreactLoadNavigationRuntime();
-  return typeof runtime?.__mreactRestoreHistoryState === "function"
-    ? runtime.__mreactRestoreHistoryState(state)
-    : false;
-}
-
-export async function __mreactGetNavigationState() {
-  const runtime = await __mreactLoadNavigationRuntime();
-  return typeof runtime?.__mreactGetNavigationState === "function"
-    ? runtime.__mreactGetNavigationState()
-    : { from: null, pending: false, to: null, type: null };
-}
-`
+    ? options.shareHydrationRuntime === true
+      ? `import { __mreactCreateDeferredNavigationRuntime } from "mreact-route-deferred-navigation";
+const { __mreactNavigate, __mreactPrefetch, __mreactInvalidateNavigationCache, __mreactRestoreHistoryState, __mreactGetNavigationState, __mreactInstallNavigation } = __mreactCreateDeferredNavigationRuntime();
+export { __mreactNavigate, __mreactPrefetch, __mreactInvalidateNavigationCache, __mreactRestoreHistoryState, __mreactGetNavigationState };`
+      : deferredNavigationRuntimeSource()
     : "";
   const routeCellStateDeclaration = routeUsesCells
     ? `const __mreactRouteStates = __mreactGlobal.__mreactRouteStates ??= new Map();
@@ -4570,15 +4379,264 @@ ${routeInlineHydrationRuntime}`;
   };
 }
 
+/** Emits the same navigation bridge for inline entries and shared batch chunks. */
+function deferredNavigationRuntimeSource(): string {
+  return `
+let __mreactDeferredNavigationRuntime = undefined;
+
+function __mreactBeginDeferredNavigation() {
+  const operation = {};
+  const state = __mreactGlobal.__mreactNavigationState;
+  if (state === undefined) __mreactGlobal.__mreactDeferredNavigationOperation = operation;
+  else state.operation = operation;
+  return operation;
+}
+
+function __mreactOwnsDeferredNavigation(operation) {
+  const state = __mreactGlobal.__mreactNavigationState;
+  return (state === undefined ? __mreactGlobal.__mreactDeferredNavigationOperation : state.operation) === operation;
+}
+
+function __mreactNavigationRuntimeScript() {
+  if (typeof document === "undefined") {
+    return undefined;
+  }
+
+  const element = document.getElementById("mreact-navigation-runtime");
+  const text = element?.textContent;
+
+  if (text === undefined || text === "") {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(text);
+    return typeof parsed?.script === "string" ? parsed.script : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function __mreactLoadNavigationRuntime() {
+  const script = __mreactNavigationRuntimeScript();
+  if (script === undefined) {
+    return Promise.resolve(undefined);
+  }
+
+  if (__mreactDeferredNavigationRuntime !== undefined) {
+    return __mreactDeferredNavigationRuntime;
+  }
+
+  __mreactDeferredNavigationRuntime = import(/* @vite-ignore */ script).catch(() => undefined);
+  return __mreactDeferredNavigationRuntime;
+}
+
+function __mreactDeferredAnchorFromEvent(event) {
+  const target = event.target;
+  const anchor = target instanceof Element ? target.closest("a[href]") : null;
+
+  return anchor instanceof HTMLAnchorElement ? anchor : null;
+}
+
+function __mreactDeferredAnchorScrollMode(anchor) {
+  return anchor.dataset.mreactScroll === "preserve" ? false : true;
+}
+
+function __mreactDeferredAnchorTransitionMode(anchor) {
+  return anchor.dataset.mreactTransition === "auto" ? "auto" : false;
+}
+
+function __mreactDeferredIsHashOnlyNavigation(nextUrl) {
+  return nextUrl.origin === location.origin &&
+    nextUrl.pathname === location.pathname &&
+    nextUrl.search === location.search &&
+    nextUrl.hash !== "" &&
+    nextUrl.hash !== location.hash;
+}
+
+function __mreactDeferredIsCurrentLocationNavigation(nextUrl) {
+  return nextUrl.origin === location.origin &&
+    nextUrl.pathname === location.pathname &&
+    nextUrl.search === location.search;
+}
+
+function __mreactDeferredHandleClick(event) {
+  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+    return;
+  }
+
+  const anchor = __mreactDeferredAnchorFromEvent(event);
+
+  if (anchor === null || anchor.dataset.mreactReload === "true") {
+    return;
+  }
+
+  const nextUrl = new URL(anchor.href, location.href);
+
+  if (nextUrl.origin !== location.origin || __mreactDeferredIsHashOnlyNavigation(nextUrl)) {
+    return;
+  }
+
+  if (__mreactNavigationRuntimeScript() === undefined) {
+    return;
+  }
+
+  if (__mreactDeferredIsCurrentLocationNavigation(nextUrl)) {
+    event.preventDefault();
+
+    if (__mreactDeferredAnchorScrollMode(anchor) !== false && nextUrl.hash === "") {
+      scrollTo(0, 0);
+    }
+
+    return;
+  }
+
+  event.preventDefault();
+  const operation = __mreactBeginDeferredNavigation();
+  void __mreactLoadNavigationRuntime()
+    .then((runtime) =>
+      !__mreactOwnsDeferredNavigation(operation) ? "superseded" : typeof runtime?.__mreactNavigate === "function"
+        ? runtime.__mreactNavigate(nextUrl.href, {
+            scroll: __mreactDeferredAnchorScrollMode(anchor),
+            transition: __mreactDeferredAnchorTransitionMode(anchor),
+          }, operation)
+        : false,
+    )
+    .then((navigated) => {
+      if (!navigated && __mreactOwnsDeferredNavigation(operation)) {
+        location.href = nextUrl.href;
+      }
+    })
+    .catch(() => {
+      if (__mreactOwnsDeferredNavigation(operation)) location.href = nextUrl.href;
+    });
+}
+
+function __mreactInstallNavigation() {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  __mreactGlobal.__mreactNavigate = __mreactNavigate;
+
+  const load = () => {
+    void __mreactLoadNavigationRuntime();
+  };
+  const loadFromAnchorEvent = (event) => {
+    const target = event.target;
+    const anchor = target instanceof Element ? target.closest("a[href]") : null;
+
+    if (anchor instanceof HTMLAnchorElement && anchor.origin === location.origin) {
+      load();
+    }
+  };
+
+  const hasSameOriginAnchor = Array.from(document.querySelectorAll("a[href]")).some((anchor) =>
+    anchor instanceof HTMLAnchorElement && anchor.origin === location.origin,
+  );
+
+  if (hasSameOriginAnchor) {
+    if (typeof requestIdleCallback === "function") {
+      requestIdleCallback(load);
+    } else {
+      setTimeout(load, 0);
+    }
+  }
+
+  addEventListener("popstate", (event) => {
+    if (__mreactGlobal.__mreactNavigationState?.installed) {
+      return;
+    }
+    // Keep the latest destination while the runtime import is pending.
+    const operation = __mreactBeginDeferredNavigation();
+    const pending = { state: event.state, operation };
+    __mreactGlobal.__mreactPendingHistoryTraversal = pending;
+    void __mreactLoadNavigationRuntime().then((runtime) => {
+      if (runtime === undefined && __mreactGlobal.__mreactPendingHistoryTraversal === pending && __mreactOwnsDeferredNavigation(operation)) {
+        location.reload();
+      }
+    });
+  });
+  document.addEventListener("pointerover", loadFromAnchorEvent, true);
+  document.addEventListener("pointerdown", loadFromAnchorEvent, true);
+  document.addEventListener("click", __mreactDeferredHandleClick, true);
+  document.addEventListener("focusin", loadFromAnchorEvent);
+}
+
+export async function __mreactNavigate(url, options = {}) {
+  let href;
+  try {
+    const parsed = new URL(url, location.href);
+    if ((parsed.protocol !== "http:" && parsed.protocol !== "https:") || parsed.origin !== location.origin) return false;
+    href = parsed.href;
+  } catch {
+    return false;
+  }
+  const operation = __mreactBeginDeferredNavigation();
+  const runtime = await __mreactLoadNavigationRuntime();
+  if (!__mreactOwnsDeferredNavigation(operation)) return "superseded";
+  try {
+    const result = typeof runtime?.__mreactNavigate === "function"
+      ? await runtime.__mreactNavigate(href, options, operation)
+      : false;
+    return __mreactOwnsDeferredNavigation(operation) ? result : "superseded";
+  } catch (error) {
+    if (!__mreactOwnsDeferredNavigation(operation)) return "superseded";
+    throw error;
+  }
+}
+
+export async function __mreactPrefetch(url, options = {}) {
+  const runtime = await __mreactLoadNavigationRuntime();
+  return typeof runtime?.__mreactPrefetch === "function"
+    ? runtime.__mreactPrefetch(url, options)
+    : false;
+}
+
+export async function __mreactInvalidateNavigationCache(path) {
+  const runtime = await __mreactLoadNavigationRuntime();
+  runtime?.__mreactInvalidateNavigationCache?.(path);
+}
+
+export async function __mreactRestoreHistoryState(state) {
+  if (state?.__mreact !== true || (typeof state.html !== "string" && !__mreactGlobal.__mreactNavigationState?.cache.has(state.url))) return false;
+  const operation = __mreactBeginDeferredNavigation();
+  const runtime = await __mreactLoadNavigationRuntime();
+  if (!__mreactOwnsDeferredNavigation(operation)) return "superseded";
+  return typeof runtime?.__mreactRestoreHistoryState === "function"
+    ? runtime.__mreactRestoreHistoryState(state, operation)
+    : false;
+}
+
+export async function __mreactGetNavigationState() {
+  const runtime = await __mreactLoadNavigationRuntime();
+  return typeof runtime?.__mreactGetNavigationState === "function"
+    ? runtime.__mreactGetNavigationState()
+    : { from: null, pending: false, to: null, type: null };
+}
+`;
+}
+
 /**
  * Emits the client navigation runtime shared by inline route entries and the dedicated navigation entry.
  *
  * The template only depends on the route hydration contract and a small set of helpers the host entry must define: the resume walk bindings, the out-of-order fragment helper, the hydration mark/report helpers, the route data script helper, and the history snapshot cache.
  */
 function inlineNavigationRuntimeSource(): string {
-  return `export function __mreactNavigateToHtml(html, url, options = {}) {
+  return `export function __mreactNavigateToHtml(html, url, options = {}, operation, response) {
+  if (operation === undefined) {
+    operation = {};
+    __mreactNavigationState.operation = operation;
+  }
+  if (__mreactNavigationState.operation !== operation) {
+    return "superseded";
+  }
   __mreactSaveCurrentHistoryState();
-  const applied = __mreactApplyNavigationHtml(html, url);
+  const applied = __mreactApplyNavigationHtml(html, url, response);
+
+  if (__mreactNavigationState.operation !== operation) {
+    return "superseded";
+  }
 
   if (!applied) {
     return false;
@@ -4719,6 +4777,8 @@ function __mreactPrefetchNavigationHtml(href) {
 }
 
 const __mreactNavigationHtmlCacheMaxEntries = 64;
+const __mreactNavigationHtmlCacheMaxBytes = 8 * 1024 * 1024;
+const __mreactNavigationHtmlCacheMaxEntryBytes = 1024 * 1024;
 const __mreactNavigationPrefetchHistoryMaxEntries = 64;
 const __mreactNavigationHtmlCacheTtlMs = 30_000;
 
@@ -4761,7 +4821,7 @@ function __mreactCachedNavigationHtml(href) {
     entry.cacheContext !== __mreactNavigationCacheContext() ||
     Date.now() - entry.fetchedAt >= __mreactNavigationHtmlCacheTtlMs
   ) {
-    __mreactNavigationState.cache.delete(href);
+    __mreactDeleteCachedNavigationHtml(href);
     __mreactNavigationState.prefetchedUrls.delete(href);
     __mreactReleaseNavigationCacheToken(href, entry.token);
     return undefined;
@@ -4782,28 +4842,41 @@ function __mreactRememberNavigationHtml(href, html, token, cacheContext) {
     return;
   }
 
-  if (__mreactNavigationState.cache.has(href)) {
-    __mreactNavigationState.cache.delete(href);
-  }
+  __mreactDeleteCachedNavigationHtml(href);
+  // Use a conservative UTF-16 payload estimate without encoding every response again.
+  const byteSize = html.length * 2;
+  if (byteSize > __mreactNavigationHtmlCacheMaxEntryBytes) return;
 
   __mreactNavigationState.cache.set(href, {
     cacheContext,
     fetchedAt: Date.now(),
     html,
     token,
+    byteSize,
   });
+  __mreactNavigationState.cacheBytes += byteSize;
 
-  while (__mreactNavigationState.cache.size > __mreactNavigationHtmlCacheMaxEntries) {
+  while (
+    __mreactNavigationState.cache.size > __mreactNavigationHtmlCacheMaxEntries ||
+    __mreactNavigationState.cacheBytes > __mreactNavigationHtmlCacheMaxBytes
+  ) {
     const oldestHref = __mreactNavigationState.cache.keys().next().value;
 
     if (oldestHref === undefined) {
       return;
     }
 
-    __mreactNavigationState.cache.delete(oldestHref);
+    __mreactDeleteCachedNavigationHtml(oldestHref);
     __mreactNavigationState.prefetchedUrls.delete(oldestHref);
     __mreactReleaseNavigationCacheToken(oldestHref);
   }
+}
+
+function __mreactDeleteCachedNavigationHtml(href) {
+  const entry = __mreactNavigationState.cache.get(href);
+  if (entry === undefined) return;
+  __mreactNavigationState.cacheBytes -= entry.byteSize ?? 0;
+  __mreactNavigationState.cache.delete(href);
 }
 
 function __mreactNavigationCacheContext() {
@@ -4819,12 +4892,10 @@ function __mreactNavigationCookies() {
   return typeof document === "undefined" ? "" : document.cookie;
 }
 
-function __mreactNavigationResponseCacheContext(html, requestCookies) {
+function __mreactNavigationResponseCacheContext(template, requestCookies) {
   let authSession;
 
-  if (typeof document !== "undefined") {
-    const template = document.createElement("template");
-    template.innerHTML = html;
+  if (template !== undefined) {
     authSession = template.content.querySelector("#__mreact_auth_session")?.textContent ?? undefined;
   }
 
@@ -4898,7 +4969,7 @@ function __mreactPrefetchRouteScript(route) {
   return valid;
 }
 
-export async function __mreactNavigate(url, options = {}) {
+export async function __mreactNavigate(url, options = {}, operation) {
   const href = __mreactNormalizeNavigationUrl(url);
 
   if (href === undefined || !__mreactIsSameOriginNavigationUrl(href)) {
@@ -4907,30 +4978,54 @@ export async function __mreactNavigate(url, options = {}) {
 
   // A navigation outranks a history refetch from the moment it starts, so a refetch that
   // resolves during a view transition cannot flash the other page first.
+  if (operation === undefined) {
+    operation = {};
+    __mreactNavigationState.operation = operation;
+  } else if (__mreactNavigationState.operation !== operation) {
+    return "superseded";
+  }
   __mreactNavigationState.pendingTraversal = undefined;
-  __mreactNavigationState.pendingTraversalState = undefined;
+  __mreactNavigationState.pendingTraversalState = operation;
   __mreactSetNavigationState(__mreactPendingNavigationState(href, options.type ?? "push"));
 
   try {
-    const html = await __mreactResolveNavigationHtml(href);
+    if (__mreactNavigationState.operation !== operation) {
+      return "superseded";
+    }
+    const response = await __mreactResolveNavigationHtml(href, operation);
 
-    if (html === undefined) {
+    if (__mreactNavigationState.operation !== operation) {
+      return "superseded";
+    }
+
+    if (response === undefined) {
       return false;
     }
 
-    return await __mreactApplyNavigationHtmlWithOptionalTransition(html, href, options);
+    return await __mreactApplyNavigationHtmlWithOptionalTransition(response, href, options, operation);
+  } catch (error) {
+    if (__mreactNavigationState.operation !== operation) {
+      return "superseded";
+    }
+    throw error;
   } finally {
-    __mreactSetNavigationState(__mreactIdleNavigationState());
+    if (__mreactNavigationState.pendingTraversalState === operation) {
+      __mreactNavigationState.pendingTraversalState = undefined;
+      __mreactSetNavigationState(__mreactIdleNavigationState());
+    }
   }
 }
 
 // Resolves the HTML a navigation may show for href, or undefined when nothing may be shown.
 // History traversal shares this so a refetched entry obeys the same cache, session and
 // speculative-prefetch guards as a link navigation.
-async function __mreactResolveNavigationHtml(href) {
+async function __mreactResolveNavigationHtml(href, operation) {
   let forceReload = __mreactNavigationState.reloadNextNavigationFetch === true;
 
   for (;;) {
+    if (operation !== undefined && __mreactNavigationState.operation !== operation) {
+      return undefined;
+    }
     const cachedHtml = forceReload ? undefined : __mreactCachedNavigationHtml(href);
     const script = __mreactRouteScriptForNavigationUrl(href);
     if (script !== undefined) {
@@ -4965,7 +5060,7 @@ async function __mreactResolveNavigationHtml(href) {
       return undefined;
     }
 
-    return typeof result.html === "string" ? result.html : undefined;
+    return typeof result.html === "string" ? result : undefined;
   }
 }
 
@@ -5059,23 +5154,23 @@ function __mreactDispatchNavigationStateChange(state) {
   }));
 }
 
-async function __mreactApplyNavigationHtmlWithOptionalTransition(html, href, options) {
+async function __mreactApplyNavigationHtmlWithOptionalTransition(response, href, options, operation) {
   if (!__mreactViewTransitionsAllowed(options.transition)) {
-    return __mreactNavigateToHtml(html, href, options);
+    return __mreactNavigateToHtml(response.html, href, options, operation, response);
   }
 
   let navigated = false;
   const transition = document.startViewTransition(() => {
-    navigated = __mreactNavigateToHtml(html, href, options);
+    navigated = __mreactNavigateToHtml(response.html, href, options, operation, response);
   });
 
   try {
     await transition.updateCallbackDone;
   } catch {
-    return navigated;
+    return __mreactNavigationState.operation === operation ? navigated : "superseded";
   }
 
-  return navigated;
+  return __mreactNavigationState.operation === operation ? navigated : "superseded";
 }
 
 function __mreactViewTransitionsAllowed(transition) {
@@ -5123,7 +5218,7 @@ export function __mreactInvalidateNavigationCache(path, excludedRequest) {
       if (token !== undefined) {
         token.valid = false;
       }
-      __mreactNavigationState.cache.delete(href);
+      __mreactDeleteCachedNavigationHtml(href);
       __mreactNavigationState.prefetchedUrls.delete(href);
       __mreactNavigationState.pendingHtmlFetches.delete(href);
       __mreactNavigationState.cacheTokens.delete(href);
@@ -5139,6 +5234,7 @@ function __mreactInvalidateAllNavigationCache() {
     request.token.valid = false;
   }
   __mreactNavigationState.cache.clear();
+  __mreactNavigationState.cacheBytes = 0;
   __mreactNavigationState.cacheTokens.clear();
   __mreactNavigationState.prefetchedUrls.clear();
   __mreactNavigationState.pendingHtmlFetches.clear();
@@ -5239,7 +5335,8 @@ function __mreactFetchNavigationHtml(href, options = {}, pendingRequest) {
     }
 
     return response.text().then((html) => {
-      const cacheContext = __mreactNavigationResponseCacheContext(html, requestCookies);
+      const template = typeof document === "undefined" ? undefined : __mreactParseNavigationHtml(html);
+      const cacheContext = __mreactNavigationResponseCacheContext(template, requestCookies);
       const currentCacheContext = __mreactNavigationCacheContext();
       const cacheContextMatches =
         cacheContext === currentCacheContext && requestCacheContext === currentCacheContext;
@@ -5251,6 +5348,7 @@ function __mreactFetchNavigationHtml(href, options = {}, pendingRequest) {
         html,
         navigationReusable: navigationReusable && cacheContextMatches,
         reusable,
+        template,
       };
     });
   });
@@ -5347,7 +5445,8 @@ function __mreactNormalizeNavigationPath(path) {
   }
 }
 
-export function __mreactRestoreHistoryState(state) {
+export function __mreactRestoreHistoryState(state, operation) {
+  if (operation !== undefined && __mreactNavigationState.operation !== operation) return "superseded";
   if (state === null || state === undefined || state.__mreact !== true) {
     return false;
   }
@@ -5360,6 +5459,10 @@ export function __mreactRestoreHistoryState(state) {
     return false;
   }
 
+  if (operation === undefined) {
+    __mreactNavigationState.operation = {};
+  }
+
   const applied = __mreactApplyNavigationHtml(html, state.url);
 
   if (!applied) {
@@ -5370,15 +5473,14 @@ export function __mreactRestoreHistoryState(state) {
   return true;
 }
 
-function __mreactRestoreHistoryEntry(state) {
+function __mreactRestoreHistoryEntry(state, traversal) {
   // Any later traversal or navigation supersedes a refetch still in flight.
-  const traversal = {};
   __mreactNavigationState.pendingTraversal = traversal;
   // Until the destination is applied the document matches no saved response, so an entry
   // saved meanwhile refetches instead of carrying the departed page.
   __mreactNavigationState.routeHtml = undefined;
 
-  if (__mreactRestoreHistoryState(state)) {
+  if (__mreactRestoreHistoryState(state, traversal)) {
     return true;
   }
 
@@ -5394,9 +5496,9 @@ function __mreactRestoreHistoryEntry(state) {
 
   // An entry without hydratable HTML, such as the initial document, is refetched so the
   // document and its shared layout survive traversal instead of reloading.
-  __mreactSetNavigationState(__mreactPendingNavigationState(href, "pop"));
   __mreactNavigationState.pendingTraversalState = traversal;
-  const superseded = () => __mreactNavigationState.pendingTraversal !== traversal;
+  __mreactSetNavigationState(__mreactPendingNavigationState(href, "pop"));
+  const superseded = () => __mreactNavigationState.operation !== traversal;
   // A navigation that overtook this refetch owns the state only while it is pending itself;
   // a synchronous restore does not touch it, so this traversal still has to settle its own.
   const settleState = () => {
@@ -5405,15 +5507,16 @@ function __mreactRestoreHistoryEntry(state) {
       __mreactSetNavigationState(__mreactIdleNavigationState());
     }
   };
-  return __mreactResolveNavigationHtml(href)
+  return __mreactResolveNavigationHtml(href, traversal)
     .then(
-      (html) => {
+      (response) => {
         if (superseded()) {
           settleState();
           return "superseded";
         }
         settleState();
-        if (html === undefined || !__mreactApplyNavigationHtml(html, href)) {
+        if (superseded()) return "superseded";
+        if (response === undefined || !__mreactApplyNavigationHtml(response.html, href, response)) {
           return false;
         }
         __mreactScrollTo(Number(state.scrollX ?? 0), Number(state.scrollY ?? 0));
@@ -5430,8 +5533,8 @@ function __mreactRestoreHistoryEntry(state) {
     });
 }
 
-function __mreactFinishHistoryTraversal(state, restored) {
-  if (restored === "superseded") {
+function __mreactFinishHistoryTraversal(state, restored, traversal) {
+  if (restored === "superseded" || __mreactNavigationState.operation !== traversal) {
     return;
   }
 
@@ -5445,22 +5548,35 @@ function __mreactFinishHistoryTraversal(state, restored) {
   __mreactDispatchUrlCommit();
 }
 
-function __mreactTraverseHistory(state) {
-  const restored = __mreactRestoreHistoryEntry(state);
+function __mreactTraverseHistory(state, traversal) {
+  if (traversal === undefined) {
+    traversal = {};
+    __mreactNavigationState.operation = traversal;
+  } else if (__mreactNavigationState.operation !== traversal) {
+    return;
+  }
+  const restored = __mreactRestoreHistoryEntry(state, traversal);
 
   if (restored === true || restored === false) {
-    __mreactFinishHistoryTraversal(state, restored);
+    __mreactFinishHistoryTraversal(state, restored, traversal);
     return;
   }
 
-  void restored.then((result) => __mreactFinishHistoryTraversal(state, result));
+  void restored.then((result) => __mreactFinishHistoryTraversal(state, result, traversal));
 }
 
-function __mreactApplyNavigationHtml(html, url) {
-  // Whatever is applied now outranks a history refetch still in flight.
-  __mreactNavigationState.pendingTraversal = undefined;
+function __mreactParseNavigationHtml(html) {
   const template = document.createElement("template");
   template.innerHTML = html.replace(/^\\s*<!doctype html>/i, "");
+  return template;
+}
+
+function __mreactApplyNavigationHtml(html, url, response) {
+  // Whatever is applied now outranks a history refetch still in flight.
+  __mreactNavigationState.pendingTraversal = undefined;
+  const template = response?.template ?? __mreactParseNavigationHtml(html);
+  // A shared fetch result lends its fragment to one consumer; caches retain only strings.
+  if (response !== undefined) response.template = undefined;
   __mreactApplyOutOfOrderFragments(template.content);
   const nextMarker = template.content.querySelector("[${routeHydrationContract.routeMarkerAttribute}]");
   const currentMarker = document.querySelector("[${routeHydrationContract.routeMarkerAttribute}]");
@@ -6032,7 +6148,7 @@ function __mreactInstallNavigation() {
   const pending = __mreactGlobal.__mreactPendingHistoryTraversal;
   delete __mreactGlobal.__mreactPendingHistoryTraversal;
   if (pending !== undefined) {
-    __mreactTraverseHistory(pending.state);
+    __mreactTraverseHistory(pending.state, pending.operation);
   } else {
     __mreactSaveCurrentHistoryState();
   }
@@ -6122,16 +6238,18 @@ function __mreactInstallNavigation() {
     }
 
     event.preventDefault();
+    const operation = {};
+    __mreactNavigationState.operation = operation;
     void __mreactNavigate(nextUrl.href, {
       scroll: __mreactAnchorScrollMode(anchor),
       transition: __mreactAnchorTransitionMode(anchor),
-    })
+    }, operation)
       .then((navigated) => {
-        if (!navigated) {
+        if (!navigated && __mreactNavigationState.operation === operation) {
           location.href = nextUrl.href;
         }
       }).catch(() => {
-        location.href = nextUrl.href;
+        if (__mreactNavigationState.operation === operation) location.href = nextUrl.href;
       });
   });
 }
@@ -6519,6 +6637,17 @@ function workspaceRuntimePlugin(options: {
   return {
     name: "mreact-workspace-runtime",
     setup(buildApi: RouterCompatBuildApi) {
+      buildApi.onResolve({ filter: /^mreact-route-deferred-navigation$/ }, () => ({
+        namespace: "mreact-route-deferred-navigation", path: "navigation",
+      }));
+      buildApi.onLoad({ filter: /^navigation$/, namespace: "mreact-route-deferred-navigation" }, () => ({
+        // Keep each route's import promise and event callbacks scoped to its bridge instance.
+        contents: `export function __mreactCreateDeferredNavigationRuntime() {
+const __mreactGlobal = globalThis;
+${deferredNavigationRuntimeSource().replaceAll("export async function", "async function")}
+return { __mreactNavigate, __mreactPrefetch, __mreactInvalidateNavigationCache, __mreactRestoreHistoryState, __mreactGetNavigationState, __mreactInstallNavigation };
+}`,
+      }));
       buildApi.onResolve({ filter: routeHydrationRuntimeSpecifierFilter }, (args) => {
         const runtimeModule = routeHydrationRuntimeModuleFor(args.path);
 

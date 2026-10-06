@@ -30,7 +30,7 @@ export function commitFiberRoot(
   const mutationEffectErrors: unknown[] = [];
   if (root.refCleanupKnown !== true || root.current.hasRefSubtree || finishedWork.hasRefSubtree) {
     runWithHostCommit(() => {
-      mutationEffectErrors.push(...cleanupDeletedRefs(root.current, finishedWork));
+      mutationEffectErrors.push(...cleanupDeletedRefs(root.current, finishedWork, root.refCleanupKnown === true));
     });
   }
   const shouldCleanupDeletedSubtrees = mayHaveDeletedFiberSubtrees(finishedWork);
@@ -202,16 +202,16 @@ function disposeHostFiberEventListeners(fiber: Fiber): void {
   }
 }
 
-function cleanupDeletedRefs(previous: Fiber, next: Fiber): unknown[] {
+function cleanupDeletedRefs(previous: Fiber, next: Fiber, refSummariesKnown: boolean): unknown[] {
   const errors: unknown[] = [];
   const nextRefNodes = new Map<unknown, Set<unknown>>();
-  for (const record of collectRefRecords(next)) {
+  for (const record of collectRefRecords(next, [], refSummariesKnown)) {
     const nodes = nextRefNodes.get(record.ref) ?? new Set<unknown>();
     nodes.add(record.node);
     nextRefNodes.set(record.ref, nodes);
   }
 
-  for (const record of collectRefRecords(previous)) {
+  for (const record of collectRefRecords(previous, [], refSummariesKnown)) {
     if (nextRefNodes.get(record.ref)?.has(record.node) !== true) {
       try {
         detachRef(record.ref, record.node);
@@ -224,18 +224,23 @@ function cleanupDeletedRefs(previous: Fiber, next: Fiber): unknown[] {
   return errors;
 }
 
-function collectRefRecords(fiber: Fiber | undefined): RefRecord[] {
-  const records: RefRecord[] = [];
+function collectRefRecords(
+  fiber: Fiber | undefined,
+  records: RefRecord[] = [],
+  refSummariesKnown = false,
+): RefRecord[] {
   let cursor = fiber;
 
   while (cursor !== undefined) {
-    const ref = getFiberRef(cursor);
+    if (!refSummariesKnown || cursor.hasRefSubtree) {
+      const ref = getFiberRef(cursor);
 
-    if (ref !== undefined && ref !== null) {
-      records.push({ ref, node: cursor.stateNode });
+      if (ref !== undefined && ref !== null) {
+        records.push({ ref, node: cursor.stateNode });
+      }
+
+      collectRefRecords(cursor.child, records, refSummariesKnown);
     }
-
-    records.push(...collectRefRecords(cursor.child));
     cursor = cursor.sibling;
   }
 

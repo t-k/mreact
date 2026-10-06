@@ -21,6 +21,9 @@ import { ChildDeletion, Placement, Ref, Update } from "./fiber-flags.js";
 import { createFiber, createWorkInProgress, type Fiber } from "./fiber.js";
 import { getPendingProps } from "./prop-comparison.js";
 
+const deletionMembershipThreshold = 32;
+const deletionMembership = new WeakMap<Fiber[], Set<Fiber>>();
+
 export function reconcileChildFibers(
   parent: Fiber,
   currentFirstChild: Fiber | undefined,
@@ -307,11 +310,24 @@ function isLazyType(value: unknown): boolean {
 
 function markChildForDeletion(parent: Fiber, child: Fiber): void {
   parent.flags |= ChildDeletion;
-  parent.deletions = parent.deletions ?? [];
-  if (parent.deletions.includes(child)) {
+  const deletions = (parent.deletions ??= []);
+  if (deletions.length < deletionMembershipThreshold) {
+    if (!deletions.includes(child)) {
+      deletions.push(child);
+    }
     return;
   }
-  parent.deletions.push(child);
+
+  // The array owns membership so resetting deletions also releases the index.
+  let membership = deletionMembership.get(deletions);
+  if (membership === undefined) {
+    membership = new Set(deletions);
+    deletionMembership.set(deletions, membership);
+  }
+  if (!membership.has(child)) {
+    membership.add(child);
+    deletions.push(child);
+  }
 }
 
 function collectKeyedChildren(

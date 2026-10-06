@@ -623,6 +623,14 @@ function registerCompilerStaticPropertyText(
   node: Text,
   property: PropertyKey,
 ): void {
+  const bindings = context[compilerRowStaticPropertyTexts];
+
+  // A row uses either the single binding fields or the packed binding array.
+  if (bindings !== undefined) {
+    bindings.push(node, property);
+    return;
+  }
+
   const firstNode = context[compilerRowStaticPropertyTextNode];
 
   if (firstNode === undefined) {
@@ -631,13 +639,14 @@ function registerCompilerStaticPropertyText(
     return;
   }
 
-  const bindings = (context[compilerRowStaticPropertyTexts] ??= [
+  context[compilerRowStaticPropertyTexts] = [
     firstNode,
     context[compilerRowStaticPropertyTextKey] as PropertyKey,
-  ]);
+    node,
+    property,
+  ];
   context[compilerRowStaticPropertyTextNode] = undefined;
   context[compilerRowStaticPropertyTextKey] = undefined;
-  bindings.push(node, property);
 }
 
 function registerCompilerRowTextSubscription(
@@ -901,11 +910,19 @@ function tryReplaceDisjointSingleNodeItems<T, TNode extends ChildNode>(
   selectedClassState: SelectedClassState | undefined,
 ): Map<unknown, SingleNodeRecord> | undefined {
   const length = currentItems.length;
+  const firstKey = key(currentItems[0] as T, 0, currentItems);
+
+  if (records.has(firstKey)) {
+    return undefined;
+  }
+
   // oxlint-disable-next-line unicorn/no-new-array -- keys are filled sequentially and reused while creating records.
   const keys = new Array<unknown>(length);
   const seenKeys = new Set<unknown>();
+  keys[0] = firstKey;
+  seenKeys.add(firstKey);
 
-  for (let index = 0; index < length; index += 1) {
+  for (let index = 1; index < length; index += 1) {
     const itemKey = key(currentItems[index] as T, index, currentItems);
 
     if (seenKeys.has(itemKey) || records.has(itemKey)) {
