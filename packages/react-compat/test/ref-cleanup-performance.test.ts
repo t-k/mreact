@@ -3,7 +3,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { commitFiberRoot, detachFiberRefs } from "../src/fiber-commit.js";
 import { createFiber, createFiberRoot, type Fiber } from "../src/fiber.js";
-import { createElement, createRoot } from "../src/index.js";
+import { getFiberRootForContainer } from "../src/fiber-work-loop.js";
+import { createElement, createRoot, Suspense } from "../src/index.js";
 import { attachRef } from "../src/ref-lifecycle.js";
 import * as refLifecycle from "../src/ref-lifecycle.js";
 
@@ -152,5 +153,72 @@ describe("ref cleanup traversal", () => {
     expect(container.querySelector("span")).toBe(retained);
     root.unmount();
     expect(log).toEqual(["a", "b"]);
+  });
+
+  it.each([false, true])("detaches Suspense fallback refs before attaching resolved refs with known summaries (cleanup: %s)", async (returnsCleanup) => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const log: string[] = [];
+    let attached: string | undefined;
+    const ref = (node: HTMLElement | null) => {
+      if (node === null) {
+        log.push(`detach:${attached}`);
+        attached = undefined;
+        return;
+      }
+      const label = node.tagName.toLowerCase();
+      attached = label;
+      log.push(`attach:${label}`);
+      if (returnsCleanup) {
+        return () => { log.push(`cleanup:${label}`); };
+      }
+    };
+    let ready = false;
+    let resolvePromise: () => void = () => {};
+    const promise = new Promise<void>((resolve) => { resolvePromise = resolve; });
+    function AsyncChild() {
+      if (!ready) throw promise;
+      return createElement("span", { ref }, "ready");
+    }
+    function App() {
+      return createElement("section", null, [
+        createElement("aside", { key: "empty" }, createElement("p", null, "no ref")),
+        createElement(Suspense, {
+          key: "boundary",
+          fallback: createElement("em", { ref }, "loading"),
+        }, createElement(AsyncChild, null)),
+      ]);
+    }
+    let unmounted = false;
+    try {
+      root.render(createElement(App, null));
+      const fiberRoot = getFiberRootForContainer(container);
+      const section = fiberRoot?.current.child?.child;
+      expect(fiberRoot?.refCleanupKnown).toBe(true);
+      expect(fiberRoot?.current.hasRefSubtree).toBe(true);
+      expect(section?.child?.hasRefSubtree).toBe(false);
+      expect(section?.child?.sibling?.hasRefSubtree).toBe(true);
+      expect(container.querySelector("em")?.textContent).toBe("loading");
+      expect(log).toEqual(["attach:em"]);
+
+      ready = true;
+      resolvePromise();
+      await promise;
+      await Promise.resolve();
+
+      const detach = returnsCleanup ? "cleanup" : "detach";
+      expect(fiberRoot?.refCleanupKnown).toBe(true);
+      expect(fiberRoot?.current.hasRefSubtree).toBe(true);
+      expect(container.querySelector("em")).toBeNull();
+      expect(container.querySelector("span")?.textContent).toBe("ready");
+      expect(log).toEqual(["attach:em", `${detach}:em`, "attach:span"]);
+
+      root.unmount();
+      unmounted = true;
+      expect(container.innerHTML).toBe("");
+      expect(log).toEqual(["attach:em", `${detach}:em`, "attach:span", `${detach}:span`]);
+    } finally {
+      if (!unmounted) root.unmount();
+    }
   });
 });
