@@ -80,6 +80,21 @@ test("zero interval sweeps actual mutable expiries on every write", () => {
   expect(cache.get("second")).toBeDefined();
 });
 
+test.each(["get", "sweep"])("expiry getters may invalidate their entry during %s", (mode) => {
+  vi.spyOn(Date, "now").mockReturnValue(1000);
+  const cache = createMemoryRouteCache({ sweepIntervalMs: 0 });
+  cache.set("self", {
+    ...entry("/self"),
+    get expiresAt() {
+      cache.deleteByPath("/self");
+      return 999;
+    },
+  });
+  if (mode === "get") expect(cache.get("self")).toBeUndefined();
+  else cache.set("next", entry("/next"));
+  expect(cache.get("self")).toBeUndefined();
+});
+
 test("memory cache traces preserve expiration, capacity order, replacement and path invalidation", () => {
   let now = 1000;
   vi.spyOn(Date, "now").mockImplementation(() => now);
