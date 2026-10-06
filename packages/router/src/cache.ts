@@ -116,7 +116,7 @@ registerRouteCache(cacheState.memoryCache);
 /**
  * Creates an in-memory route response cache for app-router rendering.
  *
- * The cache is process-local, evicts expired entries during reads/writes, and is suitable for development, tests, or single-process deployments that do not need shared invalidation.
+ * The cache is process-local and checks expiration on reads and periodic write sweeps. Capacity eviction follows insertion/update order; an oldest live entry can be evicted while a newer expired entry awaits its next read or sweep. It is suitable for development, tests, or single-process deployments that do not need shared invalidation.
  */
 export function createMemoryRouteCache(options: MemoryRouteCacheOptions = {}): AppRouterCache {
   const maxEntries = positiveIntegerOrDefault(options.maxEntries, 10_000);
@@ -225,7 +225,6 @@ export function createMemoryRouteCache(options: MemoryRouteCacheOptions = {}): A
       indexKey(key, entry.path);
 
       if (cachedRoutes.size > maxEntries) {
-        sweepExpired(now);
         evictOldestEntries();
       }
     },
