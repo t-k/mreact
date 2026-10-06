@@ -28,6 +28,7 @@ describe("native HTML template void elements", () => {
       code: `export function App() { return <div><${tag} /><span>after</span></div>; }`,
       filename: "void-elements.tsx",
       target: "client",
+      dev: false,
     });
 
     expect(output.diagnostics).toEqual([]);
@@ -41,6 +42,7 @@ describe("native HTML template void elements", () => {
       }`,
       filename: "select-after-break.tsx",
       target: "client",
+      dev: false,
     });
     expect(output.diagnostics).toEqual([]);
     const App = compileClientComponent(output.code) as unknown as (props: {
@@ -82,6 +84,7 @@ describe("native HTML template void elements", () => {
       code: "export function App() { return <svg><source /><path /></svg>; }",
       filename: "svg-source.tsx",
       target: "client",
+      dev: false,
     });
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain("<source></source><path></path>");

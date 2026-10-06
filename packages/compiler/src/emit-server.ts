@@ -16,6 +16,7 @@ import {
   parseStaticStyleObjectLiteral,
   parseStyleLiteralValue,
   simpleSideEffectFreeExpression,
+  staticTextSeparatedHtml,
   type OptionSelectedLocalNames,
 } from "./emit-server-shared.js";
 import {
@@ -33,6 +34,7 @@ export interface EmitServerOptions {
   dynamicAttributes?: "drop" | "emit";
   escape?: ServerEscapeOptions | undefined;
   serverHydration?: boolean;
+  preserveMixedTextNodes?: boolean;
 }
 
 // Module-local handle to the URL-safety helper name for the current emit
@@ -54,6 +56,7 @@ let currentRenderServerChildHelperName: string = "_renderServerChild";
 let currentJoinServerHtmlHelperName = "_joinServerHtml";
 let currentAppendServerHtmlHelperName = "_appendServerHtml";
 let currentPromiseAwareComposition = false;
+let currentPreserveMixedTextNodes = false;
 let currentSelectionParameterName: string = "_selectedValue";
 let currentSelectionMultipleParameterName: string = "_selectedMultiple";
 let currentOptionSelectedLocalNames: OptionSelectedLocalNames = {
@@ -109,6 +112,7 @@ function withSelectedValueCode<T>(
 }
 
 export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitResult {
+  currentPreserveMixedTextNodes = options.preserveMixedTextNodes === true;
   currentRouterLinkComponentNames = new Set(ir.routerLinkComponentNames ?? []);
   currentSelectedValueCode = undefined;
   currentSelectedMultipleCode = undefined;
@@ -757,18 +761,23 @@ function collectHtmlStatements(
   }
 
   if (node.kind === "fragment") {
-    return node.children.flatMap((child) =>
-      collectHtmlStatements(
-        child,
-        outVar,
-        escapeHelperName,
-        escapeBatchHelperName,
-        asyncComponentNames,
-        dynamicAttributes,
-        contextProviderHelperName,
-        contextConsumerHelperName,
-        reactNodeRenderHelperName,
-      ),
+    return collectTextSeparatedChildren(
+      node.children,
+      escapeHelperName,
+      escapeBatchHelperName,
+      (expression) => emitHtmlAppend(outVar, expression),
+      (child) =>
+        collectHtmlStatements(
+          child,
+          outVar,
+          escapeHelperName,
+          escapeBatchHelperName,
+          asyncComponentNames,
+          dynamicAttributes,
+          contextProviderHelperName,
+          contextConsumerHelperName,
+          reactNodeRenderHelperName,
+        ),
     );
   }
 
@@ -1127,21 +1136,26 @@ function collectHtmlStatements(
     statements.push(emitHtmlAppend(outVar, `${childrenExpression}`));
   } else {
     withSelectedValueCode(childSelectedValueCode, childSelectedMultipleCode, () => {
-      for (const child of node.children) {
-        statements.push(
-          ...collectHtmlStatements(
-            child,
-            outVar,
-            escapeHelperName,
-            escapeBatchHelperName,
-            asyncComponentNames,
-            dynamicAttributes,
-            contextProviderHelperName,
-            contextConsumerHelperName,
-            reactNodeRenderHelperName,
-          ),
-        );
-      }
+      statements.push(
+        ...collectTextSeparatedChildren(
+          node.children,
+          escapeHelperName,
+          escapeBatchHelperName,
+          (expression) => emitHtmlAppend(outVar, expression),
+          (child) =>
+            collectHtmlStatements(
+              child,
+              outVar,
+              escapeHelperName,
+              escapeBatchHelperName,
+              asyncComponentNames,
+              dynamicAttributes,
+              contextProviderHelperName,
+              contextConsumerHelperName,
+              reactNodeRenderHelperName,
+            ),
+        ),
+      );
     });
   }
 
@@ -1497,17 +1511,22 @@ function collectHtmlParts(
   }
 
   if (node.kind === "fragment") {
-    return node.children.flatMap((child) =>
-      collectHtmlParts(
-        child,
-        escapeHelperName,
-        escapeBatchHelperName,
-        asyncComponentNames,
-        dynamicAttributes,
-        contextProviderHelperName,
-        contextConsumerHelperName,
-        reactNodeRenderHelperName,
-      ),
+    return collectTextSeparatedChildren(
+      node.children,
+      escapeHelperName,
+      escapeBatchHelperName,
+      (expression) => expression,
+      (child) =>
+        collectHtmlParts(
+          child,
+          escapeHelperName,
+          escapeBatchHelperName,
+          asyncComponentNames,
+          dynamicAttributes,
+          contextProviderHelperName,
+          contextConsumerHelperName,
+          reactNodeRenderHelperName,
+        ),
     );
   }
 
@@ -1795,17 +1814,22 @@ function collectHtmlParts(
       ? [dangerousInnerHtml]
       : childrenExpression === undefined || forceChildWalk
         ? withSelectedValueCode(childSelectedValueCode, childSelectedMultipleCode, () =>
-            node.children.flatMap((child) =>
-              collectHtmlParts(
-                child,
-                escapeHelperName,
-                escapeBatchHelperName,
-                asyncComponentNames,
-                dynamicAttributes,
-                contextProviderHelperName,
-                contextConsumerHelperName,
-                reactNodeRenderHelperName,
-              ),
+            collectTextSeparatedChildren(
+              node.children,
+              escapeHelperName,
+              escapeBatchHelperName,
+              (expression) => expression,
+              (child) =>
+                collectHtmlParts(
+                  child,
+                  escapeHelperName,
+                  escapeBatchHelperName,
+                  asyncComponentNames,
+                  dynamicAttributes,
+                  contextProviderHelperName,
+                  contextConsumerHelperName,
+                  reactNodeRenderHelperName,
+                ),
             ),
           )
         : [childrenExpression];
@@ -2581,6 +2605,50 @@ function findOptionTextValueCode(
 
 function rawHtmlExpression(code: string): string {
   return `(function (_renderValue) { return Array.isArray(_renderValue) ? _renderValue.join("") : String(_renderValue ?? ""); })(${code})`;
+}
+
+function isSimpleTextChild(child: JsxNodeIr): boolean {
+  return (
+    child.kind === "text" ||
+    (child.kind === "expr" &&
+      child.renderMode !== "html" &&
+      child.renderMode !== "react-node" &&
+      child.renderMode !== "compat-child")
+  );
+}
+
+function collectTextSeparatedChildren(
+  children: JsxNodeIr[],
+  escapeHelperName: string,
+  escapeBatchHelperName: string | undefined,
+  collectText: (expression: string) => string,
+  collectChild: (child: JsxNodeIr) => string[],
+): string[] {
+  if (!currentPreserveMixedTextNodes) return children.flatMap(collectChild);
+  const parts: string[] = [];
+  for (let index = 0; index < children.length; ) {
+    const child = children[index]!;
+    let end = index + 1;
+    if (isSimpleTextChild(child)) {
+      while (end < children.length && isSimpleTextChild(children[end]!)) end += 1;
+    }
+    let text: string | undefined;
+    if (end > index + 1) {
+      const run = children.slice(index, end);
+      const fixedText = staticTextSeparatedHtml(run);
+      text = fixedText === undefined
+        ? emitTextSeparatedSimpleChildrenExpression(
+            run,
+            escapeHelperName,
+            escapeBatchHelperName,
+          )
+        : stringLiteral(fixedText);
+    }
+    if (text === undefined) parts.push(...collectChild(child));
+    else parts.push(collectText(text));
+    index = end;
+  }
+  return parts;
 }
 
 function emitTextSeparatedSimpleChildrenExpression(

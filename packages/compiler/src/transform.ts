@@ -102,6 +102,7 @@ function transformWithAnalyzer(
                 ? { serverAwaitHydration: true as const }
                 : {}),
               dynamicAttributes: mode === "compat" ? "drop" : "emit",
+              preserveMixedTextNodes: mode === "compat",
               escape: input.serverEscape,
             })
           : emitServer(analyzed.ir, {
@@ -112,6 +113,7 @@ function transformWithAnalyzer(
                 input.serverHydration,
               ),
               dynamicAttributes: mode === "compat" ? "drop" : "emit",
+              preserveMixedTextNodes: mode === "compat",
               escape: input.serverEscape,
             })
         : emitClient(analyzed.ir, {
