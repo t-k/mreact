@@ -29,7 +29,8 @@ afterEach(async () => {
   vi.restoreAllMocks();
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
-async function fixture(publicAssets: string[] | undefined = ["/asset.txt"]) {
+async function fixture(...args: [publicAssets?: string[] | undefined]) {
+  const publicAssets = args.length === 0 ? ["/asset.txt"] : args[0];
   const root = await mkdtemp(join(tmpdir(), "mreact-built-performance-"));
   roots.push(root);
   await mkdir(join(root, "server"), { recursive: true });
@@ -63,6 +64,7 @@ test("public manifest misses perform no per-request asset filesystem reads", asy
 test("legacy manifests discover public assets once while dynamic misses avoid reads", async () => {
   const root = await fixture(undefined);
   const runtime = await createBuiltRequestRuntime({ outDir: root });
+  expect(vi.mocked(readdir)).toHaveBeenCalledTimes(1);
   vi.clearAllMocks();
   const response = await runtime.render(new Request("http://local.test/asset.txt"));
   expect(await response.text()).toBe("public asset");
@@ -102,6 +104,21 @@ test("public paths reject interior parent segments and absolute syntax before I/
     "/asset.txt",
   ]);
   expect([...paths!]).toEqual(["asset.txt"]);
+});
+
+test("invalid legacy fallback URLs cannot reuse an asset named undefined", async () => {
+  const root = await fixture(undefined);
+  await writeFile(join(root, "client", "public", "undefined"), "cached named asset");
+  await symlink(join(root, "client", "public"), join(root, "client", "public", "alias"));
+  const runtime = await createBuiltRequestRuntime({ outDir: root });
+  expect(await (await runtime.render(new Request("http://local.test/undefined"))).text()).toBe(
+    "cached named asset",
+  );
+  vi.clearAllMocks();
+  for (const path of ["/bad%ZZ", "/asset.txt%00"]) {
+    expect((await runtime.render(new Request(`http://local.test${path}`))).status).toBe(404);
+  }
+  expect(publicReads()).toHaveLength(0);
 });
 
 test("safe decoded public manifest paths retain precedence and reject path traversal", async () => {
