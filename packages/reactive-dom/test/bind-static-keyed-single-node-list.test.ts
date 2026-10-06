@@ -5,7 +5,7 @@ import { describe, expect, test, vi } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { bindEvent, bindStaticKeyedSingleNodeList, bindText } from "../src/index.js";
-import { bindCompilerKeyedSingleNodeList, bindCompilerKeyedText } from "../src/internal.js";
+import { bindCompilerKeyedPropertyText, bindCompilerKeyedSingleNodeList, bindCompilerKeyedText } from "../src/internal.js";
 
 describe("bindStaticKeyedSingleNodeList", () => {
   test("moves only the last row for a last-to-front rotation", async () => {
@@ -1373,6 +1373,100 @@ describe("bindStaticKeyedSingleNodeList", () => {
     expect(parent.children[1]?.textContent).toBe("2");
     expect(parent.children[998]?.textContent).toBe("999");
 
+    dispose();
+  });
+
+  test("keeps retained compiler row updates to one list-sized buffer per change", async () => {
+    const initial = Array.from({ length: 1_000 }, (_, index) => ({ id: index + 1, label: `row:${index}` }));
+    const items = cell(initial);
+    const parent = document.createElement("tbody");
+    const marker = document.createComment("rows");
+    parent.append(marker);
+    let keyCalls = 0;
+    const dispose = bindCompilerKeyedSingleNodeList(parent, marker, () => items.get(), (context) => {
+      const row = document.createElement("tr");
+      const text = document.createTextNode("");
+      bindCompilerKeyedPropertyText(context, text, "label");
+      row.append(text);
+      return row;
+    }, { key: (item) => { keyCalls++; return item.id; } });
+    const originalRows = Array.from(parent.children);
+    const unchanged = initial.slice();
+    const changed = initial.slice();
+    changed[500] = { id: 501, label: "replaced" };
+    const ArrayConstructor = Array;
+    const allocations: number[] = [];
+    try {
+      for (const next of [unchanged, changed]) {
+        keyCalls = 0;
+        vi.stubGlobal("Array", new Proxy(ArrayConstructor, {
+          construct(target, argumentsList, newTarget) {
+            if (argumentsList.length === 1 && argumentsList[0] === initial.length) allocations.push(argumentsList[0]);
+            return Reflect.construct(target, argumentsList, newTarget);
+          },
+        }));
+        try {
+          items.set(next);
+          await flushEffects();
+        } finally {
+          vi.unstubAllGlobals();
+        }
+        expect(keyCalls).toBeLessThanOrEqual(initial.length + 1);
+        expect(Array.from(parent.children)).toEqual(originalRows);
+      }
+      expect(parent.children[500]?.textContent).toBe("replaced");
+      expect(allocations.length).toBeLessThanOrEqual(2);
+    } finally {
+      vi.unstubAllGlobals();
+      dispose();
+    }
+  });
+
+  test("keeps Map's zero key identity when a compiler row changes from negative to positive zero", async () => {
+    const items = cell([{ id: -0, label: "old" }, { id: 1, label: "one" }, { id: 2, label: "two" }]);
+    const parent = document.createElement("tbody");
+    const marker = document.createComment("rows");
+    parent.append(marker);
+    let keyCalls = 0;
+    const dispose = bindCompilerKeyedSingleNodeList(parent, marker, () => items.get(), (context) => {
+      const row = document.createElement("tr");
+      const text = document.createTextNode("");
+      bindCompilerKeyedPropertyText(context, text, "label");
+      row.append(text);
+      return row;
+    }, { key: (item) => { keyCalls++; return item.id; } });
+    const original = parent.firstElementChild;
+    keyCalls = 0;
+    items.set([{ id: 0, label: "new" }, ...items.get().slice(1)]);
+    await flushEffects();
+    expect(parent.firstElementChild).toBe(original);
+    expect(original?.textContent).toBe("new");
+    expect(keyCalls).toBeLessThanOrEqual(items.get().length + 1);
+    dispose();
+  });
+
+  test("evaluates each key once when creating and replacing a disjoint compiler list", async () => {
+    const makeRows = (offset: number) => Array.from({ length: 8 }, (_, index) => ({ id: offset + index, label: `row:${offset + index}` }));
+    const items = cell(makeRows(1));
+    const parent = document.createElement("tbody");
+    const marker = document.createComment("rows");
+    parent.append(marker);
+    let keyCalls = 0;
+    const dispose = bindCompilerKeyedSingleNodeList(parent, marker, () => items.get(), (context) => {
+      const row = document.createElement("tr");
+      const text = document.createTextNode("");
+      bindCompilerKeyedPropertyText(context, text, "label");
+      row.append(text);
+      return row;
+    }, { key: (item) => { keyCalls++; return item.id; } });
+    expect(keyCalls).toBe(items.get().length);
+    const oldRows = Array.from(parent.children);
+    keyCalls = 0;
+    items.set(makeRows(20));
+    await flushEffects();
+    expect(keyCalls).toBe(items.get().length);
+    expect(Array.from(parent.children, (row) => row.textContent)).toEqual(items.get().map((item) => item.label));
+    expect(oldRows.every((row) => row.parentNode === null)).toBe(true);
     dispose();
   });
 
