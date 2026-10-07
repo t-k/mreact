@@ -1,3 +1,12 @@
+const validHtmlTagName = /^[a-zA-Z][a-zA-Z0-9:._-]*$/;
+
+/** Rejects tag names that could inject attributes or markup into server-rendered HTML. */
+export function assertValidHtmlTagName(tagName: string): void {
+  if (!validHtmlTagName.test(tagName)) {
+    throw new Error("Invalid HTML tag name.");
+  }
+}
+
 const voidHtmlElementNames = new Set([
   "area",
   "base",

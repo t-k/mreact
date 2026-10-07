@@ -7,7 +7,7 @@ import {
 } from "@reckona/mreact-compat";
 import type { HtmlSink } from "@reckona/mreact-shared/compiler-contract";
 import { escapeHtmlText as escapeHtml } from "@reckona/mreact-shared/html-escape";
-import { isVoidHtmlElement } from "@reckona/mreact-shared";
+import { assertValidHtmlTagName, isVoidHtmlElement } from "@reckona/mreact-shared";
 import {
   renderReactSuspenseBoundary,
   renderReactSuspenseOutOfOrderBoundary,
@@ -281,6 +281,7 @@ function appendHostElement(
   state: HtmlRenderState,
 ): void | PromiseLike<void> {
   const tagName = element.type as string;
+  assertValidHtmlTagName(tagName);
   const hasInnerHtml = Object.hasOwn(element.props, "dangerouslySetInnerHTML");
   const innerHtml = hasInnerHtml
     ? readDangerousHtmlOptIn(element.props.dangerouslySetInnerHTML)

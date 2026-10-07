@@ -95,7 +95,7 @@ export type PostponedState = unknown;
 
 /** Renders a React-compatible node to an HTML string. */
 export function renderToString(element: ReactCompatNode, _options?: ServerOptions): string {
-  return renderCompatToString(() => element);
+  return renderCompatToString(() => element, undefined, { stringResult: "text" });
 }
 
 /** Renders a React-compatible node to static HTML without hydration metadata. */

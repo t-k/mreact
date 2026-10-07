@@ -33,7 +33,7 @@ import {
   isUnsafeUrlAttribute,
 } from "./url-safety.js";
 import { escapeHtmlAttribute as escapeHtml } from "@reckona/mreact-shared/html-escape";
-import { isEventLikePropName, isVoidHtmlElement } from "@reckona/mreact-shared";
+import { assertValidHtmlTagName, isEventLikePropName, isVoidHtmlElement } from "@reckona/mreact-shared";
 
 const serverSelectionContextKey = Symbol.for("mreact.server.selected-value");
 const serverSelectionMultipleContextKey = Symbol.for("mreact.server.select-multiple");
@@ -258,6 +258,7 @@ function renderIntrinsicElementToString(
   runtime: RootRuntime,
   path: string,
 ): string {
+  assertValidHtmlTagName(tagName);
   const attributes =
     tagName === "input" ? renderInputAttributesToString(props) : renderAttributesToString(props);
   if (isVoidHtmlElement(tagName)) {
