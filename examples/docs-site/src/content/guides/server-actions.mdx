@@ -134,7 +134,9 @@ export async function saveNote(
 }
 ```
 
-Keep authorization and validation in the action or in helpers called by the action. The form reference proves that the user submitted a rendered form, but it does not replace application-level permission checks.
+Keep authorization and validation in the action or in helpers called by the action. The form reference proves that the user submitted a rendered form, but it does not replace application-level permission checks. A configured `serverActions.authorize` callback must explicitly return `true` to allow a request; `false`, a denial message, or a missing return denies it. The JSON handler's optional `validateArgs` callback follows the same rule. Omitting a callback preserves the default behavior, so enforce your application's permissions in the action when you do not configure one.
+
+Unexpected action, authorization, validation, or registry-loading exceptions return HTTP 500 with `{ ok: false, error: "Server action failed.", errorId }`. Exception messages and stacks stay in server logs under the same opaque `errorId`, including during development. Return an explicit result for expected input or business errors that the caller should see; do not throw an exception to expose its message to the client.
 
 ## Revalidate cached routes
 

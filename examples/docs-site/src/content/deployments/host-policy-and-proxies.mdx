@@ -34,7 +34,9 @@ await startServer({
 });
 ```
 
-Use `hostPolicy: "strict"` when your app is directly reachable from the internet or when you want the app server to reject unknown hosts even behind a load balancer.
+Use `hostPolicy: "strict"` to stop trusting an unlisted Host when constructing the request URL. The Node adapter replaces an unlisted Host with its fallback authority; it continues processing the request and does not return an HTTP rejection. If `allowedHosts` is omitted, strict mode uses the fallback authority for every Host. With both `allowedHosts` and `hostPolicy` omitted, the adapter preserves the incoming Host for legacy compatibility and warns in production.
+
+Configure your reverse proxy or HTTP entrypoint to reject unknown hosts before forwarding requests when you need HTTP rejection. An allow-list controls the authority Mreact trusts; it does not replace this entrypoint policy. Verify the fallback authority for redirects and other absolute URLs as well as the allowed public hosts.
 
 ## Use trusted proxy intentionally
 
