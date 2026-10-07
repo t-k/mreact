@@ -7,6 +7,7 @@ import {
   hasModuleDirective,
 } from "@reckona/mreact-compiler";
 import {
+  createServerActionErrorResponse,
   createServerActionHandler,
   ensureServerActionReplayStoreContract,
   type ServerActionHandlerOptions,
@@ -504,10 +505,7 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
         importPolicy: options.importPolicy,
       });
     } catch (error) {
-      return jsonResponse(
-        { ok: false, error: error instanceof Error ? error.message : String(error) },
-        500,
-      );
+      return createServerActionErrorResponse(error);
     }
 
     const replayStore = options.serverActions?.replayStore ?? usedFormActionNonces;
@@ -605,10 +603,7 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
       importPolicy: options.importPolicy,
     });
   } catch (error) {
-    return jsonResponse(
-      { ok: false, error: error instanceof Error ? error.message : String(error) },
-      500,
-    );
+    return createServerActionErrorResponse(error);
   }
 
   const action = registry[`${moduleId}#${exportName}`];
@@ -638,6 +633,7 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
 
   let actionResponse: Response | undefined;
   let actionError: unknown;
+  let actionFailed = false;
   try {
     const value = await action(actionFormData, createServerActionContext(options.request));
 
@@ -649,6 +645,7 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
       actionResponse = jsonResponse({ ok: true, value }, 200);
     }
   } catch (error) {
+    actionFailed = true;
     actionError = error;
   }
 
@@ -658,12 +655,7 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
     return replayStoreUnavailableResponse();
   }
 
-  return actionError === undefined
-    ? actionResponse!
-    : jsonResponse(
-        { ok: false, error: actionError instanceof Error ? actionError.message : String(actionError) },
-        500,
-      );
+  return actionFailed ? createServerActionErrorResponse(actionError) : actionResponse!;
 }
 
 function createServerActionContext(request: Request): ServerActionContext {
@@ -896,9 +888,14 @@ async function authorizeFormAction(options: {
     exportName: options.exportName,
     moduleId: options.moduleId,
   };
-  const authorizationResult = await options.authorize?.(options.request, reference, options.args);
+  let authorizationResult: ServerActionValidationResult | undefined;
+  try {
+    authorizationResult = await options.authorize?.(options.request, reference, options.args);
+  } catch (error) {
+    return createServerActionErrorResponse(error);
+  }
 
-  return authorizationResult !== undefined && authorizationResult !== true
+  return options.authorize !== undefined && authorizationResult !== true
     ? jsonResponse(
         {
           ok: false,
@@ -909,7 +906,7 @@ async function authorizeFormAction(options: {
     : undefined;
 }
 
-function authorizationError(result: Exclude<ServerActionValidationResult, true>): string {
+function authorizationError(result: Exclude<ServerActionValidationResult, true> | undefined): string {
   return typeof result === "string" ? result : "Server action not authorized.";
 }
 

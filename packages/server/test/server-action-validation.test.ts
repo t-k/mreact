@@ -150,7 +150,7 @@ describe("createServerActionHandler validation branches", () => {
     });
   });
 
-  test("action throws return 500 with the message", async () => {
+  test("action throws return a private 500 response", async () => {
     const handle = createServerActionHandler(actions, { csrf: false });
     const response = await handle(
       sameOriginPost({
@@ -162,11 +162,12 @@ describe("createServerActionHandler validation branches", () => {
     expect(response.status).toBe(500);
     await expect(response.json()).resolves.toEqual({
       ok: false,
-      error: "boom",
+      error: "Server action failed.",
+      errorId: expect.any(String),
     });
   });
 
-  test("action throws a non-Error value uses String() coercion for the error message", async () => {
+  test("action throws a non-Error value returns a private 500 response", async () => {
     const handle = createServerActionHandler(
       {
         "actions/save#save": () => {
@@ -186,7 +187,8 @@ describe("createServerActionHandler validation branches", () => {
     expect(response.status).toBe(500);
     await expect(response.json()).resolves.toEqual({
       ok: false,
-      error: "literal-string-error",
+      error: "Server action failed.",
+      errorId: expect.any(String),
     });
   });
 

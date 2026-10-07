@@ -1334,6 +1334,7 @@ export async function save() {
   });
 
   test("rejects server action package imports unless explicitly allowed", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-package-policy-"));
     await writePackageFixture(appDir);
     await writeFile(
@@ -1385,8 +1386,14 @@ export function echo() {
     expect(blocked.status).toBe(500);
     await expect(blocked.json()).resolves.toEqual({
       ok: false,
-      error: expect.stringContaining('"fixture-lib" is imported by a server action'),
+      error: "Server action failed.",
+      errorId: expect.any(String),
     });
+    expect(log).toHaveBeenCalledWith("mreact-server: Server action failed.", {
+      errorId: expect.any(String),
+      error: expect.objectContaining({ message: expect.stringContaining('"fixture-lib" is imported by a server action') }),
+    });
+    log.mockRestore();
     expect(allowed.status).toBe(200);
     await expect(allowed.json()).resolves.toMatchObject({
       ok: true,
@@ -1394,7 +1401,8 @@ export function echo() {
     });
   });
 
-  test("explains likely app-local alias imports in import policy errors", async () => {
+  test("logs likely app-local alias imports without exposing them in responses", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-action-alias-policy-"));
     await writeFile(
       join(appDir, "page.tsx"),
@@ -1442,9 +1450,14 @@ export async function save() {
     });
 
     expect(response.status).toBe(500);
-    await expect(response.text()).resolves.toContain(
-      "This looks like an app-local alias import. Use a relative import such as",
-    );
+    await expect(response.json()).resolves.toEqual({
+      ok: false, error: "Server action failed.", errorId: expect.any(String),
+    });
+    expect(log).toHaveBeenCalledWith("mreact-server: Server action failed.", {
+      errorId: expect.any(String),
+      error: expect.objectContaining({ message: expect.stringContaining("This looks like an app-local alias import. Use a relative import such as") }),
+    });
+    log.mockRestore();
   });
 
   test("rejects JSON server action nonce replay", async () => {

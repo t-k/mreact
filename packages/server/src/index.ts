@@ -4,6 +4,8 @@ import {
   type ReactCompatNode,
 } from "@reckona/mreact-compat";
 
+export { createServerActionErrorResponse } from "./server-action-error.js";
+
 /** Fragment marker used to group children without emitting an extra element. */
 export { Fragment } from "@reckona/mreact-compat";
 /** Any value accepted by the React-compatible renderer. */

@@ -1,6 +1,7 @@
 import { createCacheScope, runWithCacheScope } from "@reckona/mreact-compat/internal";
 import { REACT_CLIENT_REFERENCE_TYPE } from "@reckona/mreact-shared";
 import { getNativeFlight } from "./native-flight.js";
+import { createServerActionErrorResponse } from "./server-action-error.js";
 
 /** Symbol tag used to identify client references in serialized Flight values. */
 export const CLIENT_REFERENCE_TYPE: typeof REACT_CLIENT_REFERENCE_TYPE =
@@ -624,9 +625,14 @@ export function createServerActionHandler(
     }
 
     const args = [...boundArgs, ...extraArgs];
-    const validationResult = validateArgs?.(args);
+    let validationResult: ServerActionValidationResult | undefined;
+    try {
+      validationResult = validateArgs?.(args);
+    } catch (error) {
+      return createServerActionErrorResponse(error);
+    }
 
-    if (validationResult !== undefined && validationResult !== true) {
+    if (validateArgs !== undefined && validationResult !== true) {
       return jsonResponse(
         {
           ok: false,
@@ -639,9 +645,14 @@ export function createServerActionHandler(
       );
     }
 
-    const authorizationResult = await options.authorize?.(request, reference, args);
+    let authorizationResult: ServerActionValidationResult | undefined;
+    try {
+      authorizationResult = await options.authorize?.(request, reference, args);
+    } catch (error) {
+      return createServerActionErrorResponse(error);
+    }
 
-    if (authorizationResult !== undefined && authorizationResult !== true) {
+    if (options.authorize !== undefined && authorizationResult !== true) {
       return jsonResponse(
         {
           ok: false,
@@ -661,9 +672,11 @@ export function createServerActionHandler(
 
     let value: unknown;
     let actionError: unknown;
+    let actionFailed = false;
     try {
       value = await action(...args);
     } catch (error) {
+      actionFailed = true;
       actionError = error;
     }
 
@@ -673,14 +686,8 @@ export function createServerActionHandler(
       return replayStoreUnavailableResponse();
     }
 
-    if (actionError !== undefined) {
-      return jsonResponse(
-        {
-          ok: false,
-          error: actionError instanceof Error ? actionError.message : String(actionError),
-        },
-        500,
-      );
+    if (actionFailed) {
+      return createServerActionErrorResponse(actionError);
     }
 
     return jsonResponse({ ok: true, value }, 200);
