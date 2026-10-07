@@ -5,6 +5,9 @@
 ```ts
 
 // @public
+export function assertValidHtmlTagName(tagName: string): void;
+
+// @public
 export interface ClientReferenceMetadata {
     // (undocumented)
     exportName: string;

@@ -45,6 +45,9 @@ export function createEventHydrationManifest(events: readonly EventHydrationEntr
 export function createFlightClientManifest(references: readonly FlightClientReferenceInput[], resolveChunks: (reference: FlightClientReferenceInput) => string[]): FlightClientManifestEntry[];
 
 // @public
+export function createServerActionErrorResponse(error: unknown): Response;
+
+// @public
 export function createServerActionHandler(actions: ServerActionRegistry, options?: ServerActionHandlerOptions): (request: Request) => Promise<Response>;
 
 // @public

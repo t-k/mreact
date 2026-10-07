@@ -670,11 +670,12 @@ export function createServerActionHandler(
       return replayClaim;
     }
 
-    let value: unknown;
+    let actionResponse: Response | undefined;
     let actionError: unknown;
     let actionFailed = false;
     try {
-      value = await action(...args);
+      const value = await action(...args);
+      actionResponse = jsonResponse({ ok: true, value }, 200);
     } catch (error) {
       actionFailed = true;
       actionError = error;
@@ -690,7 +691,7 @@ export function createServerActionHandler(
       return createServerActionErrorResponse(actionError);
     }
 
-    return jsonResponse({ ok: true, value }, 200);
+    return actionResponse!;
   };
 }
 

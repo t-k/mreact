@@ -17,9 +17,15 @@ function readPipeable(stream: PipeableStream): Promise<string> {
   return new Promise((resolve, reject) => {
     let html = "";
     stream.pipe({
-      write(chunk) { html += String(chunk); },
-      end() { resolve(html); },
-      destroy(error) { reject(error); },
+      write(chunk) {
+        html += String(chunk);
+      },
+      end() {
+        resolve(html);
+      },
+      destroy(error) {
+        reject(error);
+      },
     });
   });
 }

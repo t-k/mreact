@@ -65,6 +65,7 @@
     "test:react-conformance": "vitest run packages/react-compat/test/react-official-conformance.test.ts packages/react-compat/test/react-official-suite-gate.test.ts packages/react/test/drop-in-react.test.ts packages/react-dom/test/drop-in-react-dom.test.ts packages/scheduler/test/drop-in-scheduler.test.ts",
     "test:mutation": "pnpm test:mutation:all",
     "test:mutation:security": "stryker run stryker.security.config.mjs",
+    "test:mutation:ssr-actions-security": "stryker run stryker.ssr-actions-security.config.mjs",
     "test:mutation:core": "stryker run stryker.core.config.mjs",
     "test:mutation:compiler": "stryker run stryker.compiler.config.mjs",
     "test:mutation:lifecycle": "stryker run stryker.lifecycle.config.mjs",
