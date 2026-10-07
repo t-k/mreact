@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.0.229 - 2026-10-07
+
+### Added
+
+- Added `assertValidHtmlTagName()` in `@reckona/mreact-shared` and `createServerActionErrorResponse()` in `@reckona/mreact-server` for shared SSR validation and private server-action error responses.
+
+### Fixed
+
+- Escaped string roots as text in React DOM-compatible server rendering, including static markup and streaming APIs, while preserving the low-level renderer's compiler-generated HTML mode.
+- Rejected malformed dynamic tag names before HTML output in both React-compatible and native SSR to prevent tag names from injecting attributes or markup.
+- Kept unexpected server-action, registry, guard, and response-serialization failures private: clients receive a generic HTTP 500 response with an opaque error ID, and exception details stay in server logs. Thrown `undefined` and diagnostic logging failures are handled safely.
+- Required configured server-action authorization and argument-validation callbacks to explicitly return `true`; missing returns now deny the request while omitted callbacks preserve the existing default behavior.
+
 ## 0.0.228 - 2026-10-06
 
 ### Changed
