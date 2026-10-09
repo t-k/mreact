@@ -480,7 +480,7 @@ export function createRootRuntime(
       renderPriorities.set(this, priority);
       stateRenderDrafts.set(this, new Map());
       this.activeInstanceKeys = new Set();
-      this.activeProfilerPaths = new Set();
+      this.activeProfilerPaths = undefined;
       this.pendingProfilerCommits = [];
       this.pendingInsertionEffects = [];
       this.pendingImperativeHandleEffects = [];
@@ -541,8 +541,11 @@ export function createRootRuntime(
       if (committed) {
         commitReactiveCleanups(this);
         cleanupInactiveInstances(this, preparedInactiveInstances);
-        this.mountedProfilerPaths =
-          activeProfilerPaths === undefined ? new Set() : new Set(activeProfilerPaths);
+        if (activeProfilerPaths === undefined) {
+          this.mountedProfilerPaths.clear();
+        } else {
+          this.mountedProfilerPaths = activeProfilerPaths;
+        }
       } else {
         restorePreparedMutationEffectStates(
           preparedMutationEffectStates,
@@ -723,7 +726,9 @@ export function renderWithProfiler<T>(
   try {
     return render();
   } finally {
-    runtime.activeProfilerPaths?.add(path);
+    if (runtime.activeInstanceKeys !== undefined) {
+      (runtime.activeProfilerPaths ??= new Set()).add(path);
+    }
     const onRender = props.onRender;
     const id = props.id;
 
@@ -744,9 +749,10 @@ export function renderWithProfiler<T>(
 }
 
 export function retainMountedProfilerPaths(runtime: RootRuntime, prefix: string): void {
+  if (runtime.activeInstanceKeys === undefined) return;
   for (const path of runtime.mountedProfilerPaths) {
     if (path === prefix || path.startsWith(`${prefix}.`)) {
-      runtime.activeProfilerPaths?.add(path);
+      (runtime.activeProfilerPaths ??= new Set()).add(path);
     }
   }
 }
@@ -2564,6 +2570,7 @@ function flushPendingEffects(
   queue: PendingEffect[],
   reportEffectError: (error: unknown) => void,
 ): PendingEffect[] {
+  if (queue.length === 0) return [];
   const pending = queue.splice(0).sort(comparePendingEffectTreeOrder);
   const strictReplay: PendingEffect[] = [];
   const runnable: Array<PendingEffect & { shouldReplay: boolean }> = [];

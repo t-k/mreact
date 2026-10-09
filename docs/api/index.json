@@ -39418,9 +39418,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 2159,
+									"line": 2165,
 									"character": 12,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2159"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2165"
 								}
 							],
 							"type": {
@@ -39479,9 +39479,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 2157,
+									"line": 2163,
 									"character": 12,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2157"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2163"
 								}
 							],
 							"type": {
@@ -47192,9 +47192,9 @@
 																			"sources": [
 																				{
 																					"fileName": "hooks.ts",
-																					"line": 1489,
+																					"line": 1495,
 																					"character": 41,
-																					"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1489"
+																					"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1495"
 																				}
 																			],
 																			"type": {
@@ -48387,9 +48387,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 2067,
+									"line": 2073,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2067"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2073"
 								}
 							],
 							"signatures": [
@@ -48410,9 +48410,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 2067,
+											"line": 2073,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2067"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2073"
 										}
 									],
 									"typeParameters": [
@@ -48547,9 +48547,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 2101,
+									"line": 2107,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2101"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2107"
 								}
 							],
 							"signatures": [
@@ -48570,9 +48570,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 2101,
+											"line": 2107,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2101"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2107"
 										}
 									],
 									"type": {
@@ -48606,9 +48606,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 2106,
+									"line": 2112,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2106"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2112"
 								}
 							],
 							"signatures": [
@@ -48629,9 +48629,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 2106,
+											"line": 2112,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2106"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2112"
 										}
 									],
 									"type": {
@@ -52002,9 +52002,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 2162,
+									"line": 2168,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2162"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2168"
 								}
 							],
 							"signatures": [
@@ -52025,9 +52025,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 2162,
+											"line": 2168,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2162"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2168"
 										}
 									],
 									"parameters": [
@@ -52124,9 +52124,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 2112,
+									"line": 2118,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2112"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2118"
 								}
 							],
 							"signatures": [
@@ -52147,9 +52147,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 2112,
+											"line": 2118,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2112"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2118"
 										}
 									],
 									"type": {
@@ -52187,9 +52187,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 2054,
+									"line": 2060,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2054"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2060"
 								}
 							],
 							"signatures": [
@@ -52210,9 +52210,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 2054,
+											"line": 2060,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2054"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2060"
 										}
 									],
 									"typeParameters": [
@@ -52256,9 +52256,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1909,
+									"line": 1915,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1909"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1915"
 								}
 							],
 							"signatures": [
@@ -52279,9 +52279,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1909,
+											"line": 1915,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1909"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1915"
 										}
 									],
 									"typeParameters": [
@@ -52470,9 +52470,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1720,
+									"line": 1726,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1720"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1726"
 								}
 							],
 							"signatures": [
@@ -52493,9 +52493,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1720,
+											"line": 1726,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1720"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1726"
 										}
 									],
 									"typeParameters": [
@@ -52683,9 +52683,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1733,
+									"line": 1739,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1733"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1739"
 								}
 							],
 							"signatures": [
@@ -52706,9 +52706,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1733,
+											"line": 1739,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1733"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1739"
 										}
 									],
 									"parameters": [
@@ -52785,9 +52785,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 2270,
+									"line": 2276,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2270"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2276"
 								}
 							],
 							"signatures": [
@@ -52808,9 +52808,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 2270,
+											"line": 2276,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2270"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2276"
 										}
 									],
 									"typeParameters": [
@@ -52873,9 +52873,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1781,
+									"line": 1787,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1781"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1787"
 								}
 							],
 							"signatures": [
@@ -52896,9 +52896,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1781,
+											"line": 1787,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1781"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1787"
 										}
 									],
 									"parameters": [
@@ -52952,9 +52952,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1763,
+									"line": 1769,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1763"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1769"
 								}
 							],
 							"signatures": [
@@ -52975,9 +52975,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1763,
+											"line": 1769,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1763"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1769"
 										}
 									],
 									"typeParameters": [
@@ -53112,9 +53112,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1514,
+									"line": 1520,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1514"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1520"
 								}
 							],
 							"signatures": [
@@ -53135,9 +53135,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1514,
+											"line": 1520,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1514"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1520"
 										}
 									],
 									"type": {
@@ -53156,9 +53156,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1554,
+									"line": 1560,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1554"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1560"
 								}
 							],
 							"signatures": [
@@ -53179,9 +53179,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1554,
+											"line": 1560,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1554"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1560"
 										}
 									],
 									"typeParameters": [
@@ -53275,9 +53275,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1792,
+									"line": 1798,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1792"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1798"
 								}
 							],
 							"signatures": [
@@ -53298,9 +53298,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1792,
+											"line": 1798,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1792"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1798"
 										}
 									],
 									"parameters": [
@@ -53354,9 +53354,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1803,
+									"line": 1809,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1803"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1809"
 								}
 							],
 							"signatures": [
@@ -53377,9 +53377,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1803,
+											"line": 1809,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1803"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1809"
 										}
 									],
 									"parameters": [
@@ -53433,9 +53433,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1579,
+									"line": 1585,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1579"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1585"
 								}
 							],
 							"signatures": [
@@ -53456,9 +53456,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1579,
+											"line": 1585,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1579"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1585"
 										}
 									],
 									"typeParameters": [
@@ -53544,9 +53544,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1960,
+									"line": 1966,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1960"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1966"
 								}
 							],
 							"signatures": [
@@ -53567,9 +53567,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1960,
+											"line": 1966,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1960"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1966"
 										}
 									],
 									"typeParameters": [
@@ -53732,21 +53732,21 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1432,
+									"line": 1438,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1432"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1438"
 								},
 								{
 									"fileName": "hooks.ts",
-									"line": 1436,
+									"line": 1442,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1436"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1442"
 								},
 								{
 									"fileName": "hooks.ts",
-									"line": 1441,
+									"line": 1447,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1441"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1447"
 								}
 							],
 							"signatures": [
@@ -53767,9 +53767,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1432,
+											"line": 1438,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1432"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1438"
 										}
 									],
 									"typeParameters": [
@@ -53899,9 +53899,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1436,
+											"line": 1442,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1436"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1442"
 										}
 									],
 									"typeParameters": [
@@ -54127,9 +54127,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1489,
+									"line": 1495,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1489"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1495"
 								}
 							],
 							"signatures": [
@@ -54150,9 +54150,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1489,
+											"line": 1495,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1489"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1495"
 										}
 									],
 									"typeParameters": [
@@ -54198,9 +54198,9 @@
 													"sources": [
 														{
 															"fileName": "hooks.ts",
-															"line": 1489,
+															"line": 1495,
 															"character": 41,
-															"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1489"
+															"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1495"
 														}
 													],
 													"type": {
@@ -54234,21 +54234,21 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1065,
+									"line": 1071,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1065"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1071"
 								},
 								{
 									"fileName": "hooks.ts",
-									"line": 1066,
+									"line": 1072,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1066"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1072"
 								},
 								{
 									"fileName": "hooks.ts",
-									"line": 1070,
+									"line": 1076,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1070"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1076"
 								}
 							],
 							"signatures": [
@@ -54269,9 +54269,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1065,
+											"line": 1071,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1065"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1071"
 										}
 									],
 									"typeParameters": [
@@ -54446,9 +54446,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1066,
+											"line": 1072,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1066"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1072"
 										}
 									],
 									"typeParameters": [
@@ -54605,9 +54605,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1814,
+									"line": 1820,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1814"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1820"
 								}
 							],
 							"signatures": [
@@ -54628,9 +54628,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1814,
+											"line": 1820,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1814"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1820"
 										}
 									],
 									"typeParameters": [
@@ -54812,9 +54812,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 2226,
+									"line": 2232,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2226"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2232"
 								}
 							],
 							"signatures": [
@@ -54835,9 +54835,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 2226,
+											"line": 2232,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2226"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2232"
 										}
 									],
 									"type": {
@@ -55156,9 +55156,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 2167,
+									"line": 2173,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2167"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2173"
 								}
 							],
 							"signatures": [
@@ -55179,9 +55179,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 2167,
+											"line": 2173,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2167"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2173"
 										}
 									],
 									"typeParameters": [
@@ -60599,9 +60599,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 3127,
+									"line": 3134,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L3127"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L3134"
 								}
 							],
 							"signatures": [
@@ -60614,9 +60614,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 3127,
+											"line": 3134,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L3127"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L3134"
 										}
 									],
 									"parameters": [
@@ -60906,9 +60906,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 655,
+									"line": 658,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L655"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L658"
 								}
 							],
 							"signatures": [
@@ -60929,9 +60929,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 655,
+											"line": 658,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L655"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L658"
 										}
 									],
 									"type": {
@@ -60960,9 +60960,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 664,
+									"line": 667,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L664"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L667"
 								}
 							],
 							"signatures": [
@@ -60983,9 +60983,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 664,
+											"line": 667,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L664"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L667"
 										}
 									],
 									"parameters": [
@@ -61027,9 +61027,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 671,
+									"line": 674,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L671"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L674"
 								}
 							],
 							"signatures": [
@@ -61050,9 +61050,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 671,
+											"line": 674,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L671"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L674"
 										}
 									],
 									"typeParameters": [
