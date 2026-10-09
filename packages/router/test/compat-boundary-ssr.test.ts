@@ -13,7 +13,7 @@ import { renderAppRequest } from "../src/render.js";
 import { renderBuiltAppRequest } from "../src/serve.js";
 
 test.each(
-  ["node", "cloudflare", "aws-lambda"].flatMap((target) =>
+  ["development", "node", "cloudflare", "aws-lambda"].flatMap((target) =>
     [false, true].flatMap((stream) =>
       ["@reckona/mreact-compat", "@reckona/mreact-compat/hooks"].map((hooksEntry) => ({
         target,
@@ -43,16 +43,38 @@ export function Counter() {
         join(appDir, "Text.compat.tsx"),
         "export function Text(props) { return props.value; }",
       );
+      await writeFile(
+        join(appDir, "context.ts"),
+        'import { createContext } from "@reckona/mreact"; export const Theme = createContext<string | null>(null);',
+      );
+      await writeFile(
+        join(appDir, "contexts.ts"),
+        'export { Theme as ThemeContext } from "./context";',
+      );
+      await writeFile(
+        join(appDir, "ContextPanel.compat.tsx"),
+        `import { useContext, useState } from "@reckona/mreact";
+import { ThemeContext as Theme } from "./contexts";
+function Label() { return <output data-context>{useContext(Theme)}</output>; }
+export function ContextPanel({ initial }) {
+  const [value, setValue] = useState(initial);
+  return <Theme.Provider value={value}><Label /><Theme.Provider value="nested"><Theme.Consumer>{value => <output data-nested>{value}</output>}</Theme.Consumer></Theme.Provider><Label /><button onClick={() => setValue("updated")}>Change</button></Theme.Provider>;
+}`,
+      );
       const code = `export const stream = ${stream};
 import { Counter } from "./Counter.compat";
 import { Text } from "./Text.compat";
-export default function Page() { return <main><Counter /><p>Native sibling</p><Counter /><aside><Text value={${JSON.stringify(payload)}} /></aside></main>; }`;
+import { ContextPanel } from "./ContextPanel.compat";
+export default function Page() { return <main><Counter /><p>Native sibling</p><Counter /><aside><Text value={${JSON.stringify(payload)}} /></aside><ContextPanel initial="first"/><ContextPanel initial="second"/></main>; }`;
       const filename = join(appDir, "page.tsx");
       await writeFile(filename, code);
       await buildApp({
         appDir,
         outDir,
-        targets: target === "node" ? undefined : [target as "cloudflare" | "aws-lambda"],
+        targets:
+          target === "node" || target === "development"
+            ? undefined
+            : [target as "cloudflare" | "aws-lambda"],
       });
       const request = new Request("http://local.test/");
       let response: Response;
@@ -88,6 +110,8 @@ export default function Page() { return <main><Counter /><p>Native sibling</p><C
         const entry = await readFile(join(outDir, "aws-lambda", "mreact-handler.mjs"), "utf8");
         expect(entry).toContain('preload: { mode: "middleware" }');
         expect(entry).not.toContain("Counter.compat");
+      } else if (target === "development") {
+        response = await renderAppRequest({ appDir, request });
       } else {
         response = await renderBuiltAppRequest({ outDir, request });
       }
@@ -99,6 +123,14 @@ export default function Page() { return <main><Counter /><p>Native sibling</p><C
       expect(html).toContain("<p>Native sibling</p>");
       expect(html).toContain("&lt;img");
       expect(html).not.toContain("<img");
+      expect(html.match(/<output data-context(?:="")?>first<\/output>/g)).toHaveLength(2);
+      expect(html.match(/<output data-context(?:="")?>second<\/output>/g)).toHaveLength(2);
+      expect(html.match(/<output data-nested(?:="")?>nested<\/output>/g)).toHaveLength(2);
+      expect(
+        html.match(
+          /<template data-mreact-client-boundary="ContextPanel"[^>]*data-mreact-compat-resume=/g,
+        ),
+      ).toHaveLength(2);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -146,7 +178,7 @@ test.each(["direct", "transitive"])(
 );
 
 test.each([false, true])(
-  "production preserves nested compat output and bounds children/context (stream=%s)",
+  "production preserves nested compat/context output and bounds native children (stream=%s)",
   async (stream) => {
     const root = await mkdtemp(join(tmpdir(), "mreact-compat-shapes-"));
     try {
@@ -177,11 +209,15 @@ test.each([false, true])(
       const html = await response.text();
       expect(response.status, html).toBe(200);
       expect(html).toContain("<section><strong>Nested label</strong></section>");
-      expect(html.match(/data-mreact-compat-resume=/g)).toHaveLength(1);
+      expect(html.match(/data-mreact-compat-resume=/g)).toHaveLength(2);
       expect(html).toContain("<em>Server slot</em>");
       expect(html).toContain('data-mreact-client-boundary-nonserializable="true"');
-      expect(html).toContain('data-mreact-client-boundary="ContextPanel"');
-      expect(html).not.toContain("<p>default</p>");
+      expect(
+        html.match(
+          /<template data-mreact-client-boundary="ContextPanel"[^>]*data-mreact-compat-resume=/g,
+        ),
+      ).toHaveLength(1);
+      expect(html).toContain("<p>default</p>");
     } finally {
       await rm(root, { recursive: true, force: true });
     }

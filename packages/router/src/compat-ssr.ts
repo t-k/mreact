@@ -2,11 +2,19 @@ import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { createCompilerModuleContext } from "@reckona/mreact-compiler/internal";
 import { sourceModuleCandidates } from "./source-modules.js";
+import {
+  compatContextModuleNames,
+  hasCompatContextReflection,
+  isCompatContextInitializer,
+  unsafeCompatContextUse,
+  type CompatContextBindings,
+} from "./compat-ssr-context.js";
 
 type AstNode = Record<string, unknown>;
 const object = (value: unknown): AstNode =>
   value !== null && typeof value === "object" ? (value as AstNode) : {};
 const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
+const exportName = (value: unknown): string => String(object(value).name ?? object(value).value);
 const safeHookSubpathImports = new Set([
   "useState",
   "useReducer",
@@ -57,19 +65,34 @@ export async function analyzeCompatSsrEligibility(
   filename: string,
 ): Promise<{ eligible: boolean; reason?: string }> {
   const visiting = new Set<string>();
-  const proven = new Set<string>();
-  async function visit(file: string): Promise<boolean> {
-    // Stryker disable next-line ConditionalExpression: bypassing a successful cache changes work, not eligibility.
-    if (proven.has(file)) return true;
-    if (visiting.has(file)) return false;
+  const proven = new Map<string, ReadonlySet<string>>();
+  const programs = new Map<string, unknown>();
+  let hasContext = false;
+  let reason: string | undefined;
+  const reject = (file: string, detail: string): undefined => {
+    reason ??= `${file}: ${detail}; keeping the client-only boundary.`;
+    return undefined;
+  };
+  async function visit(file: string): Promise<ReadonlySet<string> | undefined> {
+    if (proven.has(file)) return proven.get(file);
+    if (visiting.has(file))
+      return reject(file, "Circular runtime dependency is not proven safe for SSR");
     visiting.add(file);
     try {
       const code = await readFile(file, "utf8");
       const context = createCompilerModuleContext({ code, filename: file });
-      if (context.parseErrors.length !== 0) return false;
+      if (context.parseErrors.length !== 0) return reject(file, "Module could not be parsed");
       // Native JSX helpers produce HTML strings, not compat ReactNodes.
-      if (!isCompatSsrFilename(file) && containsJsx(context.program)) return false;
+      if (!isCompatSsrFilename(file) && containsJsx(context.program))
+        return reject(file, "Native JSX dependency does not produce compatibility ReactNodes");
       const body = list(object(context.program).body);
+      const bindings: CompatContextBindings = {
+        contexts: new Set(),
+        factories: new Set(),
+        readers: new Set(),
+      };
+      const reexportedContexts = new Set<string>();
+      // Resolve imports before declarations, regardless of their position in the source module.
       for (const value of body) {
         const node = object(value);
         if (
@@ -81,9 +104,11 @@ export async function analyzeCompatSsrEligibility(
         ) {
           if (node.importKind === "type" || node.exportKind === "type") continue;
           const source = object(node.source).value;
-          if (typeof source !== "string") return false;
-          if (node.type === "ImportDeclaration" && list(node.specifiers).length === 0) return false;
+          if (typeof source !== "string") return reject(file, "Unknown runtime import");
+          if (node.type === "ImportDeclaration" && list(node.specifiers).length === 0)
+            return reject(file, "Side-effect import is not proven safe for SSR");
           if (
+            source === "@reckona/mreact" ||
             source === "@reckona/mreact-compat" ||
             source === "react" ||
             source === "@reckona/mreact-compat/hooks"
@@ -99,10 +124,18 @@ export async function analyzeCompatSsrEligibility(
                     allowedImports.has(String(object(object(spec).imported).name))),
               )
             )
-              return false;
+              return reject(file, `Unsupported compatibility import from ${source}`);
+            for (const value of list(node.specifiers)) {
+              const spec = object(value);
+              if (spec.importKind === "type") continue;
+              const imported = object(spec.imported).name;
+              const local = String(object(spec.local).name);
+              if (imported === "createContext") bindings.factories.add(local);
+              if (imported === "useContext") bindings.readers.add(local);
+            }
             continue;
           }
-          if (!source.startsWith(".")) return false;
+          if (!source.startsWith(".")) return reject(file, `Unknown runtime package ${source}`);
           let dependency: string | undefined;
           for (const candidate of sourceModuleCandidates(resolve(dirname(file), source))) {
             try {
@@ -113,9 +146,43 @@ export async function analyzeCompatSsrEligibility(
               /* Try the next source extension. */
             }
           }
-          if (dependency === undefined || !(await visit(dependency))) return false;
+          if (dependency === undefined)
+            return reject(file, `Runtime dependency ${source} could not be resolved`);
+          const exportedContexts = await visit(dependency);
+          if (exportedContexts === undefined) return undefined;
+          if (node.type === "ExportAllDeclaration") {
+            if (node.exported != null && exportedContexts.size > 0)
+              return reject(file, "Namespace Context re-export is not supported");
+            for (const name of exportedContexts)
+              if (name !== "default") reexportedContexts.add(name);
+          } else {
+            for (const value of list(node.specifiers)) {
+              const spec = object(value);
+              if (spec.importKind === "type" || spec.exportKind === "type") continue;
+              if (node.type === "ImportDeclaration") {
+                if (spec.type === "ImportNamespaceSpecifier" && exportedContexts.size > 0)
+                  return reject(file, "Namespace Context import is not supported");
+                const imported =
+                  spec.type === "ImportDefaultSpecifier" ? "default" : exportName(spec.imported);
+                if (exportedContexts.has(imported))
+                  bindings.contexts.add(String(object(spec.local).name));
+              } else if (exportedContexts.has(exportName(spec.local))) {
+                reexportedContexts.add(exportName(spec.exported));
+              }
+            }
+          }
           continue;
         }
+      }
+      const moduleNames = compatContextModuleNames(context.program);
+      for (const value of body) {
+        const node = object(value);
+        if (
+          node.type === "ImportDeclaration" ||
+          node.type === "ExportAllDeclaration" ||
+          (node.type === "ExportNamedDeclaration" && node.source != null)
+        )
+          continue;
         const declaration =
           node.type === "ExportNamedDeclaration" || node.type === "ExportDefaultDeclaration"
             ? object(node.declaration)
@@ -129,26 +196,76 @@ export async function analyzeCompatSsrEligibility(
         if (
           declaration.type === "VariableDeclaration" &&
           declaration.kind === "const" &&
-          list(declaration.declarations).every((item) => pureInitializer(object(item).init))
+          list(declaration.declarations).every((item) => {
+            const binding = object(item);
+            if (
+              isCompatContextInitializer(binding.init, bindings.factories, moduleNames) &&
+              object(binding.id).type === "Identifier"
+            ) {
+              bindings.contexts.add(String(object(binding.id).name));
+              return true;
+            }
+            return pureInitializer(binding.init);
+          })
         )
           continue;
-        return false;
+        return reject(file, "Module-level initialization is not proven safe for SSR");
       }
-      if (hasUnsafeSyntax(context.program, new Set())) return false;
-      proven.add(file);
-      return true;
+      if (hasUnsafeSyntax(context.program, new Set()))
+        return reject(
+          file,
+          "Browser, nondeterministic, or mutable syntax is not proven safe for SSR",
+        );
+      const unsafeContext = unsafeCompatContextUse(context.program, bindings);
+      if (unsafeContext !== undefined) return reject(file, unsafeContext);
+      hasContext ||= bindings.contexts.size > 0;
+      programs.set(file, context.program);
+      for (const value of body) {
+        const node = object(value);
+        if (
+          node.type !== "ExportNamedDeclaration" ||
+          node.source != null ||
+          node.exportKind === "type"
+        )
+          continue;
+        for (const value of list(object(node.declaration).declarations)) {
+          const name = String(object(object(value).id).name);
+          if (bindings.contexts.has(name)) reexportedContexts.add(name);
+        }
+        for (const value of list(node.specifiers)) {
+          const spec = object(value);
+          if (spec.exportKind !== "type" && bindings.contexts.has(exportName(spec.local)))
+            reexportedContexts.add(exportName(spec.exported));
+        }
+      }
+      proven.set(file, reexportedContexts);
+      return reexportedContexts;
     } catch {
-      return false;
+      return reject(file, "Runtime dependency could not be analyzed");
     } finally {
       visiting.delete(file);
     }
   }
-  const eligible = isCompatSsrFilename(filename) && (await visit(filename));
+  let eligible = isCompatSsrFilename(filename) && (await visit(filename)) !== undefined;
+  if (eligible && hasContext) {
+    // The ordinary syntax check also excludes Object/Reflect and dynamic property access.
+    for (const [file, program] of programs) {
+      if (hasCompatContextReflection(program)) {
+        reject(
+          file,
+          "ReactElement type introspection or JSON reflection can expose Context identity",
+        );
+        eligible = false;
+        break;
+      }
+    }
+  }
   return eligible
     ? { eligible }
     : {
         eligible,
         reason:
+          reason ??
           "The compat module or its runtime dependencies are not proven safe for SSR; keeping the client-only boundary.",
       };
 }
