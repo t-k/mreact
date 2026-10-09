@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.0.230 - 2026-10-09
+
+### Changed
+
+- Server-rendered eligible App Router Context trees initialized by named `createContext()` imports with primitive defaults, including relative Context exports and re-exports, and hydrated their existing DOM while preserving conservative fallbacks for unsafe dependency graphs.
+- Reduced compiled compatibility bundles by converting proven-safe static default-import hook calls from `@reckona/mreact` to named imports while preserving the public default object and uncertain uses.
+- Avoided unused effect and Profiler bookkeeping allocations during React-compatible commits while preserving render-attempt ownership and effect ordering.
+
+### Fixed
+
+- Kept direct native cell bindings and server-DOM attachment optimizations for canonical negative integer initial values.
+
 ## 0.0.229 - 2026-10-07
 
 ### Added

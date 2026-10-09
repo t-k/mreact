@@ -50,6 +50,8 @@ export function CompatCounter() {
 
 Optimization or compatibility fallback can change how much code runs and ships, but it should not change the observable counter behavior. Keep low-level DOM work under an explicit `createRoot()` or `createCleanupScope()` owner so listeners, effects, subscriptions, and pending work are disposed with the integration.
 
+For compiled compat code, static calls to `useState`, `useReducer`, `useRef`, `useMemo`, `useCallback`, `useEffect`, or `useLayoutEffect` through a default import from `@reckona/mreact` can be emitted as named imports. This lets bundlers remove unused compatibility exports while preserving the public default object. Dynamic property access, passing or modifying that object, unsupported members, and uncertain references keep the original import. This optimization does not change App Router SSR eligibility; named imports remain the clearest authoring form when targeting the supported SSR subset.
+
 ## App Router compat SSR
 
 The App Router server-renders eligible `.compat.tsx` boundaries and hydrates their existing DOM. A counter is visible before JavaScript loads; hydration preserves its button and focus. When the server and first client props agree, it also preserves edits made before hydration to text inputs, checkboxes, textareas, and selects, including controlled controls. File inputs and recovery that replaces a mismatched DOM range are outside this preservation contract. Each boundary owns a comment-delimited range, so sibling counters keep independent state without extra wrapper elements. Route navigation disposes their effects, refs, and event resources.
