@@ -50,7 +50,8 @@ describe("closed direct-cell route proof", () => {
     `export default function Page() { const count = cell(Date.now()); return <p>{count.get()}</p>; }`,
     `export default function Page() { const count = cell(0); return <p onClick={count.get()}>{count.get()}</p>; }`,
     `export default function Page() { const count = cell(1 + 2); return <p>{count.get()}</p>; }`,
-    `export default function Page() { const count = cell(-1); return <p>{count.get()}</p>; }`,
+    `export default function Page() { const count = cell(-0); return <p>{count.get()}</p>; }`,
+    `export default function Page() { const count = cell(-9007199254740992); return <p>{count.get()}</p>; }`,
     `export default function Page() { const count = cell(0.5); return <p>{count.get()}</p>; }`,
     `export default function Page() { const count = cell("0"); return <p>{count.get()}</p>; }`,
     `export default function Page() { const count = cell(0); return <p onClick={() => count.set(1)}>static</p>; }`,
@@ -62,6 +63,17 @@ describe("closed direct-cell route proof", () => {
   ])("rejects a route whose render may need tracked updates: %s", (source) => {
     expect(provesClosedRoute(source)).toBe(false);
   });
+
+  test.each([-1, -42, Number.MIN_SAFE_INTEGER])(
+    "accepts canonical signed integer %s",
+    (initial) => {
+      expect(
+        provesClosedRoute(
+          `export default function Page() { const count = cell(${initial}); return <p>{count.get()}</p>; }`,
+        ),
+      ).toBe(true);
+    },
+  );
 
   test("rejects malformed or expanded component facts", () => {
     const source = `export default function Page() { const count = cell(0); return <p>{count.get()}</p>; }`;
@@ -109,72 +121,75 @@ describe("closed direct-cell route proof", () => {
 });
 
 describe("closed direct-cell attach output", () => {
-  test("attaches only the live text and event targets in existing nested DOM", () => {
-    const ir = analyzeRoute(`export const clientNavigation = false;
+  test.each([0, -1, Number.MIN_SAFE_INTEGER])(
+    "attaches live targets with initial value %s",
+    (initial) => {
+      const ir = analyzeRoute(`export const clientNavigation = false;
 export default function Page() {
-  const count = cell(0);
+  const count = cell(${initial});
   return <main><p onClick={() => count.set(7)}>Static</p><button onClick={() => count.set(value => value + 1)}>{count.get()}</button></main>;
 }`);
-    const code = emitClosedDirectCellAttachRoute(ir);
-    expect(code).toBeDefined();
-    expect(code).toContain('import { bindEvent } from "@reckona/mreact-reactive-dom";');
+      const code = emitClosedDirectCellAttachRoute(ir);
+      expect(code).toBeDefined();
+      expect(code).toContain('import { bindEvent } from "@reckona/mreact-reactive-dom";');
 
-    const text = { nodeType: 3, textContent: "0" };
-    const button = { nodeType: 1, localName: "button", childNodes: [text] };
-    const staticText = { nodeType: 3, textContent: "Static" };
-    const paragraph = { nodeType: 1, localName: "p", childNodes: [staticText] };
-    const main = { nodeType: 1, localName: "main", childNodes: [paragraph, button] };
-    const events = new Map<object, () => void>();
-    const boundTexts: object[] = [];
-    let createdCells = 0;
-    const attach = runInNewContext(
-      `${code!.replace(/^import .*;\n/gmu, "")}\n__mreactAttachRoute`,
-      {
-        cell(initial: number) {
-          createdCells += 1;
-          let value = initial;
-          const listeners: Array<() => void> = [];
-          return {
-            get: () => value,
-            set(next: number | ((current: number) => number)) {
-              value = typeof next === "function" ? next(value) : next;
-              listeners.forEach((listener) => listener());
-            },
-            subscribe(listener: () => void) {
-              listeners.push(listener);
-            },
-          };
+      const text = { nodeType: 3, textContent: String(initial) };
+      const button = { nodeType: 1, localName: "button", childNodes: [text] };
+      const staticText = { nodeType: 3, textContent: "Static" };
+      const paragraph = { nodeType: 1, localName: "p", childNodes: [staticText] };
+      const main = { nodeType: 1, localName: "main", childNodes: [paragraph, button] };
+      const events = new Map<object, () => void>();
+      const boundTexts: object[] = [];
+      let createdCells = 0;
+      const attach = runInNewContext(
+        `${code!.replace(/^import .*;\n/gmu, "")}\n__mreactAttachRoute`,
+        {
+          cell(initial: number) {
+            createdCells += 1;
+            let value = initial;
+            const listeners: Array<() => void> = [];
+            return {
+              get: () => value,
+              set(next: number | ((current: number) => number)) {
+                value = typeof next === "function" ? next(value) : next;
+                listeners.forEach((listener) => listener());
+              },
+              subscribe(listener: () => void) {
+                listeners.push(listener);
+              },
+            };
+          },
+          bindCellText(
+            target: typeof text,
+            source: { get: () => number; subscribe: (listener: () => void) => void },
+          ) {
+            boundTexts.push(target);
+            source.subscribe(() => {
+              target.textContent = String(source.get());
+            });
+          },
+          bindEvent(target: object, _event: string, listener: () => void) {
+            events.set(target, listener);
+          },
         },
-        bindCellText(
-          target: typeof text,
-          source: { get: () => number; subscribe: (listener: () => void) => void },
-        ) {
-          boundTexts.push(target);
-          source.subscribe(() => {
-            target.textContent = String(source.get());
-          });
-        },
-        bindEvent(target: object, _event: string, listener: () => void) {
-          events.set(target, listener);
-        },
-      },
-    ) as (marker: { firstChild: object }) => boolean;
+      ) as (marker: { firstChild: object }) => boolean;
 
-    expect(attach({ firstChild: main })).toBe(true);
-    expect(createdCells).toBe(1);
-    expect(boundTexts).toEqual([text]);
-    expect([...events.keys()]).toEqual([paragraph, button]);
-    events.get(button)!();
-    expect(text.textContent).toBe("1");
-    events.get(paragraph)!();
-    expect(text.textContent).toBe("7");
-    expect(staticText.textContent).toBe("Static");
+      expect(attach({ firstChild: main })).toBe(true);
+      expect(createdCells).toBe(1);
+      expect(boundTexts).toEqual([text]);
+      expect([...events.keys()]).toEqual([paragraph, button]);
+      events.get(button)!();
+      expect(text.textContent).toBe(String(initial + 1));
+      events.get(paragraph)!();
+      expect(text.textContent).toBe("7");
+      expect(staticText.textContent).toBe("Static");
 
-    expect(
-      attach({ firstChild: { ...main, childNodes: [paragraph, { ...button, localName: "a" }] } }),
-    ).toBe(false);
-    expect(createdCells).toBe(1);
-  });
+      expect(
+        attach({ firstChild: { ...main, childNodes: [paragraph, { ...button, localName: "a" }] } }),
+      ).toBe(false);
+      expect(createdCells).toBe(1);
+    },
+  );
 
   test("references only live DOM targets and omits static HTML", () => {
     const ir = analyzeRoute(`export const clientNavigation = false;

@@ -43,7 +43,7 @@ function singleLiteralCellName(component: ComponentIr): string | undefined {
 
   const literal = statement.slice(prefix.length, -2);
   const value = Number(literal);
-  return Number.isSafeInteger(value) && value >= 0 && String(value) === literal ? name : undefined;
+  return Number.isSafeInteger(value) && String(value) === literal ? name : undefined;
 }
 
 function hasOnlyDirectCellText(
