@@ -300,6 +300,17 @@ test("SSR keeps unknown packages distinct from local source names", async () => 
   expect(result.reason).toContain("Unknown runtime package unknown");
 });
 
+test("SSR permits a component namespace that owns Context without exporting its identity", async () => {
+  const result = await eligibility({
+    "context.ts": `${imports} export const Theme = createContext(null);`,
+    "View.compat.tsx":
+      'import { Theme } from "./context"; export const title = "light"; export function View() { return <Theme.Provider value={title}><p>View</p></Theme.Provider>; }',
+    "Panel.compat.tsx":
+      'import * as components from "./View.compat"; export function Panel() { return <components.View />; }',
+  });
+  expect(result.eligible).toBe(true);
+});
+
 test.each(["@reckona/mreact", "@reckona/mreact-compat", "react"])(
   "SSR supports module context from %s",
   async (entry) => {
