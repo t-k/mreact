@@ -97,12 +97,13 @@ jobs:
 
       # The checks above regenerate shared package dist directories. Wait for them before E2E
       # imports those packages so it never observes a partially replaced build output.
-      - parallel:
-          - name: E2E smoke
-            run: pnpm exec playwright test packages/router/e2e/navigation.spec.ts --grep "client navigation preserves layouts"
+      # Separate Playwright processes share transform caches and output directories.
+      # Run them sequentially so collection never reads another process's partial cache entry.
+      - name: E2E smoke
+        run: pnpm exec playwright test packages/router/e2e/navigation.spec.ts --grep "client navigation preserves layouts"
 
-          - name: E2E client delivery accounting
-            run: pnpm exec playwright test packages/router/e2e/client-delivery-accounting.spec.ts
+      - name: E2E client delivery accounting
+        run: pnpm exec playwright test packages/router/e2e/client-delivery-accounting.spec.ts
 
   # Runs apart from verify so a lint, docs, or scenario failure there cannot skip the size
   # measurement: the budget verdict and the uploaded reports stay available for every push.
