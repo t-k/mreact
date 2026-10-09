@@ -1,3 +1,4 @@
+import { normalizeCompatPublicHookImports } from "./compat-import-normalization.js";
 import type {
   AttributeIr,
   ComponentPropIr,
@@ -73,7 +74,7 @@ export function emitCompat(ir: ModuleIr, options: EmitCompatOptions = {}): EmitC
     .join("\n\n");
 
   return {
-    code: `${[importLine, userImports, moduleStatements].filter(Boolean).join("\n")}\n\n${components}\n`,
+    code: normalizeCompatPublicHookImports(`${[importLine, userImports, moduleStatements].filter(Boolean).join("\n")}\n\n${components}\n`),
     imports,
   };
 }

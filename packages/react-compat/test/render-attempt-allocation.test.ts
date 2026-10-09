@@ -1,16 +1,16 @@
 import { describe, expect, test, vi } from "vitest";
-import {
-  createRootRuntime,
-  renderWithProfiler,
-  retainMountedProfilerPaths,
-} from "../src/hooks.js";
+import { createRootRuntime, renderWithProfiler, retainMountedProfilerPaths } from "../src/hooks.js";
 
 describe("render attempt resource ownership", () => {
   test("empty effect queues avoid draining and still report mutation errors", () => {
     const runtime = createRootRuntime(() => {});
-    const queues = [runtime.pendingInsertionEffects, runtime.pendingImperativeHandleEffects,
-      runtime.pendingLayoutEffects, runtime.pendingEffects];
-    const drains = queues.map(queue => vi.spyOn(queue, "splice"));
+    const queues = [
+      runtime.pendingInsertionEffects,
+      runtime.pendingImperativeHandleEffects,
+      runtime.pendingLayoutEffects,
+      runtime.pendingEffects,
+    ];
+    const drains = queues.map((queue) => vi.spyOn(queue, "splice"));
     const error = new Error("mutation failed");
     runtime.externalStoreUpdate = true;
     runtime.reportMutationEffectErrors([error]);
@@ -76,17 +76,20 @@ describe("render attempt resource ownership", () => {
   test("Profiler commit callbacks can start a fresh attempt on the same root", () => {
     const runtime = createRootRuntime(() => {});
     const phases: string[] = [];
-    const props = { id: "panel", onRender: (_id: string, phase: string) => {
-      phases.push(phase);
-      expect(runtime.activeProfilerPaths).toBeUndefined();
-      if (phase === "mount") {
-        const mounted = runtime.mountedProfilerPaths;
-        runtime.beginRender();
-        renderWithProfiler(runtime, "0.panel", props, () => {});
-        expect(runtime.activeProfilerPaths).not.toBe(mounted);
-        runtime.endRender();
-      }
-    } };
+    const props = {
+      id: "panel",
+      onRender: (_id: string, phase: string) => {
+        phases.push(phase);
+        expect(runtime.activeProfilerPaths).toBeUndefined();
+        if (phase === "mount") {
+          const mounted = runtime.mountedProfilerPaths;
+          runtime.beginRender();
+          renderWithProfiler(runtime, "0.panel", props, () => {});
+          expect(runtime.activeProfilerPaths).not.toBe(mounted);
+          runtime.endRender();
+        }
+      },
+    };
     runtime.beginRender();
     renderWithProfiler(runtime, "0.panel", props, () => {});
     runtime.endRender();
@@ -107,9 +110,16 @@ describe("render attempt resource ownership", () => {
     const runtime = createRootRuntime(() => {});
     const phases: Array<[string, string]> = [];
     const paths = ["0.panel", "0.panel.child", "0.panels", "0.sibling"];
-    const render = (path: string) => renderWithProfiler(runtime, path, {
-      id: path, onRender: (id: string, phase: string) => phases.push([id, phase]),
-    }, () => {});
+    const render = (path: string) =>
+      renderWithProfiler(
+        runtime,
+        path,
+        {
+          id: path,
+          onRender: (id: string, phase: string) => phases.push([id, phase]),
+        },
+        () => {},
+      );
     runtime.beginRender();
     for (const path of paths) render(path);
     runtime.endRender();
@@ -120,7 +130,11 @@ describe("render attempt resource ownership", () => {
     runtime.beginRender();
     for (const path of paths) render(path);
     runtime.endRender();
-    expect(phases).toEqual([["0.panel", "update"], ["0.panel.child", "update"],
-      ["0.panels", "mount"], ["0.sibling", "mount"]]);
+    expect(phases).toEqual([
+      ["0.panel", "update"],
+      ["0.panel.child", "update"],
+      ["0.panels", "mount"],
+      ["0.sibling", "mount"],
+    ]);
   });
 });
