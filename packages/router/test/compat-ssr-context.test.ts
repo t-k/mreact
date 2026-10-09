@@ -62,6 +62,244 @@ test("SSR retains ordinary property and JSON operations in graphs without Contex
   expect(result.eligible).toBe(true);
 });
 
+test.each(["named", "star", "alias"])(
+  "SSR rejects escapes through %s Context barrels",
+  async (kind) => {
+    const result = await eligibility({
+      "context.ts": `${imports} export const Theme = createContext(null);`,
+      "barrel.ts":
+        kind === "star"
+          ? 'export * from "./context";'
+          : kind === "alias"
+            ? 'export { Theme as Renamed } from "./context";'
+            : 'export { Theme } from "./context";',
+      "Panel.compat.tsx": `import { ${kind === "alias" ? "Renamed as Theme" : "Theme"} } from "./barrel"; export function Panel() { return <p>{Theme.values.push("leaked")}</p>; }`,
+    });
+    expect(result.eligible).toBe(false);
+    expect(result.reason).toContain("Context Theme escapes");
+  },
+);
+
+test.each([
+  'import type { Props } from "./missing";',
+  'export type { Props } from "./missing";',
+  "type Props = { value: string };",
+  "interface Props { value: string; }",
+])("SSR erases type-only dependency or declaration: %s", async (typeCode) => {
+  expect(
+    (
+      await eligibility({
+        "Panel.compat.tsx": `${imports} ${typeCode} const Theme = createContext(null); ${panel}`,
+      })
+    ).eligible,
+  ).toBe(true);
+});
+
+test.each(["useContext", "useState"])(
+  "SSR does not treat %s as a Context factory",
+  async (hook) => {
+    const result = await eligibility({
+      "Panel.compat.tsx": `import { ${hook} } from "react"; const Theme = ${hook}(null); export function Panel() { return <p />; }`,
+    });
+    expect(result.eligible).toBe(false);
+    expect(result.reason).toContain("Module-level initialization");
+  },
+);
+
+test("SSR does not treat arbitrary hooks as Context readers", async () => {
+  const result = await eligibility({
+    "Panel.compat.tsx": `${imports} import { useState } from "react"; const Theme = createContext(null); export function Panel() { const [value] = useState(Theme); return <p>{value.values.push("leaked")}</p>; }`,
+  });
+  expect(result.eligible).toBe(false);
+  expect(result.reason).toContain("Context Theme escapes");
+});
+
+test("SSR distinguishes Context exports from neighboring immutable values", async () => {
+  const result = await eligibility({
+    "context.ts": `${imports} export const Theme = createContext(null); export const themeName = "light";`,
+    "barrel.ts": 'export { Theme, themeName } from "./context";',
+    "Panel.compat.tsx":
+      'import { Theme, themeName } from "./barrel"; import { useContext } from "react"; export function Panel() { return <Theme.Provider value={themeName}><p>{useContext(Theme)}{themeName}</p></Theme.Provider>; }',
+  });
+  expect(result.eligible).toBe(true);
+});
+
+test.each([
+  ["parse", "export function Panel( {", {}, "Module could not be parsed"],
+  [
+    "cycle",
+    'import { value } from "./cycle"; export function Panel() { return <p />; }',
+    { "cycle.ts": 'export { value } from "./cycle";' },
+    "Circular runtime dependency",
+  ],
+  [
+    "native JSX",
+    'import { Label } from "./label"; export function Panel() { return <Label />; }',
+    { "label.tsx": "export function Label() { return <p />; }" },
+    "Native JSX dependency",
+  ],
+  [
+    "side effect",
+    'import "./side"; export function Panel() { return <p />; }',
+    {},
+    "Side-effect import",
+  ],
+  [
+    "unknown package",
+    'import { value } from "unknown"; export function Panel() { return <p />; }',
+    {},
+    "Unknown runtime package unknown",
+  ],
+  [
+    "missing",
+    'import { value } from "./missing"; export function Panel() { return <p />; }',
+    {},
+    "Runtime dependency ./missing could not be resolved",
+  ],
+  [
+    "unsupported import",
+    'import React from "react"; export function Panel() { return <p />; }',
+    {},
+    "Unsupported compatibility import from react",
+  ],
+  [
+    "module state",
+    "const values = []; export function Panel() { return <p />; }",
+    {},
+    "Module-level initialization",
+  ],
+  [
+    "browser",
+    "export function Panel() { return <p>{document.title}</p>; }",
+    {},
+    "Browser, nondeterministic, or mutable syntax",
+  ],
+  [
+    "namespace re-export",
+    'export * as contexts from "./context"; export function Panel() { return <p />; }',
+    { "context.ts": `${imports} export const Theme = createContext(null);` },
+    "Namespace Context re-export",
+  ],
+  [
+    "namespace import",
+    'import * as contexts from "./context"; export function Panel() { return <p />; }',
+    { "context.ts": `${imports} export const Theme = createContext(null);` },
+    "Namespace Context import",
+  ],
+  [
+    "reflection",
+    `${imports} const Theme = createContext(null); export function Panel(props) { return <p>{props.type}</p>; }`,
+    {},
+    "ReactElement type introspection or JSON reflection",
+  ],
+] as const)("SSR diagnostics identify the %s rejection", async (_name, code, files, detail) => {
+  const result = await eligibility({ "Panel.compat.tsx": code, ...files });
+  expect(result.eligible).toBe(false);
+  expect(result.reason).toContain(detail);
+  expect(result.reason).toContain("keeping the client-only boundary");
+});
+
+test("SSR permits a namespace re-export without Context", async () => {
+  expect(
+    (
+      await eligibility({
+        "helper.ts": "export const value = 1;",
+        "Panel.compat.tsx":
+          'export * as helper from "./helper"; export function Panel() { return <p />; }',
+      })
+    ).eligible,
+  ).toBe(true);
+});
+
+test("SSR reports a root that cannot be read", async () => {
+  const root = await mkdtemp(join(tmpdir(), "mreact-missing-context-"));
+  try {
+    const result = await analyzeCompatSsrEligibility(join(root, "Missing.compat.tsx"));
+    expect(result.eligible).toBe(false);
+    expect(result.reason).toContain("Runtime dependency could not be analyzed");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test.each([
+  "const label = 'light', Theme = createContext({});",
+  "let label = 'light'; const Theme = createContext(null);",
+  "var label = 'light'; const Theme = createContext(null);",
+  "const { Provider } = createContext(null);",
+])("SSR rejects incomplete or mutable module declarations: %s", async (declaration) => {
+  const result = await eligibility({
+    "Panel.compat.tsx": `${imports} ${declaration} export function Panel() { return <p />; }`,
+  });
+  expect(result.eligible).toBe(false);
+  expect(result.reason).toContain("Module-level initialization");
+});
+
+test("SSR tracks every Context in the same declaration", async () => {
+  const result = await eligibility({
+    "Panel.compat.tsx": `${imports} const First = createContext(null), Second = createContext(null); export function Panel() { return <p>{Second.values.push("leaked")}</p>; }`,
+  });
+  expect(result.eligible).toBe(false);
+  expect(result.reason).toContain("Context Second escapes");
+});
+
+test("SSR permits a default-exported Context component", async () => {
+  expect(
+    (
+      await eligibility({
+        "Panel.compat.tsx": `${imports} const Theme = createContext(null); export default function Panel() { return <Theme.Provider value="light"><p>{useContext(Theme)}</p></Theme.Provider>; }`,
+      })
+    ).eligible,
+  ).toBe(true);
+});
+
+test("SSR permits a namespace import with no exported Context", async () => {
+  expect(
+    (
+      await eligibility({
+        "helper.ts": "export function label() { return 'light'; }",
+        "Panel.compat.tsx":
+          'import * as helper from "./helper"; export function Panel() { return <p>{helper.label()}</p>; }',
+      })
+    ).eligible,
+  ).toBe(true);
+});
+
+test("SSR excludes default Context from star exports", async () => {
+  expect(
+    (
+      await eligibility({
+        "context.ts": `${imports} const Theme = createContext(null); export { Theme as default };`,
+        "barrel.ts": 'export * from "./context";',
+        "Panel.compat.tsx":
+          'import * as barrel from "./barrel"; export function Panel() { return <p />; }',
+      })
+    ).eligible,
+  ).toBe(true);
+});
+
+test("SSR preserves normal named imports and exports beside Context", async () => {
+  expect(
+    (
+      await eligibility({
+        "context.ts": `${imports} const Theme = createContext(null); const label = 'light'; export { Theme, label };`,
+        "Panel.compat.tsx":
+          'import { Theme, label } from "./context"; import { useContext } from "react"; export function Panel() { return <Theme.Provider value={label}><p>{label}{useContext(Theme)}</p></Theme.Provider>; }',
+      })
+    ).eligible,
+  ).toBe(true);
+});
+
+test("SSR keeps unknown packages distinct from local source names", async () => {
+  const result = await eligibility({
+    "unknown.ts": "export const value = 1;",
+    "Panel.compat.tsx":
+      'import { value } from "unknown"; export function Panel() { return <p>{value}</p>; }',
+  });
+  expect(result.eligible).toBe(false);
+  expect(result.reason).toContain("Unknown runtime package unknown");
+});
+
 test.each(["@reckona/mreact", "@reckona/mreact-compat", "react"])(
   "SSR supports module context from %s",
   async (entry) => {

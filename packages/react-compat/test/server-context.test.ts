@@ -28,7 +28,7 @@ test("SSR restores a shared module Context across nested providers and requests"
 
 test("SSR restores a shared module Context after a provider throws", () => {
   const failure = new Error("render failed");
-  function Throw() {
+  function Throw(): never {
     expect(useContext(Theme)).toBe("nested");
     throw failure;
   }

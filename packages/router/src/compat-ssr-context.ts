@@ -36,7 +36,6 @@ export function isCompatContextInitializer(
   const args = list(node.arguments);
   if (
     node.type !== "CallExpression" ||
-    node.optional === true ||
     callee.type !== "Identifier" ||
     !factories.has(String(callee.name)) ||
     args.length !== 1
@@ -45,19 +44,18 @@ export function isCompatContextInitializer(
   const argument = unwrapContextExpression(args[0]);
   if (argument.type === "Identifier")
     return argument.name === "undefined" && !moduleNames.has("undefined");
-  const literal =
-    argument.type === "UnaryExpression" && ["-", "+"].includes(String(argument.operator))
-      ? object(argument.argument)
-      : argument;
-  if (literal.type !== "Literal" || literal.regex !== undefined || literal.bigint !== undefined)
-    return false;
-  const primitive = literal.value;
-  if (argument !== literal) return typeof primitive === "number" && Number.isFinite(primitive);
+  if (argument.type === "UnaryExpression")
+    return (
+      ["-", "+"].includes(String(argument.operator)) &&
+      Number.isFinite(object(argument.argument).value)
+    );
+  if (argument.type !== "Literal") return false;
+  const primitive = argument.value;
   return (
     primitive === null ||
     typeof primitive === "string" ||
     typeof primitive === "boolean" ||
-    (typeof primitive === "number" && Number.isFinite(primitive))
+    Number.isFinite(primitive)
   );
 }
 
@@ -94,7 +92,6 @@ export function compatContextModuleNames(program: unknown): Set<string> {
 
 /** ReactElement types can expose Context identities, including through otherwise pure helpers. */
 export function hasCompatContextReflection(value: unknown): boolean {
-  if (Array.isArray(value)) return value.some(hasCompatContextReflection);
   const node = object(value);
   if (["TSTypeAliasDeclaration", "TSInterfaceDeclaration"].includes(String(node.type)))
     return false;
@@ -121,12 +118,10 @@ function hoistedVarNames(value: unknown): string[] {
       "ArrowFunctionExpression",
       "ClassDeclaration",
       "ClassExpression",
-      "StaticBlock",
     ].includes(String(node.type))
   )
     return [];
   if (node.type === "VariableDeclaration" && node.kind === "var") return declarationNames(node);
-  if (Array.isArray(value)) return value.flatMap(hoistedVarNames);
   return Object.values(node).flatMap(hoistedVarNames);
 }
 
@@ -145,13 +140,6 @@ export function unsafeCompatContextUse(
   bindings: CompatContextBindings,
 ): string | undefined {
   function visit(value: unknown, scope: CompatContextBindings): string | undefined {
-    if (Array.isArray(value)) {
-      for (const child of value) {
-        const reason = visit(child, scope);
-        if (reason !== undefined) return reason;
-      }
-      return undefined;
-    }
     const node = object(value);
     const type = String(node.type);
     if (["TSTypeAliasDeclaration", "TSInterfaceDeclaration"].includes(type)) return undefined;
@@ -246,7 +234,6 @@ export function unsafeCompatContextUse(
   }
   function visitPatternDefaults(value: unknown, scope: CompatContextBindings): string | undefined {
     const node = object(value);
-    if (node.type === "Identifier") return undefined;
     if (node.type === "AssignmentPattern")
       return visit(node.right, scope) ?? visitPatternDefaults(node.left, scope);
     if (node.type === "Property")
@@ -255,15 +242,8 @@ export function unsafeCompatContextUse(
         visitPatternDefaults(node.value, scope)
       );
     for (const child of Object.values(node)) {
-      if (Array.isArray(child)) {
-        for (const item of child) {
-          const reason = visitPatternDefaults(item, scope);
-          if (reason !== undefined) return reason;
-        }
-      } else if (child !== null && typeof child === "object") {
-        const reason = visitPatternDefaults(child, scope);
-        if (reason !== undefined) return reason;
-      }
+      const reason = visitPatternDefaults(child, scope);
+      if (reason !== undefined) return reason;
     }
     return undefined;
   }
