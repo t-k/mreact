@@ -2949,9 +2949,7 @@ function flushHostCommitRerenders(): boolean {
       const runtimes = [...hookRenderState.queuedHostCommitRerenders];
       hookRenderState.queuedHostCommitRerenders.clear();
       for (const runtime of runtimes) {
-        const hasDirtyInstance = Array.from(runtime.instances.values()).some(
-          (instance) => instance.dirty,
-        );
+        const hasDirtyInstance = hasDirtyInstances(runtime);
         clearHostCommitStateBaselines(runtime);
 
         if (hasDirtyInstance) {
@@ -2995,9 +2993,7 @@ function flushEffectFlushRerenders(): void {
       const runtimes = [...hookRenderState.queuedEffectFlushRerenders];
       hookRenderState.queuedEffectFlushRerenders.clear();
       for (const runtime of runtimes) {
-        const hasDirtyInstance = Array.from(runtime.instances.values()).some(
-          (instance) => instance.dirty,
-        );
+        const hasDirtyInstance = hasDirtyInstances(runtime);
 
         if (hasDirtyInstance) {
           runtime.rerender("sync");
@@ -3008,6 +3004,13 @@ function flushEffectFlushRerenders(): void {
   } finally {
     effectFlushRerenderDepth -= 1;
   }
+}
+
+function hasDirtyInstances(runtime: RootRuntime): boolean {
+  for (const instance of runtime.instances.values()) {
+    if (instance.dirty) return true;
+  }
+  return false;
 }
 
 function updateHostCommitDirtyState(instance: ComponentInstance): void {
