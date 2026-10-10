@@ -7,6 +7,7 @@ import { gzipSync, brotliCompressSync } from "node:zlib";
 import { esbuild, chromium, worktreeRoot } from "../benchmarks/compat-micro/build.mjs";
 import { createPropsBenchmarkEntry } from "./compat-props-entry.mjs";
 import { transform } from "../packages/compiler/dist/index.js";
+import { createCompilerModuleContext } from "../packages/compiler/dist/internal.js";
 
 const output = resolve(
   process.env.MREACT_BENCHMARK_RESULTS_DIR ?? "test-results/compat-props",
@@ -36,7 +37,31 @@ const packages = {
   "mreact-shared": "shared",
 };
 const bundles = {};
+const componentNames = { single: "SingleProp", multiple: "MultipleProps", object: "ObjectProps" };
+const sourceProgram = createCompilerModuleContext({
+  code: source,
+  filename: "Rows.compat.tsx",
+}).program;
 for (const kind of ["single", "multiple", "object", "mixed"]) {
+  // A standalone app imports a standalone component module. Compile the same
+  // declaration through the ordinary compiler instead of measuring sibling exports.
+  const kindSource =
+    kind === "mixed"
+      ? source
+      : sourceProgram.body
+          .filter((statement) => statement.declaration?.id?.name === componentNames[kind])
+          .map((statement) => source.slice(statement.start, statement.end))
+          .join("\n");
+  const kindCompiled = transform({
+    code: kindSource,
+    filename: "Rows.compat.tsx",
+    target: "client",
+    mode: "compat",
+    dev: false,
+  });
+  if (kindCompiled.diagnostics.length) throw new Error("Props fixture compilation failed");
+  await writeFile(join(temporary, "Rows.js"), kindCompiled.code);
+  await writeFile(join(output, `compiled-${kind}.js`), kindCompiled.code);
   const entry = join(temporary, `${kind}.ts`);
   await writeFile(entry, createPropsBenchmarkEntry(kind));
   const bundled = await esbuild.build({
@@ -120,6 +145,7 @@ try {
         const beforeHeap = await heap();
         const mountMs = await page.evaluate((kind) => {
           window.measurement = window.run(kind, 1000);
+          window.measurement.verify();
           return window.measurement.mountMs;
         }, kind);
         await cdp.send("HeapProfiler.collectGarbage");
