@@ -11,6 +11,7 @@ import {
 } from "./compat-props-entry.mjs";
 import { transform } from "../packages/compiler/dist/index.js";
 import { createCompilerModuleContext } from "../packages/compiler/dist/internal.js";
+import { saveAllocationProfile } from "./compat-props-allocations.mjs";
 
 const output = resolve(
   process.env.MREACT_BENCHMARK_RESULTS_DIR ?? "test-results/compat-props",
@@ -179,6 +180,7 @@ try {
           for (let i = 0; i < 100; i++) window.measurement.update();
         });
         const { profile } = await cdp.send("HeapProfiler.stopSampling");
+        const allocationProfileFile = await saveAllocationProfile({ output, kind, trial, profile });
         const sampledUpdateAllocationBytesPerUpdate =
           profile.samples.reduce((bytes, sample) => bytes + sample.size, 0) / 100;
         await page.evaluate(() => {
@@ -193,6 +195,7 @@ try {
           mountMs,
           mountedHeapBytes,
           sampledUpdateAllocationBytesPerUpdate,
+          allocationProfileFile,
           samples,
         });
       } finally {
