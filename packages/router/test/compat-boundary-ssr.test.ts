@@ -15,7 +15,7 @@ import { renderBuiltAppRequest } from "../src/serve.js";
 test.each(
   ["development", "node", "cloudflare", "aws-lambda"].flatMap((target) =>
     [false, true].flatMap((stream) =>
-      ["@reckona/mreact-compat", "@reckona/mreact-compat/hooks"].map((hooksEntry) => ({
+      ["@reckona/mreact-compat", "@reckona/mreact-compat/hooks", "@reckona/mreact"].map((hooksEntry) => ({
         target,
         stream,
         hooksEntry,
@@ -32,9 +32,9 @@ test.each(
       await mkdir(appDir);
       await writeFile(
         join(appDir, "Counter.compat.tsx"),
-        `import { useState } from "${hooksEntry}";
+        `${hooksEntry === "@reckona/mreact" ? `import React from "${hooksEntry}";` : `import { useState } from "${hooksEntry}";`}
 export function Counter() {
-  const [count, setCount] = useState(0);
+  const [count, setCount] = ${hooksEntry === "@reckona/mreact" ? "React.useState" : "useState"}(0);
   return <button type="button" onClick={() => setCount(value => value + 1)}>compat count: {count}</button>;
 }`,
       );

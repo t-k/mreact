@@ -5,6 +5,7 @@ import {
   type CompilerModuleContext,
 } from "./compiler-module-context.js";
 export { transformCompilerModuleContext } from "./transform.js";
+export { normalizeCompatPublicHookImportsFromContext } from "./compat-import-normalization.js";
 export {
   emitClosedDirectCellAttachRoute,
   hasClosedDirectCellTextRoute,

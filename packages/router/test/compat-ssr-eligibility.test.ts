@@ -9,6 +9,46 @@ export function Counter() { const [count, setCount] = useState(0); return <butto
 
 test.each([
   ["safe counter", counter, true],
+  [
+    "proven public default hook",
+    counter
+      .replace(
+        'import { useState } from "@reckona/mreact-compat"',
+        'import React from "@reckona/mreact"',
+      )
+      .replace("= useState(0)", "= React.useState<number>(0)"),
+    true,
+  ],
+  [
+    "proven public default ID and insertion effect",
+    'import React from "@reckona/mreact"; export function Counter() { const id = React.useId(); React.useInsertionEffect(() => {}, []); return <span id={id}>value</span>; }',
+    true,
+  ],
+  [
+    "public default Context reader",
+    'import React, { createContext } from "@reckona/mreact"; const Theme = createContext("light"); export function Counter() { const value = React.useContext(Theme); return <span>{value}</span>; }',
+    true,
+  ],
+  [
+    "public default cannot hide browser reads",
+    'import React from "@reckona/mreact"; export function Counter() { const [value] = React.useState(window.title); return <span>{value}</span>; }',
+    false,
+  ],
+  [
+    "public default cannot hide nondeterminism",
+    'import React from "@reckona/mreact"; export function Counter() { const [value] = React.useState(Math.random()); return <span>{value}</span>; }',
+    false,
+  ],
+  [
+    "mutable compat default remains client-only",
+    'import React from "@reckona/mreact-compat"; export function Counter() { const [value] = React.useState(0); return <span>{value}</span>; }',
+    false,
+  ],
+  [
+    "public default JSX reference remains unproven",
+    'import React from "@reckona/mreact"; export function Counter() { const [value] = React.useState(0); return <React.Fragment>{value}</React.Fragment>; }',
+    false,
+  ],
   ["invalid syntax", "export function Counter() { return <button>; }", false],
   ["explicit server directive", '"use server";\n' + counter, false],
   [

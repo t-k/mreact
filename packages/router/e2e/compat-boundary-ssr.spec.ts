@@ -10,22 +10,24 @@ let root: string;
 let url: string;
 let close: (() => Promise<void>) | undefined;
 
-for (const hooksEntry of ["@reckona/mreact-compat", "@reckona/mreact-compat/hooks"]) {
+for (const hooksEntry of ["@reckona/mreact-compat", "@reckona/mreact-compat/hooks", "@reckona/mreact"]) {
   test.describe.serial(`production compat SSR hydration (${hooksEntry})`, () => {
     test.beforeAll(async () => {
       root = await mkdtemp(join(tmpdir(), "mreact-compat-browser-"));
       const appDir = join(root, "app");
       const outDir = join(root, ".mreact");
       await mkdir(join(appDir, "other"), { recursive: true });
+      const publicDefault = hooksEntry === "@reckona/mreact";
+      const hook = (name: string) => publicDefault ? `React.${name}` : name;
       await writeFile(
         join(appDir, "Counter.compat.tsx"),
-        `import { useState, useId, useRef, useLayoutEffect } from "${hooksEntry}";
+        `${publicDefault ? `import React from "${hooksEntry}";` : `import { useState, useId, useRef, useLayoutEffect } from "${hooksEntry}";`}
 export function Counter({ label }) {
-  const [count, setCount] = useState(0);
-  const id = useId();
-  const [value, setValue] = useState("controlled");
-  const button = useRef(null);
-  useLayoutEffect(() => {
+  const [count, setCount] = ${hook("useState")}(0);
+  const id = ${hook("useId")}();
+  const [value, setValue] = ${hook("useState")}("controlled");
+  const button = ${hook("useRef")}(null);
+  ${hook("useLayoutEffect")}(() => {
     button.current?.setAttribute("data-mounted", "true");
     return () => button.current?.setAttribute("data-disposed", "true");
   }, []);

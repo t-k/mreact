@@ -1,6 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { createCompilerModuleContext } from "@reckona/mreact-compiler/internal";
+import {
+  createCompilerModuleContext,
+  normalizeCompatPublicHookImportsFromContext,
+} from "@reckona/mreact-compiler/internal";
 import { sourceModuleCandidates } from "./source-modules.js";
 import {
   compatContextModuleNames,
@@ -79,8 +82,11 @@ export async function analyzeCompatSsrEligibility(
       return reject(file, "Circular runtime dependency is not proven safe for SSR");
     visiting.add(file);
     try {
-      const code = await readFile(file, "utf8");
-      const context = createCompilerModuleContext({ code, filename: file });
+      const source = await readFile(file, "utf8");
+      const originalContext = createCompilerModuleContext({ code: source, filename: file });
+      const code = normalizeCompatPublicHookImportsFromContext(originalContext);
+      const context =
+        code === source ? originalContext : createCompilerModuleContext({ code, filename: file });
       if (context.parseErrors.length !== 0) return reject(file, "Module could not be parsed");
       // Native JSX helpers produce HTML strings, not compat ReactNodes.
       if (!isCompatSsrFilename(file) && containsJsx(context.program))

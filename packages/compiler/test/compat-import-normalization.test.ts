@@ -1,7 +1,10 @@
 import { describe, expect, test, vi } from "vitest";
 import { createCompilerModuleContextWithOxc } from "../src/compiler-module-context.js";
 import { transform, transformCompilerModuleContext } from "../src/transform.js";
-import { normalizeCompatPublicHookImports } from "../src/compat-import-normalization.js";
+import {
+  normalizeCompatPublicHookImports,
+  normalizeCompatPublicHookImportsFromContext,
+} from "../src/compat-import-normalization.js";
 import { parseSync } from "oxc-parser";
 
 vi.mock("oxc-parser", async (importOriginal) => {
@@ -114,6 +117,9 @@ describe("compat public default hook import normalization", () => {
     "useCallback",
     "useEffect",
     "useLayoutEffect",
+    "useId",
+    "useContext",
+    "useInsertionEffect",
   ])("normalizes the proven %s hook", (hook) => {
     const source = `import React from '@reckona/mreact'; React.${hook}(value);`;
     const output = normalizeCompatPublicHookImports(source);
@@ -174,4 +180,48 @@ describe("compat public default hook import normalization", () => {
     expect(normalizeCompatPublicHookImports(source)).toBe(source);
     expect(parseSync).not.toHaveBeenCalled();
   });
+
+  test("shares the proof with original TSX without mutating its module context", () => {
+    const code =
+      'import React, { type ReactNode } from "@reckona/mreact"; export function Counter(): ReactNode { const [count] = React.useState<number>(0); const id = React.useId(); return <span id={id}>{count}</span>; }';
+    const context = createCompilerModuleContextWithOxc({ code, filename: "Counter.compat.tsx" });
+    const program = context.program;
+    const normalized = normalizeCompatPublicHookImportsFromContext(context);
+    expect(normalized).toContain("_react_useState<number>(0)");
+    expect(normalized).toContain("_react_useId()");
+    expect(normalized).toContain("type ReactNode");
+    expect(
+      createCompilerModuleContextWithOxc({ code: normalized, filename: context.filename })
+        .parseErrors,
+    ).toEqual([]);
+    expect(context.code).toBe(code);
+    expect(context.program).toBe(program);
+  });
+
+  test("does not turn a type-only default into a runtime import", () => {
+    const code = 'import type React from "@reckona/mreact"; export function Counter() { return React.useState(0); }';
+    const context = createCompilerModuleContextWithOxc({ code, filename: "Counter.compat.tsx" });
+    expect(normalizeCompatPublicHookImportsFromContext(context)).toBe(code);
+  });
+
+  test("does not capture free JSX names with generated hook aliases", () => {
+    const code = 'import React from "@reckona/mreact"; export function Counter() { React.useState(0); return <_react_useState/>; }';
+    const context = createCompilerModuleContextWithOxc({ code, filename: "Counter.compat.tsx" });
+    expect(normalizeCompatPublicHookImportsFromContext(context)).toContain("useState as _react_useState$1");
+  });
+
+  test("does not treat private property names as bindings or direct eval", () => {
+    const code = 'import React from "@reckona/mreact"; class C { #eval; #React; } React.useState(0);';
+    const context = createCompilerModuleContextWithOxc({ code, filename: "Counter.compat.tsx" });
+    expect(normalizeCompatPublicHookImportsFromContext(context)).toContain("_react_useState(0)");
+  });
+
+  test.each(["<React.Fragment>{count}</React.Fragment>", "<React />", "<Other React={count} />"])(
+    "keeps source JSX references unproven: %s",
+    (jsx) => {
+      const code = `import React from "@reckona/mreact"; export function Counter() { const [count] = React.useState(0); return ${jsx}; }`;
+      const context = createCompilerModuleContextWithOxc({ code, filename: "Counter.compat.tsx" });
+      expect(normalizeCompatPublicHookImportsFromContext(context)).toBe(code);
+    },
+  );
 });

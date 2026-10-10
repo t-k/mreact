@@ -1,5 +1,6 @@
 import { parseSync } from "oxc-parser";
 import { readArray, readObject, readSource } from "./oxc-node-utils.js";
+import type { CompilerModuleContext } from "./compiler-module-context.js";
 
 // These public hooks do not observe the call receiver. The public default is an immutable compat namespace, unlike the mutable default on mreact-compat.
 const receiverIndependentHooks = new Set([
@@ -10,18 +11,37 @@ const receiverIndependentHooks = new Set([
   "useCallback",
   "useEffect",
   "useLayoutEffect",
+  "useId",
+  "useContext",
+  "useInsertionEffect",
 ]);
 
 /** @internal Narrows proven public default hook calls without changing module resolution. */
 export function normalizeCompatPublicHookImports(code: string): string {
   if (!code.includes('"@reckona/mreact"') && !code.includes("'@reckona/mreact'")) return code;
   const parsed = parseSync("compat-output.js", code, { lang: "js", sourceType: "module" });
-  if (parsed.errors.length !== 0) return code;
-  const program = readObject(parsed.program);
+  return normalizeCompatPublicHookImportsFromContext({
+    code,
+    filename: "compat-output.js",
+    parseErrors: parsed.errors,
+    program: parsed.program,
+  });
+}
+
+/** @internal Applies the same import proof to parsed source and emitted JavaScript. */
+export function normalizeCompatPublicHookImportsFromContext(
+  context: CompilerModuleContext,
+): string {
+  let { code } = context;
+  if (context.parseErrors.length !== 0) return code;
+  const program = readObject(context.program);
   const identifiers = new Set<string>();
   let hasEval = false;
   visit(program, (node) => {
-    if (node.type === "Identifier" && typeof node.name === "string") {
+    if (
+      (node.type === "Identifier" || node.type === "JSXIdentifier") &&
+      typeof node.name === "string"
+    ) {
       identifiers.add(node.name);
       if (node.name === "eval") hasEval = true;
     }
@@ -33,6 +53,7 @@ export function normalizeCompatPublicHookImports(code: string): string {
     const statement = readObject(value);
     if (
       statement.type !== "ImportDeclaration" ||
+      statement.importKind === "type" ||
       readObject(statement.source).value !== "@reckona/mreact" ||
       readArray(statement.attributes).length !== 0
     )
@@ -48,7 +69,8 @@ export function normalizeCompatPublicHookImports(code: string): string {
     const calls: Array<{ member: Record<string, unknown>; hook: string }> = [];
     let unsafe = false;
     visit(program, (node, parent, grandparent) => {
-      if (node.type !== "Identifier" || node.name !== name) return;
+      if ((node.type !== "Identifier" && node.type !== "JSXIdentifier") || node.name !== name)
+        return;
       if (node === defaultSpecifier.local) return;
       const hook = readObject(parent.property).name;
       if (
@@ -100,7 +122,7 @@ export function normalizeCompatPublicHookImports(code: string): string {
 }
 
 function visit(
-  node: Record<string, unknown>,
+  value: unknown,
   visitor: (
     node: Record<string, unknown>,
     parent: Record<string, unknown>,
@@ -109,14 +131,12 @@ function visit(
   parent: Record<string, unknown> = {},
   grandparent: Record<string, unknown> = {},
 ): void {
-  visitor(node, parent, grandparent);
-  for (const value of Object.values(node)) {
-    if (Array.isArray(value)) {
-      for (const child of value)
-        if (child !== null && typeof child === "object")
-          visit(readObject(child), visitor, node, parent);
-    } else if (value !== null && typeof value === "object") {
-      visit(readObject(value), visitor, node, parent);
-    }
+  if (value === null || typeof value !== "object") return;
+  if (Array.isArray(value)) {
+    for (const child of value) visit(child, visitor, parent, grandparent);
+    return;
   }
+  const node = value as Record<string, unknown>;
+  visitor(node, parent, grandparent);
+  for (const child of Object.values(node)) visit(child, visitor, node, parent);
 }
