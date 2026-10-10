@@ -167,8 +167,23 @@ try {
             return (performance.now() - start) / 20;
           });
           window.measurement.validate();
-          window.measurement.dispose();
           return samples;
+        });
+        // Sample allocations separately so profiler overhead cannot affect timings.
+        await cdp.send("HeapProfiler.startSampling", {
+          samplingInterval: 32768,
+          includeObjectsCollectedByMajorGC: true,
+          includeObjectsCollectedByMinorGC: true,
+        });
+        await page.evaluate(() => {
+          for (let i = 0; i < 100; i++) window.measurement.update();
+        });
+        const { profile } = await cdp.send("HeapProfiler.stopSampling");
+        const sampledUpdateAllocationBytesPerUpdate =
+          profile.samples.reduce((bytes, sample) => bytes + sample.size, 0) / 100;
+        await page.evaluate(() => {
+          window.measurement.validate();
+          window.measurement.dispose();
         });
         if (errors.length) throw new Error(errors.join("\n"));
         results.push({
@@ -177,6 +192,7 @@ try {
           trial,
           mountMs,
           mountedHeapBytes,
+          sampledUpdateAllocationBytesPerUpdate,
           samples,
         });
       } finally {
@@ -194,6 +210,9 @@ try {
       medianUpdateMs: median(trials.flatMap((trial) => trial.samples)),
       medianMountMs: median(trials.map((trial) => trial.mountMs)),
       medianMountedHeapBytes: median(trials.map((trial) => trial.mountedHeapBytes)),
+      medianSampledUpdateAllocationBytesPerUpdate: median(
+        trials.map((trial) => trial.sampledUpdateAllocationBytesPerUpdate),
+      ),
     };
   });
   const report = {
@@ -211,6 +230,10 @@ try {
       warmup: 6,
       samples: 24,
       updatesPerSample: 20,
+      allocationUpdates: 100,
+      allocationSamplingInterval: 32768,
+      allocationIncludesCollectedObjects: true,
+      allocationMeasuredOutsideTimings: true,
       measuredBundle: "mixed",
       hostCommitBundle: "host-commit",
       clientDevtools: false,
