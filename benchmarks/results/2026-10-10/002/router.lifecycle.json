@@ -1,0 +1,51 @@
+{
+  "status": "completed",
+  "measurementFailures": 0,
+  "cleanupFailures": 0,
+  "cleanup": [
+    {
+      "adapter": "marko-run",
+      "status": "completed"
+    },
+    {
+      "adapter": "nuxt",
+      "status": "completed"
+    },
+    {
+      "adapter": "svelte-kit",
+      "status": "completed"
+    },
+    {
+      "adapter": "qwik-city",
+      "status": "completed"
+    },
+    {
+      "adapter": "solid-start",
+      "status": "completed"
+    },
+    {
+      "adapter": "tanstack-start",
+      "status": "completed"
+    },
+    {
+      "adapter": "tanstack-start-solid",
+      "status": "completed"
+    },
+    {
+      "adapter": "next-app-router",
+      "status": "completed"
+    },
+    {
+      "adapter": "mreact-app-router",
+      "status": "completed"
+    },
+    {
+      "adapter": "mreact-app-router+mreact react-compat",
+      "status": "completed"
+    },
+    {
+      "adapter": "mreact-app-router+log enabled",
+      "status": "completed"
+    }
+  ]
+}
