@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.231 - 2026-10-10
+
+### Changed
+
+- Extended safe public default-import hook normalization to `useId`, `useContext`, and `useInsertionEffect`, allowing bundlers to remove unused compatibility exports when all uses are proven safe.
+- Enabled eligible App Router compat components using supported direct default-import hook calls from `@reckona/mreact` to participate in SSR, while preserving independent browser, nondeterminism, and Context safety checks.
+- Reduced React-compatible commit overhead by avoiding instance-array copies during dirty checks and clearing state and external-store baselines only for touched hook slots, while preserving effect ordering, reentrant updates, and exception cleanup.
+
 ## 0.0.230 - 2026-10-09
 
 ### Changed

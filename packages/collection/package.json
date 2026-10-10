@@ -1,6 +1,6 @@
 {
   "name": "@reckona/mreact-collection",
-  "version": "0.0.230",
+  "version": "0.0.231",
   "description": "Opt-in keyed reactive collections for mreact.",
   "keywords": [
     "collection",
