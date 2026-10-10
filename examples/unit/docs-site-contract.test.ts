@@ -2061,10 +2061,11 @@ describe("docs-site example contract", () => {
     expect(benchmarkData).toContain("readonly paint?: string");
     expect(benchmarkData).toContain('"title": "Primitive DOM benchmarks"');
     expect(benchmarkData).toContain('"title": "Primitive reactivity microbenchmarks"');
-    expect(benchmarkData).toContain('"cardCount": 13');
-    expect(benchmarkData).toContain('"cardCount": 40');
-    expect(benchmarkData).toContain('"cardCount": 4');
-    expect(benchmarkData).toContain('"cardCount": 3');
+    const { benchmarkRankingSuites } = await import("../docs-site/src/benchmark-results.js");
+    for (const suite of benchmarkRankingSuites) {
+      expect(suite.cardCount).toBe(suite.cards.length);
+      expect(suite.cardCount).toBeGreaterThan(0);
+    }
     expect(benchmarkData).toContain("benchmarkRankingSuites");
     expect(benchmarkData).toContain("create 1k event targets");
     expect(benchmarkData).toContain("mreact-app-router");

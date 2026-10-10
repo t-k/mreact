@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.232 - 2026-10-10
+
+### Fixed
+
+- Preserved type-only references to the public default import while converting supported direct hook calls to named imports, so TypeScript type queries no longer block compatibility bundle optimization or eligible App Router SSR. Runtime references inside type assertions and other TypeScript expressions still retain the conservative fallback.
+
 ## 0.0.231 - 2026-10-10
 
 ### Changed
