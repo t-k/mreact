@@ -1,0 +1,1 @@
+{"framework":"mreact-react-compat-vdom-v0.0.231-local-keyed","keyed":true,"benchmark":"41_size-uncompressed","type":"size","values":{"DEFAULT":{"min":169.2,"max":169.2,"median":169.2,"mean":169.2,"stddev":null,"values":[169.2]}}}
