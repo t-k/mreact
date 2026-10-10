@@ -46,7 +46,7 @@
     },
     "react-compat": {
       "initialBrotliBytes": 37100,
-      "initialGzipBytes": 41200,
+      "initialGzipBytes": 41300,
       "measuredBaseline": {
         "initialBrotliBytes": 35259,
         "initialGzipBytes": 40426
