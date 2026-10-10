@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.0.233 - 2026-10-10
+
+This release contains no package-facing changes.
+
 ## 0.0.232 - 2026-10-10
 
 ### Fixed
