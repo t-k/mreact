@@ -50,3 +50,41 @@ window.run = (kind, count) => {
 };
 `;
 }
+
+export function createHostCommitBenchmarkEntry() {
+  return `
+import { createElement, createRoot, flushSync, memo, useRef, useState } from "@reckona/mreact-compat";
+window.run = (_kind, count) => {
+  const root = createRoot(document.getElementById("app"));
+  const Row = memo(function Row({ id }) {
+    useState(id); useRef(id);
+    return createElement("span", null, "row-" + id);
+  });
+  function Observer({ version }) {
+    const [value, setValue] = useState(0);
+    return createElement("button", { ref: node => { if (node) setValue(version); } }, "commit-" + value);
+  }
+  const children = Array.from({ length: count }, (_, id) => createElement(Row, { key: id, id }));
+  function App({ version }) { return [createElement(Observer, { key: "observer", version }), ...children]; }
+  let version = 0;
+  const start = performance.now();
+  flushSync(() => root.render(createElement(App, { version })));
+  const mountMs = performance.now() - start;
+  const initialRows = [...document.querySelectorAll("span")];
+  return {
+    mountMs,
+    update() { flushSync(() => root.render(createElement(App, { version: ++version }))); },
+    verify() {
+      const rows = document.querySelectorAll("span");
+      if (rows.length !== count || document.querySelector("button").textContent !== "commit-" + version)
+        throw new Error("Commit state or row count changed");
+      for (let i = 0; i < count; i++)
+        if (rows[i] !== initialRows[i] || rows[i].textContent !== "row-" + i)
+          throw new Error("Commit row identity or values changed");
+    },
+    validate() { (${validatePropsMeasurement.toString()})(this); },
+    dispose() { root.unmount(); }
+  };
+};
+`;
+}

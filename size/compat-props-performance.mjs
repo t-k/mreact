@@ -5,7 +5,10 @@ import { join, resolve } from "node:path";
 import { createServer } from "node:http";
 import { gzipSync, brotliCompressSync } from "node:zlib";
 import { esbuild, chromium, worktreeRoot } from "../benchmarks/compat-micro/build.mjs";
-import { createPropsBenchmarkEntry } from "./compat-props-entry.mjs";
+import {
+  createPropsBenchmarkEntry,
+  createHostCommitBenchmarkEntry,
+} from "./compat-props-entry.mjs";
 import { transform } from "../packages/compiler/dist/index.js";
 import { createCompilerModuleContext } from "../packages/compiler/dist/internal.js";
 
@@ -42,11 +45,11 @@ const sourceProgram = createCompilerModuleContext({
   code: source,
   filename: "Rows.compat.tsx",
 }).program;
-for (const kind of ["single", "multiple", "object", "mixed"]) {
+for (const kind of ["single", "multiple", "object", "mixed", "host-commit"]) {
   // A standalone app imports a standalone component module. Compile the same
   // declaration through the ordinary compiler instead of measuring sibling exports.
   const kindSource =
-    kind === "mixed"
+    kind === "mixed" || kind === "host-commit"
       ? source
       : sourceProgram.body
           .filter((statement) => statement.declaration?.id?.name === componentNames[kind])
@@ -63,7 +66,10 @@ for (const kind of ["single", "multiple", "object", "mixed"]) {
   await writeFile(join(temporary, "Rows.js"), kindCompiled.code);
   await writeFile(join(output, `compiled-${kind}.js`), kindCompiled.code);
   const entry = join(temporary, `${kind}.ts`);
-  await writeFile(entry, createPropsBenchmarkEntry(kind));
+  await writeFile(
+    entry,
+    kind === "host-commit" ? createHostCommitBenchmarkEntry() : createPropsBenchmarkEntry(kind),
+  );
   const bundled = await esbuild.build({
     entryPoints: [entry],
     bundle: true,
@@ -110,13 +116,14 @@ for (const kind of ["single", "multiple", "object", "mixed"]) {
     JSON.stringify(bundled.metafile, null, 2) + "\n",
   );
 }
-const code = bundles.mixed.code;
 const server = createServer((request, response) => {
-  response.setHeader("content-type", request.url === "/entry.js" ? "text/javascript" : "text/html");
+  const hostCommit = request.url?.startsWith("/host-commit");
+  const isScript = request.url?.endsWith(".js");
+  response.setHeader("content-type", isScript ? "text/javascript" : "text/html");
   response.end(
-    request.url === "/entry.js"
-      ? code
-      : '<!doctype html><div id="app"></div><script type="module" src="/entry.js"></script>',
+    isScript
+      ? bundles[hostCommit ? "host-commit" : "mixed"].code
+      : `<!doctype html><div id="app"></div><script type="module" src="/${hostCommit ? "host-commit" : "entry"}.js"></script>`,
   );
 });
 let browser;
@@ -128,14 +135,16 @@ try {
   browser = await chromium.launch();
   const results = [];
   for (let trial = 0; trial < 3; trial++)
-    for (const kind of ["single", "multiple", "object"]) {
+    for (const kind of ["single", "multiple", "object", "host-commit"]) {
       const page = await browser.newPage();
       try {
         const errors = [];
         page.on("pageerror", (error) => errors.push(error.message));
         const cdp = await page.context().newCDPSession(page);
         await cdp.send("Performance.enable");
-        await page.goto(`http://127.0.0.1:${server.address().port}`);
+        await page.goto(
+          `http://127.0.0.1:${server.address().port}/${kind === "host-commit" ? "host-commit" : ""}`,
+        );
         await page.waitForFunction(() => typeof window.run === "function");
         await cdp.send("HeapProfiler.collectGarbage");
         const heap = async () =>
@@ -144,7 +153,7 @@ try {
           ).value;
         const beforeHeap = await heap();
         const mountMs = await page.evaluate((kind) => {
-          window.measurement = window.run(kind, 1000);
+          window.measurement = window.run(kind, kind === "host-commit" ? 10000 : 1000);
           window.measurement.verify();
           return window.measurement.mountMs;
         }, kind);
@@ -171,7 +180,7 @@ try {
     values.sort((a, b) => a - b);
     return (values[(values.length - 1) >> 1] + values[values.length >> 1]) / 2;
   };
-  const summary = ["single", "multiple", "object"].map((kind) => {
+  const summary = ["single", "multiple", "object", "host-commit"].map((kind) => {
     const trials = results.filter((result) => result.kind === kind);
     return {
       kind,
@@ -190,6 +199,7 @@ try {
     browser: browser.version(),
     settings: {
       rows: 1000,
+      hostCommitRows: 10000,
       trials: 3,
       warmup: 6,
       samples: 24,
