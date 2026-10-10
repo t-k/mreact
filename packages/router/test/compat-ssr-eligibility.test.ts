@@ -20,6 +20,16 @@ test.each([
     true,
   ],
   [
+    "public default referenced only in a type query",
+    'import React from "@reckona/mreact"; type StateHook = typeof React.useState; export function Counter() { const [count] = React.useState(0); return <span>{count}</span>; }',
+    true,
+  ],
+  [
+    "public default runtime cast remains unproven",
+    'import React from "@reckona/mreact"; const exposed = React as unknown; export function Counter() { const [count] = React.useState(0); return <span>{count}</span>; }',
+    false,
+  ],
+  [
     "proven public default ID and insertion effect",
     'import React from "@reckona/mreact"; export function Counter() { const id = React.useId(); React.useInsertionEffect(() => {}, []); return <span id={id}>value</span>; }',
     true,

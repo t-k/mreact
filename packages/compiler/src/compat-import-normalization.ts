@@ -37,13 +37,13 @@ export function normalizeCompatPublicHookImportsFromContext(
   const program = readObject(context.program);
   const identifiers = new Set<string>();
   let hasEval = false;
-  visit(program, (node) => {
+  visit(program, (node, _parent, _grandparent, typeOnly) => {
     if (
       (node.type === "Identifier" || node.type === "JSXIdentifier") &&
       typeof node.name === "string"
     ) {
       identifiers.add(node.name);
-      if (node.name === "eval") hasEval = true;
+      if (node.name === "eval" && !typeOnly) hasEval = true;
     }
   });
   if (hasEval) return code;
@@ -68,10 +68,15 @@ export function normalizeCompatPublicHookImportsFromContext(
 
     const calls: Array<{ member: Record<string, unknown>; hook: string }> = [];
     let unsafe = false;
-    visit(program, (node, parent, grandparent) => {
+    let hasTypeReference = false;
+    visit(program, (node, parent, grandparent, typeOnly) => {
       if ((node.type !== "Identifier" && node.type !== "JSXIdentifier") || node.name !== name)
         return;
       if (node === defaultSpecifier.local) return;
+      if (typeOnly) {
+        hasTypeReference = true;
+        return;
+      }
       const hook = readObject(parent.property).name;
       if (
         parent.type !== "MemberExpression" ||
@@ -113,7 +118,7 @@ export function normalizeCompatPublicHookImportsFromContext(
     edits.push({
       start: statement.start as number,
       end: statement.end as number,
-      text: `${original}import { ${named} } from "@reckona/mreact";`,
+      text: `${hasTypeReference ? `import type ${name} from "@reckona/mreact";\n` : ""}${original}import { ${named} } from "@reckona/mreact";`,
     });
   }
   edits.sort((a, b) => b.start - a.start);
@@ -127,16 +132,36 @@ function visit(
     node: Record<string, unknown>,
     parent: Record<string, unknown>,
     grandparent: Record<string, unknown>,
+    typeOnly: boolean,
   ) => void,
   parent: Record<string, unknown> = {},
   grandparent: Record<string, unknown> = {},
+  typeOnly = false,
 ): void {
   if (value === null || typeof value !== "object") return;
   if (Array.isArray(value)) {
-    for (const child of value) visit(child, visitor, parent, grandparent);
+    for (const child of value) visit(child, visitor, parent, grandparent, typeOnly);
     return;
   }
   const node = value as Record<string, unknown>;
-  visitor(node, parent, grandparent);
-  for (const child of Object.values(node)) visit(child, visitor, node, parent);
+  // Classify erased declarations and type edges rather than skipping TS nodes:
+  // assertions, instantiations, enums, and namespaces still contain runtime code.
+  typeOnly ||=
+    node.type === "TSTypeAliasDeclaration" ||
+    node.type === "TSInterfaceDeclaration" ||
+    node.type === "TSDeclareFunction" ||
+    node.importKind === "type" ||
+    node.exportKind === "type";
+  visitor(node, parent, grandparent, typeOnly);
+  for (const [key, child] of Object.entries(node)) {
+    const childTypeOnly =
+      typeOnly ||
+      key === "typeAnnotation" ||
+      key === "typeParameters" ||
+      key === "typeArguments" ||
+      key === "returnType" ||
+      key === "superTypeArguments" ||
+      key === "implements";
+    visit(child, visitor, node, parent, childTypeOnly);
+  }
 }

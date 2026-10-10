@@ -198,20 +198,88 @@ describe("compat public default hook import normalization", () => {
     expect(context.program).toBe(program);
   });
 
+  test.each([
+    "type StateHook = typeof React.useState;",
+    "interface Hooks { state: typeof React.useState }",
+    "const marker: typeof React.useState | undefined = undefined;",
+    "const marker = undefined as typeof React.useState | undefined;",
+    "const marker = undefined satisfies typeof React.useState | undefined;",
+    "function helper<T extends typeof React.useState>() {}",
+    "type Namespace = typeof React;",
+    "interface Hooks extends React.Hooks {}",
+    "declare function helper(): React.Hook;",
+    "function helper(): React.Hook { return undefined; }",
+    "class Helper extends Base<typeof React> {}",
+    "class Helper implements React.Hooks {}",
+    "helper<typeof React>();",
+    "export type { React };",
+  ])("preserves erased default references with a type import: %s", (statement) => {
+    const code = `import React from "@reckona/mreact"; ${statement} export function Counter() { const [count] = React.useState(0); return <span>{count}</span>; }`;
+    const context = createCompilerModuleContextWithOxc({ code, filename: "Counter.compat.tsx" });
+    const normalized = normalizeCompatPublicHookImportsFromContext(context);
+    expect(normalized).toContain('import type React from "@reckona/mreact";');
+    expect(normalized).toContain(statement);
+    expect(normalized).toContain("_react_useState(0)");
+    expect(
+      createCompilerModuleContextWithOxc({ code: normalized, filename: context.filename })
+        .parseErrors,
+    ).toEqual([]);
+    expect(compile(code).code).not.toContain("import React");
+  });
+
+  test.each([
+    "consume(React as unknown);",
+    "consume(React satisfies unknown);",
+    "consume(React!);",
+    "consume(<unknown>React);",
+    "consume(React as typeof React);",
+    "consume(React satisfies typeof React);",
+    "React.useState(0); consume(React);",
+    "class Helper extends React.Component {}",
+
+    "const hook = React.useState<number>;",
+    "enum Hook { state = consume(React) }",
+    "namespace Hooks { export const state = React; }",
+  ])("retains runtime references inside TypeScript nodes: %s", (statement) => {
+    const code = `import React from "@reckona/mreact"; ${statement} React.useState(0);`;
+    const context = createCompilerModuleContextWithOxc({ code, filename: "hooks.ts" });
+    expect(context.parseErrors).toEqual([]);
+    expect(normalizeCompatPublicHookImportsFromContext(context)).toBe(code);
+  });
+
+  test("ignores type-only eval names while reserving aliases from type scopes", () => {
+    const code =
+      'import React from "@reckona/mreact"; type eval = typeof React; type _react_useState = number; React.useState(0);';
+    const context = createCompilerModuleContextWithOxc({ code, filename: "hooks.ts" });
+    expect(normalizeCompatPublicHookImportsFromContext(context)).toContain("_react_useState$1(0)");
+  });
+
+  test("does not treat type imports named eval as runtime eval", () => {
+    const code =
+      'import React from "@reckona/mreact"; import type { eval } from "./types"; React.useState(0);';
+    const context = createCompilerModuleContextWithOxc({ code, filename: "hooks.ts" });
+    expect(normalizeCompatPublicHookImportsFromContext(context)).toContain("_react_useState(0)");
+  });
+
   test("does not turn a type-only default into a runtime import", () => {
-    const code = 'import type React from "@reckona/mreact"; export function Counter() { return React.useState(0); }';
+    const code =
+      'import type React from "@reckona/mreact"; export function Counter() { return React.useState(0); }';
     const context = createCompilerModuleContextWithOxc({ code, filename: "Counter.compat.tsx" });
     expect(normalizeCompatPublicHookImportsFromContext(context)).toBe(code);
   });
 
   test("does not capture free JSX names with generated hook aliases", () => {
-    const code = 'import React from "@reckona/mreact"; export function Counter() { React.useState(0); return <_react_useState/>; }';
+    const code =
+      'import React from "@reckona/mreact"; export function Counter() { React.useState(0); return <_react_useState/>; }';
     const context = createCompilerModuleContextWithOxc({ code, filename: "Counter.compat.tsx" });
-    expect(normalizeCompatPublicHookImportsFromContext(context)).toContain("useState as _react_useState$1");
+    expect(normalizeCompatPublicHookImportsFromContext(context)).toContain(
+      "useState as _react_useState$1",
+    );
   });
 
   test("does not treat private property names as bindings or direct eval", () => {
-    const code = 'import React from "@reckona/mreact"; class C { #eval; #React; } React.useState(0);';
+    const code =
+      'import React from "@reckona/mreact"; class C { #eval; #React; } React.useState(0);';
     const context = createCompilerModuleContextWithOxc({ code, filename: "Counter.compat.tsx" });
     expect(normalizeCompatPublicHookImportsFromContext(context)).toContain("_react_useState(0)");
   });

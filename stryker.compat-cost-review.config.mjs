@@ -6,7 +6,7 @@ export default {
     mutate: [
       // The emitted-JS parser options and context filename are fixed metadata.
       "packages/compiler/src/compat-import-normalization.ts:1-21",
-      "packages/compiler/src/compat-import-normalization.ts:31-143",
+      "packages/compiler/src/compat-import-normalization.ts:31-167",
       "packages/router/src/compat-ssr.ts:86-97",
       "packages/react-compat/src/hooks.ts:632-633",
       "packages/react-compat/src/hooks.ts:1179-1181",
