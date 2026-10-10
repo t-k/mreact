@@ -1,0 +1,1 @@
+{"framework":"react-hooks-v19.3.0-keyed","keyed":true,"benchmark":"25_run-clear-memory","type":"memory","values":{"DEFAULT":{"min":2.5442628860473633,"max":2.5442628860473633,"median":2.5442628860473633,"mean":2.5442628860473633,"stddev":null,"values":[2.5442628860473633]}}}
