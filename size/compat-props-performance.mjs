@@ -171,7 +171,14 @@ try {
           return samples;
         });
         if (errors.length) throw new Error(errors.join("\n"));
-        results.push({ kind, trial, mountMs, mountedHeapBytes, samples });
+        results.push({
+          kind,
+          bundle: kind === "host-commit" ? "host-commit" : "mixed",
+          trial,
+          mountMs,
+          mountedHeapBytes,
+          samples,
+        });
       } finally {
         await page.close();
       }
@@ -205,6 +212,7 @@ try {
       samples: 24,
       updatesPerSample: 20,
       measuredBundle: "mixed",
+      hostCommitBundle: "host-commit",
       clientDevtools: false,
       validation: "all rows, current and next odd/even states outside timing",
     },

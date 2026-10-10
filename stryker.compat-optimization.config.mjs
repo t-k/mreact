@@ -7,13 +7,13 @@ export default {
     mutate: [
       // Parser filename/options are fixed metadata for already-emitted JavaScript.
       // Keep all normalization decisions and AST traversal in the mutation scope.
-      "packages/compiler/src/compat-import-normalization.ts:1-17",
-      "packages/compiler/src/compat-import-normalization.ts:19-122",
-      "packages/react-compat/src/hooks.ts:483-483",
-      "packages/react-compat/src/hooks.ts:544-548",
-      "packages/react-compat/src/hooks.ts:729-731",
-      "packages/react-compat/src/hooks.ts:752-756",
-      "packages/react-compat/src/hooks.ts:2573-2573",
+      "packages/compiler/src/compat-import-normalization.ts:1-21",
+      "packages/compiler/src/compat-import-normalization.ts:31-143",
+      "packages/react-compat/src/hooks.ts:486-486",
+      "packages/react-compat/src/hooks.ts:547-551",
+      "packages/react-compat/src/hooks.ts:734-736",
+      "packages/react-compat/src/hooks.ts:757-761",
+      "packages/react-compat/src/hooks.ts:2578-2578",
     ],
     testFiles: [
       "packages/compiler/test/compat-import-normalization.test.ts",

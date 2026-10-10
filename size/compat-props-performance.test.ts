@@ -60,7 +60,16 @@ describe("compat props benchmark validation", () => {
 
   test("rejects lost rows and stale text", () => {
     const initial = rows();
-    expect(() => assertPropsRows(initial.slice(1), initial, "single", 3, 0)).toThrow();
+    expect(() => assertPropsRows(initial.slice(1), initial, "single", 3, 0)).toThrow(/count/);
+    expect(() => assertPropsRows([...initial, ...rows(1)], initial, "single", 3, 0)).toThrow(
+      /count/,
+    );
     expect(() => assertPropsRows(initial, initial, "single", 3, 1)).toThrow(/values/);
+  });
+
+  test("the single-prop validator only checks its text and identity", () => {
+    const initial = rows();
+    for (const row of initial) row.className = "untouched";
+    expect(() => assertPropsRows(initial, initial, "single", 3, 0)).not.toThrow();
   });
 });
