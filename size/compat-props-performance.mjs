@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { createServer } from "node:http";
 import { gzipSync, brotliCompressSync } from "node:zlib";
 import { esbuild, chromium, worktreeRoot } from "../benchmarks/compat-micro/build.mjs";
+import { createPropsBenchmarkEntry } from "./compat-props-entry.mjs";
 import { transform } from "../packages/compiler/dist/index.js";
 
 const output = resolve(
@@ -28,68 +29,63 @@ if (compiled.diagnostics.length || !compiled.code.includes("createReactiveDomBlo
   throw new Error("Expected ordinary compiler prop blocks");
 await writeFile(join(output, "compiled-rows.js"), compiled.code);
 await writeFile(join(temporary, "Rows.js"), compiled.code);
-await writeFile(
-  join(temporary, "entry.ts"),
-  `
-import { createElement, createRoot, flushSync, useState } from "@reckona/mreact-compat";
-import { SingleProp, MultipleProps, ObjectProps } from "./Rows.js";
-window.run = (kind, count) => {
-  const root = createRoot(document.getElementById("app"));
-  let setVersion;
-  const Row = { single: SingleProp, multiple: MultipleProps, object: ObjectProps }[kind];
-  function App() {
-    const [version, set] = useState(0); setVersion = set;
-    return Array.from({ length: count }, (_, id) => createElement(Row, kind === "single" ? { key: id, label: "value-" + version } : kind === "multiple" ? { key: id, label: "value-" + version, selected: version % 2 === 1 } : { key: id, row: { label: "value-" + version }, selected: version % 2 === 1 }));
-  }
-  const start = performance.now(); flushSync(() => root.render(createElement(App, null)));
-  const mountMs = performance.now() - start;
-  const first = document.querySelector("span");
-  let version = 0;
-  return {
-    mountMs,
-    update() { const start = performance.now(); flushSync(() => setVersion(++version)); return performance.now() - start; },
-    verify() {
-      const rows = document.querySelectorAll("span");
-      if (rows.length !== count || rows[0] !== first || [...rows].some(row => row.textContent !== "value-" + version || (kind !== "single" && row.className !== (version % 2 ? "selected" : "")))) throw new Error("DOM identity or values changed");
-    },
-    dispose() { root.unmount(); }
-  };
-};
-`,
-);
 const packages = {
   "mreact-compat": "react-compat",
   "mreact-reactive-core": "reactive-core",
   "mreact-reactive-dom": "reactive-dom",
   "mreact-shared": "shared",
 };
-const bundled = await esbuild.build({
-  entryPoints: [join(temporary, "entry.ts")],
-  bundle: true,
-  minify: true,
-  format: "esm",
-  platform: "browser",
-  target: "es2022",
-  write: false,
-  define: { "process.env.NODE_ENV": '"production"', __DEV__: "false" },
-  legalComments: "none",
-  plugins: [
-    {
-      name: "workspace-source",
-      setup(build) {
-        build.onResolve({ filter: /^@reckona\// }, (args) => {
-          const [name, ...rest] = args.path.slice("@reckona/".length).split("/");
-          if (!packages[name]) return null;
-          let sub = rest.join("/") || "index";
-          if (packages[name] === "reactive-core" && sub === "runtime-state")
-            sub = "runtime-state-public";
-          return { path: join(worktreeRoot, "packages", packages[name], "src", `${sub}.ts`) };
-        });
-      },
+const bundles = {};
+for (const kind of ["single", "multiple", "object", "mixed"]) {
+  const entry = join(temporary, `${kind}.ts`);
+  await writeFile(entry, createPropsBenchmarkEntry(kind));
+  const bundled = await esbuild.build({
+    entryPoints: [entry],
+    bundle: true,
+    minify: true,
+    format: "esm",
+    platform: "browser",
+    target: "es2022",
+    write: false,
+    define: {
+      "process.env.NODE_ENV": '"production"',
+      __DEV__: "false",
+      __MREACT_CLIENT_DEVTOOLS__: "false",
     },
-  ],
-});
-const code = bundled.outputFiles[0].contents;
+    metafile: true,
+    legalComments: "none",
+    plugins: [
+      {
+        name: "workspace-source",
+        setup(build) {
+          build.onResolve({ filter: /^@reckona\// }, (args) => {
+            const [name, ...rest] = args.path.slice("@reckona/".length).split("/");
+            if (!packages[name]) return null;
+            let sub = rest.join("/") || "index";
+            if (packages[name] === "reactive-core" && sub === "runtime-state")
+              sub = "runtime-state-public";
+            return { path: join(worktreeRoot, "packages", packages[name], "src", `${sub}.ts`) };
+          });
+        },
+      },
+    ],
+  });
+  const code = bundled.outputFiles[0].contents;
+  bundles[kind] = {
+    code,
+    bytes: {
+      raw: code.length,
+      gzip: gzipSync(code).length,
+      brotli: brotliCompressSync(code).length,
+    },
+  };
+  await writeFile(join(output, `${kind}.js`), code);
+  await writeFile(
+    join(output, `${kind}-metafile.json`),
+    JSON.stringify(bundled.metafile, null, 2) + "\n",
+  );
+}
+const code = bundles.mixed.code;
 const server = createServer((request, response) => {
   response.setHeader("content-type", request.url === "/entry.js" ? "text/javascript" : "text/html");
   response.end(
@@ -135,7 +131,7 @@ try {
             for (let i = 0; i < 20; i++) window.measurement.update();
             return (performance.now() - start) / 20;
           });
-          window.measurement.verify();
+          window.measurement.validate();
           window.measurement.dispose();
           return samples;
         });
@@ -166,17 +162,31 @@ try {
     node: process.version,
     createdAt: new Date().toISOString(),
     browser: browser.version(),
-    settings: { rows: 1000, trials: 3, warmup: 6, samples: 24, updatesPerSample: 20 },
-    bytes: {
-      raw: code.length,
-      gzip: gzipSync(code).length,
-      brotli: brotliCompressSync(code).length,
+    settings: {
+      rows: 1000,
+      trials: 3,
+      warmup: 6,
+      samples: 24,
+      updatesPerSample: 20,
+      measuredBundle: "mixed",
+      clientDevtools: false,
+      validation: "all rows, current and next odd/even states outside timing",
     },
+    bytes: bundles.mixed.bytes,
+    bundleBytes: Object.fromEntries(
+      Object.entries(bundles).map(([kind, bundle]) => [kind, bundle.bytes]),
+    ),
     results,
     summary,
   };
   await writeFile(join(output, "props-performance.json"), JSON.stringify(report, null, 2) + "\n");
-  console.log(JSON.stringify({ output, bytes: report.bytes, summary }, null, 2));
+  console.log(
+    JSON.stringify(
+      { output, bytes: report.bytes, bundleBytes: report.bundleBytes, summary },
+      null,
+      2,
+    ),
+  );
 } finally {
   await browser?.close();
   await new Promise((resolve) => server.close(resolve));
