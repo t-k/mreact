@@ -264,7 +264,10 @@ interface HookRenderState {
   hostCommitDepth: number;
   queuedHostCommitRerenders: Set<RootRuntime>;
   queuedEffectFlushRerenders: Set<RootRuntime>;
+  hostCommitStateBaselines?: WeakMap<RootRuntime, HostCommitBaselineSlot[]>;
 }
+
+type HostCommitBaselineSlot = Extract<HookSlot, { kind: "state" | "store" }>;
 
 const HOOK_RENDER_STATE_KEY = Symbol.for("modular.react.hook_render_state");
 const hookRenderState = ((
@@ -626,6 +629,8 @@ export function createRootRuntime(
       for (const instance of this.instances.values()) {
         try { cleanupInstance(instance); } catch (error) { firstError ??= error; }
       }
+      clearHostCommitStateBaselines(this);
+      hookRenderState.queuedHostCommitRerenders.delete(this);
 
       this.pendingLayoutEffects = [];
       this.pendingInsertionEffects = [];
@@ -1171,8 +1176,8 @@ function enqueueStateUpdate(
       return;
     }
   }
-  if (hookRenderState.hostCommitDepth > 0 && !Object.hasOwn(slot, "hostCommitValue")) {
-    slot.hostCommitValue = renderDraft?.value ?? slot.value;
+  if (hookRenderState.hostCommitDepth > 0) {
+    recordHostCommitStateBaseline(runtime, slot, renderDraft?.value ?? slot.value);
   }
   updates.push({
     action: value,
@@ -1866,8 +1871,8 @@ export function useSyncExternalStore<T>(
         const nextSnapshot = (slot.getSnapshot ?? getSnapshot)();
 
         if (!Object.is(slot.value, nextSnapshot)) {
-          if (hookRenderState.hostCommitDepth > 0 && !Object.hasOwn(slot, "hostCommitValue")) {
-            slot.hostCommitValue = slot.value;
+          if (hookRenderState.hostCommitDepth > 0) {
+            recordHostCommitStateBaseline(runtime, slot, slot.value);
           }
           slot.value = nextSnapshot;
           runtime.externalStoreUpdate = true;
@@ -2948,18 +2953,27 @@ function flushHostCommitRerenders(): boolean {
     ) {
       const runtimes = [...hookRenderState.queuedHostCommitRerenders];
       hookRenderState.queuedHostCommitRerenders.clear();
-      for (const runtime of runtimes) {
-        const hasDirtyInstance = hasDirtyInstances(runtime);
-        clearHostCommitStateBaselines(runtime);
+      try {
+        for (const runtime of runtimes) {
+          const hasDirtyInstance = hasDirtyInstances(runtime);
+          clearHostCommitStateBaselines(runtime);
 
-        if (hasDirtyInstance) {
-          didRerender = true;
-          runtime.rerender("sync");
+          if (hasDirtyInstance) {
+            didRerender = true;
+            runtime.rerender("sync");
+          }
         }
+      } catch (error) {
+        for (const runtime of runtimes) clearHostCommitStateBaselines(runtime);
+        throw error;
       }
     }
+    for (const runtime of hookRenderState.queuedHostCommitRerenders)
+      clearHostCommitStateBaselines(runtime);
     hookRenderState.queuedHostCommitRerenders.clear();
   } finally {
+    for (const runtime of hookRenderState.queuedHostCommitRerenders)
+      clearHostCommitStateBaselines(runtime);
     hostCommitRerenderDepth -= 1;
   }
   return didRerender;
@@ -3027,14 +3041,28 @@ function updateHostCommitDirtyState(instance: ComponentInstance): void {
     );
 }
 
-function clearHostCommitStateBaselines(runtime: RootRuntime): void {
-  for (const instance of runtime.instances.values()) {
-    for (const slot of instance.hooks) {
-      if (slot.kind === "state" || slot.kind === "store") {
-        delete slot.hostCommitValue;
-      }
-    }
+function recordHostCommitStateBaseline(
+  runtime: RootRuntime,
+  slot: HostCommitBaselineSlot,
+  value: unknown,
+): void {
+  if (Object.hasOwn(slot, "hostCommitValue")) return;
+  slot.hostCommitValue = value;
+  const baselines = (hookRenderState.hostCommitStateBaselines ??= new WeakMap());
+  let slots = baselines.get(runtime);
+  if (slots === undefined) {
+    slots = [];
+    baselines.set(runtime, slots);
   }
+  slots.push(slot);
+}
+
+function clearHostCommitStateBaselines(runtime: RootRuntime): void {
+  const baselines = hookRenderState.hostCommitStateBaselines;
+  const slots = baselines?.get(runtime);
+  if (slots === undefined) return;
+  baselines!.delete(runtime);
+  for (const slot of slots) delete slot.hostCommitValue;
 }
 
 function getCacheLeaf(
