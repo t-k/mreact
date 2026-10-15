@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { buildNavigationRuntimeBundle } from "./packages/router/dist/client.js";
+import { buildNavigationRuntimeBundle } from "../../packages/router/dist/client.js";
 import { createStrykerConfig } from "./stryker.base.config.mjs";
 
 // Mutate the emitted executable runtime, rather than replacing an entire source template.

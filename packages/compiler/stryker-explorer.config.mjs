@@ -1,4 +1,4 @@
-import { createStrykerConfig } from "../../stryker.base.config.mjs";
+import { createStrykerConfig } from "../../config/stryker/stryker.base.config.mjs";
 
 export default createStrykerConfig({
   name: "compiler-explorer",
