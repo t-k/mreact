@@ -8258,6 +8258,31 @@ export default function Page() {
     expect(document.querySelector("main")?.textContent).toBe("About");
   });
 
+  test.each([false, true])("navigates away without reading external server action HTML (single-flight=%s)", async (singleFlight) => {
+    const originalUrl = location.href;
+    const response = new Response('<div data-mreact-route-id="index"><main>Injected</main></div>', {
+      headers: { "content-type": "text/html", ...(singleFlight ? { "x-mreact-action-single-flight": "1" } : {}) },
+    });
+    Object.defineProperty(response, "url", { value: "https://attacker.example/redirect" });
+    const read = vi.spyOn(response, "text");
+    const cancel = vi.spyOn(response.body!, "cancel");
+    const write = vi.spyOn(document, "write");
+    globalThis.fetch = async () => response;
+    try {
+      await importRouteRuntime(`external-server-action-${singleFlight}`);
+      document.body.innerHTML = '<div data-mreact-route-id="index"><main>Original<form method="post" action="/_mreact/actions"></form></main></div>';
+      document.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(read).not.toHaveBeenCalled();
+      expect(write).not.toHaveBeenCalled();
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(document.querySelector("main")?.textContent).toBe("Original");
+      expect(location.href).toBe("https://attacker.example/redirect");
+    } finally {
+      location.href = originalUrl;
+    }
+  });
+
   test("applies server action single-flight HTML without a follow-up GET", async () => {
     const fetchCalls: Array<{
       bodyTitle: string | null;

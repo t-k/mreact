@@ -866,7 +866,7 @@ async function runWithCloudflareQueryClient<T>(
       installQueryAsyncStorage(cloudflareQueryClientStorage);
       cloudflareQueryClientFallbackInstalled = true;
       console.warn(
-        '[mreact] Cloudflare AsyncLocalStorage is unavailable. Enable the "nodejs_compat" compatibility flag; rendering is serialized until native request-local storage is available.',
+        '[mreact] Cloudflare AsyncLocalStorage is unavailable. Enable the "nodejs_compat" compatibility flag; rendering is serialized and response streams are buffered until native request-local storage is available.',
       );
       return await runWithSerializedCloudflareQueryClient(queryClient, fn);
     }
@@ -901,7 +901,28 @@ async function runWithSerializedCloudflareQueryClient<T>(
   await previous;
 
   try {
-    return await runWithQueryClient(queryClient, fn);
+    return await runWithQueryClient(queryClient, async () => {
+      let result: unknown;
+      let failed = false;
+      try {
+        result = await fn();
+      } catch (error) {
+        failed = true;
+        result = error;
+      }
+      // Returned and thrown Responses can both escape the scope. Finish their
+      // producers before another request owns the fallback storage.
+      if (result instanceof Response && result.body !== null) {
+        const response = result;
+        result = new Response(await response.arrayBuffer(), {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers,
+        });
+      }
+      if (failed) throw result;
+      return result as Awaited<T>;
+    });
   } finally {
     releaseCurrent();
   }

@@ -2414,6 +2414,23 @@ export function middleware(request: Request) {
     expect(await outsideMatcher.text()).toContain("<main>Login</main>");
   }, 10_000);
 
+  test.each(["[protectedPath]", '["/public", protectedPath]', "[...protectedPaths]"])("runs authentication for computed matcher %s", async (matcher) => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-auth-matcher-"));
+    await mkdir(join(appDir, "admin"), { recursive: true });
+    await writeFile(join(appDir, "middleware.ts"), `
+      const protectedPath = "/admin/:path*";
+      const protectedPaths = [protectedPath];
+      export const config = { matcher: ${matcher} };
+      export function middleware() {
+        return new Response(null, { status: 303, headers: { location: "/login" } });
+      }
+    `);
+    await writeFile(join(appDir, "admin", "page.tsx"), 'throw new Error("Protected page must not load"); export default function Page() { return <main>private</main>; }');
+    const response = await renderAppRequest({ appDir, request: new Request("http://local.test/admin") });
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/login");
+  });
+
   test("skips importing middleware modules when a static matcher excludes the request", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-middleware-static-skip-"));
     await mkdir(join(appDir, "healthz"), { recursive: true });

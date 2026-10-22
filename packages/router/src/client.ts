@@ -6292,6 +6292,12 @@ async function __mreactSubmitServerActionForm(submission) {
     headers: { "x-mreact-action-single-flight": "1" },
     method: "POST",
   });
+  const finalUrl = new URL(response.url || submission.action, location.href);
+  if (finalUrl.origin !== location.origin) {
+    __mreactDiscardNavigationResponse(response);
+    location.href = finalUrl.href;
+    return;
+  }
   __mreactApplyRevalidationHeader(response);
 
   const contentType = response.headers.get("content-type") ?? "";

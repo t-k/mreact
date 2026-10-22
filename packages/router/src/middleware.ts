@@ -52,45 +52,6 @@ export function validateRouteMiddlewareControl(options: {
   }
 }
 
-export function parseStaticMiddlewareConfig(code: string): StaticMiddlewareConfig {
-  const configBody = /\bexport\s+const\s+config\s*=\s*\{(?<body>[\s\S]*?)\}\s*;?/.exec(code)
-    ?.groups?.body;
-
-  if (configBody === undefined) {
-    return { hasMatcher: false };
-  }
-
-  const id = /\bid\s*:\s*["'](?<id>[^"']+)["']/.exec(configBody)?.groups?.id;
-  const stringMatcher = /\bmatcher\s*:\s*["'](?<matcher>[^"']+)["']/.exec(configBody)?.groups
-    ?.matcher;
-
-  if (stringMatcher !== undefined) {
-    return {
-      hasMatcher: true,
-      ...(id === undefined ? {} : { id }),
-      matcher: stringMatcher,
-    };
-  }
-
-  const matcherArray = /\bmatcher\s*:\s*\[(?<items>[\s\S]*?)\]/.exec(configBody)?.groups?.items;
-
-  if (matcherArray !== undefined) {
-    return {
-      hasMatcher: true,
-      ...(id === undefined ? {} : { id }),
-      matcher: Array.from(
-        matcherArray.matchAll(/["'](?<matcher>[^"']+)["']/g),
-        (match) => match.groups?.matcher,
-      ).filter((matcher): matcher is string => matcher !== undefined),
-    };
-  }
-
-  return {
-    hasMatcher: /\bmatcher\s*:/.test(configBody),
-    ...(id === undefined ? {} : { id }),
-  };
-}
-
 export function middlewareMatches(config: MiddlewareModule["config"], pathname: string): boolean {
   const matcher = config?.matcher;
 

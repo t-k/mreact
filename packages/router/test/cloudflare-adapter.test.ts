@@ -1457,6 +1457,107 @@ export function middleware(request: Request) {
     }
   });
 
+  test.each([false, true])("preserves bodyless fallback Responses and releases the queue (thrown=%s)", async (thrown) => {
+    __resetQueryClientForTesting();
+    __resetCloudflareQueryClientFallbackForTesting();
+    const globals = globalThis as { AsyncLocalStorage?: typeof AsyncLocalStorage };
+    const previous = globals.AsyncLocalStorage;
+    delete globals.AsyncLocalStorage;
+    try {
+      const handler = createCloudflareBuiltRequestHandler({
+        assets: {}, clientManifest: { routes: [] },
+        renderRoute: createCloudflareRouteModuleRenderer({ modules: {
+          "page.tsx": {
+            loader() { const response = new Response(null, { status: 204 }); if (thrown) throw response; return response; },
+            default() { return "unused"; },
+          },
+        } }),
+        serverManifest: { files: {}, version: 1, routes: [{ file: "page.tsx", kind: "page", path: "/", segments: [] }] },
+      });
+      for (let index = 0; index < 2; index += 1) {
+        const response = await handler.fetch(new Request("https://app.example/"), {}, createExecutionContext());
+        expect(response.status).toBe(204);
+        expect(response.body).toBeNull();
+      }
+    } finally {
+      if (previous === undefined) delete globals.AsyncLocalStorage;
+      else globals.AsyncLocalStorage = previous;
+      __resetQueryClientForTesting();
+      __resetCloudflareQueryClientFallbackForTesting();
+    }
+  });
+
+  test.each([[false, "page"], [true, "page"], [false, "loader"], [false, "throw"], [false, "document"]] as const)("retains query isolation until delayed response producers finish (native=%s, stage=%s)", async (native, stage) => {
+    __resetQueryClientForTesting();
+    __resetCloudflareQueryClientFallbackForTesting();
+    const globals = globalThis as { AsyncLocalStorage?: typeof AsyncLocalStorage };
+    const previous = globals.AsyncLocalStorage;
+    if (native) globals.AsyncLocalStorage = AsyncLocalStorage;
+    else delete globals.AsyncLocalStorage;
+    const started = createDeferred<void>();
+    const release = createDeferred<void>();
+    const releaseSecond = createDeferred<void>();
+    let secondStarted = false;
+    const requests: Promise<Response>[] = [];
+    try {
+      const produce = () => {
+              const client = getQueryClient();
+              return new Response(new ReadableStream({
+                async start(controller) {
+                  started.resolve();
+                  await release.promise;
+                  try {
+                    controller.enqueue(new TextEncoder().encode(getQueryClient() === client ? "private-first" : "leaked-client"));
+                    controller.close();
+                  } catch (error) { controller.error(error); }
+                },
+              }), { status: 202, headers: { "x-test": "preserved" } });
+      };
+      const handler = createCloudflareBuiltRequestHandler({
+        assets: {}, clientManifest: { routes: [] },
+        renderRoute: createCloudflareRouteModuleRenderer({
+          document: stage === "document" ? ({ route, body }) => route.path === "/first" ? produce() : body : undefined,
+          modules: {
+          "first.tsx": {
+            ...(stage === "page" ? { default: produce } : stage === "document" ? { default: () => "<main>First</main>" } : {
+              loader() { const response = produce(); if (stage === "throw") throw response; return response; },
+              default() { return "unused"; },
+            }),
+            metadata: { title: "First" },
+          },
+          "second.tsx": {
+            async loader() { secondStarted = true; await releaseSecond.promise; return undefined; },
+            default() { return "<main>Second</main>"; },
+          },
+        } }),
+        serverManifest: { files: {}, version: 1, routes: [
+          { file: "first.tsx", kind: "page", path: "/first", segments: [{ kind: "static", value: "first" }] },
+          { file: "second.tsx", kind: "page", path: "/second", segments: [{ kind: "static", value: "second" }] },
+        ] },
+      });
+      requests.push(handler.fetch(new Request("https://app.example/first"), {}, createExecutionContext()));
+      await started.promise;
+      requests.push(handler.fetch(new Request("https://app.example/second"), {}, createExecutionContext()));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const overlapped = secondStarted;
+      release.resolve();
+      releaseSecond.resolve();
+      const [first, second] = await Promise.all(requests);
+      expect(await first!.text()).toBe("private-first");
+      expect(first!.status).toBe(202);
+      expect(first!.headers.get("x-test")).toBe("preserved");
+      expect(await second!.text()).toContain("Second");
+      expect(overlapped).toBe(native);
+    } finally {
+      release.resolve(); releaseSecond.resolve();
+      await Promise.allSettled(requests);
+      if (previous === undefined) delete globals.AsyncLocalStorage;
+      else globals.AsyncLocalStorage = previous;
+      __resetQueryClientForTesting();
+      __resetCloudflareQueryClientFallbackForTesting();
+    }
+  });
+
   test("serializes Cloudflare query-client fallback calls after storage is installed", async () => {
     __resetQueryClientForTesting();
     const globalWithStorage = globalThis as {

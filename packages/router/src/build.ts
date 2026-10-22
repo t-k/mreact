@@ -1,3 +1,4 @@
+import { parseStaticMiddlewareConfig } from "./static-middleware-config.js";
 import { isCompatSsrFilename } from "./compat-ssr.js";
 import { createHash } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -128,7 +129,6 @@ import { rewriteStaticModuleSpecifiers, staticModuleSpecifiers } from "./module-
 import { prependTailwindSourceDirectives } from "./tailwind-source.js";
 import {
   parseRouteMiddlewareControl,
-  parseStaticMiddlewareConfig,
   validateRouteMiddlewareControl,
 } from "./middleware.js";
 import type { Plugin, PluginOption, UserConfig } from "vite";

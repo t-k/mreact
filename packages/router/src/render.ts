@@ -1,3 +1,4 @@
+import { parseStaticMiddlewareConfig } from "./static-middleware-config.js";
 import { getRequestStateStorage } from "@reckona/mreact-reactive-core/internal";
 import { installRequestStateStorage, type RequestStateScope } from "@reckona/mreact-reactive-core";
 import { runWithRequestStateResponse } from "./request-state.js";
@@ -130,7 +131,6 @@ import {
   mergeRouteMiddlewareControls,
   middlewareMatches,
   parseRouteMiddlewareControl,
-  parseStaticMiddlewareConfig,
   shouldSkipMiddleware,
   validateRouteMiddlewareControl,
   type MiddlewareModule,
