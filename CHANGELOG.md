@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.0.234 - 2026-10-22
+
+### Fixed
+
+- Prevented computed, aliased, or mutated middleware matchers from bypassing authentication through static route filtering.
+- Escaped ordinary strings in named SSR props while preserving JSX values and client render markers.
+- Rejected malformed Flight binary lengths and bounded native Flight reference expansion and merge copies to prevent unbounded processing and memory growth.
+- Preserved Cloudflare query-client isolation for delayed response producers when native async storage is unavailable; this fallback now buffers returned and thrown response bodies before releasing the request scope.
+- Navigated to cross-origin server-action responses without injecting their HTML into the current document.
+- Ignored implicit `innerHTML` and `outerHTML` DOM props while preserving explicit `dangerouslySetInnerHTML`.
+
 ## 0.0.233 - 2026-10-10
 
 This release contains no package-facing changes.

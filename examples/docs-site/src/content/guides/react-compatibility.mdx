@@ -158,6 +158,8 @@ Use this as a performance model, not a compatibility switch: start from server-r
 
 ## Known differences
 
+Raw HTML requires an explicit `dangerouslySetInnerHTML={{ __html: trustedHtml }}` prop. Ordinary `innerHTML` and `outerHTML` props are ignored; sanitize untrusted content before using the explicit HTML API. Ordinary strings in server-rendered named props such as `fallback`, `header`, `sidebar`, and `element` are escaped as text, while JSX values remain renderable.
+
 `useId()` returns opaque underscore-delimited ids such as `_R_0_` and `_r_0_` instead of React's colon-delimited internal shape. Mreact keeps SSR and hydration ids stable through its hydrated-id map, but application code and libraries should treat the returned string as opaque and must not parse or compare it against React's exact internal format.
 
 Server rendering normalizes standard HTML attribute casing, including `readOnly`. If a third-party library depends on byte-for-byte React markup rather than browser-observable DOM behavior, keep a focused compatibility test around that integration.
