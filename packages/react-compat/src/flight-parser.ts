@@ -138,10 +138,10 @@ function parseReactFlightBinaryRows(payload: ArrayBuffer | Uint8Array): FlightRe
         throw new Error("Invalid React Flight binary row.");
       }
 
-      const byteLength = parseReactFlightId(decoder.decode(bytes.subarray(lengthStart, index)));
+      const byteLength = parseReactFlightBinaryLength(decoder.decode(bytes.subarray(lengthStart, index)));
       index += 1;
 
-      if (index + byteLength > bytes.length) {
+      if (byteLength > bytes.length - index) {
         throw new Error("React Flight binary row ended before declared payload length.");
       }
 
@@ -307,7 +307,7 @@ function parseReactFlightBinaryChunk(
     throw new Error("Invalid React Flight binary row.");
   }
 
-  const byteLength = parseReactFlightId(payload.slice(0, separator));
+  const byteLength = parseReactFlightBinaryLength(payload.slice(0, separator));
   const bytes = decodeBase64Bytes(payload.slice(separator + 1));
 
   if (bytes.length !== byteLength) {
@@ -828,4 +828,12 @@ function valueIsObject(value: unknown): value is Record<string, unknown> {
 
 function parseReactFlightId(value: string): number {
   return Number.parseInt(value, 16);
+}
+
+function parseReactFlightBinaryLength(value: string): number {
+  const length = Number.parseInt(value, 16);
+  if (!/^[0-9a-f]+$/i.test(value) || !Number.isSafeInteger(length)) {
+    throw new Error("Invalid React Flight binary length.");
+  }
+  return length;
 }

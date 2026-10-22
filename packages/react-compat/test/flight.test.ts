@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { createElement, createRoot, useState, type ReactCompatNode } from "../src/index.js";
 import {
   decodeFlightResponse,
@@ -13,6 +13,21 @@ import {
 import { renderToFlightResponse, toReactFlightPayload } from "../../server/src/flight.js";
 
 describe("react-compat Flight client", () => {
+  test.each(["-6", "-1", "+0", "", " 0", "0g", "20000000000000"])("rejects malformed binary length %j before slicing", (length) => {
+    const payload = new TextEncoder().encode(`0:A${length},`);
+    const slice = vi.spyOn(payload, "slice").mockImplementation(() => {
+      throw new Error("unsafe binary slice reached");
+    });
+    expect(() => parseFlightResponse(payload)).toThrow("Invalid React Flight binary length");
+    expect(slice).not.toHaveBeenCalled();
+  });
+
+  test("accepts empty binary chunks and rejects truncated binary input", () => {
+    const payload = new TextEncoder().encode('0:A0,');
+    expect(parseFlightResponse(payload.buffer)).toEqual(parseFlightResponse(payload));
+    expect(() => parseFlightResponse(new TextEncoder().encode('0:A2,x'))).toThrow("ended before declared payload length");
+  });
+
   test("preserves own __proto__ data without changing the decoded object prototype", () => {
     const response = parseFlightResponse(
       '0:{"name":"Ada","__proto__":{"isAdmin":true},"constructor":"own-constructor","prototype":"own-prototype"}',

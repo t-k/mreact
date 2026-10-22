@@ -699,10 +699,63 @@ pub fn napi_encode_flight_payload(response_json: String) -> napi::Result<Buffer>
 // Decoder
 // ---------------------------------------------------------------------
 
-#[derive(Default)]
 struct FlightDecodeContext {
+  remaining_budget: usize,
   in_progress_chunk_ids: std::collections::HashSet<u64>,
-  completed_chunk_models: std::collections::HashMap<(u64, usize), Value>,
+  completed_chunk_models: std::collections::HashMap<(u64, usize), (Value, usize)>,
+}
+
+impl Default for FlightDecodeContext {
+  fn default() -> Self {
+    Self {
+      remaining_budget: 64 * 1024 * 1024,
+      in_progress_chunk_ids: Default::default(),
+      completed_chunk_models: Default::default(),
+    }
+  }
+}
+
+// Bound cumulative materialization work, including owned cache copies. This
+// is deliberately a byte-weighted work budget, not a wire-size limit.
+impl FlightDecodeContext {
+  fn charge(&mut self, cost: usize) -> Result<(), String> {
+    self.remaining_budget = self.remaining_budget.checked_sub(cost)
+      .ok_or_else(|| "MR_FLIGHT_TOO_LARGE: decoded allocation budget exceeded".to_string())?;
+    Ok(())
+  }
+
+  fn charge_node(&mut self, value: &Value) -> Result<(), String> {
+    self.charge(128)?;
+    match value {
+      Value::String(text) => self.charge(text.len())?,
+      Value::Array(items) => self.charge(items.len().saturating_mul(32))?,
+      Value::Object(props) => {
+        for key in props.keys() { self.charge(key.len())?; }
+      }
+      _ => {}
+    }
+    Ok(())
+  }
+
+  fn charge_tree(&mut self, value: &Value) -> Result<usize, String> {
+    let before = self.remaining_budget;
+    self.charge_node(value)?;
+    match value {
+      Value::Array(items) => {
+        for item in items { self.charge_tree(item)?; }
+      }
+      Value::Object(props) => {
+        for child in props.values() { self.charge_tree(child)?; }
+      }
+      _ => {}
+    }
+    Ok(before - self.remaining_budget)
+  }
+
+  fn clone_value(&mut self, value: &Value) -> Result<Value, String> {
+    self.charge_tree(value)?;
+    Ok(value.clone())
+  }
 }
 
 /// Decode a `\n`-separated Flight row payload into a JSON-serialized
@@ -808,9 +861,9 @@ pub fn decode_flight_rows(rows: &str) -> Result<String, String> {
 
   let root = if let Some(explicit) = explicit_root {
     explicit
-  } else if let Some(raw) = model_chunks.get(&0).cloned() {
+  } else if let Some(raw) = model_chunks.get(&0) {
     decode_model(
-      &raw,
+      raw,
       &model_chunks,
       &error_chunks,
       0,
@@ -1090,6 +1143,7 @@ fn decode_model(
       "MR_FLIGHT_TOO_DEEP: nested deeper than {MAX_FLIGHT_DECODE_DEPTH} levels"
     ));
   }
+  context.charge_node(value)?;
   match value {
     Value::Null | Value::Bool(_) | Value::Number(_) => Ok(value.clone()),
     Value::String(s) => decode_string(s, model_chunks, error_chunks, depth, context),
@@ -1133,7 +1187,7 @@ fn decode_model(
     Value::Object(obj) => {
       let kind = obj.get("kind").and_then(Value::as_str);
       if matches!(kind, Some("array-buffer") | Some("typed-array") | Some("data-view")) {
-        return Ok(value.clone());
+        return context.clone_value(value);
       }
       decode_props(value, model_chunks, error_chunks, depth + 1, context)
     }
@@ -1187,15 +1241,13 @@ fn decode_string(
   }
   if let Some(rest) = value.strip_prefix("$Q") {
     let decoded = decode_chunk_ref(rest, model_chunks, error_chunks, depth + 1, context)?;
-    let entries = decoded
-      .as_array()
-      .cloned()
-      .unwrap_or_default()
+    let entries = match decoded { Value::Array(items) => items, _ => Vec::new() }
       .into_iter()
       .map(|entry| match entry {
         Value::Array(pair) => {
-          let k = pair.first().cloned().unwrap_or(json!({ "kind": "undefined" }));
-          let v = pair.get(1).cloned().unwrap_or(json!({ "kind": "undefined" }));
+          let mut pair = pair.into_iter();
+          let k = pair.next().unwrap_or(json!({ "kind": "undefined" }));
+          let v = pair.next().unwrap_or(json!({ "kind": "undefined" }));
           Value::Array(vec![k, v])
         }
         other => Value::Array(vec![other, json!({ "kind": "undefined" })]),
@@ -1205,21 +1257,20 @@ fn decode_string(
   }
   if let Some(rest) = value.strip_prefix("$W") {
     let decoded = decode_chunk_ref(rest, model_chunks, error_chunks, depth + 1, context)?;
-    let values = decoded.as_array().cloned().unwrap_or_default();
+    let values = match decoded { Value::Array(items) => items, _ => Vec::new() };
     return Ok(json!({ "kind": "set", "values": values }));
   }
   if let Some(rest) = value.strip_prefix("$K") {
     let decoded = decode_chunk_ref(rest, model_chunks, error_chunks, depth + 1, context)?;
-    let entries: Vec<Value> = decoded
-      .as_array()
-      .cloned()
-      .unwrap_or_default()
+    let entries: Vec<Value> = match decoded { Value::Array(items) => items, _ => Vec::new() }
       .into_iter()
       .filter_map(|entry| match entry {
         Value::Array(pair) => {
-          let key = pair.first().and_then(Value::as_str)?.to_string();
-          let value = pair.get(1).cloned().unwrap_or(json!({ "kind": "undefined" }));
-          Some(Value::Array(vec![Value::String(key), value]))
+          let mut pair = pair.into_iter();
+          let key = pair.next()?;
+          if !key.is_string() { return None; }
+          let value = pair.next().unwrap_or(json!({ "kind": "undefined" }));
+          Some(Value::Array(vec![key, value]))
         }
         _ => None,
       })
@@ -1228,13 +1279,13 @@ fn decode_string(
   }
   if let Some(rest) = value.strip_prefix("$i") {
     let decoded = decode_chunk_ref(rest, model_chunks, error_chunks, depth + 1, context)?;
-    let values = decoded.as_array().cloned().unwrap_or_default();
+    let values = match decoded { Value::Array(items) => items, _ => Vec::new() };
     return Ok(json!({ "kind": "iterable", "values": values }));
   }
   if let Some(rest) = value.strip_prefix("$Z") {
     let id = parse_flight_id(rest)?;
     if let Some(err) = error_chunks.get(&id) {
-      return Ok(err.clone());
+      return context.clone_value(err);
     }
     return Ok(json!({
       "kind": "error",
@@ -1267,24 +1318,24 @@ fn decode_chunk_ref(
   }
   let id = parse_flight_id(rest)?;
   if let Some(err) = error_chunks.get(&id) {
-    return Ok(err.clone());
+    return context.clone_value(err);
   }
-  if let Some(completed) = context.completed_chunk_models.get(&(id, depth)) {
-    return Ok(completed.clone());
+  if let Some(cost) = context.completed_chunk_models.get(&(id, depth)).map(|entry| entry.1) {
+    context.charge(cost)?;
+    return Ok(context.completed_chunk_models[&(id, depth)].0.clone());
   }
   let chunk = match model_chunks.get(&id) {
-    Some(c) => c.clone(),
+    Some(c) => c,
     None => return Ok(json!({ "kind": "promise", "id": id })),
   };
   if !context.in_progress_chunk_ids.insert(id) {
     return Err(format!("MR_FLIGHT_CYCLE: cyclic chunk reference {id}"));
   }
-  let result = decode_model(&chunk, model_chunks, error_chunks, depth, context);
+  let result = decode_model(chunk, model_chunks, error_chunks, depth, context);
   context.in_progress_chunk_ids.remove(&id);
   if let Ok(decoded) = &result {
-    context
-      .completed_chunk_models
-      .insert((id, depth), decoded.clone());
+    let cost = context.charge_tree(decoded)?;
+    context.completed_chunk_models.insert((id, depth), (decoded.clone(), cost));
   }
   result
 }
@@ -1318,7 +1369,7 @@ fn decode_props(
   }
   let obj = match value.as_object() {
     Some(o) => o,
-    None => return Ok(value.clone()),
+    None => return context.clone_value(value),
   };
   let mut out = serde_json::Map::new();
   for (key, child) in obj {
@@ -1329,6 +1380,7 @@ fn decode_props(
       depth + 1,
       context,
     )?;
+    context.charge(key.len())?;
     out.insert(key.clone(), decoded);
   }
   Ok(Value::Object(out))
@@ -1420,9 +1472,9 @@ pub fn merge_flight_rows(prev_json: &str, rows: &str) -> Result<String, String> 
     }
   }
 
-  let merged_root = prev.get("root").cloned().unwrap_or(Value::Null);
+  let merged_root = prev.get("root").unwrap_or(&Value::Null);
   let resolved_root = resolve_promise_chunks(
-    &merged_root,
+    merged_root,
     &model_chunks,
     &error_chunks,
     0,
@@ -1450,6 +1502,7 @@ fn resolve_promise_chunks(
       "MR_FLIGHT_TOO_DEEP: nested deeper than {MAX_FLIGHT_DECODE_DEPTH} levels"
     ));
   }
+  context.charge_node(value)?;
   match value {
     Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => Ok(value.clone()),
     Value::Array(items) => {
@@ -1470,7 +1523,7 @@ fn resolve_promise_chunks(
       if kind == Some("promise") {
         let id = obj.get("id").and_then(Value::as_u64).unwrap_or(0);
         if let Some(err) = error_chunks.get(&id) {
-          return Ok(err.clone());
+          return context.clone_value(err);
         }
         if let Some(chunk) = model_chunks.get(&id) {
           if !context.in_progress_chunk_ids.insert(id) {
@@ -1486,15 +1539,16 @@ fn resolve_promise_chunks(
           context.in_progress_chunk_ids.remove(&id);
           return result;
         }
-        return Ok(value.clone());
+        return context.clone_value(value);
       }
       if kind == Some("element") {
+        context.charge_tree(value)?;
         let mut out = obj.clone();
-        if let Some(Value::Object(props)) = out.get("props").cloned() {
+        if let Some(Value::Object(props)) = obj.get("props") {
           let mut resolved = serde_json::Map::new();
           for (key, child) in props {
             resolved.insert(
-              key,
+              key.clone(),
               resolve_promise_chunks(
                 &child,
                 model_chunks,
@@ -1509,13 +1563,14 @@ fn resolve_promise_chunks(
         return Ok(Value::Object(out));
       }
       if kind == Some("map") {
+        context.charge_tree(value)?;
         let mut out = obj.clone();
-        if let Some(Value::Array(entries)) = out.get("entries").cloned() {
+        if let Some(Value::Array(entries)) = obj.get("entries") {
           let mut resolved = Vec::with_capacity(entries.len());
           for entry in entries {
             if let Value::Array(pair) = entry {
-              let k = pair.first().cloned().unwrap_or(Value::Null);
-              let v = pair.get(1).cloned().unwrap_or(Value::Null);
+              let k = pair.first().unwrap_or(&Value::Null);
+              let v = pair.get(1).unwrap_or(&Value::Null);
               resolved.push(Value::Array(vec![
                 resolve_promise_chunks(
                   &k,
@@ -1539,8 +1594,9 @@ fn resolve_promise_chunks(
         return Ok(Value::Object(out));
       }
       if kind == Some("set") {
+        context.charge_tree(value)?;
         let mut out = obj.clone();
-        if let Some(Value::Array(values)) = out.get("values").cloned() {
+        if let Some(Value::Array(values)) = obj.get("values") {
           let mut resolved = Vec::with_capacity(values.len());
           for v in values {
             resolved.push(resolve_promise_chunks(
@@ -1556,7 +1612,7 @@ fn resolve_promise_chunks(
         return Ok(Value::Object(out));
       }
       if kind.is_some() {
-        return Ok(value.clone());
+        return context.clone_value(value);
       }
       let mut out = serde_json::Map::new();
       for (key, child) in obj {
@@ -1579,6 +1635,95 @@ fn resolve_promise_chunks(
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn merge_charges_copies_of_extra_fields_on_recognized_kinds() {
+    for kind in ["element", "map", "set"] {
+      let value = json!({ "kind": kind, "extra": "x".repeat(4096) });
+      let mut context = FlightDecodeContext { remaining_budget: 1024, ..Default::default() };
+      let error = resolve_promise_chunks(&value, &Default::default(), &Default::default(), 0, &mut context).unwrap_err();
+      assert!(error.contains("MR_FLIGHT_TOO_LARGE"), "{error}");
+    }
+  }
+
+  #[test]
+  fn allocation_budget_counts_keys_strings_array_storage_and_nested_values() {
+    for (value, cost) in [
+      (json!("abcd"), 132),
+      (json!([null]), 288),
+      (json!({"key":"abcd"}), 263),
+    ] {
+      let mut context = FlightDecodeContext { remaining_budget: cost, ..Default::default() };
+      assert_eq!(context.charge_tree(&value).unwrap(), cost);
+      assert_eq!(context.remaining_budget, 0);
+      let mut context = FlightDecodeContext { remaining_budget: cost - 1, ..Default::default() };
+      assert!(context.clone_value(&value).is_err());
+    }
+  }
+
+  #[test]
+  fn allocation_budget_checks_exact_boundary_and_overflow() {
+    let mut context = FlightDecodeContext { remaining_budget: 128, ..Default::default() };
+    assert_eq!(context.charge_tree(&Value::Null).unwrap(), 128);
+    assert_eq!(context.remaining_budget, 0);
+    assert!(context.charge(1).unwrap_err().contains("MR_FLIGHT_TOO_LARGE"));
+    let mut context = FlightDecodeContext::default();
+    assert!(context.charge(usize::MAX).is_err());
+    let mut context = FlightDecodeContext { remaining_budget: 127, ..Default::default() };
+    assert!(context.clone_value(&Value::Null).is_err());
+  }
+
+  #[test]
+  fn bound_references_share_the_allocation_budget() {
+    let chunks = std::collections::HashMap::from([(1, json!("x".repeat(1024)))]);
+    let errors = std::collections::HashMap::new();
+    let mut context = FlightDecodeContext { remaining_budget: 4096, ..Default::default() };
+    let bound = r#"{"id":"actions#save","bound":["$1"]}"#;
+    assert!(parse_server_reference(2, bound, &chunks, &errors, &mut context).is_ok());
+    assert!(parse_server_reference(3, bound, &chunks, &errors, &mut context).is_ok());
+    assert!(parse_server_reference(4, bound, &chunks, &errors, &mut context).unwrap_err().contains("MR_FLIGHT_TOO_LARGE"));
+  }
+
+  #[test]
+  fn rejects_repeated_reference_expansion_with_a_bounded_budget() {
+    let mut chunks = std::collections::HashMap::new();
+    for id in 0..8 {
+      chunks.insert(id, json!([format!("${:x}", id + 1), format!("${:x}", id + 1)]));
+    }
+    chunks.insert(8, json!("a modest leaf"));
+    let errors = std::collections::HashMap::new();
+    let mut context = FlightDecodeContext { remaining_budget: 4096, ..Default::default() };
+    let error = decode_chunk_ref("0", &chunks, &errors, 0, &mut context).unwrap_err();
+    assert!(error.contains("MR_FLIGHT_TOO_LARGE"), "{error}");
+    let mut context = FlightDecodeContext { remaining_budget: 4096, ..Default::default() };
+    let error = resolve_promise_chunks(&json!({"kind":"promise","id":0}), &chunks, &errors, 0, &mut context).unwrap_err();
+    assert!(error.contains("MR_FLIGHT_TOO_LARGE"), "{error}");
+  }
+
+  #[test]
+  fn rejects_repeated_large_string_clones() {
+    let chunks = std::collections::HashMap::from([(1, json!("x".repeat(1024)))]);
+    let errors = std::collections::HashMap::new();
+    let mut context = FlightDecodeContext { remaining_budget: 4096, ..Default::default() };
+    let error = decode_model(&json!(["$1", "$1", "$1", "$1"]), &chunks, &errors, 0, &mut context).unwrap_err();
+    assert!(error.contains("MR_FLIGHT_TOO_LARGE"), "{error}");
+  }
+
+  #[test]
+  #[ignore]
+  fn security_decode_performance() {
+    let rows = "0:{\"items\":[\"$1\",\"$1\"]}\n1:{\"name\":\"Ada\",\"values\":[1,2,3]}";
+    let prev = r#"{"version":1,"root":{"kind":"promise","id":0},"clientReferences":[],"serverReferences":[]}"#;
+    for run in 0..7 {
+      let start = std::time::Instant::now();
+      let mut checksum = 0;
+      for _ in 0..10000 {
+        checksum += decode_flight_rows(rows).unwrap().len();
+        checksum += merge_flight_rows(prev, rows).unwrap().len();
+      }
+      println!("run={run} elapsed_us={} checksum={checksum}", start.elapsed().as_micros());
+    }
+  }
 
   #[test]
   fn decodes_standard_alphabet() {
