@@ -1186,7 +1186,7 @@ export function isOxcRenderValueExpression(expression: Record<string, unknown>):
     object.type === "Identifier" &&
     object.name === "props" &&
     typeof property.name === "string" &&
-    ["children", "fallback", "header", "sidebar", "element"].includes(property.name)
+    property.name === "children"
   );
 }
 

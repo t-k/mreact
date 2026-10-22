@@ -9,6 +9,26 @@ import {
 } from "../src/dom-prop-application.js";
 
 describe("DOM prop application policy", () => {
+  test.each(["innerHTML", "outerHTML"])("never invokes the %s parser through generic props", (name) => {
+    const parent = document.createElement("section");
+    const div = document.createElement("div");
+    div.textContent = "keep";
+    parent.append(div);
+    for (const preferProperty of [true, false]) {
+      for (const value of ["<img src=x onerror=alert(1)>", { __html: "<b>unsafe</b>" }, null, false]) {
+        applyDomProp(div, name, value, preferProperty);
+        expect(parent.firstChild).toBe(div);
+        expect(div.textContent).toBe("keep");
+        expect(div.children.length).toBe(0);
+      }
+    }
+    removeDomProp(div, name);
+    expect(parent.firstChild).toBe(div);
+    expect(div.textContent).toBe("keep");
+    applyDomProp(div, "dangerouslySetInnerHTML", { __html: "<b>explicit</b>" }, true);
+    expect(div.innerHTML).toBe("<b>explicit</b>");
+  });
+
   test("appends reactive prop bindings without replacing the binding array", () => {
     const div = document.createElement("div") as HTMLDivElement & {
       __mreactPropBindings?: unknown[];

@@ -28,6 +28,10 @@ export function applyDomProp(
   value: unknown,
   preferProperty: boolean,
 ): void {
+  if (name === "innerHTML" || name === "outerHTML") {
+    return;
+  }
+
   if (name === "dangerouslySetInnerHTML") {
     element.innerHTML = readDangerousHtmlOptIn(value) ?? "";
     return;
@@ -111,6 +115,10 @@ export function applyDomProp(
 }
 
 export function removeDomProp(element: Element, name: string): void {
+  if (name === "innerHTML" || name === "outerHTML") {
+    return;
+  }
+
   if (name === "dangerouslySetInnerHTML") {
     element.innerHTML = "";
     return;
