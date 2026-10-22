@@ -661,7 +661,11 @@ export function analyzeOxcExpressionChild(
   const sameModuleComponentCall =
     sameModuleComponentStreamCall !== undefined ||
     isOxcSameModuleComponentCallExpression(expression, declaredComponentCallNames);
-  const legacyRenderValue = isOxcRenderValueExpression(expression) || sameModuleComponentCall;
+  const legacyExpressionRenderValue = isOxcRenderValueExpression(
+    expression,
+    bodyStatementJsx !== "server-string",
+  );
+  const legacyRenderValue = legacyExpressionRenderValue || sameModuleComponentCall;
   const containsNestedRenderValue =
     containsOxcJsxSyntax(unwrappedExpression) ||
     containsOxcLocalJsxHelperCall(
@@ -693,13 +697,13 @@ export function analyzeOxcExpressionChild(
   const isPotentialComponentPropRenderValue =
     (bodyStatementJsx === "server-string" || bodyStatementJsx === "dom-node") &&
     !sameModuleComponentCall &&
-    !isOxcRenderValueExpression(expression) &&
+    !legacyExpressionRenderValue &&
     isOxcPotentialComponentPropRenderValueExpression(expression, context);
   const isUnoptimizedCall =
     unwrappedExpression.type === "CallExpression" &&
     readObject(unwrappedExpression.callee).type === "Identifier" &&
     !sameModuleComponentCall &&
-    !isOxcRenderValueExpression(expression);
+    !legacyExpressionRenderValue;
   const renderMode =
     sameModuleComponentStreamCall !== undefined
       ? ("stream-node" as const)

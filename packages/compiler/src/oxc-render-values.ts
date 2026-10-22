@@ -1170,7 +1170,10 @@ export function markOxcRenderValueExpressions(
   }
 }
 
-export function isOxcRenderValueExpression(expression: Record<string, unknown>): boolean {
+export function isOxcRenderValueExpression(
+  expression: Record<string, unknown>,
+  allowNamedProps = false,
+): boolean {
   if (isOxcRendererCallExpression(expression)) {
     return true;
   }
@@ -1186,7 +1189,8 @@ export function isOxcRenderValueExpression(expression: Record<string, unknown>):
     object.type === "Identifier" &&
     object.name === "props" &&
     typeof property.name === "string" &&
-    property.name === "children"
+    (property.name === "children" ||
+      (allowNamedProps && ["fallback", "header", "sidebar", "element"].includes(property.name)))
   );
 }
 

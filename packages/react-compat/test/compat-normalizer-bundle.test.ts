@@ -9,11 +9,12 @@ import { gzipSync } from "node:zlib";
 import { describe, expect, test } from "vitest";
 import { build as viteBuild, type Rollup } from "vite";
 
+// Rejecting implicit innerHTML/outerHTML setters adds 108 raw bytes and at most 12 gzip bytes to compat consumers; retain the existing gzip limits.
 // Demoting a Set to one subscriber adds 59 raw bytes to packed native and memo consumers while reducing retained source memory; keep the gzip limits unchanged.
 const packedCompatConsumerSizeBudgets = {
-  root: { gzipBytes: 13_450, rawBytes: 48_600 },
-  "jsx-runtime": { gzipBytes: 13_450, rawBytes: 48_700 },
-  "jsx-dev-runtime": { gzipBytes: 13_500, rawBytes: 48_800 },
+  root: { gzipBytes: 13_450, rawBytes: 48_710 },
+  "jsx-runtime": { gzipBytes: 13_450, rawBytes: 48_810 },
+  "jsx-dev-runtime": { gzipBytes: 13_500, rawBytes: 48_910 },
   native: { gzipBytes: 10_300, rawBytes: 38_050 },
 } as const;
 
