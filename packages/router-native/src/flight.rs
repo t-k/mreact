@@ -1550,7 +1550,7 @@ fn resolve_promise_chunks(
             resolved.insert(
               key.clone(),
               resolve_promise_chunks(
-                &child,
+                child,
                 model_chunks,
                 error_chunks,
                 depth + 1,
@@ -1573,14 +1573,14 @@ fn resolve_promise_chunks(
               let v = pair.get(1).unwrap_or(&Value::Null);
               resolved.push(Value::Array(vec![
                 resolve_promise_chunks(
-                  &k,
+                  k,
                   model_chunks,
                   error_chunks,
                   depth + 1,
                   context,
                 )?,
                 resolve_promise_chunks(
-                  &v,
+                  v,
                   model_chunks,
                   error_chunks,
                   depth + 1,
@@ -1600,7 +1600,7 @@ fn resolve_promise_chunks(
           let mut resolved = Vec::with_capacity(values.len());
           for v in values {
             resolved.push(resolve_promise_chunks(
-              &v,
+              v,
               model_chunks,
               error_chunks,
               depth + 1,
