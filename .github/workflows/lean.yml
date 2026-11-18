@@ -1,0 +1,36 @@
+name: Lean verification
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'formal/lean/**'
+      - '.github/workflows/lean.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'formal/lean/**'
+      - '.github/workflows/lean.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lean:
+    name: Verify Lean proofs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Build Lean proofs
+        uses: leanprover/lean-action@ba3fdfe5c4476c925da13bf11a005ddb47e47aee # v1
+        with:
+          lake-package-directory: formal/lean
+          auto-config: "false"
+          build: "true"
+          use-mathlib-cache: "false"
+          use-github-cache: "false"

@@ -1,0 +1,6 @@
+name = "mreact-verification"
+defaultTargets = ["Mreact"]
+leanOptions = { warningAsError = true }
+
+[[lean_lib]]
+name = "Mreact"
