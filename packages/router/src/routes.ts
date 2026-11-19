@@ -171,8 +171,8 @@ export function compileRouteMatcherArtifact(
   routes: readonly AppRoute[],
 ): CompiledRouteMatcherArtifact {
   const sortedRoutes = routes
-    .map((route, routeIndex) => ({ route, routeIndex }))
-    .sort((left, right) => compareRoutes(left.route, right.route));
+    .map((route, routeIndex) => ({ route, routeIndex, score: routeScore(route) }))
+    .sort((left, right) => right.score - left.score || compareRouteTies(left.route, right.route));
 
   return {
     version: 1,
@@ -635,9 +635,11 @@ function isRouteGroup(part: string): boolean {
 function compareRoutes(a: AppRoute, b: AppRoute): number {
   const scoreDelta = routeScore(b) - routeScore(a);
 
-  return scoreDelta === 0
-    ? a.path.localeCompare(b.path) || a.kind.localeCompare(b.kind)
-    : scoreDelta;
+  return scoreDelta === 0 ? compareRouteTies(a, b) : scoreDelta;
+}
+
+function compareRouteTies(a: AppRoute, b: AppRoute): number {
+  return a.path.localeCompare(b.path) || a.kind.localeCompare(b.kind);
 }
 
 function compareRouteListEntries(a: AppRoute, b: AppRoute): number {

@@ -1,12 +1,13 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import {
   compileRouteMatcherArtifact,
   createRouteMatcher,
   matchRoute,
   scanAppRoutes,
+  type AppRoute,
 } from "../src/routes.js";
 
 describe("mreact app route scanning", () => {
@@ -176,6 +177,25 @@ describe("mreact app route scanning", () => {
       slug: ["guides", "install"],
     });
     expect(routes.map((route) => route.path)).toEqual(originalOrder);
+  });
+
+  test("scores each route once and preserves path, kind, and input-order ties", () => {
+    const routes: AppRoute[] = [
+      { kind: "page", path: "/z", file: "z", segments: [{ kind: "static", value: "z" }] },
+      { kind: "page", path: "/:id", file: "id", segments: [{ kind: "dynamic", name: "id" }] },
+      { kind: "server", path: "/a", file: "server", segments: [{ kind: "static", value: "a" }] },
+      { kind: "page", path: "/a", file: "first", segments: [{ kind: "static", value: "a" }] },
+      { kind: "page", path: "/a", file: "second", segments: [{ kind: "static", value: "a" }] },
+      { kind: "page", path: "/:...slug", file: "slug", segments: [{ kind: "catch-all", name: "slug" }] },
+    ];
+    const scoreCalls = routes.map((route) => vi.spyOn(route.segments, "reduce"));
+    try {
+      const artifact = compileRouteMatcherArtifact(routes);
+      expect(artifact.routes.map(({ routeIndex }) => routeIndex)).toEqual([3, 4, 2, 0, 1, 5]);
+      for (const score of scoreCalls) expect(score).toHaveBeenCalledTimes(1);
+    } finally {
+      for (const score of scoreCalls) score.mockRestore();
+    }
   });
 
   test("compiled matcher artifact matches without reading route segments", async () => {
