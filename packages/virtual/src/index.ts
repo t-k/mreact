@@ -879,8 +879,8 @@ function computeMeasuredRows<TItem>(
   const rowCount = Math.ceil(items.length / columnCount);
   // oxlint-disable-next-line unicorn/no-new-array -- Reserve one slot per measured row.
   const rowSizes = new Array<number>(rowCount);
-  // oxlint-disable-next-line unicorn/no-new-array -- Reserve one slot per measured row.
-  const rowOffsets = new Array<number>(rowCount);
+  // Append offsets so engines can keep a packed array for range searches.
+  const rowOffsets: number[] = [];
   let totalSizePx = 0;
 
   for (let row = 0; row < rowCount; row += 1) {
@@ -902,7 +902,7 @@ function computeMeasuredRows<TItem>(
     const rowSize =
       measuredMax ?? clampPositiveSize(options.estimateItemSize(startIndex, items[startIndex]));
     rowSizes[row] = rowSize;
-    rowOffsets[row] = totalSizePx;
+    rowOffsets.push(totalSizePx);
     totalSizePx += rowSize;
   }
 

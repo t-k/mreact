@@ -764,3 +764,23 @@ it.each([false, true])("accumulates fractional measured rows from the same offse
   grid.refresh();
   expect(grid.totalSizePx.get()).toBe(0);
 });
+
+it.each([false, true])("preserves the addition order for measured row starts and totals (span %j)", (span) => {
+  const items = [{ id: 0 }, { id: 1 }, { id: 2 }];
+  const grid = createVirtualGrid({
+    estimateItemSize: () => 1,
+    getColumnCount: () => 1,
+    getKey: (item) => item.id,
+    ...(span ? { getItemSpan: () => ({ colSpan: 1, rowSpan: 1 }) } : {}),
+    items: () => items,
+    scrollOffset: () => 0,
+    viewportSize: () => 10,
+  });
+
+  grid.measureItem(0, 1e16);
+
+  expect(grid.scrollToIndex(0)).toBe(0);
+  expect(grid.scrollToIndex(1)).toBe(1e16);
+  expect(grid.scrollToKey(2)).toBe(1e16);
+  expect(grid.totalSizePx.get()).toBe(1e16);
+});
