@@ -153,7 +153,8 @@ export function setDomAttribute(element: Element, name: string, value: string): 
   if (!isValidDomAttributeName(name)) {
     return;
   }
-  const prefix = name.split(":", 1)[0];
+  const colon = name.indexOf(":");
+  const prefix = colon === -1 ? name : name.slice(0, colon);
   const namespace =
     prefix === "xlink"
       ? "1999/xlink"

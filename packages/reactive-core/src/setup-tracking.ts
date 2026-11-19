@@ -43,6 +43,18 @@ export function runWithSetupTracking<TArgument, TResult>(
 }
 
 function replaySetupReads(reads: Source[], writes: ReadonlySet<Source>): void {
+  if (reads.every((source) => source.setupDependencies === undefined)) {
+    const replayed = new Set<Source>();
+    for (let index = reads.length - 1; index >= 0; index -= 1) {
+      const source = reads[index]!;
+      if (!writes.has(source) && !replayed.has(source)) {
+        replayed.add(source);
+        trackSource(source);
+      }
+    }
+    return;
+  }
+
   const dependenciesBySource = new Map<Source, Source[]>();
   const dependentsBySource = new Map<Source, Source[]>();
   const pending = [...reads];

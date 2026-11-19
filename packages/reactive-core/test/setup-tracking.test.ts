@@ -1,7 +1,9 @@
 import { afterEach, expect, test } from "vitest";
 import { cell, computed, effect, selector, type Selector, untrack } from "../src/index.js";
 import { runWithSetupTracking } from "../src/internal.js";
-import { runtimeState } from "../src/state.js";
+import { recordSetupWrite } from "../src/setup-tracking.js";
+import { trackSource } from "../src/tracking.js";
+import { runtimeState, type Source } from "../src/state.js";
 import { createReactiveTestRuntime, type ReactiveTestRuntime } from "../src/testing.js";
 
 let runtime: ReactiveTestRuntime | undefined;
@@ -97,6 +99,40 @@ test("drops a dependency from an earlier setup run and drains one queued rerun",
 
   expect(runs).toBe(3);
   dispose();
+});
+
+const replayCases = (["Single", "Repeated", "Multiple"] as const).flatMap((reads) =>
+  (["Leaf", "Derived"] as const).flatMap((dependency) =>
+    (["Read", "Unrelated"] as const).map((write) => ({ reads, dependency, write })),
+  ),
+);
+
+test.each(replayCases)("replays $reads $dependency setup reads after a $write write", ({
+  reads, dependency, write,
+}) => {
+  useRuntime();
+  const upstream: Source = { subscribers: null };
+  const first: Source = dependency === "Leaf"
+    ? upstream
+    : { subscribers: null, setupDependencies: () => [upstream] };
+  const second: Source = { subscribers: null };
+  const unrelated: Source = { subscribers: null };
+  const observed: Source[][] = [];
+  const stop = effect(() => {
+    runWithSetupTracking(() => {
+      runWithSetupTracking(() => {
+        trackSource(first);
+        if (reads !== "Single") trackSource(second);
+        if (reads === "Repeated") trackSource(first);
+        recordSetupWrite(write === "Read" ? upstream : unrelated);
+      }, undefined);
+      observed.push([...(runtimeState.setupTrackingFrame?.reads ?? [])]);
+    }, undefined);
+  });
+  const expected = reads === "Single" ? [first] : reads === "Repeated" ? [first, second] : [second, first];
+
+  expect(observed).toEqual([write === "Read" ? expected.filter((source) => source !== first) : expected]);
+  stop();
 });
 
 test("does not replay a computed that depends on a source changed by setup", () => {

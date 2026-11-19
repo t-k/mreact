@@ -1,10 +1,11 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import {
   applyDomProp,
   registerReactivePropBinding,
   removeDomProp,
+  setDomAttribute,
   withPropBindingMetadata,
 } from "../src/dom-prop-application.js";
 
@@ -27,6 +28,29 @@ describe("DOM prop application policy", () => {
     expect(div.textContent).toBe("keep");
     applyDomProp(div, "dangerouslySetInnerHTML", { __html: "<b>explicit</b>" }, true);
     expect(div.innerHTML).toBe("<b>explicit</b>");
+  });
+
+  test.each([
+    ["data-name", undefined],
+    ["custom:name", undefined],
+    ["XML:lang", undefined],
+    ["xml:lang", "http://www.w3.org/XML/1998/namespace"],
+    ["xlink:href", "http://www.w3.org/1999/xlink"],
+    ["xmlns", "http://www.w3.org/2000/xmlns/"],
+  ])("sets %s with its original namespace", (name, namespace) => {
+    const element = document.createElement("div");
+    const native = vi.spyOn(element, "setAttribute").mockImplementation(() => {});
+    const qualified = vi.spyOn(element, "setAttributeNS").mockImplementation(() => {});
+
+    setDomAttribute(element, name, "sample");
+
+    if (namespace === undefined) {
+      expect(native).toHaveBeenCalledWith(name, "sample");
+      expect(qualified).not.toHaveBeenCalled();
+    } else {
+      expect(qualified).toHaveBeenCalledWith(namespace, name, "sample");
+      expect(native).not.toHaveBeenCalled();
+    }
   });
 
   test("appends reactive prop bindings without replacing the binding array", () => {
