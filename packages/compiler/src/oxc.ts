@@ -459,10 +459,9 @@ function analyzeOxcToIr(
     program,
     detectedComponentCallNames,
   );
-  const localJsxReturnFunctionNames = collectOxcLocalJsxReturnFunctionNames(
-    program,
-    reassignedLocalJsxReturnFunctionNames,
-  );
+  const localJsxReturnFunctionNames = reassignedLocalJsxReturnFunctionNames.size === 0
+    ? detectedLocalJsxReturnFunctionNames
+    : collectOxcLocalJsxReturnFunctionNames(program, reassignedLocalJsxReturnFunctionNames);
   const compatCreateElementNames =
     target === "server" ? collectCompatCreateElementNames(program) : new Set<string>();
   const compatRenderToStringNames =

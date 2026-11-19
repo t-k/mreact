@@ -561,15 +561,19 @@ function getMeasuredRowLayout<TItem>(
     return cached;
   }
 
-  const rowSizes = computeRowSizes(items, columnCount, options, measuredSizes);
-  const rowOffsets = computeRowOffsets(rowSizes);
+  const { rowOffsets, rowSizes, totalSizePx } = computeMeasuredRows(
+    items,
+    columnCount,
+    options,
+    measuredSizes,
+  );
   const layout = {
     columnCount,
     items,
     measuredVersion,
     rowOffsets,
     rowSizes,
-    totalSizePx: rowSizes.reduce((total, size) => total + size, 0),
+    totalSizePx,
   };
   snapshotOptions?.updateMeasuredRowLayout?.(layout);
 
@@ -610,7 +614,7 @@ function getSpanRowLayout<TItem>(
     measuredSizes,
     placements.rowCount,
   );
-  const rowOffsets = computeRowOffsets(rowSizes);
+  const { rowOffsets, totalSizePx } = computeRowOffsets(rowSizes);
   const layout: SpanRowLayout<TItem> = {
     columnCount,
     getItemSpan: options.getItemSpan,
@@ -620,7 +624,7 @@ function getSpanRowLayout<TItem>(
     rowCount: placements.rowCount,
     rowOffsets,
     rowSizes,
-    totalSizePx: rowSizes.reduce((total, size) => total + size, 0),
+    totalSizePx,
   };
   snapshotOptions?.updateSpanRowLayout?.(layout);
 
@@ -866,14 +870,20 @@ function computeSpanRowSizes<TItem>(
   return estimatedRowSizes.map((estimatedSize, row) => measuredRowSizes[row] ?? estimatedSize);
 }
 
-function computeRowSizes<TItem>(
+function computeMeasuredRows<TItem>(
   items: readonly TItem[],
   columnCount: number,
   options: VirtualGridOptions<TItem>,
   measuredSizes: ReadonlyMap<VirtualKey, number>,
-): number[] {
+): { rowOffsets: number[]; rowSizes: number[]; totalSizePx: number } {
   const rowCount = Math.ceil(items.length / columnCount);
-  return Array.from({ length: rowCount }, (_unused, row) => {
+  // oxlint-disable-next-line unicorn/no-new-array -- Reserve one slot per measured row.
+  const rowSizes = new Array<number>(rowCount);
+  // oxlint-disable-next-line unicorn/no-new-array -- Reserve one slot per measured row.
+  const rowOffsets = new Array<number>(rowCount);
+  let totalSizePx = 0;
+
+  for (let row = 0; row < rowCount; row += 1) {
     let measuredMax: number | undefined;
     const startIndex = row * columnCount;
     const endIndex = Math.min(items.length, startIndex + columnCount);
@@ -889,24 +899,26 @@ function computeRowSizes<TItem>(
       }
     }
 
-    if (measuredMax !== undefined) {
-      return measuredMax;
-    }
-
-    return clampPositiveSize(options.estimateItemSize(startIndex, items[startIndex]));
-  });
-}
-
-function computeRowOffsets(rowSizes: readonly number[]): number[] {
-  const offsets: number[] = [];
-  let current = 0;
-
-  for (const size of rowSizes) {
-    offsets.push(current);
-    current += size;
+    const rowSize =
+      measuredMax ?? clampPositiveSize(options.estimateItemSize(startIndex, items[startIndex]));
+    rowSizes[row] = rowSize;
+    rowOffsets[row] = totalSizePx;
+    totalSizePx += rowSize;
   }
 
-  return offsets;
+  return { rowOffsets, rowSizes, totalSizePx };
+}
+
+function computeRowOffsets(rowSizes: readonly number[]): { rowOffsets: number[]; totalSizePx: number } {
+  const rowOffsets: number[] = [];
+  let totalSizePx = 0;
+
+  for (const size of rowSizes) {
+    rowOffsets.push(totalSizePx);
+    totalSizePx += size;
+  }
+
+  return { rowOffsets, totalSizePx };
 }
 
 function createEntries<TItem>(

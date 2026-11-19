@@ -1157,6 +1157,14 @@ function cloneValues<TValues extends FormValues>(values: TValues): TValues {
 }
 
 function cloneValue<TValue>(value: TValue): TValue {
+  const type = typeof value;
+  if (
+    type === "string" || type === "number" || type === "boolean" || type === "bigint" ||
+    value === null || Object.is(value, undefined)
+  ) {
+    return value;
+  }
+
   return structuredClone(value);
 }
 

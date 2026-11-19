@@ -1,4 +1,5 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
+import * as componentDetection from "../src/oxc-component-detection.js";
 import { transform } from "../src/index.js";
 import { compileServerModule } from "./helpers.js";
 
@@ -16,6 +17,21 @@ async function evaluateCompiled(code: string): Promise<Record<string, unknown>> 
 }
 
 describe("compiler render-value reassignment safety (Issue 074)", () => {
+  test.each([false, true])("reuses the first JSX analysis only without a reassignment (%j)", (reassign) => {
+    const collect = vi.spyOn(componentDetection, "collectOxcLocalJsxReturnFunctionNames");
+    try {
+      compileServer(`
+        let render = () => <b>first</b>;
+        function wrapper() { return render(); }
+        ${reassign ? 'render = () => "next";' : ""}
+        export default function Page() { return <main>{wrapper()}</main>; }
+      `);
+      expect(collect).toHaveBeenCalledTimes(reassign ? 2 : 1);
+    } finally {
+      collect.mockRestore();
+    }
+  });
+
   test("let JSX-init reassigned to user input is escaped at render", async () => {
     const code = compileServer(
       `export default function Page({ note }) {

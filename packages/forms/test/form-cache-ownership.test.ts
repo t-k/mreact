@@ -1,9 +1,30 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createCleanupScope, effect, runWithCleanupScope } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { createForm } from "../src/index.js";
 
 describe("form cache ownership", () => {
+  it("skips cloning primitive updates but still snapshots objects and rejects uncloneable values", async () => {
+    const form = createForm({ initialValues: { value: null as unknown } });
+    const clone = vi.spyOn(globalThis, "structuredClone");
+    try {
+      for (const value of ["typed", -0, NaN, true, null, undefined, 1n]) {
+        await form.setValue("value", value);
+        expect(form.field("value").state.get().value).toBe(value);
+      }
+      expect(clone).not.toHaveBeenCalled();
+
+      const input = { text: "owned" };
+      await form.setValue("value", input);
+      input.text = "changed";
+      expect(form.field("value").state.get().value).toEqual({ text: "owned" });
+      await expect(form.setValue("value", Symbol("value"))).rejects.toMatchObject({ name: "DataCloneError" });
+      await expect(form.setValue("value", () => {})).rejects.toMatchObject({ name: "DataCloneError" });
+    } finally {
+      clone.mockRestore();
+    }
+  });
+
   it("keeps a cached field usable after the consumer scope that first read it is disposed", async () => {
     const form = createForm({ initialValues: { email: "", name: "" } });
     const consumer = createCleanupScope();

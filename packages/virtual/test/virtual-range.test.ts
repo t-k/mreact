@@ -743,3 +743,24 @@ describe("createVirtualGrid", () => {
     expect(virtual.entries.get()).toEqual([]);
   });
 });
+
+
+it.each([false, true])("accumulates fractional measured rows from the same offsets (span %j)", (span) => {
+  const items = [{ id: 0 }, { id: 1 }, { id: 2 }];
+  const grid = createVirtualGrid({
+    estimateItemSize: () => 10.25,
+    getColumnCount: () => 1,
+    getKey: (item) => item.id,
+    ...(span ? { getItemSpan: () => ({ colSpan: 1, rowSpan: 1 }) } : {}),
+    items: () => items,
+    scrollOffset: () => 100,
+    viewportSize: () => 10,
+  });
+  grid.measureItem(0, 11.5);
+  grid.measureItem(2, 12.75);
+  expect(grid.totalSizePx.get()).toBe(34.5);
+  expect(grid.range.get().totalSizePx).toBe(34.5);
+  items.length = 0;
+  grid.refresh();
+  expect(grid.totalSizePx.get()).toBe(0);
+});
