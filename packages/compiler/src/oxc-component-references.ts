@@ -66,7 +66,9 @@ export function collectOxcClientBoundaryImportComponents(
     }
   }
 
-  collectOxcClientReferenceAliases(program, names);
+  if (names.size > 0) {
+    collectOxcClientReferenceAliases(program, names);
+  }
   return names;
 }
 
