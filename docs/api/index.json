@@ -88043,9 +88043,9 @@
 							"sources": [
 								{
 									"fileName": "resources.ts",
-									"line": 192,
+									"line": 196,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/devtools/src/resources.ts#L192"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/devtools/src/resources.ts#L196"
 								}
 							],
 							"signatures": [
@@ -88066,9 +88066,9 @@
 									"sources": [
 										{
 											"fileName": "resources.ts",
-											"line": 192,
+											"line": 196,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/devtools/src/resources.ts#L192"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/devtools/src/resources.ts#L196"
 										}
 									],
 									"parameters": [
@@ -105184,9 +105184,9 @@
 							"sources": [
 								{
 									"fileName": "index.ts",
-									"line": 1165,
+									"line": 1173,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/forms/src/index.ts#L1165"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/forms/src/index.ts#L1173"
 								}
 							],
 							"target": 11328
@@ -105208,9 +105208,9 @@
 							"sources": [
 								{
 									"fileName": "index.ts",
-									"line": 1166,
+									"line": 1174,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/forms/src/index.ts#L1166"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/forms/src/index.ts#L1174"
 								}
 							],
 							"target": 11336
@@ -105232,9 +105232,9 @@
 							"sources": [
 								{
 									"fileName": "index.ts",
-									"line": 1167,
+									"line": 1175,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/forms/src/index.ts#L1167"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/forms/src/index.ts#L1175"
 								}
 							],
 							"target": 11324
@@ -105272,9 +105272,9 @@
 							"sources": [
 								{
 									"fileName": "index.ts",
-									"line": 1170,
+									"line": 1178,
 									"character": 9,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/forms/src/index.ts#L1170"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/forms/src/index.ts#L1178"
 								}
 							],
 							"target": 11352

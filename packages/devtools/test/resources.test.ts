@@ -35,6 +35,44 @@ describe("devtools resource inspector", () => {
     expect(inspector.census().live).toBe(1);
   });
 
+  test("counts retained records by their current owner and registered kind", () => {
+    const inspector = createDevtoolsResourceInspector(4);
+    const scope = inspector.register({ kind: "scope", ownerId: "before" });
+    scope.update({ ownerId: "screen" });
+    const disposed = inspector.register({ kind: "effect", ownerId: "screen" });
+    inspector.register({ kind: "subscription", ownerId: "elsewhere" });
+    const renamed = inspector.register({ kind: "computed", ownerId: "screen" });
+    renamed.update({ kind: "unregistered" });
+    const omitted = inspector.register({ kind: "other", ownerId: "screen" });
+    disposed.dispose();
+
+    expect(inspector.census({ ownerId: "screen" })).toEqual({
+      byKind: {
+        scope: { created: 1, disposed: 0, live: 1 },
+        effect: { created: 1, disposed: 1, live: 0 },
+        subscription: { created: 0, disposed: 0, live: 0 },
+        computed: { created: 0, disposed: 0, live: 0 },
+        other: { created: 0, disposed: 0, live: 0 },
+      },
+      live: 1,
+      missingMetadata: 1,
+      retainedMetadata: 4,
+    });
+    omitted.dispose();
+    expect(inspector.census({ ownerId: "absent" }).live).toBe(0);
+  });
+
+  test("does not coerce a changed record kind to a registered string kind", () => {
+    const inspector = createDevtoolsResourceInspector();
+    inspector.register({ kind: "undefined", ownerId: "other" });
+    const scope = inspector.register({ kind: "scope", ownerId: "screen" });
+    scope.update({ kind: undefined as unknown as string });
+
+    expect(inspector.census({ ownerId: "screen" }).byKind["undefined"]).toEqual({
+      created: 0, disposed: 0, live: 0,
+    });
+  });
+
   test("caps retained metadata and clears disposed records without losing live counts", () => {
     const inspector = createDevtoolsResourceInspector(1);
     const first = inspector.register({ kind: "effect" });

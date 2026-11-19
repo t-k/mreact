@@ -128,18 +128,22 @@ export function createDevtoolsResourceInspector(
   return {
     census(options = {}) {
       const byKind: Record<string, { created: number; disposed: number; live: number }> = Object.create(null);
+      const ownerId = options.ownerId;
       for (const [kind, counter] of counters) {
-        if (options.ownerId !== undefined) {
-          const ownedRecords = [...records.values()].filter(
-            (record) => record.ownerId === options.ownerId && record.kind === kind,
-          );
-          byKind[kind] = {
-            created: ownedRecords.length,
-            disposed: ownedRecords.filter((record) => record.status === "disposed").length,
-            live: ownedRecords.filter((record) => record.status === "live").length,
-          };
-        } else {
-          byKind[kind] = { ...counter };
+        byKind[kind] = ownerId === undefined
+          ? { ...counter }
+          : { created: 0, disposed: 0, live: 0 };
+      }
+      if (ownerId !== undefined) {
+        for (const record of records.values()) {
+          if (record.ownerId !== ownerId || typeof record.kind !== "string") continue;
+
+          const counter = byKind[record.kind];
+          if (counter === undefined) continue;
+
+          counter.created += 1;
+          if (record.status === "disposed") counter.disposed += 1;
+          if (record.status === "live") counter.live += 1;
         }
       }
 
