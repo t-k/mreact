@@ -792,6 +792,27 @@ describe("createQueryClient", () => {
     expect(hashQueryKey(["plain", { a: 1, b: 2 }])).toBe(hashQueryKey(["plain", { b: 2, a: 1 }]));
   });
 
+  it("reads all object properties before serializing in sorted order", () => {
+    const reads: string[] = [];
+    const key = {
+      get z() {
+        reads.push("outer z");
+        return { get child() { reads.push("inner z"); return "value"; } };
+      },
+      get omitted() {
+        reads.push("outer omitted");
+        return undefined;
+      },
+      get a() {
+        reads.push("outer a");
+        return { get child() { reads.push("inner a"); return 0; } };
+      },
+    };
+
+    expect(hashQueryKey([key])).toBe('[{"a":{"child":0},"z":{"child":"value"}}]');
+    expect(reads).toEqual(["outer z", "outer omitted", "outer a", "inner a", "inner z"]);
+  });
+
   it("rehashes mutable query-key input for repeated reads of the same key array", () => {
     const queryKey = ["search", { page: 1, q: "mreact" }] as const;
     const originalStringify = JSON.stringify;

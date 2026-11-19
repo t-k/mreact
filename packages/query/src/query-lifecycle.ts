@@ -998,8 +998,12 @@ function stableStringifyValue(value: unknown, ancestors: object[]): string {
       const entries = Object.entries(value as Record<string, unknown>)
         .filter(([, entryValue]) => entryValue !== undefined)
         .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
-
-      return `{${entries.map(([key, entryValue]) => `${JSON.stringify(key)}:${stableStringifyValue(entryValue, ancestors)}`).join(",")}}`;
+      let serialized = "{";
+      for (const [key, entryValue] of entries) {
+        if (serialized.length > 1) serialized += ",";
+        serialized += `${JSON.stringify(key)}:${stableStringifyValue(entryValue, ancestors)}`;
+      }
+      return serialized + "}";
     }
     if (value instanceof Date) {
       return `@Date:${JSON.stringify(Date.prototype.toJSON.call(value))}`;
