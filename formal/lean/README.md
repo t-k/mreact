@@ -17,10 +17,6 @@ The compiler emits `insertBranch` for conditionals whose arms cannot produce a k
 
 The Lean model covers the single-node subset. Runtime tests exercise the TypeScript implementation, including mixed representations, detached markers, errors, and hydration. Run `pnpm bench:compiler-specializations` from the repository root to measure repeated branch updates in Chromium.
 
-## Render-value normalization
-
-The normalization proof compares concatenating each child result with accumulating nodes into a single output. It establishes that both traversals preserve node order and identity for any modeled tree. The model takes normalized leaf sequences as inputs. TypeScript tests cover DOM fragments, custom normalizers, iterator errors, and the depth limit.
-
 ## Virtual row layout
 
 The row layout proof shows that a single scan over computed row sizes produces the same start offsets and final total as separate scans. It holds for any accumulation step, so it preserves the order of floating-point additions. The model starts with the row sizes. TypeScript tests cover how measured sizes and grid spans determine those sizes and how the resulting offsets are exposed.

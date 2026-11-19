@@ -22,32 +22,24 @@ export function registerRenderValueNormalizer(normalizer: RenderValueNormalizer)
 }
 
 export function normalizeRenderValue(value: RenderValue, depth = 0): Node[] {
-  if (depth <= maxRenderValueDepth && typeof Element !== "undefined" && value instanceof Element) {
-    return [value];
-  }
-
-  return collectRenderNodes(value, depth);
-}
-
-function collectRenderNodes(value: RenderValue, depth: number, output?: Node[]): Node[] {
   if (depth > maxRenderValueDepth) {
     throw new Error(`mreact render value is too deep: exceeded ${maxRenderValueDepth} levels`);
   }
 
   if (value === null || value === undefined || typeof value === "boolean") {
-    return output ?? [];
+    return [];
   }
 
   if (typeof value === "string" || typeof value === "number") {
-    return appendNode(document.createTextNode(String(value)), output);
+    return [document.createTextNode(String(value))];
   }
 
   if (typeof DocumentFragment !== "undefined" && value instanceof DocumentFragment) {
-    return appendNodes(Array.from(value.childNodes), output);
+    return Array.from(value.childNodes);
   }
 
   if (value instanceof Node) {
-    return appendNode(value, output);
+    return [value];
   }
 
   const normalizer =
@@ -58,42 +50,25 @@ function collectRenderNodes(value: RenderValue, depth: number, output?: Node[]):
   const customNodes = normalizer?.(value, depth + 1);
 
   if (customNodes !== undefined) {
-    return appendNodes(customNodes, output);
+    return customNodes;
   }
+
+  const nodes: Node[] = [];
 
   if (!isIterable(value)) {
-    return appendNode(document.createTextNode(String(value)), output);
+    return [document.createTextNode(String(value))];
   }
 
-  const nodes = output ?? [];
-  for (const item of value) {
-    collectRenderNodes(item, depth + 1, nodes);
+  for (const item of value as Iterable<RenderValue>) {
+    for (const node of normalizeRenderValue(item, depth + 1)) {
+      nodes.push(node);
+    }
   }
+
   return nodes;
 }
 
-function appendNode(node: Node, output: Node[] | undefined): Node[] {
-  if (output === undefined) {
-    return [node];
-  }
-
-  output.push(node);
-  return output;
-}
-
-function appendNodes(nodes: Node[], output: Node[] | undefined): Node[] {
-  if (output === undefined) {
-    return nodes;
-  }
-
-  for (const node of nodes) {
-    output.push(node);
-  }
-
-  return output;
-}
-
-function isIterable(value: unknown): value is Iterable<RenderValue> {
+function isIterable(value: unknown): value is Iterable<unknown> {
   return (
     typeof value === "object" &&
     value !== null &&
