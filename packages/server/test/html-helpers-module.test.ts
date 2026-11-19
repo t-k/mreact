@@ -84,6 +84,35 @@ describe("server HTML helpers module", () => {
     await expect(renderReactNodeToString(null)).resolves.toBe("");
   });
 
+  test("snapshots enumerable host props before serializing attribute values", async () => {
+    const events: string[] = [];
+    const node = {
+      ...createElement("label", null),
+      props: {
+        get htmlFor() {
+          events.push("read htmlFor");
+          return {
+            toString() {
+              events.push("stringify htmlFor");
+              return "control";
+            },
+          };
+        },
+        get title() {
+          events.push("read title");
+          return 'A & "B"';
+        },
+        hidden: false,
+        "data-order": 0,
+      },
+    };
+
+    await expect(renderReactNodeToString(node)).resolves.toBe(
+      '<label for="control" title="A &amp; &quot;B&quot;" data-order="0"></label>',
+    );
+    expect(events).toEqual(["read htmlFor", "read title", "stringify htmlFor"]);
+  });
+
   test("renderReactNodeToString separates adjacent text nodes", async () => {
     await expect(
       renderReactNodeToString(createElement("p", null, "Hello, ", "Ada", 0)),

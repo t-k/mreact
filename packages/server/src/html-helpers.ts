@@ -551,10 +551,11 @@ function renderHtmlAttributes(props: Record<string, unknown>): string {
   // attributes in scope to make the call. Strip the unsafe content
   // before per-attribute rendering.
   const sanitizedProps = sanitizeMetaRefreshProps(props);
-  return Object.entries(sanitizedProps)
-    .map(([name, value]) => renderHtmlAttribute(name, value))
-    .filter((attribute) => attribute !== "")
-    .join("");
+  let attributes = "";
+  for (const [name, value] of Object.entries(sanitizedProps)) {
+    attributes += renderHtmlAttribute(name, value);
+  }
+  return attributes;
 }
 
 function sanitizeMetaRefreshProps(props: Record<string, unknown>): Record<string, unknown> {
