@@ -171,7 +171,7 @@ if (rows.some((row) => row.status === "failed")) {
 
 }
 
-async function measurePrimitiveBrowserTrial(options: {
+export async function measurePrimitiveBrowserTrial(options: {
   url: string;
   framework: string;
   caseName: string;
@@ -1162,7 +1162,7 @@ export function rotateFrameworksForRound<T>(frameworks: readonly T[], round: num
   return [...frameworks.slice(offset), ...frameworks.slice(0, offset)];
 }
 
-async function serveDirectory(rootDir: string): Promise<{ close(): Promise<void>; url: string }> {
+export async function serveDirectory(rootDir: string): Promise<{ close(): Promise<void>; url: string }> {
   const server = createServer(async (request, response) => {
     try {
       const pathname = new URL(request.url ?? "/", "http://local.test").pathname;

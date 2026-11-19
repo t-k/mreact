@@ -15,6 +15,7 @@ on:
           - js-framework
           - non-router
           - router
+          - paired
       js_frameworks:
         description: Optional js-framework-benchmark framework ids, for example "keyed/mreact keyed/mreact-react-compat keyed/react-hooks"
         required: false
@@ -34,6 +35,7 @@ concurrency:
 
 jobs:
   benchmark:
+    if: inputs.suite != 'paired'
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     env:
@@ -192,3 +194,59 @@ jobs:
           git pull --rebase origin "$GITHUB_REF_NAME"
           git push origin "HEAD:$GITHUB_REF_NAME"
           gh workflow run docs-pages.yml --ref "$GITHUB_REF_NAME"
+
+  paired:
+    if: inputs.suite == 'paired'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: candidate
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !/benchmarks/results/
+
+      - uses: actions/checkout@v6
+        with:
+          path: baseline
+          ref: main
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !/benchmarks/results/
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Build both revisions
+        run: |
+          corepack enable
+          for checkout in baseline candidate; do
+            (cd "$checkout" && pnpm install --frozen-lockfile --prod=false && pnpm build)
+          done
+
+      - name: Install Playwright Chromium
+        working-directory: candidate
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run paired benchmarks
+        working-directory: candidate
+        run: pnpm exec tsx benchmarks/paired/run.ts ../baseline "$RUNNER_TEMP/paired-results"
+
+      - name: Upload paired benchmark results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paired-benchmark-results
+          path: ${{ runner.temp }}/paired-results
