@@ -236,7 +236,11 @@ function createSegmentMappings(outputCode: string, sourceCode: string): Generate
   let previousSourceLine = 0;
   let previousSourceColumn = 0;
   let previousNameIndex = 0;
-  const searchState: SourceMapSearchState = { tokenOffsets: new Map() };
+  const lineStarts = [0];
+  for (let line = 0; line < sourceLines.length - 1; line += 1) {
+    lineStarts.push(lineStarts[line]! + sourceLines[line]!.length + 1);
+  }
+  const searchState: SourceMapSearchState = { sourceCode, lineStarts, tokenOffsets: new Map() };
 
   for (const [lineIndex, generatedLine] of generatedLines.entries()) {
     let previousGeneratedColumn = 0;
@@ -280,6 +284,8 @@ interface SourceMapSegment {
 }
 
 interface SourceMapSearchState {
+  sourceCode: string;
+  lineStarts: readonly number[];
   tokenOffsets: Map<string, number>;
 }
 
@@ -289,7 +295,7 @@ function collectSourceMapSegments(
   sourceLines: readonly string[],
   searchState: SourceMapSearchState,
 ): SourceMapSegment[] {
-  const fallbackSourceLine = findFallbackSourceLine(generatedLine, generatedLineIndex, sourceLines);
+  const fallbackSourceLine = findFallbackSourceLine(generatedLine, generatedLineIndex, sourceLines, searchState);
   const segments: SourceMapSegment[] = [
     {
       generatedColumn: 0,
@@ -301,7 +307,7 @@ function collectSourceMapSegments(
   const functionMatch = /function\s+([A-Za-z_$][\w$]*)/.exec(generatedLine);
   if (functionMatch !== null && functionMatch.index !== undefined) {
     const token = `function ${functionMatch[1]}`;
-    const sourceLocation = findSourceLocation(sourceLines, token);
+    const sourceLocation = findSourceLocation(searchState, token);
 
     if (sourceLocation !== undefined) {
       segments.push({
@@ -314,7 +320,7 @@ function collectSourceMapSegments(
 
   const returnColumn = generatedLine.indexOf("return");
   if (returnColumn >= 0) {
-    const sourceLocation = findSourceLocation(sourceLines, "return");
+    const sourceLocation = findSourceLocation(searchState, "return");
 
     if (sourceLocation !== undefined) {
       segments.push({
@@ -332,7 +338,7 @@ function collectSourceMapSegments(
       : generatedLine.slice(templateStart).match(/<[A-Za-z][\w:-]*/)?.[0];
   if (templateTag !== undefined) {
     const generatedColumn = generatedLine.indexOf(templateTag);
-    const sourceLocation = findSourceLocation(sourceLines, templateTag);
+    const sourceLocation = findSourceLocation(searchState, templateTag);
 
     if (generatedColumn >= 0 && sourceLocation !== undefined) {
       segments.push({
@@ -351,19 +357,19 @@ function collectSourceMapSegments(
       bindPropAttribute === undefined
         ? undefined
         : (findSourceLocation(
-            sourceLines,
-            `${bindPropAttribute}={${dynamicExpression}}`,
             searchState,
+            `${bindPropAttribute}={${dynamicExpression}}`,
+            true,
           ) ??
           findSourceLocation(
-            sourceLines,
-            `${bindPropAttribute}="${dynamicExpression}"`,
             searchState,
+            `${bindPropAttribute}="${dynamicExpression}"`,
+            true,
           ));
     const fallbackSourceLocation =
-      findSourceLocation(sourceLines, `{${dynamicExpression}}`, searchState) ??
+      findSourceLocation(searchState, `{${dynamicExpression}}`, true) ??
       findJsxExpressionTokenLocation(sourceLines, dynamicExpression) ??
-      findSourceLocation(sourceLines, dynamicExpression, searchState);
+      findSourceLocation(searchState, dynamicExpression, true);
     const resolvedSourceLocation = sourceLocation ?? fallbackSourceLocation;
 
     if (generatedColumn >= 0 && resolvedSourceLocation !== undefined) {
@@ -442,11 +448,12 @@ function findFallbackSourceLine(
   generatedLine: string,
   generatedLineIndex: number,
   sourceLines: readonly string[],
+  searchState: SourceMapSearchState,
 ): number {
   const functionName = /function\s+([A-Za-z_$][\w$]*)/.exec(generatedLine)?.[1];
 
   if (functionName !== undefined) {
-    return findSourceLocation(sourceLines, `function ${functionName}`)?.line ?? 0;
+    return findSourceLocation(searchState, `function ${functionName}`)?.line ?? 0;
   }
 
   if (generatedLine.includes("createTemplate")) {
@@ -455,51 +462,51 @@ function findFallbackSourceLine(
   }
 
   if (generatedLine.includes("return")) {
-    return findSourceLocation(sourceLines, "return")?.line ?? 0;
+    return findSourceLocation(searchState, "return")?.line ?? 0;
   }
 
   return Math.min(generatedLineIndex, Math.max(0, sourceLines.length - 1));
 }
 
 function findSourceLocation(
-  sourceLines: readonly string[],
+  { sourceCode, lineStarts, tokenOffsets }: SourceMapSearchState,
   token: string,
-  searchState?: SourceMapSearchState,
+  advanceToken = false,
 ): { line: number; column: number } | undefined {
-  const source = sourceLines.join("\n");
-  const start = searchState?.tokenOffsets.get(token) ?? 0;
-  let offset = source.indexOf(token, start);
+  const start = advanceToken ? (tokenOffsets.get(token) ?? 0) : 0;
+  let offset = sourceCode.indexOf(token, start);
 
   if (offset < 0 && start > 0) {
-    offset = source.indexOf(token);
+    offset = sourceCode.indexOf(token);
   }
 
   if (offset < 0) {
     return undefined;
   }
 
-  searchState?.tokenOffsets.set(token, offset + token.length);
-  return sourceOffsetToLineColumn(sourceLines, offset);
+  if (advanceToken) {
+    tokenOffsets.set(token, offset + token.length);
+  }
+  return sourceOffsetToLineColumn(lineStarts, offset);
 }
 
 function sourceOffsetToLineColumn(
-  sourceLines: readonly string[],
+  lineStarts: readonly number[],
   offset: number,
 ): { line: number; column: number } {
-  let remaining = offset;
+  let line = 0;
+  let end = lineStarts.length;
 
-  for (const [line, sourceLine] of sourceLines.entries()) {
-    if (remaining <= sourceLine.length) {
-      return { line, column: remaining };
+  while (line + 1 < end) {
+    const middle = line + Math.floor((end - line) / 2);
+    if (lineStarts[middle]! <= offset) {
+      line = middle;
+    } else {
+      end = middle;
     }
-
-    remaining -= sourceLine.length + 1;
   }
 
-  return {
-    line: Math.max(0, sourceLines.length - 1),
-    column: sourceLines.at(-1)?.length ?? 0,
-  };
+  return { line, column: offset - lineStarts[line]! };
 }
 
 function findJsxExpressionTokenLocation(

@@ -113,6 +113,30 @@ describe("compiler source maps", () => {
     );
   });
 
+  test.each(["\n", "\r\n"])("keeps UTF-16 token positions with %j line endings", (lineEnding) => {
+    const lines = [
+      "export function App() {",
+      '  const name = "Ada";',
+      "  return <p>😀 {name}</p>;",
+      "}",
+      "",
+    ];
+    const code = lines.join(lineEnding);
+    const output = transform({ code, filename: "App.tsx", target: "client", dev: true, sourceMap: true });
+    const map = JSON.parse(output.map as string) as { names: string[]; mappings: string };
+    const bindingIndex = output.code.split("\n").findIndex((line) => line.includes("bindText("));
+
+    expect(decodeMappings(map.mappings)[bindingIndex]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceLine: 2,
+          sourceColumn: lines[2]!.indexOf("name"),
+          nameIndex: map.names.indexOf("name"),
+        }),
+      ]),
+    );
+  });
+
   test("maps Oxc generated dynamic expression segments back to the JSX expression column", () => {
     const code = [
       "export function App() {",
