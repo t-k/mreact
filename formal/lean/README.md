@@ -11,6 +11,8 @@ Elan reads `lean-toolchain` to select the pinned Lean version. Lake checks the p
 
 ## Single-node conditional branches
 
-The model describes a candidate for specializing the compiler's `insertBranch` path. Its eligibility check requires both arms to normalize to exactly one node. Given successful renders with an attached marker, the proof shows that tracking an optional node instead of a node list preserves the current node identity and the sequence of scope-disposal, node-removal, and node-insertion operations for every finite sequence of renders and disposals.
+The model describes the single-node specialization of the compiler's `insertBranch` path. Its eligibility check requires both arms to normalize to exactly one node. Given successful renders with an attached marker, the proof shows that tracking an optional node instead of a node list preserves the current node identity and the sequence of scope-disposal, node-removal, and node-insertion operations for every finite sequence of renders and disposals.
 
-The model takes normalized nodes and scopes as inputs. Applying the proof to emitted JavaScript requires validating that the compiler can establish the singleton precondition and that the DOM implementation matches the model. Render and cleanup errors, detached markers, hydration, and reactive scheduling are outside the model. The candidate has no production emitter or runtime implementation yet, so the proof establishes no browser performance result.
+The compiler emits `insertBranch` for conditionals whose arms cannot produce a keyed list render value. The runtime checks each rendered value and uses the single-node path when that value is an `Element`. Other values use the existing normalization, and switching between a directly returned element and a normalized node array preserves node identity.
+
+The Lean model covers the single-node subset. Runtime tests exercise the TypeScript implementation, including mixed representations, detached markers, errors, and hydration. Run `pnpm bench:compiler-specializations` from the repository root to measure repeated branch updates in Chromium.

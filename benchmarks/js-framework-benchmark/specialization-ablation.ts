@@ -11,12 +11,13 @@ import { createDatedResultsDir, writeJsonFile } from "../shared/results.js";
 const names = ["directCellText", "branchInsertion", "elementProperty", "selectBinding"] as const;
 type SpecializationName = typeof names[number];
 const rounds = readPositiveInteger("MREACT_SPECIALIZATION_ABLATION_ROUNDS", 5);
+const branchIterations = readPositiveInteger("MREACT_SPECIALIZATION_BRANCH_ITERATIONS", 2_000);
 const filename = resolve("benchmarks/js-framework-benchmark/specialization-ablation-fixture.tsx");
 const source = await readFile(filename, "utf8");
 const rootDir = await mkdtemp(join(await realpath(tmpdir()), "mreact-specialization-ablation-"));
 const entry = `import { App } from "./compiled.js";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
-window.__specializationAblation = async () => {
+window.__specializationAblation = async (measureBranch) => {
   const root = document.querySelector("#root");
   const creationStart = performance.now();
   root.append(App());
@@ -37,7 +38,22 @@ window.__specializationAblation = async () => {
     if (!verify()) throw new Error(name + " update verification failed");
     updates[name] = performance.now() - start;
   }
-  return { creationMs, updates };
+  if (!measureBranch) return { creationMs, updates };
+  for (let i = 0; i < 200; i++) {
+    controls.setBranch(i % 2 === 0);
+    await flushEffects();
+  }
+  const start = performance.now();
+  for (let i = 0; i < ${branchIterations}; i++) {
+    controls.setBranch(i % 2 === 0);
+    await flushEffects();
+  }
+  const branchSwitchMs = performance.now() - start;
+  const lastTag = ${branchIterations} % 2 === 0 ? "i" : "b";
+  if (root.querySelector(lastTag)?.textContent !== (lastTag === "i" ? "no" : "yes")) {
+    throw new Error("repeated branch update verification failed");
+  }
+  return { creationMs, updates, branchSwitchMs };
 };`;
 
 try {
@@ -50,7 +66,7 @@ try {
     for (let round = 0; round < rounds; round++) {
       const order = round % 2 === 0 ? ["on", name] : [name, "on"];
       for (const variant of order) {
-        results.push({ name, variant, round, ...await runTrial(variants.get(variant)!.bundle) });
+        results.push({ name, variant, round, ...await runTrial(variants.get(variant)!.bundle, name === "branchInsertion") });
       }
     }
   }
@@ -60,6 +76,7 @@ try {
     track: "compiled-reactive-jsx-specialization-ablation",
     filename,
     rounds,
+    branchIterations,
     environment: await collectBenchmarkEnvironment(["@reckona/mreact-compiler", "@reckona/mreact-reactive-dom"]),
     variants: Object.fromEntries([...variants.entries()].map(([name, value]) => [name, {
       decisions: value.decisions,
@@ -130,14 +147,14 @@ async function buildVariant(disabled: "on" | SpecializationName) {
   };
 }
 
-async function runTrial(bundle: string) {
+async function runTrial(bundle: string, measureBranch: boolean) {
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
     await page.setContent('<div id="root"></div>');
     await page.addScriptTag({ content: bundle, type: "module" });
     await page.waitForFunction(() => typeof (window as any).__specializationAblation === "function");
-    const sample = await page.evaluate(() => (window as any).__specializationAblation());
+    const sample = await page.evaluate((measure) => (window as any).__specializationAblation(measure), measureBranch);
     return { browserVersion: browser.version(), ...sample };
   } finally {
     await browser.close();

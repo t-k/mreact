@@ -1,9 +1,20 @@
 import { effect } from "@reckona/mreact-reactive-core";
 import { effectWithDebugLabel, registerCleanup } from "@reckona/mreact-reactive-core/internal";
 import { isDynamicHydrationEnabled, markDynamicNode, markDynamicNodes } from "./dynamic-node.js";
+import { normalizeRenderValue } from "./normalize.js";
 import { createScopedRenderNodes } from "./render-scope.js";
 import { registerDispose } from "./scope.js";
 import type { Dispose, RenderValue } from "./types.js";
+
+type BranchNodes = Element | Node[];
+
+const emptyBranch: Node[] = [];
+
+function normalizeBranch(value: RenderValue): BranchNodes {
+  return typeof Element !== "undefined" && value instanceof Element
+    ? value
+    : normalizeRenderValue(value);
+}
 
 /**
  * @internal Inserts and updates a render value the compiler proved is never a list.
@@ -27,7 +38,7 @@ export function insertBranch(
     markDynamicNode(marker);
   }
 
-  let current: Node[] = [];
+  let current: BranchNodes = emptyBranch;
   let disposeCurrentScope: Dispose | undefined;
 
   const clear = () => {
@@ -41,15 +52,23 @@ export function insertBranch(
       firstError = error;
     }
 
-    for (const node of current) {
+    if (Array.isArray(current)) {
+      for (const node of current) {
+        try {
+          node.parentNode?.removeChild(node);
+        } catch (error) {
+          firstError ??= error;
+        }
+      }
+    } else {
       try {
-        node.parentNode?.removeChild(node);
+        current.parentNode?.removeChild(current);
       } catch (error) {
         firstError ??= error;
       }
     }
 
-    current = [];
+    current = emptyBranch;
 
     if (firstError !== undefined) {
       throw firstError;
@@ -70,7 +89,7 @@ export function insertBranch(
     let next;
 
     try {
-      next = createScopedRenderNodes(value);
+      next = createScopedRenderNodes(value, normalizeBranch);
     } catch (error) {
       try {
         clear();
@@ -80,7 +99,7 @@ export function insertBranch(
       throw firstError ?? error;
     }
 
-    if (isSameNodeList(current, next.nodes)) {
+    if (isSameBranch(current, next.nodes)) {
       disposeCurrentScope = next.dispose;
       if (firstError !== undefined) {
         throw firstError;
@@ -94,13 +113,20 @@ export function insertBranch(
       firstError ??= error;
     }
 
-    current = markForHydration ? markDynamicNodes(next.nodes) : next.nodes;
+    if (markForHydration) {
+      if (Array.isArray(next.nodes)) {
+        markDynamicNodes(next.nodes);
+      } else {
+        markDynamicNode(next.nodes);
+      }
+    }
+    current = next.nodes;
     disposeCurrentScope = next.dispose;
 
     const insertionParent = marker.parentNode;
 
     if (insertionParent === null) {
-      current = [];
+      current = emptyBranch;
       const disposeNextScope = disposeCurrentScope;
       disposeCurrentScope = undefined;
 
@@ -116,8 +142,12 @@ export function insertBranch(
       return;
     }
 
-    for (const node of current) {
-      insertionParent.insertBefore(node, marker);
+    if (Array.isArray(current)) {
+      for (const node of current) {
+        insertionParent.insertBefore(node, marker);
+      }
+    } else {
+      insertionParent.insertBefore(current, marker);
     }
 
     if (firstError !== undefined) {
@@ -135,6 +165,12 @@ export function insertBranch(
   return disposeOwnedBranch;
 }
 
-function isSameNodeList(left: readonly Node[], right: readonly Node[]): boolean {
-  return left.length === right.length && left.every((node, index) => node === right[index]);
+function isSameBranch(left: BranchNodes, right: BranchNodes): boolean {
+  if (Array.isArray(left)) {
+    return Array.isArray(right)
+      ? left.length === right.length && left.every((node, index) => node === right[index])
+      : left.length === 1 && left[0] === right;
+  }
+
+  return Array.isArray(right) ? right.length === 1 && right[0] === left : left === right;
 }

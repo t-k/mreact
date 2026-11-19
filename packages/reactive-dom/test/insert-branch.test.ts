@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { withCleanupScope } from "@reckona/mreact-reactive-core/internal";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { bindDomRef, insertDynamic } from "../src/index.js";
 import { insertBranch } from "../src/insert-branch.js";
+import * as renderNormalization from "../src/normalize.js";
 import { registerDispose } from "../src/scope.js";
 import type { RenderValue } from "../src/types.js";
 
@@ -20,7 +21,109 @@ function bothInsertions(): readonly [
   ];
 }
 
+const shapes = ["Element", "Singleton", "Multiple", "Empty"] as const;
+const branchCombinations = shapes.flatMap((before) =>
+  shapes.flatMap((after) =>
+    (["Attached", "Detached"] as const).map((markerState) => ({ before, after, markerState })),
+  ),
+);
+
 describe("insertBranch", () => {
+  test("skips array normalization for a directly returned DOM node", async () => {
+    const parent = document.createElement("div");
+    const marker = document.createComment("marker");
+    const element = document.createElement("strong");
+    const rendered = cell<RenderValue>(element);
+    parent.append(marker);
+
+    const normalize = vi.spyOn(renderNormalization, "normalizeRenderValue");
+    try {
+      const dispose = insertBranch(parent, marker, () => rendered.get());
+      expect(normalize).not.toHaveBeenCalled();
+
+      rendered.set([element]);
+      await flushEffects();
+      expect(normalize).toHaveBeenCalledWith([element]);
+      expect(parent.firstChild).toBe(element);
+      dispose();
+    } finally {
+      normalize.mockRestore();
+    }
+  });
+
+  test.each(branchCombinations)(
+    "preserves $before -> $after with a $markerState marker",
+    async ({ before, after, markerState }) => {
+      const parent = document.createElement("div");
+      const marker = document.createComment("marker");
+      const first = document.createElement("b");
+      const second = document.createElement("i");
+      const values = { Element: first, Singleton: [first], Multiple: [first, second], Empty: null };
+      const nodes = { Element: [first], Singleton: [first], Multiple: [first, second], Empty: [] };
+      const render = cell<RenderValue>(values[before]);
+      parent.append(marker);
+
+      const changes = cell(0);
+      const lifecycle: string[] = [];
+      const dispose = insertBranch(parent, marker, () => {
+        const revision = changes.get();
+        registerDispose(() => lifecycle.push(`dispose:${revision}`));
+        lifecycle.push(`render:${revision}`);
+        return render.get();
+      });
+      const insertSpy = vi.spyOn(parent, "insertBefore");
+      const removes = vi.spyOn(parent, "removeChild");
+      try {
+        const attached = markerState === "Attached";
+        if (!attached) marker.remove();
+        removes.mockClear();
+
+        // The wrapper forces a rerender even when the render value is identical.
+        changes.set(changes.get() + 1);
+        render.set(values[after]);
+        await flushEffects();
+
+        const sameNodes = nodes[before].length === nodes[after].length;
+        const expected = sameNodes || attached ? nodes[after] : [];
+        expect([...parent.childNodes]).toEqual(attached ? [...expected, marker] : expected);
+        expect(lifecycle).toEqual([
+          "render:0", "dispose:0", "render:1",
+          ...(!sameNodes && !attached ? ["dispose:1"] : []),
+        ]);
+        if (sameNodes) {
+          expect(insertSpy).not.toHaveBeenCalled();
+          expect(removes).not.toHaveBeenCalled();
+        }
+      } finally {
+        dispose();
+        insertSpy.mockRestore();
+        removes.mockRestore();
+      }
+    },
+  );
+
+  test.each(["Element", "Singleton"] as const)(
+    "replaces a different node when switching from $0 to the other representation",
+    async (before) => {
+      const parent = document.createElement("div");
+      const marker = document.createComment("marker");
+      const first = document.createElement("b");
+      const second = document.createElement("i");
+      const render = cell<RenderValue>(before === "Element" ? first : [first]);
+      parent.append(marker);
+
+      const dispose = insertBranch(parent, marker, () => render.get());
+      try {
+        render.set(before === "Element" ? [second] : second);
+        await flushEffects();
+        expect(parent.firstChild).toBe(second);
+        expect(first.parentNode).toBeNull();
+      } finally {
+        dispose();
+      }
+    },
+  );
+
   test("replaces only the range before the marker and clears it on disposal", async () => {
     for (const [name, insert] of bothInsertions()) {
       const value = cell<RenderValue>("first");
@@ -112,7 +215,7 @@ describe("insertBranch", () => {
         throw new Error("replacement failed");
       }
 
-      return document.createTextNode(branch);
+      return document.createElement("strong");
     });
 
     selected.set("error");
@@ -225,12 +328,42 @@ describe("insertBranch", () => {
     hydrationState.__mreactHydratingDynamicRanges = true;
 
     try {
-      const dispose = insertBranch(parent, marker, () => document.createTextNode("hydrated"));
-      const mounted = parent.firstChild as Text & { __mreactDynamicNode?: true };
+      const dispose = insertBranch(parent, marker, () => document.createElement("strong"));
+      const mounted = parent.firstChild as Element & { __mreactDynamicNode?: true };
 
       expect((marker as Comment & { __mreactDynamicNode?: true }).__mreactDynamicNode).toBe(true);
       expect(mounted.__mreactDynamicNode).toBe(true);
       dispose();
+    } finally {
+      delete hydrationState.__mreactHydratingDynamicRanges;
+    }
+  });
+
+  test("does not own a node when setting its hydration marker fails", async () => {
+    const hydrationState = globalThis as typeof globalThis & {
+      __mreactHydratingDynamicRanges?: boolean;
+    };
+    const parent = document.createElement("div");
+    const marker = document.createComment("marker");
+    const otherParent = document.createElement("div");
+    const next = document.createElement("strong");
+    const value = cell(document.createElement("strong"));
+    parent.append(marker);
+    otherParent.append(next);
+    Object.defineProperty(next, "__mreactDynamicNode", {
+      set() {
+        throw new Error("hydration mark failed");
+      },
+    });
+    hydrationState.__mreactHydratingDynamicRanges = true;
+
+    try {
+      const dispose = insertBranch(parent, marker, () => value.get());
+      value.set(next);
+      await expect(flushEffects()).rejects.toThrow("hydration mark failed");
+      dispose();
+      expect(next.parentNode).toBe(otherParent);
+      expect(parent.firstChild).toBe(marker);
     } finally {
       delete hydrationState.__mreactHydratingDynamicRanges;
     }

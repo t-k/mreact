@@ -17,12 +17,20 @@ export interface ScopedRenderNodes {
 
 const noopDispose: Dispose = () => {};
 
-export function createScopedRenderNodes(render: () => RenderValue): ScopedRenderNodes {
+export function createScopedRenderNodes(render: () => RenderValue): ScopedRenderNodes;
+export function createScopedRenderNodes<T>(
+  render: () => RenderValue,
+  normalize: (value: RenderValue) => T,
+): { nodes: T; dispose: Dispose };
+export function createScopedRenderNodes<T>(
+  render: () => RenderValue,
+  normalize: (value: RenderValue) => T | Node[] = normalizeRenderValue,
+): { nodes: T | Node[]; dispose: Dispose } {
   const scope = createScope();
 
   try {
     const nodes = withScope(scope, () =>
-      withCleanupScope(registerCleanupDispose, () => normalizeRenderValue(render())),
+      withCleanupScope(registerCleanupDispose, () => normalize(render())),
     );
 
     return {
