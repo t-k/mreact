@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import {
   cancelCallback,
   forceFrameRate,
@@ -11,12 +11,9 @@ import {
   type SchedulerHost,
 } from "../src/fiber-scheduler.js";
 
-import * as schedulerHeap from "../src/scheduler-heap.js";
-
 interface TestHost extends SchedulerHost {
   advance(ms: number): void;
   advanceTo(time: number): void;
-  deliverDueTimeoutsAt(time: number): void;
   flushAllHostCallbacks(): void;
   flushOneHostCallback(): void;
   pendingTimeouts(): Array<{ due: number; id: number }>;
@@ -63,13 +60,6 @@ function createTestHost(): TestHost {
       }
       time = target;
     },
-    deliverDueTimeoutsAt(target) {
-      time = target;
-      const pending = [...timeouts];
-      for (const [id, timeout] of pending) {
-        if (timeout.due <= target && timeouts.delete(id)) timeout.callback();
-      }
-    },
     flushAllHostCallbacks() {
       while (callbacks.length > 0) callbacks.shift()?.();
     },
@@ -94,7 +84,6 @@ describe("fiber scheduler", () => {
   afterEach(() => {
     setSchedulerHostForTesting(undefined);
     forceFrameRate(0);
-    vi.restoreAllMocks();
   });
 
   test("runs higher priority tasks before lower priority tasks", () => {
@@ -185,81 +174,6 @@ describe("fiber scheduler", () => {
     host.flushAllHostCallbacks();
 
     expect(calls).toEqual(["first", "continuation"]);
-  });
-
-  const timerCases = (["All", "Some", "None"] as const).flatMap((due) =>
-    (["Empty", "Occupied"] as const).flatMap((ready) =>
-      (["No", "Yes"] as const).map((cancel) => ({ due, ready, cancel })),
-    ),
-  );
-
-  test.each(timerCases)("preserves $due due timers with $ready ready work and $cancel cancellation", ({
-    due, ready, cancel,
-  }) => {
-    const host = createTestHost();
-    setSchedulerHostForTesting(host);
-    const calls: string[] = [];
-    const bulk = vi.spyOn(schedulerHeap, "heapify");
-    const record = (name: string) => () => { calls.push(name); };
-
-    if (ready === "Occupied") scheduleCallback("normal", record("ready"));
-    const cancelled = scheduleCallback("normal", record("normal A"), { delay: 5 });
-    scheduleCallback("normal", record("normal B"), { delay: 5 });
-    scheduleCallback("user-blocking", record("priority"), { delay: 5 });
-    scheduleCallback("immediate", record("later"), { delay: 15 });
-    if (cancel === "Yes") cancelCallback(cancelled);
-
-    const early = [
-      "priority",
-      ...(ready === "Occupied" ? ["ready"] : []),
-      ...(cancel === "No" ? ["normal A"] : []),
-      "normal B",
-    ];
-    host.deliverDueTimeoutsAt({ All: 20, Some: 10, None: 0 }[due]);
-    host.flushAllHostCallbacks();
-    const first = due === "All" ? ["later", ...early]
-      : due === "Some" ? early
-        : ready === "Occupied" ? ["ready"] : [];
-    expect(calls).toEqual(first);
-    expect(bulk).toHaveBeenCalledTimes(due === "All" && ready === "Empty" ? 1 : 0);
-
-    host.deliverDueTimeoutsAt(20);
-    host.flushAllHostCallbacks();
-    const second = due === "All" ? [] : due === "Some" ? ["later"]
-      : ["later", ...early.filter((name) => name !== "ready")];
-    expect(calls).toEqual([...first, ...second]);
-  });
-
-  test("does not promote a timer whose handle now has a later start time", () => {
-    const host = createTestHost();
-    setSchedulerHostForTesting(host);
-    const calls: string[] = [];
-    scheduleCallback("normal", () => { calls.push("first"); }, { delay: 5 });
-    const later = scheduleCallback("immediate", () => { calls.push("later"); }, { delay: 6 });
-    later.startTime = 20;
-
-    host.deliverDueTimeoutsAt(6);
-    host.flushAllHostCallbacks();
-    expect(calls).toEqual(["first"]);
-
-    host.deliverDueTimeoutsAt(20);
-    host.flushAllHostCallbacks();
-    expect(calls).toEqual(["first", "later"]);
-  });
-
-  test("preserves timer order when task handles have equal IDs", () => {
-    const host = createTestHost();
-    setSchedulerHostForTesting(host);
-    const calls: string[] = [];
-    scheduleCallback("normal", () => { calls.push("first"); }, { delay: 5 });
-    const second = scheduleCallback("normal", () => { calls.push("second"); }, { delay: 5 });
-    const third = scheduleCallback("normal", () => { calls.push("third"); }, { delay: 5 });
-    second.id = third.id;
-
-    host.deliverDueTimeoutsAt(5);
-    host.flushAllHostCallbacks();
-
-    expect(calls).toEqual(["first", "second", "third"]);
   });
 
   test("promotes delayed tasks only when their start time is reached", () => {

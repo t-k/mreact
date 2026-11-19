@@ -47,7 +47,6 @@ const priorityTimeouts: Record<SchedulerPriority, number> = {
 let taskIdCounter = 1;
 let taskQueue: SchedulerTask[] = [];
 let timerQueue: SchedulerTask[] = [];
-let latestTimerStart = -Infinity;
 let currentTask: SchedulerTask | null = null;
 let isPerformingWork = false;
 let isHostCallbackScheduled = false;
@@ -82,7 +81,6 @@ export function scheduleCallback(
 
   if (start > currentTime) {
     pushHeap(timerQueue, task, compareTasks);
-    latestTimerStart = Math.max(latestTimerStart, start);
     if (taskQueue.length === 0 && peek(timerQueue) === task) {
       if (isHostTimeoutScheduled) {
         getHost().cancelHostTimeout(taskTimeoutId);
@@ -255,18 +253,6 @@ function handleTimeout(): void {
 
 function advanceTimers(currentTime: number): void {
   let timer = peek(timerQueue);
-  if (timer === null) {
-    return;
-  }
-
-  if (
-    taskQueue.length === 0 &&
-    timerQueue.length > 1 &&
-    currentTime >= latestTimerStart &&
-    promoteAllTimers(currentTime)
-  ) {
-    return;
-  }
 
   while (timer !== null) {
     if (timer.callback === null) {
@@ -281,47 +267,6 @@ function advanceTimers(currentTime: number): void {
 
     timer = peek(timerQueue);
   }
-
-  latestTimerStart = -Infinity;
-}
-
-function promoteAllTimers(currentTime: number): boolean {
-  // Task handles are mutable. Equal comparison keys need the original promotion order.
-  const ids = new Set<number>();
-  for (const timer of timerQueue) {
-    if (timer.callback === null) {
-      continue;
-    }
-    if (
-      !(timer.startTime <= currentTime) ||
-      !Number.isFinite(timer.id) ||
-      !Number.isFinite(timer.expirationTime)
-    ) {
-      return false;
-    }
-    const previousCount = ids.size;
-    ids.add(timer.id);
-    if (ids.size === previousCount) {
-      return false;
-    }
-  }
-
-  let liveCount = 0;
-  for (const timer of timerQueue) {
-    if (timer.callback !== null) {
-      timer.sortIndex = timer.expirationTime;
-      timerQueue[liveCount] = timer;
-      liveCount += 1;
-    }
-  }
-
-  timerQueue.length = liveCount;
-  heapify(timerQueue, compareTasks);
-  const previousReadyQueue = taskQueue;
-  taskQueue = timerQueue;
-  timerQueue = previousReadyQueue;
-  latestTimerStart = -Infinity;
-  return true;
 }
 
 function requestHostCallbackIfNeeded(): void {
@@ -376,7 +321,6 @@ function getHost(): SchedulerHost {
 function resetSchedulerState(): void {
   taskQueue = [];
   timerQueue = [];
-  latestTimerStart = -Infinity;
   currentTask = null;
   isPerformingWork = false;
   isHostCallbackScheduled = false;
@@ -438,4 +382,4 @@ function createDefaultHostCallbackScheduler(): (callback: () => void) => unknown
   return (callback) => setTimeout(callback, 0);
 }
 
-import { heapify, peek as peekHeap, pop as popHeap, push as pushHeap } from "./scheduler-heap.js";
+import { peek as peekHeap, pop as popHeap, push as pushHeap } from "./scheduler-heap.js";

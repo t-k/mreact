@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { heapify, peek, pop, push } from "../src/scheduler-heap.js";
+import { peek, pop, push } from "../src/scheduler-heap.js";
 
 interface Item {
   id: number;
@@ -38,20 +38,6 @@ describe("scheduler heap", () => {
       pop(heap, compare),
     ]).toEqual([items[3], items[1], items[2], items[0]]);
     expect(pop(heap, compare)).toBeNull();
-  });
-
-  test("builds a ready heap in place after expiration times replace timer start times", () => {
-    const items = [
-      { id: 1, sortIndex: 50 },
-      { id: 2, sortIndex: 10 },
-      { id: 3, sortIndex: 50 },
-      { id: 4, sortIndex: 5 },
-      { id: 5, sortIndex: 20 },
-    ];
-
-    heapify(items, compare);
-
-    expect(Array.from({ length: 5 }, () => pop(items, compare)?.id)).toEqual([4, 2, 5, 1, 3]);
   });
 
   test("preserves heap order across interleaved pushes and pops", () => {
