@@ -30,6 +30,7 @@ enum RouteSegment {
 #[derive(Debug)]
 struct Route {
   index: u32,
+  has_catch_all: bool,
   segments: Vec<RouteSegment>,
 }
 
@@ -93,6 +94,10 @@ impl RouteMatcherCore {
       .into_iter()
       .map(|input| Route {
         index: input.index,
+        has_catch_all: input
+          .segments
+          .iter()
+          .any(|segment| matches!(segment, RouteSegment::CatchAll { .. })),
         segments: input.segments,
       })
       .collect();
@@ -102,10 +107,10 @@ impl RouteMatcherCore {
 
   fn match_route(&self, pathname: &str) -> Result<Option<NativeMatch>, String> {
     let normalized = normalize_path(pathname);
-    let pathname_segments = path_segments(&normalized);
+    let pathname_segments = path_segments(normalized);
 
     for route in &self.routes {
-      if let Some(params) = match_segments(&route.segments, &pathname_segments)? {
+      if let Some(params) = match_segments(route, &pathname_segments)? {
         return Ok(Some(NativeMatch {
           index: route.index,
           params: params.params,
@@ -119,14 +124,12 @@ impl RouteMatcherCore {
 }
 
 fn match_segments(
-  route_segments: &[RouteSegment],
+  route: &Route,
   pathname_segments: &[&str],
 ) -> Result<Option<MatchParams>, String> {
-  let catch_all_index = route_segments
-    .iter()
-    .position(|segment| matches!(segment, RouteSegment::CatchAll { .. }));
+  let route_segments = &route.segments;
 
-  if catch_all_index.is_none() && route_segments.len() != pathname_segments.len() {
+  if !route.has_catch_all && route_segments.len() != pathname_segments.len() {
     return Ok(None);
   }
 
@@ -200,13 +203,13 @@ fn match_segments(
   Ok(Some(params))
 }
 
-fn normalize_path(pathname: &str) -> String {
+fn normalize_path(pathname: &str) -> &str {
   let trimmed = pathname.trim_end_matches('/');
 
   if trimmed.is_empty() {
-    "/".to_string()
+    "/"
   } else {
-    trimmed.to_string()
+    trimmed
   }
 }
 
@@ -294,6 +297,16 @@ fn escape_with_quotes(value: &str) -> String {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn normalizes_a_path_without_copying_its_storage() {
+    let path = String::from("/docs/detail///");
+    let normalized = normalize_path(&path);
+    assert_eq!(normalized, "/docs/detail");
+    assert_eq!(normalized.as_ptr(), path.as_ptr());
+    assert_eq!(normalize_path("///"), "/");
+    assert_eq!(normalize_path(""), "/");
+  }
 
   #[test]
   fn matches_dynamic_and_catch_all_routes() {
