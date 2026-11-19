@@ -32575,9 +32575,9 @@
 					"sources": [
 						{
 							"fileName": "index.ts",
-							"line": 29,
+							"line": 33,
 							"character": 16,
-							"url": "https://github.com/t-k/mreact/blob/main/packages/collection/src/index.ts#L29"
+							"url": "https://github.com/t-k/mreact/blob/main/packages/collection/src/index.ts#L33"
 						}
 					],
 					"signatures": [
@@ -32598,9 +32598,9 @@
 							"sources": [
 								{
 									"fileName": "index.ts",
-									"line": 29,
+									"line": 33,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/collection/src/index.ts#L29"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/collection/src/index.ts#L33"
 								}
 							],
 							"typeParameters": [
@@ -32674,9 +32674,9 @@
 													"sources": [
 														{
 															"fileName": "index.ts",
-															"line": 31,
+															"line": 35,
 															"character": 13,
-															"url": "https://github.com/t-k/mreact/blob/main/packages/collection/src/index.ts#L31"
+															"url": "https://github.com/t-k/mreact/blob/main/packages/collection/src/index.ts#L35"
 														}
 													],
 													"type": {

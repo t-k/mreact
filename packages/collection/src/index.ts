@@ -21,6 +21,10 @@ function sameKey<TKey>(left: TKey, right: TKey): boolean {
   return left === right || (left !== left && right !== right);
 }
 
+function findKeyIndex<TKey>(keys: readonly TKey[], key: TKey): number {
+  return key === key ? keys.indexOf(key) : keys.findIndex((candidate) => candidate !== candidate);
+}
+
 function missingKey(): Error {
   return new Error("Collection key is missing");
 }
@@ -78,12 +82,12 @@ export function createCollection<TRow extends object, TKey>(
     move(key, { before }) {
       if (!rows.has(key) || !rows.has(before)) throw missingKey();
       if (sameKey(key, before)) return;
-      const source = keys.findIndex((candidate) => sameKey(candidate, key));
-      const target = keys.findIndex((candidate) => sameKey(candidate, before));
+      const source = findKeyIndex(keys, key);
+      const target = findKeyIndex(keys, before);
       if (source + 1 === target) return;
       const next = [...keys];
       next.splice(source, 1);
-      const destination = next.findIndex((candidate) => sameKey(candidate, before));
+      const destination = source < target ? target - 1 : target;
       next.splice(destination, 0, key);
       keys = next;
       orderCell.setValue(keys);

@@ -134,6 +134,39 @@ describe("createCollection", () => {
     expect(rows.toArray()).toEqual([row("a"), row("d"), row("c")]);
   });
 
+  const moveCases = (["Forward", "Backward"] as const).flatMap((direction) =>
+    (["Adjacent", "Far"] as const).flatMap((proximity) =>
+      (["Number", "Object", "NaN"] as const).map((keyType) => ({ direction, proximity, keyType })),
+    ),
+  );
+
+  it.each(moveCases)("keeps order after $direction $proximity moves with $keyType keys", ({
+    direction, proximity, keyType,
+  }) => {
+    const distance = proximity === "Adjacent" ? 1 : 3;
+    const source = direction === "Forward" ? 0 : distance;
+    const target = direction === "Forward" ? distance : 0;
+    const keys = Array.from({ length: 4 }, (_, index) =>
+      keyType === "Object" ? { index } : keyType === "NaN" && index === source ? NaN : index,
+    );
+    const rows = createCollection(keys.map((id) => ({ id })), { key: (item) => item.id });
+    const original = rows.order.get();
+    const movedKey = keys[source]!;
+    const before = keys[target]!;
+    const expected = keys.filter((_, index) => index !== source);
+    expected.splice(expected.indexOf(before), 0, movedKey);
+
+    rows.move(movedKey, { before });
+
+    expect(rows.order.get()).toEqual(expected);
+    expect(rows.order.get()[expected.findIndex((key) => Object.is(key, movedKey))]).toBe(movedKey);
+    if (direction === "Forward" && proximity === "Adjacent") {
+      expect(rows.order.get()).toBe(original);
+    } else {
+      expect(rows.order.get()).not.toBe(original);
+    }
+  });
+
   it("uses Map equality for NaN and signed-zero keys", () => {
     const rows = createCollection(
       [
@@ -149,6 +182,7 @@ describe("createCollection", () => {
     expect(rows.row(Number.NaN)?.get()?.label).toBe("updated");
     expect(() => rows.append({ id: +0, label: "duplicate" })).toThrow(/duplicate/i);
     rows.move(+0, { before: Number.NaN });
+    expect(Object.is(rows.order.get()[0], +0)).toBe(true);
     expect(rows.toArray().map((item) => item.label)).toEqual(["zero", "updated"]);
     rows.remove(Number.NaN);
     expect(rows.toArray().map((item) => item.label)).toEqual(["zero"]);
