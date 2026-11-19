@@ -16,3 +16,7 @@ The model describes the single-node specialization of the compiler's `insertBran
 The compiler emits `insertBranch` for conditionals whose arms cannot produce a keyed list render value. The runtime checks each rendered value and uses the single-node path when that value is an `Element`. Other values use the existing normalization, and switching between a directly returned element and a normalized node array preserves node identity.
 
 The Lean model covers the single-node subset. Runtime tests exercise the TypeScript implementation, including mixed representations, detached markers, errors, and hydration. Run `pnpm bench:compiler-specializations` from the repository root to measure repeated branch updates in Chromium.
+
+## Render-value normalization
+
+The normalization proof compares concatenating each child result with accumulating nodes into a single output. It establishes that both traversals preserve node order and identity for any modeled tree. The model takes normalized leaf sequences as inputs. TypeScript tests cover DOM fragments, custom normalizers, iterator errors, and the depth limit.

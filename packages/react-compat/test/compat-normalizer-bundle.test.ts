@@ -11,14 +11,15 @@ import { build as viteBuild, type Rollup } from "vite";
 
 // Rejecting implicit innerHTML/outerHTML setters adds 108 raw bytes and at most 12 gzip bytes to compat consumers; retain the existing gzip limits.
 // Demoting a Set to one subscriber adds 59 raw bytes to packed native and memo consumers while reducing retained source memory; keep the gzip limits unchanged.
+// The shared render-value accumulator adds at most 304 raw bytes and 69 gzip bytes to these bundles.
 const packedCompatConsumerSizeBudgets = {
-  root: { gzipBytes: 13_450, rawBytes: 48_710 },
-  "jsx-runtime": { gzipBytes: 13_450, rawBytes: 48_810 },
-  "jsx-dev-runtime": { gzipBytes: 13_500, rawBytes: 48_910 },
-  native: { gzipBytes: 10_300, rawBytes: 38_050 },
+  root: { gzipBytes: 13_510, rawBytes: 49_020 },
+  "jsx-runtime": { gzipBytes: 13_520, rawBytes: 49_120 },
+  "jsx-dev-runtime": { gzipBytes: 13_560, rawBytes: 49_220 },
+  native: { gzipBytes: 10_370, rawBytes: 38_360 },
 } as const;
 
-const packedMemoConsumerSizeBudget = { gzipBytes: 4_250, rawBytes: 13_150 } as const;
+const packedMemoConsumerSizeBudget = { gzipBytes: 4_320, rawBytes: 13_450 } as const;
 
 describe("react-compat production bundle", () => {
   test.each([
