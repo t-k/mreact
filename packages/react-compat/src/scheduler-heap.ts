@@ -28,6 +28,12 @@ export function pop<T>(heap: T[], compare: HeapComparator<T>): T | null {
   return first;
 }
 
+export function heapify<T>(heap: T[], compare: HeapComparator<T>): void {
+  for (let index = (heap.length >>> 1) - 1; index >= 0; index -= 1) {
+    siftDown(heap, index, compare);
+  }
+}
+
 function siftUp<T>(
   heap: T[],
   index: number,
