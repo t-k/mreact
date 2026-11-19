@@ -561,12 +561,8 @@ function getMeasuredRowLayout<TItem>(
     return cached;
   }
 
-  const { rowOffsets, rowSizes, totalSizePx } = computeMeasuredRows(
-    items,
-    columnCount,
-    options,
-    measuredSizes,
-  );
+  const rowSizes = computeRowSizes(items, columnCount, options, measuredSizes);
+  const { rowOffsets, totalSizePx } = computeRowOffsets(rowSizes);
   const layout = {
     columnCount,
     items,
@@ -870,20 +866,14 @@ function computeSpanRowSizes<TItem>(
   return estimatedRowSizes.map((estimatedSize, row) => measuredRowSizes[row] ?? estimatedSize);
 }
 
-function computeMeasuredRows<TItem>(
+function computeRowSizes<TItem>(
   items: readonly TItem[],
   columnCount: number,
   options: VirtualGridOptions<TItem>,
   measuredSizes: ReadonlyMap<VirtualKey, number>,
-): { rowOffsets: number[]; rowSizes: number[]; totalSizePx: number } {
+): number[] {
   const rowCount = Math.ceil(items.length / columnCount);
-  // oxlint-disable-next-line unicorn/no-new-array -- Reserve one slot per measured row.
-  const rowSizes = new Array<number>(rowCount);
-  // Append offsets so engines can keep a packed array for range searches.
-  const rowOffsets: number[] = [];
-  let totalSizePx = 0;
-
-  for (let row = 0; row < rowCount; row += 1) {
+  return Array.from({ length: rowCount }, (_unused, row) => {
     let measuredMax: number | undefined;
     const startIndex = row * columnCount;
     const endIndex = Math.min(items.length, startIndex + columnCount);
@@ -899,14 +889,12 @@ function computeMeasuredRows<TItem>(
       }
     }
 
-    const rowSize =
-      measuredMax ?? clampPositiveSize(options.estimateItemSize(startIndex, items[startIndex]));
-    rowSizes[row] = rowSize;
-    rowOffsets.push(totalSizePx);
-    totalSizePx += rowSize;
-  }
+    if (measuredMax !== undefined) {
+      return measuredMax;
+    }
 
-  return { rowOffsets, rowSizes, totalSizePx };
+    return clampPositiveSize(options.estimateItemSize(startIndex, items[startIndex]));
+  });
 }
 
 function computeRowOffsets(rowSizes: readonly number[]): { rowOffsets: number[]; totalSizePx: number } {
