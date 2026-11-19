@@ -242,7 +242,7 @@ jobs:
             package: router-native-linux-x64-gnu
             binary: index.node
             rustflags: ""
-          - os: macos-14
+          - os: macos-15
             package: router-native-darwin-arm64
             binary: index.node
             rustflags: "-C link-arg=-undefined -C link-arg=dynamic_lookup"
