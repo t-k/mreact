@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.0.235 - 2026-11-25
+
+### Added
+
+- Added opt-in React-compat lowering and VDOM fallback diagnostics in `@reckona/mreact-compiler` (`reportCompatLowering`, `explainTransform()` `compatLowering` entries, `formatCompatLoweringReport()`, and `formatCompilerDecisionReport()`) and `@reckona/mreact-shared/compiler-contract` so developers can inspect whether each compat component lowered to a reactive DOM block or fell back to the VDOM reconciler, along with exact reason codes, blocking constructs, per-component runtime imports, and hints.
+- Added opt-in `compatDiagnostics: "warn"` (`MR_COMPAT_VDOM_FALLBACK`) and `onCompatLowering` hooks to `modularReact()` in `@reckona/mreact-vite`.
+- Added compat lowering and VDOM fallback reporting to `mreact-router boundaries` and production `buildApp()` boundary reports, plus a new `mreact-router explain <file>` CLI command for inspecting single-file compiler decisions.
+
+### Changed
+
+- Reduced hot-path allocations and repeated work across compiled conditional branches, SSR attribute and nested render-value serialization, compiler source-map generation, client-boundary alias analysis, reactive setup replay, DOM attribute writes, collection key moves, virtual layout offset scans, devtools owner censuses, and JS/native route matchers.
+
+### Fixed
+
+- Resolved `@reckona/mreact-reactive-dom` in `@reckona/mreact-router` server component bundling so production builds can bundle `.compat.*` boundaries that lower to reactive DOM blocks without requiring a direct app dependency on `@reckona/mreact-reactive-dom`.
+
 ## 0.0.234 - 2026-10-22
 
 ### Fixed
