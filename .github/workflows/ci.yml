@@ -130,6 +130,14 @@ jobs:
             ${{ runner.os }}-node-24-pnpm-bench-
             ${{ runner.os }}-node-24-pnpm-
 
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
       - name: Install core dependencies
         run: pnpm install --frozen-lockfile
 
@@ -138,6 +146,9 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: Run benchmark unit tests
         run: pnpm test:benchmarks
@@ -173,6 +184,14 @@ jobs:
             ${{ runner.os }}-node-24-pnpm-compat-lab-
             ${{ runner.os }}-node-24-pnpm-
 
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
       - name: Install core dependencies
         run: pnpm install --frozen-lockfile
 
@@ -181,6 +200,9 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
 
       - name: Run compat-lab tests
         run: pnpm test:compat-lab
