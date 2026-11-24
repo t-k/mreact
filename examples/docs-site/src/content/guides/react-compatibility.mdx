@@ -148,7 +148,22 @@ The compatibility gate tracks React 19.2.6 public export coverage for React, Rea
 
 ## Compiler optimization
 
-The compatibility runtime is not the only execution path for React-shaped code. When React-compatible JSX is compiled by Mreact, the compiler can lower proven-safe state text, prop bindings, and event bindings into reactive DOM blocks. Effect-sensitive, ref-sensitive, or otherwise unsupported shapes keep the normal compatibility reconciler path, so the optimization preserves observable behavior instead of acting as a benchmark-only shortcut.
+The compatibility runtime is not the only execution path for React-shaped code. When React-compatible JSX is compiled by Mreact in production client mode, the compiler attempts three reactive DOM fast paths—`reactive-dom-block`, `prop-reactive-dom-block`, and `root-list-reactive-dom-block`—before falling back to `vdom-direct-text` or the full `vdom` reconciler. Effect-sensitive, ref-sensitive, controlled-input, or otherwise unsupported shapes keep the compatibility reconciler path so the optimization preserves observable behavior instead of acting as a benchmark-only shortcut.
+
+### Diagnosing VDOM fallbacks
+
+When a component unexpectedly falls back to the VDOM reconciler—increasing runtime work or pulling in `@reckona/mreact-compat/jsx-runtime`—inspect the exact lowering path and blocking reasons without changing runtime behavior:
+
+```bash
+mreact-router explain src/components/Row.compat.tsx
+mreact-router explain src/components/Row.tsx --mode=compat --json
+mreact-router boundaries
+mreact-router boundaries --json
+```
+
+`mreact-router explain` prints each component's chosen path (`prop-reactive-dom-block`, `reactive-dom-block`, `root-list-reactive-dom-block`, `vdom-direct-text`, or `vdom`), machine-readable fallback reason codes (such as `unsupported-dynamic-attribute`, `unsupported-child-component`, `has-body-statements`, or `root-list-item-not-prop-block`), concrete blocking constructs, per-component runtime imports, and remediation hints. `mreact-router boundaries` includes the same compat lowering summary for every `.compat.*` route boundary.
+
+For programmatic tooling or standalone Vite builds, call `explainTransform()` or `transform({ mode: "compat", target: "client", dev: false, reportCompatLowering: true })` from `@reckona/mreact-compiler`, or enable `modularReact({ mode: "compat", compatDiagnostics: "warn" })` in `@reckona/mreact-vite` to emit `MR_COMPAT_VDOM_FALLBACK` warnings during builds.
 
 ## App Router output
 
@@ -176,7 +191,7 @@ pnpm --filter @reckona/example-react-libraries test:e2e
 
 If a package works in the compatibility example but fails in an App Router route, check whether inference can see the browser behavior, whether an explicit client boundary is needed, whether the package imports browser-only modules during server render, and whether it expects React DOM behavior that is not part of the tested compatibility surface yet.
 
-The repository also includes focused compatibility labs for ecosystem packages that need screenshot and DOM-summary comparison against React. Run `pnpm compat-lab:radix` when changing Radix-facing event or portal behavior, `pnpm compat-lab:recharts` when changing chart, SVG, animation, or tooltip behavior, `pnpm compat-lab:react-flow` when changing React Flow or xyflow-facing layout, store, handle, or pointer behavior, and `pnpm compat-lab:ui-primitives` when changing primitive-library behavior for Ark UI, Base UI, Headless UI, React Aria, React Spectrum, or Zag JS.
+The repository also includes focused compatibility labs for ecosystem packages that need screenshot and DOM-summary comparison against React. Their third-party React library dependencies are isolated under `compat-lab/`; run `pnpm setup:compat-lab` once before invoking `pnpm compat-lab:radix`, `pnpm compat-lab:recharts`, `pnpm compat-lab:react-flow`, or `pnpm compat-lab:ui-primitives`.
 
 ## Focused conformance checks
 
