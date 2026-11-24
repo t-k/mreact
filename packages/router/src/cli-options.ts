@@ -9,12 +9,17 @@ import type { AwsLambdaGeneratedHandlerPreloadMode } from "./build.js";
 
 export type CliRequestLogMode = "requests";
 export type CliBuildTarget = AppRouterBuildTarget | "all";
+export type CliExplainMode = "compat" | "reactive";
+export type CliExplainTarget = "client" | "server";
 
 export interface ParsedCliArguments {
   awsLambdaPreload?: AwsLambdaGeneratedHandlerPreloadMode | undefined;
   awsLambdaPreloadRoutes?: readonly string[] | undefined;
   clientSourceMaps?: AppRouterClientSourceMapMode | undefined;
   command: string;
+  dev?: boolean | undefined;
+  explainMode?: CliExplainMode | undefined;
+  explainTarget?: CliExplainTarget | undefined;
   allowedHosts?: readonly string[] | undefined;
   from?: string | undefined;
   handler?: string | undefined;
@@ -52,10 +57,35 @@ export function parseCliArguments(argv: readonly string[]): ParsedCliArguments {
     }
 
     if (value === "--json") {
-      if (command !== "boundaries") {
-        throw new Error("--json is only supported by the boundaries command");
+      if (command !== "boundaries" && command !== "explain") {
+        throw new Error("--json is only supported by the boundaries and explain commands");
       }
       parsed.json = true;
+      continue;
+    }
+
+    if (value === "--dev") {
+      if (command !== "explain") {
+        throw new Error("--dev is only supported by the explain command");
+      }
+      parsed.dev = true;
+      continue;
+    }
+
+    if (value === "--mode") {
+      if (command !== "explain") {
+        throw new Error("--mode is only supported by the explain command");
+      }
+      parsed.explainMode = parseCliExplainMode(readOptionValue(argv, index, "mode"));
+      index += 1;
+      continue;
+    }
+
+    if (value.startsWith("--mode=")) {
+      if (command !== "explain") {
+        throw new Error("--mode is only supported by the explain command");
+      }
+      parsed.explainMode = parseCliExplainMode(value.slice("--mode=".length));
       continue;
     }
 
@@ -172,13 +202,22 @@ export function parseCliArguments(argv: readonly string[]): ParsedCliArguments {
     }
 
     if (value === "--target") {
-      parsed.target = parseCliBuildTarget(readOptionValue(argv, index, "target"));
+      if (command === "explain") {
+        parsed.explainTarget = parseCliExplainTarget(readOptionValue(argv, index, "target"));
+      } else {
+        parsed.target = parseCliBuildTarget(readOptionValue(argv, index, "target"));
+      }
       index += 1;
       continue;
     }
 
     if (value.startsWith("--target=")) {
-      parsed.target = parseCliBuildTarget(value.slice("--target=".length));
+      const targetValue = value.slice("--target=".length);
+      if (command === "explain") {
+        parsed.explainTarget = parseCliExplainTarget(targetValue);
+      } else {
+        parsed.target = parseCliBuildTarget(targetValue);
+      }
       continue;
     }
 
@@ -270,6 +309,28 @@ export function formatCliHelp(command?: string | undefined): string {
       "  mreact-router build --target=cloudflare",
       "  mreact-router build --target=aws-lambda",
       "  mreact-router build --target=all",
+    ].join("\n");
+  }
+
+  if (command === "explain") {
+    return [
+      "Usage: mreact-router explain <file> [options]",
+      "",
+      "Explain compiler decisions, compat lowering paths, VDOM fallback reasons, and runtime imports for one component module.",
+      "",
+      "Mode resolution:",
+      "  Without --mode, .compat.* files use compat mode and other files use reactive mode.",
+      "",
+      "Options:",
+      "  --mode=compat|reactive  Override compiler mode.",
+      "  --target=client|server  Select compilation target. Default: client.",
+      "  --dev                   Compile with development mode enabled.",
+      "  --json                  Print a machine-readable versioned report.",
+      "  -h, --help              Show this help message.",
+      "",
+      "Examples:",
+      "  mreact-router explain src/components/Row.compat.tsx",
+      "  mreact-router explain src/components/Row.tsx --mode=compat --json",
     ].join("\n");
   }
 
@@ -382,6 +443,7 @@ export function formatCliHelp(command?: string | undefined): string {
     "  dev [appDir]                              Start the development server.",
     `  build [appDir]                            Build ${defaultTargetLabel} artifacts by default.`,
     "  boundaries [appDir]                       Inspect route and component boundaries.",
+    "  explain <file>                            Explain compiler lowering and compat VDOM fallback reasons for one file.",
     "  build --target=aws-lambda                 Build Lambda artifacts including generated handler and import policy.",
     "  start [outDir]                            Serve built Node output.",
     "  package aws-lambda --from .mreact --out .lambda",
@@ -576,6 +638,26 @@ function parseCliBuildTarget(value: string): CliBuildTarget {
 
   throw new Error(
     `Unsupported build target ${JSON.stringify(value)}. Expected "node", "cloudflare", "aws-lambda", or "all".`,
+  );
+}
+
+function parseCliExplainMode(value: string): CliExplainMode {
+  if (value === "compat" || value === "reactive") {
+    return value;
+  }
+
+  throw new Error(
+    `Unsupported explain mode ${JSON.stringify(value)}. Expected "compat" or "reactive".`,
+  );
+}
+
+function parseCliExplainTarget(value: string): CliExplainTarget {
+  if (value === "client" || value === "server") {
+    return value;
+  }
+
+  throw new Error(
+    `Unsupported explain target ${JSON.stringify(value)}. Expected "client" or "server".`,
   );
 }
 

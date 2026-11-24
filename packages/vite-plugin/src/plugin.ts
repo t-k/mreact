@@ -1,6 +1,7 @@
 import {
   transform as compile,
   type ClientReferenceMetadata,
+  type CompatLoweringMetadata,
   type ServerBootstrapMode,
   type ServerOutputMode,
   type TransformInput,
@@ -12,6 +13,10 @@ import { formatDiagnostic } from "./diagnostics.js";
 export interface ModularReactViteOptions {
   include?: RegExp | readonly RegExp[];
   mode?: "reactive" | "compat";
+  /** Emits Vite warnings when compat client components fall back to the VDOM reconciler. */
+  compatDiagnostics?: "off" | "warn";
+  /** Receives per-component compat client lowering reports when compat mode compiles a client module. */
+  onCompatLowering?: (filename: string, entries: CompatLoweringMetadata[]) => void;
   serverOutput?: ServerOutputMode;
   serverBootstrap?: ServerBootstrapMode;
   serverBootstrapNonce?: string | (() => string);
@@ -50,6 +55,14 @@ export function modularReact(options: ModularReactViteOptions = {}): Plugin {
         input.mode = options.mode;
       }
 
+      const shouldCollectCompatLowering =
+        input.target === "client" &&
+        input.mode === "compat" &&
+        (options.compatDiagnostics === "warn" || options.onCompatLowering !== undefined);
+      if (shouldCollectCompatLowering) {
+        input.reportCompatLowering = true;
+      }
+
       if (transformOptions?.ssr === true && options.serverOutput !== undefined) {
         input.serverOutput = options.serverOutput;
       }
@@ -78,6 +91,36 @@ export function modularReact(options: ModularReactViteOptions = {}): Plugin {
 
       if (transformOptions?.ssr === true && output.metadata.clientReferenceManifest !== undefined) {
         options.onFlightClientReferences?.(filename, output.metadata.clientReferenceManifest);
+      }
+
+      if (output.metadata.compatLowering !== undefined) {
+        options.onCompatLowering?.(filename, output.metadata.compatLowering);
+
+        if (options.compatDiagnostics === "warn") {
+          for (const entry of output.metadata.compatLowering) {
+            if (!entry.fallback) {
+              continue;
+            }
+            const reasonList = entry.reasons.join(", ");
+            const detailText =
+              entry.details !== undefined && entry.details.length > 0
+                ? ` ${entry.details[0]}`
+                : "";
+            const suggestionText =
+              entry.suggestions !== undefined && entry.suggestions.length > 0
+                ? ` Suggestion: ${entry.suggestions[0]}`
+                : "";
+            const loc =
+              entry.loc === undefined ? "" : `:${entry.loc.line}:${entry.loc.column}`;
+            this.warn({
+              id: filename,
+              message: `${filename}${loc} [MR_COMPAT_VDOM_FALLBACK] Compat component '${entry.component}' fell back to '${entry.path}' (${reasonList}).${detailText}${suggestionText}`,
+              ...(entry.loc === undefined
+                ? {}
+                : { loc: { line: entry.loc.line, column: entry.loc.column } }),
+            });
+          }
+        }
       }
 
       for (const diagnostic of output.diagnostics) {

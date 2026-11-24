@@ -87,7 +87,10 @@ function transformWithAnalyzer(
 
   const emitted =
     mode === "compat" && input.target === "client"
-      ? emitCompat(analyzed.ir, { dev: input.dev })
+      ? emitCompat(analyzed.ir, {
+          dev: input.dev,
+          reportLowering: input.reportCompatLowering === true,
+        })
       : input.target === "server"
         ? serverOutput === "stream"
           ? emitServerStream(analyzed.ir, {
@@ -138,6 +141,9 @@ function transformWithAnalyzer(
   };
   if ("clientSpecializations" in emitted && Array.isArray(emitted.clientSpecializations)) {
     metadata.clientSpecializations = emitted.clientSpecializations;
+  }
+  if ("compatLowering" in emitted && Array.isArray(emitted.compatLowering)) {
+    metadata.compatLowering = emitted.compatLowering;
   }
   const events = collectEventHydrationEntries(analyzed.ir.components);
 

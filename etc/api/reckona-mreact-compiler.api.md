@@ -6,6 +6,9 @@
 
 import type { ClientReferenceMetadata as ClientReferenceMetadata_2 } from '@reckona/mreact-shared/compiler-contract';
 import type { ClientSpecializationMetadata as ClientSpecializationMetadata_2 } from '@reckona/mreact-shared/compiler-contract';
+import type { CompatLoweringMetadata as CompatLoweringMetadata_2 } from '@reckona/mreact-shared/compiler-contract';
+import type { CompatLoweringPath as CompatLoweringPath_2 } from '@reckona/mreact-shared/compiler-contract';
+import type { CompatLoweringReason as CompatLoweringReason_2 } from '@reckona/mreact-shared/compiler-contract';
 import type { CompilerFrontend as CompilerFrontend_2 } from '@reckona/mreact-shared/compiler-contract';
 import type { CompileTarget as CompileTarget_2 } from '@reckona/mreact-shared/compiler-contract';
 import type { ComponentMetadata as ComponentMetadata_2 } from '@reckona/mreact-shared/compiler-contract';
@@ -268,6 +271,15 @@ export function collectTopLevelValueExportNames(input: {
 }): string[];
 
 // @public
+export type CompatLoweringMetadata = CompatLoweringMetadata_2;
+
+// @public
+export type CompatLoweringPath = CompatLoweringPath_2;
+
+// @public
+export type CompatLoweringReason = CompatLoweringReason_2;
+
+// @public
 export interface CompilerDecision {
     // (undocumented)
     applied: boolean;
@@ -285,6 +297,8 @@ export interface CompilerDecision {
 
 // @public
 export interface CompilerDecisionReport {
+    // (undocumented)
+    compatLowering: CompatLoweringMetadata[];
     // (undocumented)
     components: ComponentMetadata[];
     // (undocumented)
@@ -371,6 +385,12 @@ export interface FormActionReference {
     // (undocumented)
     start: number;
 }
+
+// @public
+export function formatCompatLoweringReport(filename: string, entries: readonly CompatLoweringMetadata[]): string;
+
+// @public
+export function formatCompilerDecisionReport(report: CompilerDecisionReport): string;
 
 // @public
 export function formatDiagnostic(filename: string, diagnostic: Diagnostic): string;
@@ -515,6 +535,7 @@ export interface TransformInput {
     reactSuspenseRevealScriptSrc?: string;
     // @internal
     reportClientSpecializations?: boolean;
+    reportCompatLowering?: boolean;
     // (undocumented)
     serverAwaitHydration?: boolean;
     // (undocumented)

@@ -2,6 +2,7 @@
 
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { explainTransform, formatCompilerDecisionReport } from "@reckona/mreact-compiler";
 import {
   buildApp,
   packageAwsLambdaArtifact,
@@ -122,6 +123,28 @@ if (parsed !== undefined) {
           (parsed.json === true
             ? formatBoundaryReportJson(report)
             : formatBoundaryReport(report)
+          ).trimEnd(),
+        );
+      } else if (command === "explain") {
+        if (routeArg === undefined) {
+          throw new Error("Missing file argument for explain. Usage: mreact-router explain <file>");
+        }
+        const filename = resolve(routeArg);
+        const code = await readFile(filename, "utf8");
+        const mode =
+          parsed.explainMode ??
+          (/\.compat(?:\.mreact)?\.[cm]?[jt]sx?$/i.test(filename) ? "compat" : "reactive");
+        const report = explainTransform({
+          code,
+          filename: routeArg,
+          target: parsed.explainTarget ?? "client",
+          dev: parsed.dev === true,
+          mode,
+        });
+        console.log(
+          (parsed.json === true
+            ? `${JSON.stringify(report, null, 2)}\n`
+            : formatCompilerDecisionReport(report)
           ).trimEnd(),
         );
       } else if (command === "package") {

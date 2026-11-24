@@ -10,6 +10,7 @@ export {
 } from "./boundaries.js";
 export type {
   AnalyzeAppBoundariesOptions,
+  BoundaryCompatLowering,
   BoundaryExecutionMode,
   BoundaryReportByteCost,
   BoundaryReport,
@@ -23,6 +24,7 @@ export type {
   CreateBoundaryReportInput,
   CreateBoundaryReportRouteInput,
 } from "./boundaries.js";
+export type { CompatLoweringPath, CompatLoweringReason } from "@reckona/mreact-compiler";
 export { cacheControl, createMemoryRouteCache, revalidatePath } from "./cache.js";
 export { deleteCookie, parseCookieHeader, serializeCookie, setCookie } from "./cookies.js";
 export { defineMessages, detectLocale } from "./i18n.js";

@@ -5,19 +5,30 @@
 ```ts
 
 import { ClientReferenceMetadata } from '@reckona/mreact-compiler';
+import { CompatLoweringMetadata } from '@reckona/mreact-compiler';
+import { CompatLoweringPath } from '@reckona/mreact-compiler';
+import { CompatLoweringReason } from '@reckona/mreact-compiler';
 import type { Plugin as Plugin_2 } from 'vite';
 import { ServerBootstrapMode } from '@reckona/mreact-compiler';
 import { ServerOutputMode } from '@reckona/mreact-compiler';
+
+export { CompatLoweringMetadata }
+
+export { CompatLoweringPath }
+
+export { CompatLoweringReason }
 
 // @public
 export function modularReact(options?: ModularReactViteOptions): Plugin_2;
 
 // @public
 export interface ModularReactViteOptions {
+    compatDiagnostics?: "off" | "warn";
     // (undocumented)
     include?: RegExp | readonly RegExp[];
     // (undocumented)
     mode?: "reactive" | "compat";
+    onCompatLowering?: (filename: string, entries: CompatLoweringMetadata[]) => void;
     // (undocumented)
     onFlightClientReferences?: (filename: string, entries: ClientReferenceMetadata[]) => void;
     // (undocumented)

@@ -9,7 +9,9 @@ import {
   formatBoundaryReportJson,
   validateBoundaryExecutionContracts,
   validateClientDeliveryContracts,
+  type BoundaryReport,
 } from "../src/boundaries.js";
+import { buildApp } from "../src/build.js";
 import { inferClientRouteModule } from "../src/client.js";
 
 describe("boundary reports", () => {
@@ -595,5 +597,76 @@ export default function Page() { return <main><MissingPanel /></main>; }`,
       "MR_CLIENT_BOUNDARY_INFERENCE_UNRESOLVED_REFERENCE",
     );
     expect(formatBoundaryReportJson(report)).not.toContain(projectRoot);
+  });
+
+  test("reports compat lowering paths and VDOM fallback reasons for .compat.tsx boundaries", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-boundaries-compat-lowering-"));
+    const appDir = join(projectRoot, "src", "app");
+    const componentsDir = join(projectRoot, "src", "components");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(componentsDir, { recursive: true });
+
+    await writeFile(
+      join(componentsDir, "Row.compat.tsx"),
+      `export function FastRow(props: { label: string }) {
+  return <div>{props.label}</div>;
+}
+export function FallbackInput(props: { value: string }) {
+  return <input value={props.value} />;
+}
+`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { FastRow, FallbackInput } from "../components/Row.compat";
+export default function Page() {
+  return <main><FastRow label="ok" /><FallbackInput value="x" /></main>;
+}
+`,
+    );
+
+    const report = await analyzeAppBoundaries({ projectRoot });
+    const components = report.routes[0]?.components ?? [];
+    const fastRow = components.find((item) => item.exportName === "FastRow");
+    const fallbackInput = components.find((item) => item.exportName === "FallbackInput");
+
+    expect(fastRow?.compatLowering).toEqual({
+      fallback: false,
+      optimized: true,
+      path: "prop-reactive-dom-block",
+      reasons: [],
+    });
+    expect(fallbackInput?.compatLowering).toEqual(
+      expect.objectContaining({
+        fallback: true,
+        optimized: false,
+        path: "vdom",
+        reasons: ["unsupported-dynamic-attribute"],
+      }),
+    );
+
+    const text = formatBoundaryReport(report);
+    expect(text).toContain("[compat:prop-reactive-dom-block]");
+    expect(text).toContain("[compat:vdom fallback: unsupported-dynamic-attribute]");
+    expect(text).toContain("Compat VDOM fallbacks:");
+    expect(text).toContain("src/components/Row.compat.tsx#FallbackInput (vdom): unsupported-dynamic-attribute");
+
+    let buildReport: BoundaryReport | undefined;
+    await buildApp({
+      projectRoot,
+      outDir: join(projectRoot, ".mreact"),
+      targets: ["node"],
+      onBoundaryReport(received) {
+        buildReport = received;
+      },
+    });
+
+    const buildComponents = buildReport?.routes[0]?.components ?? [];
+    expect(buildComponents.find((item) => item.exportName === "FastRow")?.compatLowering).toEqual(
+      fastRow?.compatLowering,
+    );
+    expect(
+      buildComponents.find((item) => item.exportName === "FallbackInput")?.compatLowering,
+    ).toEqual(fallbackInput?.compatLowering);
   });
 });

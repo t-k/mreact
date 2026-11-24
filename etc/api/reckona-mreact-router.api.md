@@ -5,6 +5,8 @@
 ```ts
 
 import { ClientRouteModuleAnalysis } from '@reckona/mreact-compiler';
+import { CompatLoweringPath } from '@reckona/mreact-compiler';
+import { CompatLoweringReason } from '@reckona/mreact-compiler';
 import { CompilerModuleContext } from '@reckona/mreact-compiler/internal';
 import { DehydrateOptions } from '@reckona/mreact-query';
 import type { Duplex } from 'node:stream';
@@ -458,6 +460,22 @@ export interface AwsLambdaArtifactManifest {
 export type AwsLambdaGeneratedHandlerPreloadMode = "all" | "hot-route-requests" | "middleware" | "none";
 
 // @public
+export interface BoundaryCompatLowering {
+    // (undocumented)
+    details?: readonly string[] | undefined;
+    // (undocumented)
+    fallback: boolean;
+    // (undocumented)
+    optimized: boolean;
+    // (undocumented)
+    path: CompatLoweringPath;
+    // (undocumented)
+    reasons: readonly CompatLoweringReason[];
+    // (undocumented)
+    suggestions?: readonly string[] | undefined;
+}
+
+// @public
 export interface BoundaryCostOptions {
     fetchedDynamicImports?: Readonly<Record<string, readonly string[]>> | undefined;
 }
@@ -491,6 +509,8 @@ export interface BoundaryReportByteCost {
 export interface BoundaryReportComponent {
     // (undocumented)
     classification: ClientRouteComponentClassification;
+    // (undocumented)
+    compatLowering?: BoundaryCompatLowering | undefined;
     // (undocumented)
     decision: BoundaryReportDecision;
     // (undocumented)
@@ -828,6 +848,10 @@ export interface CloudflarePagesArtifactManifest {
     worker: "_worker.js";
 }
 
+export { CompatLoweringPath }
+
+export { CompatLoweringReason }
+
 // @public
 export type ConcreteLinkHrefGuard<Href extends string> = [RegisteredAppRoutePath] extends [never] ? unknown : Href extends Extract<RegisteredAppRoutePath, `${string}:${string}`> ? {
     readonly __mreactRoutePatternHrefError__: never;
@@ -867,6 +891,8 @@ export interface CreateBoundaryReportInput {
 
 // @public (undocumented)
 export interface CreateBoundaryReportRouteInput {
+    // (undocumented)
+    compatLowering?: Readonly<Record<string, BoundaryCompatLowering>> | undefined;
     // (undocumented)
     components: readonly ClientRouteComponent[];
     // (undocumented)

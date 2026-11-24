@@ -177,7 +177,7 @@ describe("router CLI options", () => {
       routeArg: "src/app",
     });
     expect(() => parseCliArguments(["build", "--json"])).toThrow(
-      /--json is only supported by the boundaries command/,
+      /--json is only supported by the boundaries and explain commands/,
     );
   });
 
@@ -374,5 +374,34 @@ describe("router CLI options", () => {
 
     log.mockRestore();
     error.mockRestore();
+  });
+
+  test("parses explain command options and rejects invalid explain flags", () => {
+    expect(parseCliArguments(["explain", "src/Row.compat.tsx"])).toEqual({
+      command: "explain",
+      routeArg: "src/Row.compat.tsx",
+    });
+    expect(
+      parseCliArguments(["explain", "src/Row.tsx", "--mode=compat", "--target=client", "--dev", "--json"]),
+    ).toEqual({
+      command: "explain",
+      dev: true,
+      explainMode: "compat",
+      explainTarget: "client",
+      json: true,
+      routeArg: "src/Row.tsx",
+    });
+    expect(parseCliArguments(["explain", "src/Row.tsx", "--mode", "reactive", "--target", "server"])).toEqual({
+      command: "explain",
+      explainMode: "reactive",
+      explainTarget: "server",
+      routeArg: "src/Row.tsx",
+    });
+    expect(() => parseCliArguments(["build", "--mode=compat"])).toThrow(/explain/);
+    expect(() => parseCliArguments(["build", "--dev"])).toThrow(/explain/);
+    expect(() => parseCliArguments(["explain", "src/Row.tsx", "--mode=invalid"])).toThrow(/explain mode/);
+    expect(() => parseCliArguments(["explain", "src/Row.tsx", "--target=node"])).toThrow(/explain target/);
+    expect(formatCliHelp("explain")).toContain("Usage: mreact-router explain <file> [options]");
+    expect(formatCliHelp()).toContain("explain <file>");
   });
 });

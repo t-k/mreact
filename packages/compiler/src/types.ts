@@ -1,6 +1,9 @@
 import type {
   ClientReferenceMetadata as SharedClientReferenceMetadata,
   ClientSpecializationMetadata as SharedClientSpecializationMetadata,
+  CompatLoweringMetadata as SharedCompatLoweringMetadata,
+  CompatLoweringPath as SharedCompatLoweringPath,
+  CompatLoweringReason as SharedCompatLoweringReason,
   CompileTarget as SharedCompileTarget,
   CompilerFrontend as SharedCompilerFrontend,
   ComponentMetadata as SharedComponentMetadata,
@@ -76,6 +79,8 @@ export interface TransformInput {
   clientSpecializations?: Partial<ClientSpecializationFlags>;
   /** @internal Collects actual reactive client emitter specialization decisions. */
   reportClientSpecializations?: boolean;
+  /** Collects per-component compat client lowering and VDOM fallback diagnostics. */
+  reportCompatLowering?: boolean;
 }
 
 /**
@@ -116,6 +121,15 @@ export type ModuleMetadata = SharedModuleMetadata;
 
 /** One opt-in reactive client emitter decision. */
 export type ClientSpecializationMetadata = SharedClientSpecializationMetadata;
+
+/** Execution path chosen by the compat client emitter for a component. */
+export type CompatLoweringPath = SharedCompatLoweringPath;
+
+/** Stable machine-readable reason why a compat component fell back to VDOM. */
+export type CompatLoweringReason = SharedCompatLoweringReason;
+
+/** One opt-in compat client component lowering decision. */
+export type CompatLoweringMetadata = SharedCompatLoweringMetadata;
 
 /** Describes compiler frontend metadata for one transformed module. */
 export type CompilerMetadata = SharedModuleMetadata["compiler"];

@@ -62,6 +62,65 @@ export interface ModuleMetadata {
   eventHydrationManifest?: EventHydrationManifestMetadata;
   /** Opt-in decisions made while emitting a reactive client module. */
   clientSpecializations?: ClientSpecializationMetadata[];
+  /** Opt-in per-component lowering decisions made while emitting a compat client module. */
+  compatLowering?: CompatLoweringMetadata[];
+}
+
+/** Execution path chosen by the compat client emitter for a component. */
+export type CompatLoweringPath =
+  | "reactive-dom-block"
+  | "prop-reactive-dom-block"
+  | "root-list-reactive-dom-block"
+  | "vdom-direct-text"
+  | "vdom";
+
+/** Stable machine-readable reason why a compat component did not lower to a reactive DOM block. */
+export type CompatLoweringReason =
+  | "dev-mode"
+  | "class-component"
+  | "unsupported-root-kind"
+  | "root-has-key"
+  | "unsupported-parameters"
+  | "prop-alias-rewrite-unsupported"
+  | "has-body-statements"
+  | "no-dynamic-part"
+  | "unsupported-child-component"
+  | "unsupported-dynamic-attribute"
+  | "unsupported-jsx-node"
+  | "root-has-dynamic-attributes"
+  | "no-direct-state-text-child"
+  | "state-used-outside-direct-text"
+  | "root-list-missing-key"
+  | "root-list-unsupported-expression"
+  | "root-list-multiple-children"
+  | "root-list-no-direct-state-binding"
+  | "root-list-item-not-component"
+  | "root-list-item-not-same-module"
+  | "root-list-item-not-prop-block"
+  | "root-list-param-shadowing";
+
+/** One compat client component lowering decision collected for an opt-in transform report. */
+export interface CompatLoweringMetadata {
+  /** Component function name in the module. */
+  component: string;
+  /** Exported binding name (`default`, named export, or local component name). */
+  exportName: string;
+  /** Execution path selected by the compat client emitter. */
+  path: CompatLoweringPath;
+  /** Whether the component was lowered to a fine-grained reactive DOM block. */
+  optimized: boolean;
+  /** Whether the component fell back to the compat VDOM reconciler. */
+  fallback: boolean;
+  /** Stable reason codes explaining why reactive DOM lowering did not apply. */
+  reasons: CompatLoweringReason[];
+  /** Concrete blocking constructs found in the component, when available. */
+  details?: string[];
+  /** Actionable guidance for avoiding VDOM fallback or isolating fallback boundaries. */
+  suggestions?: string[];
+  /** Runtime imports required specifically by this component's emitted output. */
+  runtimeImports: RuntimeImport[];
+  /** Original root JSX source location, when available. */
+  loc?: SourceLocation;
 }
 
 /** One reactive client emitter decision collected for an opt-in transform report. */

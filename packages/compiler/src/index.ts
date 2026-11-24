@@ -47,7 +47,11 @@ export type {
 } from "./boundary-graph.js";
 export { formatDiagnostic } from "./diagnostics.js";
 export { transform } from "./transform.js";
-export { explainTransform } from "./compiler-explorer.js";
+export {
+  explainTransform,
+  formatCompatLoweringReport,
+  formatCompilerDecisionReport,
+} from "./compiler-explorer.js";
 export type {
   CompilerDecision,
   CompilerDecisionReport,
@@ -58,6 +62,9 @@ export type {
   CompilerFrontend,
   CompilerMetadata,
   ClientReferenceMetadata,
+  CompatLoweringMetadata,
+  CompatLoweringPath,
+  CompatLoweringReason,
   ComponentMetadata,
   Diagnostic,
   ModuleMetadata,

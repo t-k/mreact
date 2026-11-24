@@ -11,7 +11,13 @@ import type {
 } from "./ir.js";
 import { getCompatInlineMemo } from "./compat-inline-memo.js";
 import { transformJsxToCreateElementWithOxc } from "./oxc-transform.js";
-import type { RuntimeImport } from "./types.js";
+import type {
+  CompatLoweringMetadata,
+  CompatLoweringPath,
+  CompatLoweringReason,
+  RuntimeImport,
+  SourceLocation,
+} from "./types.js";
 import { listReadsNestedItemObject } from "./ir-nested-object-read.js";
 import { escapeRegExp } from "./string-utils.js";
 import { escapeHtmlAttribute as escapeHtml } from "@reckona/mreact-shared/html-escape";
@@ -19,10 +25,12 @@ import { escapeHtmlAttribute as escapeHtml } from "@reckona/mreact-shared/html-e
 export interface EmitCompatResult {
   code: string;
   imports: RuntimeImport[];
+  compatLowering?: CompatLoweringMetadata[];
 }
 
 export interface EmitCompatOptions {
   dev?: boolean;
+  reportLowering?: boolean;
 }
 
 const JSX_RUNTIME_SOURCE = "@reckona/mreact-compat/jsx-runtime";
@@ -36,6 +44,7 @@ export function emitCompat(ir: ModuleIr, options: EmitCompatOptions = {}): EmitC
     return {
       code: "",
       imports: [],
+      ...(options.reportLowering === true ? { compatLowering: [] } : {}),
     };
   }
 
@@ -76,6 +85,18 @@ export function emitCompat(ir: ModuleIr, options: EmitCompatOptions = {}): EmitC
   return {
     code: normalizeCompatPublicHookImports(`${[importLine, userImports, moduleStatements].filter(Boolean).join("\n")}\n\n${components}\n`),
     imports,
+    ...(options.reportLowering === true
+      ? {
+          compatLowering: collectCompatLoweringReport(
+            ir,
+            dev,
+            staticPropBlockComponentNames,
+            componentAnalyses,
+            componentImportSource,
+            normalizedModuleStatements,
+          ),
+        }
+      : {}),
   };
 }
 
@@ -134,6 +155,673 @@ function collectCompatComponentAnalyses(
   }
 
   return analyses;
+}
+
+function collectCompatLoweringReport(
+  ir: ModuleIr,
+  dev: boolean,
+  staticPropBlockComponentNames: ReadonlySet<string>,
+  componentAnalyses: ReadonlyMap<ComponentIr, CompatComponentAnalysis>,
+  componentImportSource: string,
+  normalizedModuleStatements: NormalizedModuleStatements,
+): CompatLoweringMetadata[] {
+  const functionEntries = ir.components.map((component) => {
+    const analysis = componentAnalyses.get(component);
+    const path = resolveCompatLoweringPath(analysis);
+    const optimized =
+      path === "reactive-dom-block" ||
+      path === "prop-reactive-dom-block" ||
+      path === "root-list-reactive-dom-block";
+    const runtimeImports = collectSingleComponentRuntimeImports(
+      ir,
+      component,
+      dev,
+      componentAnalyses,
+      componentImportSource,
+    );
+    const loc = getJsxNodeSourceLocation(component.root);
+
+    if (optimized) {
+      return {
+        component: component.name,
+        exportName: component.exportName,
+        path,
+        optimized: true,
+        fallback: false,
+        reasons: [],
+        runtimeImports,
+        ...(loc === undefined ? {} : { loc }),
+      };
+    }
+
+    const diagnosis = diagnoseCompatLoweringFallback(
+      component,
+      ir,
+      dev,
+      staticPropBlockComponentNames,
+      analysis?.directTextBindings ?? [],
+    );
+
+    return {
+      component: component.name,
+      exportName: component.exportName,
+      path,
+      optimized: false,
+      fallback: true,
+      reasons: diagnosis.reasons,
+      ...(diagnosis.details.length === 0 ? {} : { details: diagnosis.details }),
+      ...(diagnosis.suggestions.length === 0 ? {} : { suggestions: diagnosis.suggestions }),
+      runtimeImports,
+      ...(loc === undefined ? {} : { loc }),
+    };
+  });
+
+  const classEntries = collectCompatClassComponentLoweringReport(
+    normalizedModuleStatements,
+    dev,
+    componentImportSource,
+  );
+
+  return [...functionEntries, ...classEntries];
+}
+
+function collectCompatClassComponentLoweringReport(
+  normalizedModuleStatements: NormalizedModuleStatements,
+  dev: boolean,
+  componentImportSource: string,
+): CompatLoweringMetadata[] {
+  const entries: CompatLoweringMetadata[] = [];
+  const runtimeImportByLocal = new Map(
+    normalizedModuleStatements.importSpecifiers.map((spec) => [spec.localName, spec]),
+  );
+
+  for (const statement of normalizedModuleStatements.statements) {
+    const match = statement.match(
+      /^\s*(?<exportPrefix>export\s+(?<defaultPrefix>default\s+)?)?(?:abstract\s+)?class\s+(?<name>[A-Za-z_$][\w$]*)(?:<[^>{]+>)?(?:\s+extends\s+(?<superClass>[A-Za-z_$][\w$.]*)(?:<[^>{]+>)?)?(?:\s+implements\s+[^{]+)?\s*\{/,
+    );
+    const name = match?.groups?.name;
+    if (name === undefined) {
+      continue;
+    }
+
+    const superClass = match?.groups?.superClass ?? "";
+    const extendsReactComponent = /(?:^|\.)(?:Pure)?Component$/.test(superClass);
+    const hasRenderMethod = /\brender\s*\(\s*\)\s*(?::\s*[^{]+)?\{/.test(statement);
+    if (!extendsReactComponent && !hasRenderMethod) {
+      continue;
+    }
+
+    const usedBySource = new Map<string, Set<string>>();
+    for (const [localName, spec] of runtimeImportByLocal) {
+      if (containsIdentifier(statement, localName)) {
+        const set = usedBySource.get(spec.source) ?? new Set<string>();
+        set.add(spec.importedName);
+        usedBySource.set(spec.source, set);
+      }
+    }
+    const runtimeImports: RuntimeImport[] =
+      usedBySource.size > 0
+        ? Array.from(usedBySource.entries()).map(([source, specifiers]) => ({
+            source,
+            specifiers: Array.from(specifiers).sort(),
+          }))
+        : hasRenderMethod
+          ? [{ source: componentImportSource, specifiers: [dev ? "jsxDEV" : "jsx"] }]
+          : [];
+
+    const exportName = match?.groups?.defaultPrefix !== undefined ? "default" : name;
+    const reasons: CompatLoweringReason[] = dev
+      ? ["dev-mode", "class-component"]
+      : ["class-component"];
+
+    entries.push({
+      component: name,
+      exportName,
+      path: "vdom",
+      optimized: false,
+      fallback: true,
+      reasons,
+      details: [
+        `Class component '${name}' executes on the compat VDOM reconciler instead of reactive DOM block lowering.`,
+      ],
+      suggestions: [
+        "Keep class components in isolated error-boundary or legacy leaves, or rewrite hot components as stateless function components or native cell/computed/effect primitives.",
+      ],
+      runtimeImports,
+    });
+  }
+
+  return entries;
+}
+
+function resolveCompatLoweringPath(analysis: CompatComponentAnalysis | undefined): CompatLoweringPath {
+  if (analysis?.propReactiveDomBlock !== undefined) {
+    return "prop-reactive-dom-block";
+  }
+
+  if (analysis?.reactiveDomBlock !== undefined) {
+    return "reactive-dom-block";
+  }
+
+  if (analysis?.rootListReactiveDomBlock !== undefined) {
+    return "root-list-reactive-dom-block";
+  }
+
+  if ((analysis?.directTextBindings.length ?? 0) > 0) {
+    return "vdom-direct-text";
+  }
+
+  return "vdom";
+}
+
+function collectSingleComponentRuntimeImports(
+  ir: ModuleIr,
+  component: ComponentIr,
+  dev: boolean,
+  componentAnalyses: ReadonlyMap<ComponentIr, CompatComponentAnalysis>,
+  componentImportSource: string,
+): RuntimeImport[] {
+  const singleIr: ModuleIr = { ...ir, components: [component] };
+  const componentSpecifiers = collectComponentImportSpecifiers(singleIr, dev, componentAnalyses);
+  const reactiveDomSpecifiers = collectReactiveDomImportSpecifiers(singleIr, dev, componentAnalyses);
+  const helperNames = allocateHelperNames(singleIr, componentSpecifiers, reactiveDomSpecifiers);
+  const groups = createImportGroups(
+    componentSpecifiers,
+    reactiveDomSpecifiers,
+    helperNames,
+    [],
+    componentImportSource,
+  );
+  return collectImports(groups);
+}
+
+function getJsxNodeSourceLocation(node: JsxNodeIr): SourceLocation | undefined {
+  if ("loc" in node && node.loc !== undefined) {
+    return node.loc;
+  }
+
+  if (node.kind === "fragment") {
+    for (const child of node.children) {
+      const childLoc = getJsxNodeSourceLocation(child);
+      if (childLoc !== undefined) {
+        return childLoc;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+interface CompatFallbackDiagnosis {
+  reasons: CompatLoweringReason[];
+  details: string[];
+  suggestions: string[];
+}
+
+function diagnoseCompatLoweringFallback(
+  component: ComponentIr,
+  ir: ModuleIr,
+  dev: boolean,
+  staticPropBlockComponentNames: ReadonlySet<string>,
+  directTextBindings: readonly DirectTextBinding[],
+): CompatFallbackDiagnosis {
+  const reasons = new Set<CompatLoweringReason>();
+  const details: string[] = [];
+  const suggestions = new Set<string>();
+  const addDetail = (detail: string) => {
+    if (!details.includes(detail)) {
+      details.push(detail);
+    }
+  };
+
+  if (dev) {
+    reasons.add("dev-mode");
+    addDetail(
+      "Development builds disable compat reactive DOM block lowering so jsxDEV diagnostics and HMR stay intact.",
+    );
+    suggestions.add(
+      "Inspect compat lowering with a production transform (dev: false) to verify production fast paths.",
+    );
+    return {
+      reasons: Array.from(reasons),
+      details,
+      suggestions: Array.from(suggestions),
+    };
+  }
+
+  const rootList =
+    component.root.kind === "list"
+      ? component.root
+      : readCompatCreateElementRootList(component.root);
+
+  if (rootList !== undefined) {
+    diagnoseRootListFallback(
+      component,
+      rootList,
+      ir,
+      staticPropBlockComponentNames,
+      reasons,
+      addDetail,
+      suggestions,
+    );
+    return {
+      reasons: Array.from(reasons),
+      details,
+      suggestions: Array.from(suggestions),
+    };
+  }
+
+  if (
+    component.root.kind === "expr" &&
+    /\.map\s*\(/.test(component.root.code)
+  ) {
+    const hasExplicitKey =
+      /\bkey\s*[:=]/.test(component.root.code) ||
+      /=>\s*(?:\/\*[\s\S]*?\*\/\s*)?[A-Za-z_$][\w$]*\s*\(\s*[A-Za-z_$][\w$]*\s*,\s*\{[\s\S]*\}\s*,/.test(
+        component.root.code,
+      );
+    if (hasExplicitKey) {
+      reasons.add("root-list-unsupported-expression");
+      addDetail(
+        "Root .map() expression uses a callback shape (such as extra parameters or a createElement/helper call) that could not be lowered to root-list-reactive-dom-block.",
+      );
+      suggestions.add(
+        "Return a single keyed JSX row component from a single-parameter .map() callback (for example state.rows.map((row) => <Row key={row.id} row={row} />)).",
+      );
+    } else {
+      reasons.add("root-list-missing-key");
+      addDetail("Root .map() list item is missing a stable 'key' prop.");
+      suggestions.add(
+        "Add a stable 'key' prop (such as key={row.id}) and return a same-module row component directly from .map().",
+      );
+    }
+    return {
+      reasons: Array.from(reasons),
+      details,
+      suggestions: Array.from(suggestions),
+    };
+  }
+
+  const hasBody = component.bodyStatements.length > 0;
+  const useStateNames = collectUseStateVariableNames(component.bodyStatements);
+
+  if (hasBody) {
+    reasons.add("has-body-statements");
+    const hookNames = collectCompatHookNames(component.bodyStatements);
+    if (hookNames.length > 0) {
+      addDetail(
+        `Component body uses ${hookNames.join(", ")}, which disqualifies stateless prop-block lowering.`,
+      );
+    } else {
+      addDetail(
+        "Component has body statements, which disqualifies stateless prop-block lowering.",
+      );
+    }
+
+    if (useStateNames.length > 0) {
+      if (component.root.kind !== "element") {
+        reasons.add("unsupported-root-kind");
+        addDetail(
+          `Root JSX node is '${component.root.kind}' instead of a single host element required for reactive-dom-block lowering.`,
+        );
+      } else {
+        if (component.root.keyCode !== undefined) {
+          reasons.add("root-has-key");
+          addDetail("Root element defines a 'key' attribute, which prevents reactive-dom-block lowering.");
+        }
+        const nonStaticAttr = component.root.attributes.find((attr) => attr.kind !== "static-attr");
+        if (nonStaticAttr !== undefined) {
+          reasons.add("root-has-dynamic-attributes");
+          addDetail(
+            `Root <${component.root.tagName}> has a non-static attribute ('${describeAttr(nonStaticAttr)}'), which prevents single-state reactive-dom-block lowering.`,
+          );
+        }
+        if (directTextBindings.length === 0) {
+          reasons.add("state-used-outside-direct-text");
+          addDetail(
+            `State variable(s) (${useStateNames.join(", ")}) are used outside a single direct text slot or alongside non-trivial body statements.`,
+          );
+        } else if (findDirectTextBindingForChildren(component.root.children, directTextBindings) === undefined) {
+          reasons.add("no-direct-state-text-child");
+          addDetail(
+            `Root <${component.root.tagName}> does not have a single direct useState text child (remaining text bindings stay on VDOM direct-text patching).`,
+          );
+        }
+      }
+    }
+
+    collectPropBlockTreeBlockers(
+      component.root,
+      staticPropBlockComponentNames,
+      reasons,
+      addDetail,
+      suggestions,
+    );
+    suggestions.add(
+      "Keep hooks or side effects in a small stateful container and pass plain props into host-only leaf components so leaf rows/cards lower to prop-reactive-dom-block, or use native cell/computed/effect primitives for hot paths.",
+    );
+    return {
+      reasons: Array.from(reasons),
+      details,
+      suggestions: Array.from(suggestions),
+    };
+  }
+
+  if (component.parameters.length !== 1) {
+    reasons.add("unsupported-parameters");
+    addDetail(
+      component.parameters.length === 0
+        ? "Component has no props parameter, so prop-reactive-dom-block lowering does not apply."
+        : `Component has ${component.parameters.length} parameters; prop-reactive-dom-block requires a single props parameter.`,
+    );
+  } else {
+    const propsParam = component.parameters[0];
+    const propAliases = component.parameterPropAliases;
+    if (
+      propsParam === undefined ||
+      (!PROP_BLOCK_IDENTIFIER.test(propsParam) && propAliases === undefined)
+    ) {
+      reasons.add("unsupported-parameters");
+      addDetail(
+        "Props parameter uses a complex destructuring pattern (for example defaults, rest, or nested patterns) that cannot be lowered to a prop reactive DOM block.",
+      );
+      suggestions.add(
+        "Accept a single identifier parameter (props) or flat object destructuring without defaults/rest to enable prop-reactive-dom-block lowering.",
+      );
+    }
+  }
+
+  if (component.root.kind !== "element") {
+    reasons.add("unsupported-root-kind");
+    addDetail(
+      `Root JSX node is '${component.root.kind}'; reactive DOM blocks require a single intrinsic host element root.`,
+    );
+    suggestions.add(
+      "Return a single intrinsic host element at the component root (instead of a fragment, conditional, or child component) to enable prop-reactive-dom-block lowering.",
+    );
+  } else {
+    if (component.root.keyCode !== undefined) {
+      reasons.add("root-has-key");
+      addDetail("Root element defines a 'key' attribute, which disables prop-reactive-dom-block lowering.");
+      suggestions.add(
+        "Move the 'key' prop to the parent list item call site rather than placing it on the component's own root element.",
+      );
+    }
+
+    collectPropBlockTreeBlockers(
+      component.root,
+      staticPropBlockComponentNames,
+      reasons,
+      addDetail,
+      suggestions,
+    );
+
+    if (!collectPropBlockFacts(component.root).hasDynamicPart) {
+      reasons.add("no-dynamic-part");
+      addDetail(
+        "Component tree is completely static (no dynamic expressions, attributes, or event handlers), so it stays on lightweight static JSX output.",
+      );
+    }
+
+    if (
+      component.parameterPropAliases !== undefined &&
+      !canRewritePropBlockAliasNode(component.root, "props", component.parameterPropAliases)
+    ) {
+      reasons.add("prop-alias-rewrite-unsupported");
+      addDetail(
+        "Destructured props aliases could not be safely rewritten to props.<name> inside the component JSX.",
+      );
+      suggestions.add(
+        "Use a single 'props' parameter (props.foo) instead of destructuring when prop names collide with nested scopes or shorthand expressions.",
+      );
+    }
+  }
+
+  if (reasons.size === 0) {
+    reasons.add("unsupported-root-kind");
+    addDetail("Component shape did not satisfy compat reactive DOM block lowering preconditions.");
+  }
+
+  return {
+    reasons: Array.from(reasons),
+    details,
+    suggestions: Array.from(suggestions),
+  };
+}
+
+function diagnoseRootListFallback(
+  component: ComponentIr,
+  root: Extract<JsxNodeIr, { kind: "list" }>,
+  ir: ModuleIr,
+  staticPropBlockComponentNames: ReadonlySet<string>,
+  reasons: Set<CompatLoweringReason>,
+  addDetail: (detail: string) => void,
+  suggestions: Set<string>,
+): void {
+  if (root.keyCode === undefined) {
+    reasons.add("root-list-missing-key");
+    addDetail("Root list .map() item is missing a stable 'key' prop.");
+    suggestions.add("Add a stable 'key' prop (such as key={row.id}) to the rendered list item.");
+  }
+
+  if (root.children.length !== 1) {
+    reasons.add("root-list-multiple-children");
+    addDetail(
+      `Root list .map() renders ${root.children.length} children; root-list-reactive-dom-block requires a single component child.`,
+    );
+  }
+
+  const stateBindings = collectDirectStateBindings(component);
+  const matchingState = stateBindings.find((binding) =>
+    rootListUsesStateBinding(root, binding.stateName),
+  );
+  if (matchingState === undefined) {
+    reasons.add("root-list-no-direct-state-binding");
+    addDetail(
+      "Root list does not iterate over a direct useState/useReducer binding in this component.",
+    );
+    suggestions.add(
+      "Drive the root list directly from a local useState/useReducer state binding (or move to native cell() + keyed list).",
+    );
+  } else if (!rootListBodyStatementsAreSafe(component, matchingState)) {
+    reasons.add("root-list-no-direct-state-binding");
+    addDetail(
+      `State binding '${matchingState.stateName}' is referenced in other component body statements, preventing root-list reactive DOM lowering.`,
+    );
+  }
+
+  const renderComponentNode =
+    root.children[0]?.kind === "component"
+      ? root.children[0]
+      : readCompatRuntimeComponentExpression(root.children[0]);
+
+  if (
+    renderComponentNode === undefined ||
+    renderComponentNode.children.length > 0 ||
+    renderComponentNode.props.some(
+      (prop) => prop.kind === "render-prop" || prop.kind === "spread-prop",
+    )
+  ) {
+    reasons.add("root-list-item-not-component");
+    addDetail(
+      renderComponentNode === undefined
+        ? "Root list item is not a component call (<Row ... />)."
+        : `Root list item <${renderComponentNode.name} /> uses JSX children, render props, or spread props, which prevents root-list lowering.`,
+    );
+    suggestions.add(
+      "Render a same-module row component with explicit named props and no JSX children/spread props.",
+    );
+    return;
+  }
+
+  const memoAliases = collectCompatMemoAliases(ir.moduleStatements);
+  const renderComponentName = memoAliases.get(renderComponentNode.name) ?? renderComponentNode.name;
+  const renderComponent = ir.components.find((candidate) => candidate.name === renderComponentName);
+
+  if (renderComponent === undefined) {
+    reasons.add("root-list-item-not-same-module");
+    addDetail(
+      `Root list item component '${renderComponentName}' is imported or not defined in the same module.`,
+    );
+    suggestions.add(
+      `Define '${renderComponentName}' in the same module as the list component (or switch the list to native reactive primitives) to enable root-list-reactive-dom-block.`,
+    );
+    return;
+  }
+
+  const renderComponentBlock = getPropReactiveDomBlock(
+    renderComponent,
+    staticPropBlockComponentNames,
+  );
+  if (renderComponentBlock === undefined) {
+    reasons.add("root-list-item-not-prop-block");
+    addDetail(
+      `Root list item component '${renderComponentName}' fell back to VDOM instead of lowering to prop-reactive-dom-block.`,
+    );
+    suggestions.add(
+      `Inspect the VDOM fallback reasons reported for '${renderComponentName}' and resolve them to unlock root-list-reactive-dom-block on '${component.name}'.`,
+    );
+    return;
+  }
+
+  if (
+    [root.itemName, root.indexName, root.arrayName].some(
+      (name) => name !== undefined && name === renderComponentBlock.propsParam,
+    )
+  ) {
+    reasons.add("root-list-param-shadowing");
+    addDetail(
+      `List callback parameter '${renderComponentBlock.propsParam}' shadows '${renderComponentName}' props parameter.`,
+    );
+    suggestions.add(
+      `Rename the .map() callback parameter so it does not collide with '${renderComponentName}' parameter '${renderComponentBlock.propsParam}'.`,
+    );
+  }
+}
+
+function collectPropBlockTreeBlockers(
+  node: JsxNodeIr,
+  staticPropBlockComponentNames: ReadonlySet<string>,
+  reasons: Set<CompatLoweringReason>,
+  addDetail: (detail: string) => void,
+  suggestions: Set<string>,
+): void {
+  if (node.kind === "text" || node.kind === "expr") {
+    return;
+  }
+
+  if (node.kind === "conditional") {
+    for (const child of node.whenTrue) {
+      collectPropBlockTreeBlockers(child, staticPropBlockComponentNames, reasons, addDetail, suggestions);
+    }
+    for (const child of node.whenFalse) {
+      collectPropBlockTreeBlockers(child, staticPropBlockComponentNames, reasons, addDetail, suggestions);
+    }
+    return;
+  }
+
+  if (node.kind === "list" || node.kind === "fragment") {
+    for (const child of node.children) {
+      collectPropBlockTreeBlockers(child, staticPropBlockComponentNames, reasons, addDetail, suggestions);
+    }
+    return;
+  }
+
+  if (node.kind === "component") {
+    if (!staticPropBlockComponentNames.has(node.name)) {
+      reasons.add("unsupported-child-component");
+      addDetail(
+        `Child component <${node.name} /> is not a same-module static prop-block component.`,
+      );
+      suggestions.add(
+        `Keep third-party or stateful child component <${node.name} /> in an isolated leaf boundary, or inline/co-locate simple presentational subcomponents in the same module.`,
+      );
+    } else if (node.props.some((prop) => prop.kind === "render-prop")) {
+      reasons.add("unsupported-child-component");
+      addDetail(
+        `Child component <${node.name} /> receives a render prop, which prevents prop-reactive-dom-block lowering.`,
+      );
+    }
+    for (const child of node.children) {
+      collectPropBlockTreeBlockers(child, staticPropBlockComponentNames, reasons, addDetail, suggestions);
+    }
+    return;
+  }
+
+  if (node.kind !== "element") {
+    reasons.add("unsupported-jsx-node");
+    addDetail(`JSX node kind '${node.kind}' is not supported inside a compat reactive DOM block.`);
+    return;
+  }
+
+  for (const attr of node.attributes) {
+    if (
+      attr.kind === "dynamic-attr" &&
+      isUnsupportedPropBlockDynamicAttr(node.tagName, attr.name)
+    ) {
+      reasons.add("unsupported-dynamic-attribute");
+      if (attr.name === "ref") {
+        addDetail(
+          `Dynamic attribute 'ref' on <${node.tagName}> requires the compat VDOM reconciler.`,
+        );
+        suggestions.add(
+          "Isolate ref-dependent elements in a dedicated leaf component, or use native domRef on native Mreact components.",
+        );
+      } else if (
+        PROP_BLOCK_FORM_VALUE_TAGS.has(node.tagName) &&
+        PROP_BLOCK_FORM_VALUE_ATTRS.has(attr.name)
+      ) {
+        addDetail(
+          `Controlled form attribute '${attr.name}' on <${node.tagName}> uses the compat VDOM reconciler to preserve React controlled-input semantics.`,
+        );
+        suggestions.add(
+          "Isolate controlled React form inputs in a leaf component, or use native Mreact form bindings for performance-critical forms.",
+        );
+      } else {
+        addDetail(
+          `Dynamic attribute '${attr.name}' on <${node.tagName}> is not supported by prop-reactive-dom-block lowering.`,
+        );
+      }
+    }
+  }
+
+  for (const child of node.children) {
+    collectPropBlockTreeBlockers(child, staticPropBlockComponentNames, reasons, addDetail, suggestions);
+  }
+}
+
+function collectUseStateVariableNames(statements: readonly string[]): string[] {
+  const names: string[] = [];
+  for (const statement of statements) {
+    const match = statement.match(
+      /^\s*const\s+\[\s*(?<stateName>[A-Za-z_$][\w$]*)\s*,\s*[A-Za-z_$][\w$]*\s*\]\s*=\s*useState\s*\(/,
+    );
+    const stateName = match?.groups?.stateName;
+    if (stateName !== undefined) {
+      names.push(stateName);
+    }
+  }
+  return names;
+}
+
+function collectCompatHookNames(statements: readonly string[]): string[] {
+  const hooks = new Set<string>();
+  for (const statement of statements) {
+    for (const match of statement.matchAll(/\b(use[A-Z][A-Za-z0-9_]*)\s*\(/g)) {
+      const hook = match[1];
+      if (hook !== undefined) {
+        hooks.add(hook);
+      }
+    }
+  }
+  return Array.from(hooks).sort();
+}
+
+function describeAttr(attr: AttributeIr): string {
+  if (attr.kind === "spread-attr") {
+    return "...spread";
+  }
+  return attr.name;
 }
 
 function collectComponentImportSpecifiers(

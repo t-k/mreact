@@ -119,21 +119,36 @@ describe("explainTransform", () => {
     );
   });
 
-  it("returns no client decisions for server and compat transforms", () => {
-    for (const input of [
-      { target: "server" as const },
-      { target: "client" as const, mode: "compat" as const },
-    ]) {
-      const report = explainTransform({
-        code: "export function App() { return <p>Hello</p>; }",
-        filename: "App.tsx",
-        dev: false,
-        ...input,
-      });
+  it("returns no reactive client decisions for server and compat transforms while populating compatLowering for compat client", () => {
+    const serverReport = explainTransform({
+      code: "export function App() { return <p>Hello</p>; }",
+      filename: "App.tsx",
+      target: "server",
+      dev: false,
+    });
+    expect(serverReport.decisions).toEqual([]);
+    expect(serverReport.compatLowering).toEqual([]);
+    expect(serverReport.target).toBe("server");
+    expect(serverReport.mode).toBe("reactive");
 
-      expect(report.decisions).toEqual([]);
-      expect(report.target).toBe(input.target);
-      expect(report.mode).toBe(input.mode === "compat" ? "compat" : "reactive");
-    }
+    const compatReport = explainTransform({
+      code: "export function App(props: { label: string }) { return <p>{props.label}</p>; }",
+      filename: "App.compat.tsx",
+      target: "client",
+      mode: "compat",
+      dev: false,
+    });
+    expect(compatReport.decisions).toEqual([]);
+    expect(compatReport.compatLowering).toEqual([
+      expect.objectContaining({
+        component: "App",
+        path: "prop-reactive-dom-block",
+        optimized: true,
+        fallback: false,
+        reasons: [],
+      }),
+    ]);
+    expect(compatReport.target).toBe("client");
+    expect(compatReport.mode).toBe("compat");
   });
 });

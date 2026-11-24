@@ -45,6 +45,7 @@ import {
   type ClientRouteInferenceCache,
 } from "./client-route-inference.js";
 import {
+  collectRouteCompatLowering,
   createBoundaryReport,
   validateBoundaryExecutionContracts,
   validateClientDeliveryContracts,
@@ -1845,16 +1846,29 @@ async function analyzeBuildRouteSources(options: {
     }
   }
 
-  return {
-    boundaryReport: createBoundaryReport({
-      projectRoot: options.projectRoot,
-      routes: Array.from(byRouteFile.values(), (analysis) => ({
+  const compatLoweringCache = new Map();
+  const boundaryRoutes = await Promise.all(
+    Array.from(byRouteFile.values(), async (analysis) => {
+      const compatLowering = await collectRouteCompatLowering(
+        analysis.components,
+        compatLoweringCache,
+        async (filename) => options.files[filename],
+      );
+      return {
+        ...(compatLowering === undefined ? {} : { compatLowering }),
         components: analysis.components,
         diagnostics: analysis.diagnostics,
         entry: analysis.route.file,
         path: analysis.route.path,
         source: analysis.source,
-      })),
+      };
+    }),
+  );
+
+  return {
+    boundaryReport: createBoundaryReport({
+      projectRoot: options.projectRoot,
+      routes: boundaryRoutes,
     }),
     byFile,
     byRouteFile,

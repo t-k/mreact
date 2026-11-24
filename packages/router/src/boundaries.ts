@@ -1,5 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { relative, sep } from "node:path";
+import {
+  transform as compileModule,
+  type CompatLoweringMetadata,
+  type CompatLoweringPath,
+  type CompatLoweringReason,
+} from "@reckona/mreact-compiler";
 import type { UserConfig } from "vite";
 import type {
   ClientRouteComponent,
@@ -20,10 +26,23 @@ import { stripRouteClientSource } from "./route-source.js";
 import { scanAppRoutes } from "./routes.js";
 
 /**
+ * Summarizes compat client lowering and VDOM fallback diagnostics for a compat boundary component.
+ */
+export interface BoundaryCompatLowering {
+  details?: readonly string[] | undefined;
+  fallback: boolean;
+  optimized: boolean;
+  path: CompatLoweringPath;
+  reasons: readonly CompatLoweringReason[];
+  suggestions?: readonly string[] | undefined;
+}
+
+/**
  * Describes one statically traced component in a route boundary report.
  */
 export interface BoundaryReportComponent {
   classification: ClientRouteComponentClassification;
+  compatLowering?: BoundaryCompatLowering | undefined;
   decision: BoundaryReportDecision;
   exportName: string;
   file: string;
@@ -104,6 +123,7 @@ export interface BoundaryReport {
 }
 
 export interface CreateBoundaryReportRouteInput {
+  compatLowering?: Readonly<Record<string, BoundaryCompatLowering>> | undefined;
   components: readonly ClientRouteComponent[];
   cost?: BoundaryReportCost | undefined;
   diagnostics: readonly ClientRouteInferenceDiagnostic[];
@@ -135,6 +155,7 @@ export async function analyzeAppBoundaries(
     (route) => route.kind === "page",
   );
   const cache = createClientRouteInferenceCache();
+  const compatLoweringCache = new Map<string, Promise<readonly CompatLoweringMetadata[]>>();
   const analyzedRoutes = await Promise.all(
     routes.map(async (route): Promise<CreateBoundaryReportRouteInput> => {
       const source = await readFile(route.file, "utf8");
@@ -147,9 +168,12 @@ export async function analyzeAppBoundaries(
         routePath: route.path,
         vitePlugins: options.viteConfig?.plugins,
       });
+      const components = inference.components ?? [];
+      const compatLowering = await collectRouteCompatLowering(components, compatLoweringCache);
 
       return {
-        components: inference.components ?? [],
+        ...(compatLowering === undefined ? {} : { compatLowering }),
+        components,
         diagnostics: inference.diagnostics,
         entry: route.file,
         path: route.path,
@@ -175,6 +199,7 @@ export function createBoundaryReport(input: CreateBoundaryReportInput): Boundary
         entry,
         route.components,
         route.source,
+        route.compatLowering,
       );
 
       return {
@@ -234,12 +259,30 @@ export function formatBoundaryReport(report: BoundaryReport): string {
 
     for (const component of route.components) {
       lines.push(
-        `    ${component.file}#${component.exportName}  ${component.classification}${formatComponentOrigin(component.origin)}${formatComponentFallback(component)}`,
+        `    ${component.file}#${component.exportName}  ${component.classification}${formatComponentOrigin(component.origin)}${formatComponentFallback(component)}${formatComponentCompatLowering(component)}`,
       );
     }
 
     lines.push(`    modes: ${route.executionModes.join(", ")}`);
 
+    lines.push("");
+  }
+
+  const compatFallbacks = collectUniqueCompatFallbacks(report.routes);
+  if (compatFallbacks.length > 0) {
+    lines.push("Compat VDOM fallbacks:");
+    for (const component of compatFallbacks) {
+      const lowering = component.compatLowering!;
+      lines.push(
+        `  ${component.file}#${component.exportName} (${lowering.path}): ${lowering.reasons.join(", ")}`,
+      );
+      for (const detail of lowering.details ?? []) {
+        lines.push(`    reason: ${detail}`);
+      }
+      for (const suggestion of lowering.suggestions ?? []) {
+        lines.push(`    hint: ${suggestion}`);
+      }
+    }
     lines.push("");
   }
 
@@ -276,12 +319,18 @@ function normalizeComponents(
   entry: string,
   components: readonly ClientRouteComponent[],
   source: string | undefined,
+  compatLoweringByKey?: Readonly<Record<string, BoundaryCompatLowering>> | undefined,
 ): BoundaryReportComponent[] {
   const unique = new Map<string, BoundaryReportComponent>();
 
   for (const component of components) {
+    const relativeFile = projectRelativePath(projectRoot, component.file);
+    const compatLowering =
+      compatLoweringByKey?.[`${component.file}#${component.exportName}`] ??
+      compatLoweringByKey?.[`${relativeFile}#${component.exportName}`];
     const normalized: BoundaryReportComponent = {
       ...component,
+      ...(compatLowering === undefined ? {} : { compatLowering }),
       decision: {
         executionMode: executionModeForClassification(component.classification),
         reasonChain: reasonChainForComponent(component, projectRoot, entry),
@@ -290,7 +339,7 @@ function normalizeComponents(
           ? {}
           : sourceRangeField(source, component.exportName)),
       },
-      file: projectRelativePath(projectRoot, component.file),
+      file: relativeFile,
     };
     unique.set(
       `${normalized.file}\0${normalized.exportName}\0${normalized.classification}`,
@@ -566,6 +615,102 @@ function formatComponentFallback(component: BoundaryReportComponent): string {
   return reasons.length === 0
     ? ""
     : `  ${[...reasons, ...(rejection === undefined ? [] : [rejection])].join(" ")}`;
+}
+
+function formatComponentCompatLowering(component: BoundaryReportComponent): string {
+  const lowering = component.compatLowering;
+  if (lowering === undefined) {
+    return "";
+  }
+  if (lowering.optimized) {
+    return `  [compat:${lowering.path}]`;
+  }
+  const reasons = lowering.reasons.length === 0 ? "" : `: ${lowering.reasons.join(", ")}`;
+  return `  [compat:${lowering.path} fallback${reasons}]`;
+}
+
+function collectUniqueCompatFallbacks(
+  routes: readonly BoundaryReportRoute[],
+): BoundaryReportComponent[] {
+  const seen = new Set<string>();
+  const fallbacks: BoundaryReportComponent[] = [];
+
+  for (const route of routes) {
+    for (const component of route.components) {
+      if (component.compatLowering?.fallback !== true) {
+        continue;
+      }
+      const key = `${component.file}#${component.exportName}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      fallbacks.push(component);
+    }
+  }
+
+  return fallbacks;
+}
+
+export async function collectRouteCompatLowering(
+  components: readonly ClientRouteComponent[],
+  cache: Map<string, Promise<readonly CompatLoweringMetadata[]>>,
+  readSource?: (filename: string) => Promise<string | undefined>,
+): Promise<Record<string, BoundaryCompatLowering> | undefined> {
+  const compatComponents = components.filter(
+    (component) =>
+      component.origin === "compat-filename" || isCompatComponentFile(component.file),
+  );
+  if (compatComponents.length === 0) {
+    return undefined;
+  }
+
+  const results: Record<string, BoundaryCompatLowering> = {};
+  for (const component of compatComponents) {
+    let pending = cache.get(component.file);
+    if (pending === undefined) {
+      pending = analyzeCompatFileLowering(component.file, readSource);
+      cache.set(component.file, pending);
+    }
+    const entries = await pending;
+    const match =
+      entries.find((entry) => entry.exportName === component.exportName) ??
+      entries.find((entry) => entry.component === component.exportName);
+    if (match === undefined) {
+      continue;
+    }
+
+    results[`${component.file}#${component.exportName}`] = {
+      ...(match.details === undefined ? {} : { details: match.details }),
+      fallback: match.fallback,
+      optimized: match.optimized,
+      path: match.path,
+      reasons: match.reasons,
+      ...(match.suggestions === undefined ? {} : { suggestions: match.suggestions }),
+    };
+  }
+
+  return Object.keys(results).length === 0 ? undefined : results;
+}
+
+async function analyzeCompatFileLowering(
+  filename: string,
+  readSource?: (filename: string) => Promise<string | undefined>,
+): Promise<readonly CompatLoweringMetadata[]> {
+  try {
+    const code = (await readSource?.(filename)) ?? (await readFile(filename, "utf8"));
+    const output = compileModule({
+      code,
+      filename,
+      target: "client",
+      dev: false,
+      mode: "compat",
+      reportCompatLowering: true,
+    });
+    return output.metadata.compatLowering ?? [];
+  } catch {
+    return [];
+  }
 }
 
 function plural(count: number, singular: string): string {

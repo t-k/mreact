@@ -27,6 +27,26 @@ export interface ClientSpecializationMetadata {
 }
 
 // @public
+export interface CompatLoweringMetadata {
+    component: string;
+    details?: string[];
+    exportName: string;
+    fallback: boolean;
+    loc?: SourceLocation;
+    optimized: boolean;
+    path: CompatLoweringPath;
+    reasons: CompatLoweringReason[];
+    runtimeImports: RuntimeImport[];
+    suggestions?: string[];
+}
+
+// @public
+export type CompatLoweringPath = "reactive-dom-block" | "prop-reactive-dom-block" | "root-list-reactive-dom-block" | "vdom-direct-text" | "vdom";
+
+// @public
+export type CompatLoweringReason = "dev-mode" | "class-component" | "unsupported-root-kind" | "root-has-key" | "unsupported-parameters" | "prop-alias-rewrite-unsupported" | "has-body-statements" | "no-dynamic-part" | "unsupported-child-component" | "unsupported-dynamic-attribute" | "unsupported-jsx-node" | "root-has-dynamic-attributes" | "no-direct-state-text-child" | "state-used-outside-direct-text" | "root-list-missing-key" | "root-list-unsupported-expression" | "root-list-multiple-children" | "root-list-no-direct-state-binding" | "root-list-item-not-component" | "root-list-item-not-same-module" | "root-list-item-not-prop-block" | "root-list-param-shadowing";
+
+// @public
 export type CompilerFrontend = "oxc";
 
 // @public
@@ -153,6 +173,7 @@ export interface ModuleMetadata {
     // (undocumented)
     clientReferences?: string[];
     clientSpecializations?: ClientSpecializationMetadata[];
+    compatLowering?: CompatLoweringMetadata[];
     // (undocumented)
     compiler: CompilerMetadata;
     // (undocumented)

@@ -526,4 +526,53 @@ export default function Page() {
       process.exitCode = previousExitCode;
     }
   });
+
+  test("explains compat lowering and VDOM fallback reasons via mreact-router explain", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-router-explain-"));
+    const compatFile = join(rootDir, "Card.compat.tsx");
+    await writeFile(
+      compatFile,
+      `export function Fast(props: { label: string }) {
+  return <span>{props.label}</span>;
+}
+export function Fallback(props: { value: string }) {
+  return <input value={props.value} />;
+}
+`,
+    );
+
+    const previousExitCode = process.exitCode;
+    try {
+      process.argv = [process.argv[0]!, "cli.ts", "explain", compatFile];
+      await import("../src/cli.ts");
+      expect(logSpy).toHaveBeenCalledTimes(1);
+      const textOutput = String(logSpy.mock.calls[0]?.[0]);
+      expect(textOutput).toContain("mode: compat");
+      expect(textOutput).toContain("Fast");
+      expect(textOutput).toContain("prop-reactive-dom-block (optimized)");
+      expect(textOutput).toContain("Fallback");
+      expect(textOutput).toContain("vdom (VDOM fallback) [unsupported-dynamic-attribute]");
+      expect(errorSpy).not.toHaveBeenCalled();
+
+      logSpy.mockClear();
+      vi.resetModules();
+      process.argv = [process.argv[0]!, "cli.ts", "explain", compatFile, "--json"];
+      await import("../src/cli.ts");
+      expect(logSpy).toHaveBeenCalledTimes(1);
+      const jsonOutput = JSON.parse(String(logSpy.mock.calls[0]?.[0])) as {
+        mode: string;
+        compatLowering: Array<{ component: string; path: string; fallback: boolean }>;
+      };
+      expect(jsonOutput.mode).toBe("compat");
+      expect(jsonOutput.compatLowering).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ component: "Fast", path: "prop-reactive-dom-block", fallback: false }),
+          expect.objectContaining({ component: "Fallback", path: "vdom", fallback: true }),
+        ]),
+      );
+      expect(errorSpy).not.toHaveBeenCalled();
+    } finally {
+      process.exitCode = previousExitCode;
+    }
+  });
 });
