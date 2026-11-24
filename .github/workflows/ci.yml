@@ -78,9 +78,6 @@ jobs:
           - name: Typecheck forms with strict options
             run: pnpm typecheck:forms:strict
 
-          - name: Primitive browser fixture build smoke
-            run: NODE_ENV=production pnpm exec tsx benchmarks/primitive-browser/build.ts
-
           - name: API reports
             run: node scripts/generate-api-reports.mjs --check
 
@@ -104,6 +101,89 @@ jobs:
 
       - name: E2E client delivery accounting
         run: pnpm exec playwright test packages/router/e2e/client-delivery-accounting.spec.ts
+
+  benchmark-smoke:
+    name: Benchmark fixture build smoke
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Resolve pnpm store path
+        run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PNPM_STORE_PATH }}
+          key: ${{ runner.os }}-node-24-pnpm-bench-${{ hashFiles('pnpm-lock.yaml', 'benchmarks/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-node-24-pnpm-bench-
+            ${{ runner.os }}-node-24-pnpm-
+
+      - name: Install core dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install benchmark workspace dependencies
+        run: pnpm setup:benchmarks
+
+      - name: Build
+        run: pnpm build
+
+      - name: Run benchmark unit tests
+        run: pnpm test:benchmarks
+
+      - name: Primitive browser fixture build smoke
+        run: NODE_ENV=production pnpm exec tsx benchmarks/primitive-browser/build.ts
+
+  compat-lab-tests:
+    name: Compat lab tests
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Resolve pnpm store path
+        run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PNPM_STORE_PATH }}
+          key: ${{ runner.os }}-node-24-pnpm-compat-lab-${{ hashFiles('pnpm-lock.yaml', 'compat-lab/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-node-24-pnpm-compat-lab-
+            ${{ runner.os }}-node-24-pnpm-
+
+      - name: Install core dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install compat-lab workspace dependencies
+        run: pnpm setup:compat-lab
+
+      - name: Build
+        run: pnpm build
+
+      - name: Run compat-lab tests
+        run: pnpm test:compat-lab
 
   # Runs apart from verify so a lint, docs, or scenario failure there cannot skip the size
   # measurement: the budget verdict and the uploaded reports stay available for every push.

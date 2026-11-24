@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
+import { dirname, join, resolve } from "node:path";
 import ts from "@typescript/typescript6";
 import { rechartsFixtures } from "./fixtures.js";
 import { rechartsPublicComponentFeatures } from "./public-features.js";
@@ -42,9 +42,8 @@ interface ModuleDeclarations {
   imports: Map<string, { modulePath: string; sourceName: string }>;
 }
 
-const labRoot = fileURLToPath(new URL(".", import.meta.url));
-const repoRoot = resolve(labRoot, "../..");
-const rechartsTypesRoot = join(repoRoot, "node_modules", "recharts", "types");
+const requireFromHere = createRequire(import.meta.url);
+const rechartsTypesRoot = join(dirname(requireFromHere.resolve("recharts/package.json")), "types");
 const moduleCache = new Map<string, ModuleDeclarations>();
 
 const categoricalChartComponents = new Set([

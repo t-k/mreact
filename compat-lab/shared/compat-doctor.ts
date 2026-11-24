@@ -138,10 +138,18 @@ export async function writeCompatDoctorReport(input: WriteCompatDoctorReportInpu
   if (typeof rootPackage.version !== "string" || rootPackage.version.length === 0) {
     throw new Error("Missing mreact version in root package.json");
   }
-  const candidateNames = [
-    ...Object.keys(rootPackage.dependencies ?? {}),
-    ...Object.keys(rootPackage.devDependencies ?? {}),
-  ];
+  const compatLabPackage = await readOptionalJson<{
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+  }>(join(input.repoRoot, "compat-lab", "package.json"));
+  const candidateNames = Array.from(
+    new Set([
+      ...Object.keys(compatLabPackage?.dependencies ?? {}),
+      ...Object.keys(compatLabPackage?.devDependencies ?? {}),
+      ...Object.keys(rootPackage.dependencies ?? {}),
+      ...Object.keys(rootPackage.devDependencies ?? {}),
+    ]),
+  );
   const fixtures = input.fixtures.map(
     (fixture): ResolvedFixture => ({
       ...fixture,
@@ -150,9 +158,7 @@ export async function writeCompatDoctorReport(input: WriteCompatDoctorReportInpu
   );
   const packageVersions: Record<string, string> = {};
   for (const packageName of new Set(fixtures.map((fixture) => fixture.packageName))) {
-    const packageJson = JSON.parse(
-      await readFile(join(input.repoRoot, "node_modules", packageName, "package.json"), "utf8"),
-    ) as { version?: string };
+    const packageJson = await readInstalledPackageManifest(input.repoRoot, packageName);
     if (typeof packageJson.version !== "string" || packageJson.version.length === 0) {
       throw new Error(`Missing installed package version for ${packageName}`);
     }
@@ -173,6 +179,33 @@ export async function writeCompatDoctorReport(input: WriteCompatDoctorReportInpu
     join(input.outputDir, "compat-doctor.json"),
     `${JSON.stringify(report, null, 2)}\n`,
   );
+}
+
+async function readOptionalJson<T>(path: string): Promise<T | undefined> {
+  try {
+    return JSON.parse(await readFile(path, "utf8")) as T;
+  } catch {
+    return undefined;
+  }
+}
+
+async function readInstalledPackageManifest(
+  repoRoot: string,
+  packageName: string,
+): Promise<{ version?: string }> {
+  const candidates = [
+    join(repoRoot, "compat-lab", "node_modules", packageName, "package.json"),
+    join(repoRoot, "node_modules", packageName, "package.json"),
+  ];
+  let lastError: unknown;
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(await readFile(candidate, "utf8")) as { version?: string };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
 }
 
 function fixturePackageName(fixture: CompatDoctorFixture, packageNames: readonly string[]): string {

@@ -11,6 +11,7 @@ mutants.out*/
 .next/
 .cache/
 tmp/
+benchmarks/.tmp/
 benchmarks/app-framework/.tmp/
 benchmarks/router/.tmp/
 benchmarks/results/

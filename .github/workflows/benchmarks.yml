@@ -56,6 +56,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install benchmark workspace dependencies
+        run: pnpm setup:benchmarks
+
       - name: Prepare benchmark output directory
         id: results
         shell: bash
@@ -130,7 +133,7 @@ jobs:
         if: ${{ inputs.suite == 'all' || inputs.suite == 'router' }}
         env:
           MREACT_ROUTER_HTTP_INTEGRATION: "1"
-        run: pnpm build && NODE_ENV=production pnpm exec vitest run benchmarks/router/adapters/http-production.integration.test.ts benchmarks/router/fixture-server.test.ts
+        run: pnpm build && NODE_ENV=production pnpm exec vitest run --config vitest.benchmarks.config.ts benchmarks/router/adapters/http-production.integration.test.ts benchmarks/router/fixture-server.test.ts
 
       - name: Run router benchmarks
         if: ${{ inputs.suite == 'all' || inputs.suite == 'router' }}
@@ -233,7 +236,7 @@ jobs:
         run: |
           corepack enable
           for checkout in baseline candidate; do
-            (cd "$checkout" && pnpm install --frozen-lockfile --prod=false && pnpm build)
+            (cd "$checkout" && pnpm install --frozen-lockfile --prod=false && if [ -f benchmarks/package.json ]; then pnpm setup:benchmarks; fi && pnpm build)
           done
 
       - name: Install Playwright Chromium

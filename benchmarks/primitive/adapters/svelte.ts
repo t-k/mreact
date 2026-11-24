@@ -376,7 +376,7 @@ async function getSvelteRuntime(): Promise<SvelteRuntime> {
 
 async function loadSvelteRuntime(): Promise<SvelteRuntime> {
   const svelteRoot = dirname(require.resolve("svelte/package.json"));
-  const outputDir = join(process.cwd(), "tmp", `mreact-svelte-primitive-${process.pid}`);
+  const outputDir = join(process.cwd(), "benchmarks", ".tmp", `mreact-svelte-primitive-${process.pid}`);
   await mkdir(outputDir, { recursive: true });
 
   process.once("exit", () => {

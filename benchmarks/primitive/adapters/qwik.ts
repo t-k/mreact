@@ -22,7 +22,7 @@ import type { PrimitiveAdapter, PrimitiveCaseResult, PrimitiveRunContext } from 
 // production-mode benchmark. Use the production runtime so tests and measurements
 // exercise the same renderer behavior.
 // @ts-expect-error Qwik does not publish declarations for dist subpaths.
-import { _qrlSync, h, render } from "../../../node_modules/@builder.io/qwik/dist/core.prod.mjs";
+import { _qrlSync, h, render } from "../../node_modules/@builder.io/qwik/dist/core.prod.mjs";
 
 export const qwikAdapter: PrimitiveAdapter = {
   name: "qwik",

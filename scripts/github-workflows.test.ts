@@ -6,12 +6,22 @@ const readWorkflow = (name: string) =>
   readFile(join(process.cwd(), ".github", "workflows", name), "utf8");
 
 describe("GitHub workflows", () => {
-  test("runs the primitive browser fixture build smoke in normal CI", async () => {
+  test("runs benchmark and compat-lab suites in isolated CI jobs", async () => {
     const workflow = await readWorkflow("ci.yml");
 
+    expect(workflow).toContain("  benchmark-smoke:\n    name: Benchmark fixture build smoke");
     expect(workflow).toContain(
-      "          - name: Primitive browser fixture build smoke\n            run: NODE_ENV=production pnpm exec tsx benchmarks/primitive-browser/build.ts",
+      "      - name: Install benchmark workspace dependencies\n        run: pnpm setup:benchmarks",
     );
+    expect(workflow).toContain("      - name: Run benchmark unit tests\n        run: pnpm test:benchmarks");
+    expect(workflow).toContain(
+      "      - name: Primitive browser fixture build smoke\n        run: NODE_ENV=production pnpm exec tsx benchmarks/primitive-browser/build.ts",
+    );
+    expect(workflow).toContain("  compat-lab-tests:\n    name: Compat lab tests");
+    expect(workflow).toContain(
+      "      - name: Install compat-lab workspace dependencies\n        run: pnpm setup:compat-lab",
+    );
+    expect(workflow).toContain("      - name: Run compat-lab tests\n        run: pnpm test:compat-lab");
   });
 
   test("builds before parallel CI verify steps that consume workspace dist", async () => {

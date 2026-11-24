@@ -56,7 +56,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["packages/react-compat/test/radix-dialog.compat.ts"],
+    include: ["compat-lab/radix/radix-dialog.compat.ts"],
     server: {
       deps: {
         inline: true,

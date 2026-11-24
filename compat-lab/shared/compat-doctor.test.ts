@@ -234,15 +234,20 @@ describe("Compat Doctor report", () => {
   });
 
   test("maps every current Radix fixture to an installed package", async () => {
-    const rootPackage = JSON.parse(await readFile(join(process.cwd(), "package.json"), "utf8")) as {
+    const compatLabPackage = JSON.parse(
+      await readFile(join(process.cwd(), "compat-lab", "package.json"), "utf8"),
+    ) as {
       devDependencies: Record<string, string>;
     };
-    const packageNames = Object.keys(rootPackage.devDependencies);
+    const packageNames = Object.keys(compatLabPackage.devDependencies);
 
     for (const radixFixture of radixFixtures) {
       const packageName = radixPackageNameForFixture(radixFixture.id, packageNames);
       const installed = JSON.parse(
-        await readFile(join(process.cwd(), "node_modules", packageName, "package.json"), "utf8"),
+        await readFile(
+          join(process.cwd(), "compat-lab", "node_modules", packageName, "package.json"),
+          "utf8",
+        ),
       ) as { version: string };
       expect(installed.version).toMatch(/^\d+\./);
     }

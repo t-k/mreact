@@ -1,0 +1,55 @@
+{
+  "name": "@reckona/mreact-benchmarks",
+  "private": true,
+  "description": "Isolated comparison framework dependencies for mreact benchmarks.",
+  "type": "module",
+  "packageManager": "pnpm@10.19.0",
+  "scripts": {
+    "test": "vitest run --config ../vitest.benchmarks.config.ts --passWithNoTests"
+  },
+  "devDependencies": {
+    "@analogjs/content": "2.6.0",
+    "@analogjs/platform": "2.6.0",
+    "@analogjs/router": "2.6.0",
+    "@angular/animations": "22.0.1",
+    "@angular/build": "22.0.1",
+    "@angular/common": "22.0.1",
+    "@angular/compiler": "22.0.1",
+    "@angular/compiler-cli": "22.0.1",
+    "@angular/core": "22.0.1",
+    "@angular/platform-browser": "22.0.1",
+    "@angular/platform-server": "22.0.1",
+    "@angular/router": "22.0.1",
+    "@angular/ssr": "22.0.1",
+    "@builder.io/qwik": "1.20.0",
+    "@qwik.dev/core": "2.0.0-beta.36",
+    "@qwik.dev/router": "2.0.0-beta.36",
+    "@sveltejs/kit": "2.65.0",
+    "@vue/server-renderer": "3.5.38",
+    "marked": "15.0.12",
+    "marko": "5.39.2",
+    "next": "16.2.9",
+    "nuxt": "4.4.8",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "rxjs": "7.8.2",
+    "solid-js": "1.9.13",
+    "solid-js-2": "npm:solid-js@2.0.0-beta.13",
+    "svelte": "5.56.3",
+    "tinybench": "6.0.1",
+    "vue": "3.5.38",
+    "zone.js": "0.16.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ],
+    "overrides": {
+      "@marko/compiler": "5.39.63",
+      "@marko/runtime-tags": "6.1.2",
+      "@solidjs/signals": "2.0.0-beta.13",
+      "postcss@<8.5.10": ">=8.5.10",
+      "qs@6.15.1": "6.15.2"
+    }
+  }
+}

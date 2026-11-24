@@ -1,6 +1,13 @@
-/** @param {{ name: string; mutate: string[]; testFiles: string[]; breakThreshold?: number }} profile */
+/** @param {{ name: string; mutate: string[]; testFiles: string[]; breakThreshold?: number; vitestConfigFile?: string }} profile */
 export function createStrykerConfig(profile) {
   const reportRoot = `coverage/mutation/${profile.name}`;
+  const defaultVitestConfig =
+    profile.testFiles.length > 0 && profile.testFiles.every((file) => file.startsWith("benchmarks/"))
+      ? "vitest.benchmarks.config.ts"
+      : profile.testFiles.length > 0 &&
+          profile.testFiles.every((file) => file.startsWith("compat-lab/"))
+        ? "vitest.compat-lab.config.ts"
+        : "vitest.config.ts";
 
   return {
     clearTextReporter: {
@@ -29,7 +36,7 @@ export function createStrykerConfig(profile) {
       low: 80,
     },
     vitest: {
-      configFile: "vitest.config.ts",
+      configFile: profile.vitestConfigFile ?? defaultVitestConfig,
       related: true,
     },
   };

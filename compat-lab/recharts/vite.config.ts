@@ -1,18 +1,20 @@
+import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 
+const requireFromHere = createRequire(import.meta.url);
 const labRoot = fileURLToPath(new URL(".", import.meta.url));
 const repoRoot = resolve(labRoot, "../..");
 const runtime = process.env.COMPAT_LAB_RUNTIME === "compat" ? "compat" : "react";
 
 const reactAliases = [
-  { find: "react/jsx-dev-runtime", replacement: resolve(repoRoot, "node_modules/react/jsx-dev-runtime.js") },
-  { find: "react/jsx-runtime", replacement: resolve(repoRoot, "node_modules/react/jsx-runtime.js") },
-  { find: "react-dom/client", replacement: resolve(repoRoot, "node_modules/react-dom/client.js") },
-  { find: "react-dom/server", replacement: resolve(repoRoot, "node_modules/react-dom/server.js") },
-  { find: "react-dom", replacement: resolve(repoRoot, "node_modules/react-dom/index.js") },
-  { find: "react", replacement: resolve(repoRoot, "node_modules/react/index.js") },
+  { find: "react/jsx-dev-runtime", replacement: requireFromHere.resolve("react/jsx-dev-runtime") },
+  { find: "react/jsx-runtime", replacement: requireFromHere.resolve("react/jsx-runtime") },
+  { find: "react-dom/client", replacement: requireFromHere.resolve("react-dom/client") },
+  { find: "react-dom/server", replacement: requireFromHere.resolve("react-dom/server") },
+  { find: "react-dom", replacement: requireFromHere.resolve("react-dom") },
+  { find: "react", replacement: requireFromHere.resolve("react") },
 ];
 
 const compatAliases =

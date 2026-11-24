@@ -386,7 +386,8 @@ function installMarkoDomRequireHook(): void {
   const markoPackagePath = require.resolve("marko/package.json");
   const markoRequire = createRequire(markoPackagePath);
   const compiler = markoRequire("@marko/compiler") as MarkoCompiler;
-  installMarkoBrowserInternalAliases(dirname(markoPackagePath));
+  const translator = markoRequire.resolve("marko/translator");
+  installMarkoBrowserInternalAliases(dirname(markoPackagePath), markoRequire);
 
   require.extensions[".marko"] = (module, filename) => {
     const { code } = compiler.compileFileSync(filename, {
@@ -399,19 +400,34 @@ function installMarkoDomRequireHook(): void {
       modules: "cjs",
       output: "dom",
       sourceMaps: false,
+      translator,
     });
 
     module._compile(code, filename);
   };
 }
 
-function installMarkoBrowserInternalAliases(markoPackageDir: string): void {
+function installMarkoBrowserInternalAliases(
+  markoPackageDir: string,
+  markoRequire: NodeRequire,
+): void {
+  const runtimeTagsDir = dirname(markoRequire.resolve("@marko/runtime-tags/package.json"));
+  const runtimeTagsDomPath = markoRequire.resolve("@marko/runtime-tags/dom");
   const moduleResolver = Module as unknown as MutableModuleResolver;
   const originalResolveFilename = moduleResolver._resolveFilename.bind(Module);
 
   moduleResolver._resolveFilename = (request, parent, isMain, options) => {
     if (request.startsWith("@internal/")) {
       return join(markoPackageDir, "dist", "node_modules", request, "index-browser.js");
+    }
+    if (request === "@marko/runtime-tags/dom") {
+      return runtimeTagsDomPath;
+    }
+    if (request === "@marko/runtime-tags" || request.startsWith("@marko/runtime-tags/")) {
+      return originalResolveFilename(request, parent, isMain, {
+        ...options,
+        paths: [markoPackageDir, runtimeTagsDir],
+      });
     }
 
     return originalResolveFilename(request, parent, isMain, options);
