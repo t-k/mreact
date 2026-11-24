@@ -30,7 +30,7 @@ concurrency:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -108,7 +108,7 @@ jobs:
 
   test-shard:
     name: Test shard ${{ matrix.shard }}/3
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -149,7 +149,7 @@ jobs:
           - os: ubuntu-latest
             package: router-native-linux-x64-gnu
             rustflags: ""
-          - os: macos-14
+          - os: macos-15
             package: router-native-darwin-arm64
             rustflags: "-C link-arg=-undefined -C link-arg=dynamic_lookup"
           - os: windows-latest
