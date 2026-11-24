@@ -28,7 +28,7 @@
     "@vue/server-renderer": "3.5.38",
     "marked": "15.0.12",
     "marko": "5.39.2",
-    "next": "16.2.9",
+    "next": "16.4.5",
     "nuxt": "4.4.8",
     "react": "19.2.7",
     "react-dom": "19.2.7",
