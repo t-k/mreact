@@ -148,6 +148,9 @@ describe("URL safety helpers", () => {
     expect(isUnsafeUrlAttribute("href", "javascriptx:alert(1)")).toBe(false);
     expect(isUnsafeUrlAttribute("href", "xjavascript:alert(1)")).toBe(false);
     expect(isUnsafeUrlAttribute("href", "_javascript:alert(1)")).toBe(false);
+    // 0x21 ('!') is right above the 0x20 leading-control/space strip boundary.
+    expect(isUnsafeUrlAttribute("href", "!javascript:alert(1)")).toBe(false);
+    expect(isUnsafeUrlAttribute("href", "   ")).toBe(false);
   });
 
   test("allows non-SVG data images only for image-like src and poster sinks", () => {
@@ -177,6 +180,8 @@ describe("URL safety helpers", () => {
     }
 
     expect(isUnsafeUrlAttribute("src", "javascript:data:image/png;base64,AAA")).toBe(true);
+    expect(isUnsafeUrlAttribute("src", "data:text/plain,data:image/png;base64,AAA")).toBe(true);
+    expect(isUnsafeUrlAttribute("poster", "data:text/html,data:image/png;base64,AAA")).toBe(true);
   });
 
   test("taints srcset and imagesrcset when any candidate URL is unsafe", () => {
@@ -210,5 +215,10 @@ describe("URL safety helpers", () => {
     expect(isUnsafeMetaRefreshContent("refresh", "ignored; 0; url=javascript:alert(1)")).toBe(
       false,
     );
+    // Boundary lengths and unmatched quotes in meta refresh URLs.
+    expect(isUnsafeMetaRefreshContent("refresh", "0; url=a")).toBe(false);
+    expect(isUnsafeMetaRefreshContent("refresh", '0; url=""')).toBe(false);
+    expect(isUnsafeMetaRefreshContent("refresh", '0; url="javascript:alert(1)')).toBe(false);
+    expect(isUnsafeMetaRefreshContent("refresh", "0; url='javascript:alert(1)")).toBe(false);
   });
 });

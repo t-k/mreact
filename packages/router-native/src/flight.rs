@@ -2343,4 +2343,67 @@ mod tests {
     assert_eq!(response.pointer("/root/map/entries/0/1"), Some(&json!("resolved")));
     assert_eq!(response.pointer("/root/set/values/0"), Some(&json!("resolved")));
   }
+
+  #[test]
+  fn rejects_trailing_single_base64_character() {
+    for invalid in ["A", "AAAAA"] {
+      let error = decode_base64_bytes(invalid).unwrap_err();
+      assert!(error.contains("trailing single character"), "{invalid}: {error}");
+    }
+  }
+
+  #[test]
+  fn preserves_non_leading_dollar_signs_without_doubling() {
+    let encoded = encode_flight_response(&flight_response(json!("price$100"))).unwrap();
+    assert!(encoded.contains("\"price$100\""), "{encoded}");
+    assert!(!encoded.contains("\"$price$100\""), "{encoded}");
+
+    let decoded = decode_flight_rows(&encoded).unwrap();
+    let response: Value = serde_json::from_str(&decoded).unwrap();
+    assert_eq!(response.get("root"), Some(&json!("price$100")));
+  }
+
+  #[test]
+  fn validate_json_nesting_handles_string_escapes_and_sibling_containers() {
+    // Escaped quotes inside a string must not terminate string mode, while a
+    // trailing escaped backslash before `"` must terminate string mode so the
+    // following over-deep array is still rejected.
+    let too_deep = "[".repeat(MAX_FLIGHT_DECODE_DEPTH + 2)
+      + &"]".repeat(MAX_FLIGHT_DECODE_DEPTH + 2);
+    let escaped_quote_payload = format!(r#"["\"{too_deep}"]"#);
+    assert!(validate_json_nesting(&escaped_quote_payload).is_ok());
+
+    let escaped_backslash_before_close = format!(r#"["\\",{too_deep}]"#);
+    let error = validate_json_nesting(&escaped_backslash_before_close).unwrap_err();
+    assert!(error.contains("MR_FLIGHT_TOO_DEEP"), "{error}");
+
+    // Exact boundary: MAX_FLIGHT_DECODE_DEPTH + 1 levels is allowed, + 2 is rejected.
+    let at_limit = "[".repeat(MAX_FLIGHT_DECODE_DEPTH + 1)
+      + &"]".repeat(MAX_FLIGHT_DECODE_DEPTH + 1);
+    assert!(validate_json_nesting(&at_limit).is_ok());
+
+    // Closing a container must decrement depth so sibling containers whose
+    // combined opening brackets exceed MAX_FLIGHT_DECODE_DEPTH remain valid.
+    let half = MAX_FLIGHT_DECODE_DEPTH / 2 + 2;
+    let sibling = format!("{}{}", "[".repeat(half), "]".repeat(half));
+    let siblings_payload = format!("[{sibling},{sibling}]");
+    assert!(validate_json_nesting(&siblings_payload).is_ok());
+  }
+
+  #[test]
+  fn resolve_promise_chunks_enforces_allocation_budget() {
+    let mut context = FlightDecodeContext {
+      remaining_budget: 100,
+      ..Default::default()
+    };
+    let error = resolve_promise_chunks(
+      &json!("small"),
+      &std::collections::HashMap::new(),
+      &std::collections::HashMap::new(),
+      0,
+      &mut context,
+    )
+    .unwrap_err();
+    assert!(error.contains("MR_FLIGHT_TOO_LARGE"), "{error}");
+  }
 }

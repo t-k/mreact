@@ -305,7 +305,18 @@ mod tests {
     assert_eq!(normalized, "/docs/detail");
     assert_eq!(normalized.as_ptr(), path.as_ptr());
     assert_eq!(normalize_path("///"), "/");
+    assert_eq!(normalize_path("/"), "/");
     assert_eq!(normalize_path(""), "/");
+
+    let root_matcher = RouteMatcherCore::new(r#"[{"index":0,"segments":[]}]"#).unwrap();
+    assert_eq!(
+      root_matcher.match_route("/").unwrap().unwrap(),
+      NativeMatch {
+        index: 0,
+        params: HashMap::new(),
+        catch_all_params: HashMap::new(),
+      },
+    );
   }
 
   #[test]
@@ -401,6 +412,7 @@ mod tests {
     assert_eq!(matcher.match_route("/docs/%ZZ").unwrap(), None);
     assert_eq!(matcher.match_route("/docs/%E0").unwrap(), None);
     assert_eq!(matcher.match_route("/docs/%").unwrap(), None);
+    assert_eq!(matcher.match_route("/docs/%A").unwrap(), None);
     assert_eq!(matcher.match_route("/docs/%C0%AF").unwrap(), None);
   }
 
